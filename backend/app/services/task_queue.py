@@ -1,25 +1,133 @@
 from __future__ import annotations
+
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from sqlalchemy import or_, select
+
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
-from app.db.models import TaskStatus, TaskUnit
+
+from app.db.models import SampleAttempt, SampleAttemptStatus, TaskStatus, TaskUnit
+
 
 def reclaim_expired_leases(session: Session) -> int:
-    now=datetime.now(timezone.utc)
-    tasks=list(session.scalars(select(TaskUnit).where(TaskUnit.status.in_([TaskStatus.LEASED.value,TaskStatus.RUNNING.value]),TaskUnit.lease_expires_at < now)))
+    """Make crashed-worker tasks claimable again without discarding sample evidence."""
+
+    now = datetime.now(timezone.utc)
+    tasks = list(
+        session.scalars(
+            select(TaskUnit).where(
+                TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
+                TaskUnit.lease_expires_at < now,
+            )
+        )
+    )
     for task in tasks:
-        task.status=TaskStatus.PENDING.value;task.leased_by=None;task.lease_token=None;task.lease_expires_at=None
-    if tasks:session.commit()
+        task.status = TaskStatus.PENDING.value
+        task.leased_by = None
+        task.lease_token = None
+        task.lease_expires_at = None
+        task.heartbeat_at = None
+        session.execute(
+            update(SampleAttempt)
+            .where(
+                SampleAttempt.task_id == task.id,
+                SampleAttempt.status == SampleAttemptStatus.RUNNING.value,
+            )
+            .values(status=SampleAttemptStatus.PENDING.value)
+        )
+    if tasks:
+        session.commit()
     return len(tasks)
 
-def claim_task(session: Session, worker_id: str, lease_seconds: int=60) -> TaskUnit|None:
-    reclaim_expired_leases(session);now=datetime.now(timezone.utc)
-    task=session.scalar(select(TaskUnit).where(TaskUnit.status.in_([TaskStatus.PENDING.value,TaskStatus.RETRY_SCHEDULED.value]),or_(TaskUnit.next_retry_at.is_(None),TaskUnit.next_retry_at<=now)).order_by(TaskUnit.priority.desc(),TaskUnit.created_at).limit(1))
-    if task is None:return None
-    task.status=TaskStatus.LEASED.value;task.leased_by=worker_id;task.lease_token=str(uuid4());task.lease_expires_at=now+timedelta(seconds=lease_seconds);task.heartbeat_at=now;session.commit();session.refresh(task);return task
 
-def heartbeat_task(session:Session, task_id:str, lease_token:str, lease_seconds:int=60)->TaskUnit|None:
-    task=session.get(TaskUnit,task_id)
-    if task is None or task.lease_token!=lease_token:return None
-    now=datetime.now(timezone.utc);task.heartbeat_at=now;task.lease_expires_at=now+timedelta(seconds=lease_seconds);session.commit();session.refresh(task);return task
+def claim_task(
+    session: Session,
+    worker_id: str,
+    lease_seconds: int = 60,
+    *,
+    run_id: str | None = None,
+) -> TaskUnit | None:
+    """Atomically lease one due task, optionally restricting the claim to one run."""
+
+    reclaim_expired_leases(session)
+    now = datetime.now(timezone.utc)
+    claimable = [TaskStatus.PENDING.value, TaskStatus.RETRY_SCHEDULED.value]
+    query = select(TaskUnit.id).where(
+        TaskUnit.status.in_(claimable),
+        or_(TaskUnit.next_retry_at.is_(None), TaskUnit.next_retry_at <= now),
+    )
+    if run_id is not None:
+        query = query.where(TaskUnit.run_id == run_id)
+    candidate_ids = list(
+        session.scalars(query.order_by(TaskUnit.priority.desc(), TaskUnit.created_at).limit(20))
+    )
+    for task_id in candidate_ids:
+        lease_token = str(uuid4())
+        claimed = session.execute(
+            update(TaskUnit)
+            .where(
+                TaskUnit.id == task_id,
+                TaskUnit.status.in_(claimable),
+                or_(TaskUnit.next_retry_at.is_(None), TaskUnit.next_retry_at <= now),
+            )
+            .values(
+                status=TaskStatus.LEASED.value,
+                leased_by=worker_id,
+                lease_token=lease_token,
+                lease_expires_at=now + timedelta(seconds=lease_seconds),
+                heartbeat_at=now,
+            )
+        )
+        if claimed.rowcount != 1:
+            continue
+        session.commit()
+        task = session.get(TaskUnit, task_id)
+        assert task is not None
+        return task
+    return None
+
+
+def heartbeat_task(
+    session: Session,
+    task_id: str,
+    lease_token: str,
+    lease_seconds: int = 60,
+) -> TaskUnit | None:
+    task = session.get(TaskUnit, task_id)
+    now = datetime.now(timezone.utc)
+    if (
+        task is None
+        or task.lease_token != lease_token
+        or task.status not in {TaskStatus.LEASED.value, TaskStatus.RUNNING.value}
+        or task.lease_expires_at is None
+        or _as_utc(task.lease_expires_at) < now
+    ):
+        return None
+    task.heartbeat_at = now
+    task.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
+def has_valid_lease(task: TaskUnit, lease_token: str, now: datetime | None = None) -> bool:
+    now = now or datetime.now(timezone.utc)
+    return bool(
+        task.lease_token == lease_token
+        and task.status in {TaskStatus.LEASED.value, TaskStatus.RUNNING.value}
+        and task.lease_expires_at is not None
+        and _as_utc(task.lease_expires_at) >= now
+    )
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite returns timezone-naive timestamps despite timezone-aware columns."""
+
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def clear_lease(task: TaskUnit) -> None:
+    task.leased_by = None
+    task.lease_token = None
+    task.lease_expires_at = None
+    task.heartbeat_at = None

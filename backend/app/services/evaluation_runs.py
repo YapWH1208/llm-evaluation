@@ -74,7 +74,10 @@ def create_text_quick_check_run(
     task = TaskUnit(
         run_id=run.id,
         task_type="evaluation_shard",
-        payload={"sample_ids": [sample.sample_id for sample in samples]},
+        payload={
+            "sample_ids": [sample.sample_id for sample in samples],
+            "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+        },
         status=TaskStatus.PENDING.value,
     )
     session.add(task)
