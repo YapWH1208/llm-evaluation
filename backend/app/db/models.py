@@ -133,6 +133,25 @@ class PromptPackage(Base):
     change_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+class DatasetStatus(StrEnum):
+    NOT_DOWNLOADED="not_downloaded"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; LICENSE_REQUIRED="license_required"; FAILED="failed"
+
+class DatasetVersion(Base):
+    __tablename__ = "dataset_versions"
+    __table_args__ = (UniqueConstraint("dataset_id", "version", "revision", name="uq_dataset_revision"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    dataset_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    revision: Mapped[str] = mapped_column(String(128), nullable=False, default="default")
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    local_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    license_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    license_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=DatasetStatus.NOT_DOWNLOADED.value)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 
 class RunStatus(StrEnum):
     DRAFT = "draft"
