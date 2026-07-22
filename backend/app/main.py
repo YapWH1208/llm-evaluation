@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.api.evaluation_runs import router as evaluation_runs_router
@@ -38,6 +39,13 @@ def create_app(
         title=settings.application_name,
         version=settings.application_version,
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Content-Type"],
     )
     app.state.settings = settings
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
