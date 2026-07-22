@@ -18,11 +18,11 @@ def test_health_initializes_the_configured_sqlite_database(tmp_path: Path) -> No
         assert response.json() == {
             "status": "ok",
             "database": "sqlite",
-            "schema_version": 2,
+            "schema_version": 3,
         }
 
         tables = inspect(app.state.database.engine).get_table_names()
         assert "schema_versions" in tables
 
         with app.state.database.get_session() as session:
-            assert session.scalar(select(SchemaVersion.version)) == 2
+            assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 3

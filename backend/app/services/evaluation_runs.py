@@ -76,6 +76,8 @@ def create_text_quick_check_run(
         task_type="evaluation_shard",
         payload={
             "sample_ids": [sample.sample_id for sample in samples],
+            "estimated_request_count": len(samples),
+            "estimated_token_count": sum(_estimate_request_tokens(sample.prompt) for sample in samples),
             "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
         },
         status=TaskStatus.PENDING.value,
@@ -117,3 +119,9 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
             messages.append({"role": example["role"], "content": example["content"]})
     messages.append({"role": "user", "content": template.replace("{{ question }}", question)})
     return messages
+
+
+def _estimate_request_tokens(prompt: str) -> int:
+    """Conservative dependency-free estimate used only for TPM admission control."""
+
+    return max(1, (len(prompt) + 3) // 4) + 32

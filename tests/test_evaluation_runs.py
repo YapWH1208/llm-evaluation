@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import EvaluationRun, SampleAttempt, TaskUnit
 from app.db import ModelEndpoint
+from app.db.models import EndpointRateWindow
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
@@ -225,6 +226,36 @@ def test_expired_worker_lease_requeues_only_inflight_sample_attempts(tmp_path: P
         assert recovered["id"] == claim["id"]
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert attempts[0]["status"] == "pending"
+
+
+def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model","max_concurrency":1}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        first_run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).json()
+        client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1})
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json()["run_id"] == first_run["id"]
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
+
+    rpm_app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'rpm.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(rpm_app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model","max_concurrency":3,"requests_per_minute":1}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1})
+        client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1})
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is not None
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
+        with rpm_app.state.database.get_session() as session:
+            window = session.scalar(select(EndpointRateWindow))
+            assert window is not None
+            assert window.request_count == 1
 
 
 def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:

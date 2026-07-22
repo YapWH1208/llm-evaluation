@@ -130,6 +130,24 @@ class ModelCapability(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class EndpointRateWindow(Base):
+    """Durable per-endpoint fixed-window request and token admission accounting."""
+
+    __tablename__ = "endpoint_rate_windows"
+    __table_args__ = (UniqueConstraint("model_endpoint_id", "window_started_at", name="uq_endpoint_rate_window"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    model_endpoint_id: Mapped[str] = mapped_column(
+        ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    window_started_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class PromptPackage(Base):
     """Versioned prompt, parser, and scoring configuration."""
 

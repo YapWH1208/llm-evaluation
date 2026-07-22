@@ -2,6 +2,7 @@ from app.db.database import Database
 from app.db.models import (
     Base,
     EndpointStatus,
+    EndpointRateWindow,
     EvaluationRun,
     ModelEndpoint,
     PromptPackage,
@@ -17,6 +18,7 @@ __all__ = [
     "Base",
     "Database",
     "EndpointStatus",
+    "EndpointRateWindow",
     "EvaluationRun",
     "ModelEndpoint",
     "PromptPackage",

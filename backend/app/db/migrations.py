@@ -42,12 +42,22 @@ def _upgrade_v2_prompt_package_reference(connection: Connection) -> None:
     )
 
 
+def _upgrade_v3_endpoint_rate_windows(_connection: Connection) -> None:
+    """The ORM creates the new durable admission-accounting table."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
         migration_id="20260722_add_prompt_package_reference",
         description="Add prompt package references and register post-v1 platform tables.",
         upgrade=_upgrade_v2_prompt_package_reference,
+    ),
+    Migration(
+        version=3,
+        migration_id="20260722_add_endpoint_rate_windows",
+        description="Add durable per-endpoint request and token admission accounting.",
+        upgrade=_upgrade_v3_endpoint_rate_windows,
     ),
 )
 
