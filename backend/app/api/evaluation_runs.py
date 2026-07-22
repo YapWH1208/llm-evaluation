@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.db import EvaluationRun, SampleAttempt
+from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
 from app.services.evaluation_runs import RunCreationError, create_text_quick_check_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
@@ -108,6 +108,35 @@ def create_evaluation_run(
 @router.get("", response_model=list[EvaluationRunResponse])
 def list_evaluation_runs(session: SessionDependency) -> list[EvaluationRun]:
     return list(session.scalars(select(EvaluationRun).order_by(EvaluationRun.created_at.desc())))
+
+@router.post("/{run_id}/pause", response_model=EvaluationRunResponse)
+def pause_evaluation_run(run_id: str, session: SessionDependency) -> EvaluationRun:
+    run = session.get(EvaluationRun, run_id)
+    if run is None: raise HTTPException(404, "Evaluation run not found")
+    if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}: raise HTTPException(409, "Run cannot be paused in its current state")
+    run.status = RunStatus.PAUSED.value
+    session.query(TaskUnit).filter(TaskUnit.run_id == run.id, TaskUnit.status.in_([TaskStatus.PENDING.value, TaskStatus.RUNNING.value])).update({TaskUnit.status: TaskStatus.CANCELLED.value})
+    session.commit(); session.refresh(run); return run
+
+@router.post("/{run_id}/resume", response_model=EvaluationRunResponse)
+def resume_evaluation_run(run_id: str, session: SessionDependency) -> EvaluationRun:
+    run = session.get(EvaluationRun, run_id)
+    if run is None: raise HTTPException(404, "Evaluation run not found")
+    if run.status != RunStatus.PAUSED.value: raise HTTPException(409, "Only paused runs can be resumed")
+    run.status = RunStatus.QUEUED.value
+    for task in session.scalars(select(TaskUnit).where(TaskUnit.run_id == run.id)):
+        if task.status == TaskStatus.CANCELLED.value: task.status = TaskStatus.PENDING.value
+    session.commit(); session.refresh(run); return run
+
+@router.post("/{run_id}/cancel", response_model=EvaluationRunResponse)
+def cancel_evaluation_run(run_id: str, session: SessionDependency) -> EvaluationRun:
+    run = session.get(EvaluationRun, run_id)
+    if run is None: raise HTTPException(404, "Evaluation run not found")
+    if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}: raise HTTPException(409, "Run cannot be cancelled in its current state")
+    run.status = RunStatus.CANCELLED.value
+    session.query(TaskUnit).filter(TaskUnit.run_id == run.id).update({TaskUnit.status: TaskStatus.CANCELLED.value})
+    session.query(SampleAttempt).filter(SampleAttempt.run_id == run.id, SampleAttempt.status == SampleAttemptStatus.PENDING.value).update({SampleAttempt.status: SampleAttemptStatus.CANCELLED.value})
+    session.commit(); session.refresh(run); return run
 
 
 @router.post("/{run_id}/execute", response_model=EvaluationRunResponse)
