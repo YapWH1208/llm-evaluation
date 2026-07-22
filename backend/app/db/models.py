@@ -173,6 +173,28 @@ class HumanReview(Base):
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
 
+class UserRole(StrEnum):
+    ADMIN="admin"; EVALUATOR="evaluator"; REVIEWER="reviewer"; VIEWER="viewer"
+
+class User(Base):
+    __tablename__="users"
+    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))
+    email: Mapped[str]=mapped_column(String(320),nullable=False,unique=True,index=True)
+    display_name: Mapped[str]=mapped_column(String(200),nullable=False)
+    role: Mapped[str]=mapped_column(String(32),nullable=False,default=UserRole.VIEWER.value)
+    status: Mapped[str]=mapped_column(String(32),nullable=False,default="active")
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
+
+class AuditEvent(Base):
+    __tablename__="audit_events"
+    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))
+    actor_id: Mapped[str|None]=mapped_column(String(36),nullable=True,index=True)
+    action: Mapped[str]=mapped_column(String(128),nullable=False,index=True)
+    entity_type: Mapped[str]=mapped_column(String(64),nullable=False)
+    entity_id: Mapped[str|None]=mapped_column(String(36),nullable=True,index=True)
+    details: Mapped[dict[str,object]|None]=mapped_column(JSON,nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
+
 
 class RunStatus(StrEnum):
     DRAFT = "draft"
