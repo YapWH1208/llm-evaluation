@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api, ApiError, Endpoint, EvaluationRun, SampleAttempt } from "./api";
+import { api, ApiError, Dashboard, Endpoint, EvaluationRun, SampleAttempt } from "./api";
 
 const initialEndpoint = { base_url: "", api_key: "", model_name: "", display_name: "" };
 
@@ -10,6 +10,7 @@ function formatDate(value: string | null) {
 export default function App() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [runs, setRuns] = useState<EvaluationRun[]>([]);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [attempts, setAttempts] = useState<SampleAttempt[]>([]);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [form, setForm] = useState(initialEndpoint);
@@ -17,9 +18,14 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEndpoints, nextRuns] = await Promise.all([api.listEndpoints(), api.listRuns()]);
+    const [nextEndpoints, nextRuns, nextDashboard] = await Promise.all([
+      api.listEndpoints(),
+      api.listRuns(),
+      api.dashboard(),
+    ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
+    setDashboard(nextDashboard);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -83,14 +89,28 @@ export default function App() {
   }
 
   const completedRuns = runs.filter((run) => run.status.startsWith("completed"));
+  const metrics = dashboard ?? {
+    runs: { active: 0, completed: completedRuns.length },
+    queue: { pending: 0, leased: 0 },
+    endpoints: { available: 0, unavailable: 0, total: endpoints.length },
+    datasets: { ready: 0, blocked: 0 },
+    reports: 0,
+  };
 
   return (
     <main>
       <header className="hero">
         <div><p className="eyebrow">SQLite-first workspace</p><h1>LLM/SLM Evaluation Platform</h1><p>Connect an API-hosted model, verify it, run a reproducible text benchmark, and inspect every saved attempt.</p></div>
-        <div className="metric"><strong>{completedRuns.length}</strong><span>completed runs</span></div>
+        <div className="metric"><strong>{metrics.runs.completed}</strong><span>completed runs</span></div>
       </header>
       {notice && <button className="notice" onClick={() => setNotice(null)}>{notice}<span>×</span></button>}
+
+      <section className="dashboard" aria-label="Operational status">
+        <div><span>Active runs</span><strong>{metrics.runs.active}</strong><small>{metrics.queue.pending} waiting · {metrics.queue.leased} leased</small></div>
+        <div><span>Endpoints</span><strong>{metrics.endpoints.available}/{metrics.endpoints.total}</strong><small>{metrics.endpoints.unavailable} unavailable</small></div>
+        <div><span>Datasets</span><strong>{metrics.datasets.ready}</strong><small>{metrics.datasets.blocked} need attention</small></div>
+        <div><span>Reports</span><strong>{metrics.reports}</strong><small>generated artifacts</small></div>
+      </section>
 
       <section className="grid two">
         <article className="panel">

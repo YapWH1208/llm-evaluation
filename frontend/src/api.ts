@@ -42,6 +42,13 @@ export type SampleAttempt = {
 };
 
 export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generated_at: string };
+export type Dashboard = {
+  runs: { active: number; completed: number };
+  queue: { pending: number; leased: number };
+  endpoints: { available: number; unavailable: number; total: number };
+  datasets: { ready: number; blocked: number };
+  reports: number;
+};
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -85,4 +92,5 @@ export const api = {
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
   createReport: (runId: string, format: "html" | "json" | "csv") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
+  dashboard: () => request<Dashboard>("/dashboard"),
 };
