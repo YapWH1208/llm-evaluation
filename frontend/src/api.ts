@@ -41,6 +41,8 @@ export type SampleAttempt = {
   status: string;
 };
 
+export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generated_at: string };
+
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
 export class ApiError extends Error {
@@ -81,4 +83,6 @@ export const api = {
   executeRun: (runId: string) =>
     request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
+  createReport: (runId: string, format: "html" | "json" | "csv") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
+  reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
 };

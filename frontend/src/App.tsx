@@ -68,6 +68,15 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function generateReport(runId: string) {
+    setBusy(`report-${runId}`);
+    try {
+      const report = await api.createReport(runId, "html");
+      setNotice("HTML report generated in the platform artifact store.");
+      window.open(api.reportDownloadUrl(report.id), "_blank", "noopener,noreferrer");
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function selectRun(runId: string) {
     setSelectedRun(runId);
     try { setAttempts(await api.listAttempts(runId)); } catch (error) { showError(error); }
@@ -112,7 +121,7 @@ export default function App() {
       <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>
         {runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <div className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}>
           <button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button>
-          <div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Evidence</button>{run.status === "queued" && <button disabled={busy === run.id} onClick={() => void executeRun(run.id)}>Execute</button>}</div>
+          <div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Evidence</button>{run.status === "queued" && <button disabled={busy === run.id} onClick={() => void executeRun(run.id)}>Execute</button>}{run.status.startsWith("completed") && <button disabled={busy === `report-${run.id}`} onClick={() => void generateReport(run.id)}>Download report</button>}</div>
         </div>)}</div>}
       </section>
 
