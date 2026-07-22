@@ -83,6 +83,38 @@ class ModelEndpoint(Base):
     )
 
 
+class CapabilityDeclaration(StrEnum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
+
+
+class CapabilityDetection(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+    INCONCLUSIVE = "inconclusive"
+    NOT_TESTED = "not_tested"
+    UNSUPPORTED_BY_ADAPTER = "unsupported_by_adapter"
+
+
+class ModelCapability(Base):
+    """Keeps user declarations separate from platform detection evidence."""
+
+    __tablename__ = "model_capabilities"
+    __table_args__ = (UniqueConstraint("model_endpoint_id", "capability_key", name="uq_model_capability"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    model_endpoint_id: Mapped[str] = mapped_column(ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    capability_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_declared_status: Mapped[str] = mapped_column(String(32), nullable=False, default=CapabilityDeclaration.UNKNOWN.value)
+    auto_detection_status: Mapped[str] = mapped_column(String(32), nullable=False, default=CapabilityDetection.NOT_TESTED.value)
+    effective_status: Mapped[str] = mapped_column(String(64), nullable=False, default="unverified")
+    detection_evidence: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    detector_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class RunStatus(StrEnum):
     DRAFT = "draft"
     QUEUED = "queued"

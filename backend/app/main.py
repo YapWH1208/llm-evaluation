@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.capabilities import router as capabilities_router
 from app.api.evaluation_runs import router as evaluation_runs_router
 from app.api.model_endpoints import router as model_endpoints_router
 from app.core.config import Settings
@@ -51,6 +52,7 @@ def create_app(
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
     app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor()
     app.include_router(model_endpoints_router)
+    app.include_router(capabilities_router)
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
