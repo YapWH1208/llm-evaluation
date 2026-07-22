@@ -10,6 +10,7 @@ from app.api.model_endpoints import router as model_endpoints_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
+from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
 
 
 class HealthResponse(BaseModel):
@@ -21,6 +22,7 @@ class HealthResponse(BaseModel):
 def create_app(
     settings: Settings | None = None,
     connection_tester: ConnectionTester | None = None,
+    model_executor: ModelExecutor | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_environment()
     database = Database(settings)
@@ -39,6 +41,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
+    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor()
     app.include_router(model_endpoints_router)
     app.include_router(evaluation_runs_router)
 
