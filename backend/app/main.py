@@ -20,11 +20,13 @@ from app.api.reviews import router as reviews_router
 from app.api.admin import router as admin_router
 from app.api.dashboard import router as dashboard_router
 from app.api.assets import router as assets_router
+from app.api.benchmarks import router as benchmarks_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
 from app.services.capability_detector import CapabilityDetector, OpenAIChatCompletionsCapabilityDetector
 from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
+from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
 
 
 class HealthResponse(BaseModel):
@@ -45,6 +47,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         database.initialize()
+        with database.get_session() as session:
+            ensure_builtin_benchmark_definitions(session)
         app.state.database = database
         yield
         database.dispose()
@@ -76,6 +80,7 @@ def create_app(
     app.include_router(admin_router)
     app.include_router(dashboard_router)
     app.include_router(assets_router)
+    app.include_router(benchmarks_router)
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):

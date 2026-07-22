@@ -50,6 +50,10 @@ def _upgrade_v4_media_assets(_connection: Connection) -> None:
     """The ORM creates the content-addressed local media asset table."""
 
 
+def _upgrade_v5_benchmark_definitions(_connection: Connection) -> None:
+    """The ORM creates the versioned benchmark manifest table."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -68,6 +72,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260722_add_media_assets",
         description="Add validated content-addressed media assets for multimodal samples.",
         upgrade=_upgrade_v4_media_assets,
+    ),
+    Migration(
+        version=5,
+        migration_id="20260722_add_benchmark_definitions",
+        description="Add versioned benchmark manifests and plugin registration records.",
+        upgrade=_upgrade_v5_benchmark_definitions,
     ),
 )
 

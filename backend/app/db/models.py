@@ -165,6 +165,24 @@ class MediaAsset(Base):
     )
 
 
+class BenchmarkDefinition(Base):
+    """Versioned benchmark manifest, independent from a particular worker implementation."""
+
+    __tablename__ = "benchmark_definitions"
+    __table_args__ = (UniqueConstraint("benchmark_id", "version", name="uq_benchmark_definition_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    benchmark_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="registered")
+    manifest: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class PromptPackage(Base):
     """Versioned prompt, parser, and scoring configuration."""
 

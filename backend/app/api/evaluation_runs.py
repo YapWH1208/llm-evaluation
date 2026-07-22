@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
-from app.services.evaluation_runs import RunCreationError, create_text_quick_check_run
+from app.services.evaluation_runs import RunCreationError, create_benchmark_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 
@@ -22,6 +22,8 @@ class EvaluationRunCreate(BaseModel):
     model_endpoint_id: str
     sample_limit: Annotated[int | None, Field(ge=1, le=3)] = None
     prompt_package_id: str | None = None
+    benchmark_id: str = "text-quick-check"
+    benchmark_version: str = "1.0.0"
 
 
 class EvaluationRunResponse(BaseModel):
@@ -93,11 +95,13 @@ def create_evaluation_run(
     session: SessionDependency,
 ) -> EvaluationRun:
     try:
-        return create_text_quick_check_run(
+        return create_benchmark_run(
             session,
             model_endpoint_id=payload.model_endpoint_id,
             sample_limit=payload.sample_limit,
             prompt_package_id=payload.prompt_package_id,
+            benchmark_id=payload.benchmark_id,
+            benchmark_version=payload.benchmark_version,
         )
     except RunCreationError as error:
         status_code = (

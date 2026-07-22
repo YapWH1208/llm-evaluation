@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.benchmarks import TEXT_QUICK_CHECK
+from app.benchmarks import get_installed_plugin
 from app.db import (
     EndpointStatus,
     EvaluationRun,
@@ -26,13 +26,35 @@ def create_text_quick_check_run(
     sample_limit: int | None,
     prompt_package_id: str | None = None,
 ) -> EvaluationRun:
+    return create_benchmark_run(
+        session,
+        model_endpoint_id=model_endpoint_id,
+        sample_limit=sample_limit,
+        prompt_package_id=prompt_package_id,
+        benchmark_id="text-quick-check",
+        benchmark_version="1.0.0",
+    )
+
+
+def create_benchmark_run(
+    session: Session,
+    *,
+    model_endpoint_id: str,
+    sample_limit: int | None,
+    prompt_package_id: str | None,
+    benchmark_id: str,
+    benchmark_version: str,
+) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
         raise RunCreationError("Model endpoint not found.")
     if endpoint.status != EndpointStatus.AVAILABLE.value:
         raise RunCreationError("Model endpoint must pass a connection test before scheduling a run.")
 
-    samples = TEXT_QUICK_CHECK.samples[:sample_limit]
+    plugin = get_installed_plugin(benchmark_id, benchmark_version)
+    if plugin is None:
+        raise RunCreationError("Benchmark plugin is not installed for the requested version.")
+    samples = plugin.samples(sample_limit)
     if not samples:
         raise RunCreationError("At least one benchmark sample is required.")
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
@@ -41,8 +63,9 @@ def create_text_quick_check_run(
 
     snapshot = {
         "benchmark": {
-            "id": TEXT_QUICK_CHECK.identifier,
-            "version": TEXT_QUICK_CHECK.version,
+            "id": benchmark_id,
+            "version": benchmark_version,
+            "manifest": plugin.manifest,
         },
         "endpoint": {
             "id": endpoint.id,
@@ -62,8 +85,8 @@ def create_text_quick_check_run(
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
-        benchmark_id=TEXT_QUICK_CHECK.identifier,
-        benchmark_version=TEXT_QUICK_CHECK.version,
+        benchmark_id=benchmark_id,
+        benchmark_version=benchmark_version,
         configuration_snapshot=snapshot,
         status=RunStatus.QUEUED.value,
         total_samples=len(samples),
