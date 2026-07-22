@@ -28,6 +28,21 @@ class SchemaVersion(Base):
     )
 
 
+class SchemaMigration(Base):
+    """Auditable record of each successful forward-only schema migration."""
+
+    __tablename__ = "schema_migrations"
+
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    migration_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    applied_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class EndpointStatus(StrEnum):
     UNVERIFIED = "unverified"
     AVAILABLE = "available"

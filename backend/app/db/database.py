@@ -7,13 +7,14 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
-from app.db.models import Base, SchemaVersion
+from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS, Migration
+from app.db.models import Base, SchemaMigration, SchemaVersion
 
 
 class Database:
     """Owns database setup and sessions for one application instance."""
 
-    INITIAL_SCHEMA_VERSION = 1
+    CURRENT_SCHEMA_VERSION = LATEST_SCHEMA_VERSION
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -51,18 +52,42 @@ class Database:
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
 
+    def migration_preview(self) -> tuple[Migration, ...]:
+        """Return pending forward-only migrations without changing the database."""
+
+        with self.engine.connect() as connection:
+            table_names = set(connection.dialect.get_table_names(connection))
+            if "schema_versions" not in table_names:
+                return MIGRATIONS
+            current_version = connection.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)) or 0
+        return tuple(migration for migration in MIGRATIONS if migration.version > current_version)
+
     def initialize(self) -> None:
-        """Create the initial schema for a single-node startup."""
+        """Create missing structures and advance existing relational databases safely."""
 
         Base.metadata.create_all(self.engine)
-        with self.session_factory.begin() as session:
-            current_version = session.scalar(
+        with self.engine.begin() as connection:
+            current_version = connection.scalar(
                 select(SchemaVersion.version)
                 .order_by(SchemaVersion.version.desc())
                 .limit(1)
-            )
-            if current_version is None:
-                session.add(SchemaVersion(version=self.INITIAL_SCHEMA_VERSION))
+            ) or 0
+            for migration in MIGRATIONS:
+                if migration.version <= current_version:
+                    continue
+                migration.upgrade(connection)
+                Base.metadata.create_all(connection)
+                connection.execute(
+                    SchemaVersion.__table__.insert().values(version=migration.version)
+                )
+                connection.execute(
+                    SchemaMigration.__table__.insert().values(
+                        version=migration.version,
+                        migration_id=migration.migration_id,
+                        description=migration.description,
+                    )
+                )
+                current_version = migration.version
 
     def get_session(self) -> Session:
         return self.session_factory()

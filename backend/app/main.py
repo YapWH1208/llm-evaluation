@@ -87,7 +87,7 @@ def create_app(
         return HealthResponse(
             status="ok",
             database="sqlite" if settings.is_sqlite else "configured",
-            schema_version=Database.INITIAL_SCHEMA_VERSION,
+            schema_version=Database.CURRENT_SCHEMA_VERSION,
         )
 
     return app
