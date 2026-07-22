@@ -148,6 +148,23 @@ class EndpointRateWindow(Base):
     )
 
 
+class MediaAsset(Base):
+    """A validated, content-addressed local media artifact referenced by sample content."""
+
+    __tablename__ = "media_assets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    media_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    storage_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class PromptPackage(Base):
     """Versioned prompt, parser, and scoring configuration."""
 

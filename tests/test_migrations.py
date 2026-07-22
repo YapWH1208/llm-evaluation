@@ -37,19 +37,22 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4]
     database.initialize()
     database.initialize()
 
     columns = {column["name"] for column in inspect(database.engine).get_columns("evaluation_runs")}
     assert "prompt_package_id" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 3
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 4
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
         rate_window_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 3))
         assert rate_window_migration is not None
         assert rate_window_migration.migration_id == "20260722_add_endpoint_rate_windows"
+        media_asset_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 4))
+        assert media_asset_migration is not None
+        assert media_asset_migration.migration_id == "20260722_add_media_assets"
     assert database.migration_preview() == ()
     database.dispose()

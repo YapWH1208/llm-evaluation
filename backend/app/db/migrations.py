@@ -46,6 +46,10 @@ def _upgrade_v3_endpoint_rate_windows(_connection: Connection) -> None:
     """The ORM creates the new durable admission-accounting table."""
 
 
+def _upgrade_v4_media_assets(_connection: Connection) -> None:
+    """The ORM creates the content-addressed local media asset table."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -58,6 +62,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260722_add_endpoint_rate_windows",
         description="Add durable per-endpoint request and token admission accounting.",
         upgrade=_upgrade_v3_endpoint_rate_windows,
+    ),
+    Migration(
+        version=4,
+        migration_id="20260722_add_media_assets",
+        description="Add validated content-addressed media assets for multimodal samples.",
+        upgrade=_upgrade_v4_media_assets,
     ),
 )
 

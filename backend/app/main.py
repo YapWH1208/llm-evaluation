@@ -19,6 +19,7 @@ from app.api.comparisons import router as comparisons_router
 from app.api.reviews import router as reviews_router
 from app.api.admin import router as admin_router
 from app.api.dashboard import router as dashboard_router
+from app.api.assets import router as assets_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
@@ -74,6 +75,7 @@ def create_app(
     app.include_router(reviews_router)
     app.include_router(admin_router)
     app.include_router(dashboard_router)
+    app.include_router(assets_router)
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):
