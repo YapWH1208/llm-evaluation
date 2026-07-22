@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
 class EvaluationRunCreate(BaseModel):
     model_endpoint_id: str
     sample_limit: Annotated[int | None, Field(ge=1, le=3)] = None
+    prompt_package_id: str | None = None
 
 
 class EvaluationRunResponse(BaseModel):
@@ -28,6 +29,7 @@ class EvaluationRunResponse(BaseModel):
 
     id: str
     model_endpoint_id: str
+    prompt_package_id: str | None
     benchmark_id: str
     benchmark_version: str
     configuration_snapshot: dict[str, Any]
@@ -95,6 +97,7 @@ def create_evaluation_run(
             session,
             model_endpoint_id=payload.model_endpoint_id,
             sample_limit=payload.sample_limit,
+            prompt_package_id=payload.prompt_package_id,
         )
     except RunCreationError as error:
         status_code = (

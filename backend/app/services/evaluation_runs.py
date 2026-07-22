@@ -7,6 +7,7 @@ from app.db import (
     EndpointStatus,
     EvaluationRun,
     ModelEndpoint,
+    PromptPackage,
     RunStatus,
     SampleAttempt,
     TaskStatus,
@@ -23,6 +24,7 @@ def create_text_quick_check_run(
     *,
     model_endpoint_id: str,
     sample_limit: int | None,
+    prompt_package_id: str | None = None,
 ) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
@@ -33,6 +35,9 @@ def create_text_quick_check_run(
     samples = TEXT_QUICK_CHECK.samples[:sample_limit]
     if not samples:
         raise RunCreationError("At least one benchmark sample is required.")
+    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
+        raise RunCreationError("Prompt package not found.")
 
     snapshot = {
         "benchmark": {
@@ -47,9 +52,16 @@ def create_text_quick_check_run(
             "default_request_body": endpoint.default_request_body,
         },
         "sample_ids": [sample.sample_id for sample in samples],
+        "prompt_package": (
+            {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
+             "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
+             "few_shot_examples": prompt_package.few_shot_examples}
+            if prompt_package else None
+        ),
     }
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
+        prompt_package_id=prompt_package.id if prompt_package else None,
         benchmark_id=TEXT_QUICK_CHECK.identifier,
         benchmark_version=TEXT_QUICK_CHECK.version,
         configuration_snapshot=snapshot,
@@ -75,7 +87,7 @@ def create_text_quick_check_run(
                 task_id=task.id,
                 sample_id=sample.sample_id,
                 input_snapshot={
-                    "messages": [{"role": "user", "content": sample.prompt}],
+                    "messages": _build_messages(sample.prompt, prompt_package),
                     "modality": "text",
                 },
                 reference_snapshot={"type": "exact_match", "answer": sample.reference_answer},
@@ -86,3 +98,19 @@ def create_text_quick_check_run(
     session.commit()
     session.refresh(run)
     return run
+
+
+def _build_messages(question: str, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
+    if prompt_package is None:
+        return [{"role": "user", "content": question}]
+    template = prompt_package.user_template
+    if "{{ question }}" not in template:
+        raise RunCreationError("Prompt package user template must contain {{ question }}.")
+    messages: list[dict[str, object]] = []
+    if prompt_package.system_message:
+        messages.append({"role": "system", "content": prompt_package.system_message})
+    for example in prompt_package.few_shot_examples:
+        if isinstance(example, dict) and isinstance(example.get("role"), str) and isinstance(example.get("content"), str):
+            messages.append({"role": example["role"], "content": example["content"]})
+    messages.append({"role": "user", "content": template.replace("{{ question }}", question)})
+    return messages

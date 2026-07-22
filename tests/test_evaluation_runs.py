@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import Settings
 from app.db import EvaluationRun, SampleAttempt, TaskUnit
+from app.db import ModelEndpoint
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
@@ -156,3 +157,20 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
         assert all(attempt["raw_response"] for attempt in attempts.json())
 
         assert client.post(f"/api/v1/evaluation-runs/{run_id}/execute").status_code == 409
+
+
+def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        with app.state.database.get_session() as session:
+            item = session.get(ModelEndpoint, endpoint["id"])
+            assert item is not None
+            item.status = "available"
+            session.commit()
+        prompt = client.post("/api/v1/prompt-packages", json={"name":"strict","version":"1","user_template":"Answer only: {{ question }}","system_message":"Be concise."}).json()
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1,"prompt_package_id":prompt["id"]})
+        assert run.status_code == 201
+        attempts = client.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
+        assert attempts[0]["input_snapshot"]["messages"][0]["role"] == "system"
+        assert "Answer only:" in attempts[0]["input_snapshot"]["messages"][-1]["content"]
