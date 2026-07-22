@@ -162,6 +162,17 @@ class Report(Base):
     generator_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+class HumanReview(Base):
+    __tablename__="human_reviews"
+    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))
+    sample_attempt_id: Mapped[str]=mapped_column(ForeignKey("sample_attempts.id",ondelete="CASCADE"),nullable=False,index=True)
+    reviewer_id: Mapped[str]=mapped_column(String(128),nullable=False)
+    rubric: Mapped[dict[str,object]|None]=mapped_column(JSON,nullable=True)
+    score: Mapped[float|None]=mapped_column(nullable=True)
+    labels: Mapped[list[object]]=mapped_column(JSON,nullable=False,default=list)
+    notes: Mapped[str|None]=mapped_column(Text,nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
+
 
 class RunStatus(StrEnum):
     DRAFT = "draft"
