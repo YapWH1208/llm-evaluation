@@ -50,6 +50,36 @@ export type Dashboard = {
   reports: number;
 };
 
+export type PromptPackage = {
+  id: string;
+  name: string;
+  version: string;
+  prompt_type: string;
+  system_message: string | null;
+  user_template: string;
+  created_at: string;
+};
+
+export type Dataset = {
+  id: string;
+  dataset_id: string;
+  version: string;
+  revision: string;
+  source_url: string | null;
+  license_text: string | null;
+  license_accepted_at: string | null;
+  status: string;
+  error_message: string | null;
+};
+
+export type Capability = {
+  id: string;
+  capability_key: string;
+  user_declared_status: string;
+  auto_detection_status: string;
+  effective_status: string;
+};
+
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
 export class ApiError extends Error {
@@ -82,10 +112,10 @@ export const api = {
       { method: "POST" },
     ),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
-  createRun: (modelEndpointId: string) =>
+  createRun: (modelEndpointId: string, promptPackageId?: string) =>
     request<EvaluationRun>("/evaluation-runs", {
       method: "POST",
-      body: JSON.stringify({ model_endpoint_id: modelEndpointId }),
+      body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null }),
     }),
   executeRun: (runId: string) =>
     request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
@@ -93,4 +123,15 @@ export const api = {
   createReport: (runId: string, format: "html" | "json" | "csv") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
   dashboard: () => request<Dashboard>("/dashboard"),
+  listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
+  createPromptPackage: (body: Record<string, unknown>) =>
+    request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
+  listDatasets: () => request<Dataset[]>("/datasets"),
+  createDataset: (body: Record<string, unknown>) =>
+    request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
+  acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
+  downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
+  listCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities`),
+  detectCapabilities: (endpointId: string) =>
+    request<Capability[]>(`/model-endpoints/${endpointId}/capabilities/detect`, { method: "POST" }),
 };
