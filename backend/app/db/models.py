@@ -152,6 +152,16 @@ class DatasetVersion(Base):
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+class Report(Base):
+    __tablename__ = "reports"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    report_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    format: Mapped[str] = mapped_column(String(16), nullable=False)
+    artifact_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    generator_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 
 class RunStatus(StrEnum):
     DRAFT = "draft"
