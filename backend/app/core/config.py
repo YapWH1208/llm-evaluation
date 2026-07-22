@@ -13,6 +13,7 @@ class Settings:
     secret_encryption_key: str | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     data_root: str = "./data"
+    admin_token: str | None = None
     application_name: str = "LLM/SLM Evaluation Platform"
     application_version: str = "0.1.0"
 
@@ -24,6 +25,7 @@ class Settings:
             secret_encryption_key=getenv("LLE_SECRET_ENCRYPTION_KEY"),
             cors_origins=tuple(configured_origins.split(",")) if configured_origins else DEFAULT_CORS_ORIGINS,
             data_root=getenv("LLE_DATA_ROOT", "./data"),
+            admin_token=getenv("LLE_ADMIN_TOKEN"),
         )
 
     @property

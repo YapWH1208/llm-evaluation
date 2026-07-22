@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hmac
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.capabilities import router as capabilities_router
@@ -67,6 +69,15 @@ def create_app(
     app.include_router(comparisons_router)
     app.include_router(reviews_router)
     app.include_router(admin_router)
+
+    @app.middleware("http")
+    async def require_configured_api_token(request, call_next):
+        if settings.admin_token and request.url.path.startswith("/api/v1"):
+            supplied = request.headers.get("Authorization", "")
+            expected = f"Bearer {settings.admin_token}"
+            if not hmac.compare_digest(supplied, expected):
+                return JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
+        return await call_next(request)
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
