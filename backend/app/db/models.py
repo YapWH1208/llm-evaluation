@@ -115,6 +115,25 @@ class ModelCapability(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class PromptPackage(Base):
+    """Versioned prompt, parser, and scoring configuration."""
+
+    __tablename__ = "prompt_packages"
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_prompt_package_version"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_type: Mapped[str] = mapped_column(String(64), nullable=False, default="user_custom")
+    system_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_template: Mapped[str] = mapped_column(Text, nullable=False)
+    few_shot_examples: Mapped[list[object]] = mapped_column(JSON, nullable=False, default=list)
+    output_format: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    response_parser: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    scoring_rule: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    change_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class RunStatus(StrEnum):
     DRAFT = "draft"
     QUEUED = "queued"

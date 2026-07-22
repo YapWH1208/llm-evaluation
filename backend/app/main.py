@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.api.capabilities import router as capabilities_router
 from app.api.evaluation_runs import router as evaluation_runs_router
 from app.api.model_endpoints import router as model_endpoints_router
+from app.api.prompt_packages import router as prompt_packages_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
@@ -53,6 +54,7 @@ def create_app(
     app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor()
     app.include_router(model_endpoints_router)
     app.include_router(capabilities_router)
+    app.include_router(prompt_packages_router)
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
