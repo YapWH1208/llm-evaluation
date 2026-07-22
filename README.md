@@ -19,4 +19,13 @@ The default database is `data/llm_evaluation.db`. Override it with `LLE_DATABASE
 $env:LLE_DATABASE_URL = "sqlite:///C:/temp/llm_evaluation.db"
 ```
 
+Before adding a model API key, configure a Fernet encryption key. Generate one locally with:
+
+```powershell
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+$env:LLE_SECRET_ENCRYPTION_KEY = "paste-the-generated-key-here"
+```
+
+The API never returns a stored API key; it only displays a masked suffix.
+
 Open `http://127.0.0.1:8000/docs` for the API and `http://127.0.0.1:8000/health` for the health check.
