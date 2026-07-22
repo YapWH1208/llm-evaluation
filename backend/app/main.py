@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.api.model_endpoints import router as model_endpoints_router
 from app.core.config import Settings
 from app.db.database import Database
+from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
 
 
 class HealthResponse(BaseModel):
@@ -16,7 +17,10 @@ class HealthResponse(BaseModel):
     schema_version: int
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    connection_tester: ConnectionTester | None = None,
+) -> FastAPI:
     settings = settings or Settings.from_environment()
     database = Database(settings)
 
@@ -33,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
     app.include_router(model_endpoints_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])

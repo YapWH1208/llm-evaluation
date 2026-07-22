@@ -79,3 +79,26 @@ def test_model_endpoint_creation_requires_an_encryption_key(tmp_path: Path) -> N
 
     assert response.status_code == 503
     assert "LLE_SECRET_ENCRYPTION_KEY" in response.json()["detail"]
+
+
+def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}",
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "test-secret-key",
+                "model_name": "example-model",
+                "default_request_body": {"model": "cannot-override"},
+            },
+        )
+
+    assert response.status_code == 422
+    assert "protected fields" in response.json()["detail"][0]["msg"]

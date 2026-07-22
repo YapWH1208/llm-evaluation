@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError, mask_secret
-from app.db import ModelEndpoint
+from app.db import EndpointStatus, ModelEndpoint
+from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
 
@@ -36,6 +37,17 @@ class EndpointBase(BaseModel):
             raise ValueError("base_url must not include credentials")
         return value.rstrip("/")
 
+    @field_validator("default_request_body")
+    @classmethod
+    def validate_default_request_body(cls, value: dict[str, Any]) -> dict[str, Any]:
+        protected_fields = sorted(set(value).intersection(PROTECTED_REQUEST_FIELDS))
+        if protected_fields:
+            raise ValueError(
+                "default_request_body cannot override protected fields: "
+                + ", ".join(protected_fields)
+            )
+        return value
+
 
 class ModelEndpointCreate(EndpointBase):
     api_key: SecretStr
@@ -59,6 +71,13 @@ class ModelEndpointUpdate(BaseModel):
             return value
         return EndpointBase.validate_base_url(value)
 
+    @field_validator("default_request_body")
+    @classmethod
+    def validate_default_request_body(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return value
+        return EndpointBase.validate_default_request_body(value)
+
 
 class ModelEndpointResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -75,6 +94,8 @@ class ModelEndpointResponse(BaseModel):
     requests_per_minute: int | None
     tokens_per_minute: int | None
     status: str
+    last_tested_at: datetime | None
+    last_connection_error: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -94,8 +115,13 @@ def get_cipher(request: Request) -> SecretCipher:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 
 
+def get_connection_tester(request: Request) -> ConnectionTester:
+    return request.app.state.connection_tester
+
+
 SessionDependency = Annotated[Session, Depends(get_session)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
+ConnectionTesterDependency = Annotated[ConnectionTester, Depends(get_connection_tester)]
 
 
 def get_endpoint_or_404(session: Session, endpoint_id: str) -> ModelEndpoint:
@@ -138,6 +164,45 @@ def list_model_endpoints(session: SessionDependency) -> list[ModelEndpoint]:
 @router.get("/{endpoint_id}", response_model=ModelEndpointResponse)
 def get_model_endpoint(endpoint_id: str, session: SessionDependency) -> ModelEndpoint:
     return get_endpoint_or_404(session, endpoint_id)
+
+
+class ConnectionTestResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    provider_status_code: int | None
+    tested_at: datetime
+
+
+@router.post("/{endpoint_id}/connection-test", response_model=ConnectionTestResponse)
+def test_model_endpoint_connection(
+    endpoint_id: str,
+    session: SessionDependency,
+    cipher: CipherDependency,
+    connection_tester: ConnectionTesterDependency,
+) -> ConnectionTestResponse:
+    endpoint = get_endpoint_or_404(session, endpoint_id)
+    try:
+        api_key = cipher.decrypt(endpoint.encrypted_api_key)
+    except SecretConfigurationError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+
+    result: ConnectionTestResult = connection_tester.test(endpoint, api_key)
+    tested_at = datetime.now(timezone.utc)
+    endpoint.last_tested_at = tested_at
+    endpoint.status = (
+        EndpointStatus.AVAILABLE.value if result.success else EndpointStatus.UNAVAILABLE.value
+    )
+    endpoint.last_connection_error = None if result.success else result.message
+    session.commit()
+
+    return ConnectionTestResponse(
+        success=result.success,
+        status=endpoint.status,
+        message=result.message,
+        provider_status_code=result.provider_status_code,
+        tested_at=tested_at,
+    )
 
 
 @router.patch("/{endpoint_id}", response_model=ModelEndpointResponse)
