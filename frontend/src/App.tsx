@@ -54,6 +54,7 @@ const initialSuite = { name: "", version: "1", description: "", benchmarks: "tex
 const initialReview = { reviewer_id: "local-reviewer", score: "", labels: "", notes: "" };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
 const initialUser = { email: "", display_name: "", role: "viewer", max_concurrency: "" };
+const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
 
 function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
@@ -126,6 +127,7 @@ export default function App() {
   const [runMaxConcurrency, setRunMaxConcurrency] = useState("");
   const [reportType, setReportType] = useState<ReportType>("single_model");
   const [relatedReportRunId, setRelatedReportRunId] = useState("");
+  const [shareForm, setShareForm] = useState(initialShare);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -296,7 +298,13 @@ export default function App() {
   async function shareReport(report: Report) {
     setBusy(`share-${report.id}`);
     try {
-      const share = await api.createReportShare(report.id);
+      const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
+      const share = await api.createReportShare(report.id, {
+        expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+        password: shareForm.password || undefined,
+        allow_download: shareForm.allow_download,
+        include_evidence: shareForm.include_evidence,
+      });
       setNotice(`Read-only share link (expires ${formatDate(share.expires_at)}): ${share.share_url}`);
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -576,7 +584,25 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
 }
 
 function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
-  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a>{onShare && !["json", "csv", "parquet"].includes(report.format) && <button className="secondary" onClick={() => void onShare(report)}>Share</button>}</div></td></tr>)}</tbody></table></div>;
+  const [shareForm, setShareForm] = useState(initialShare);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+
+  async function createShare(report: Report) {
+    if (onShare) {
+      await onShare(report);
+      return;
+    }
+    const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
+    const share = await api.createReportShare(report.id, {
+      expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+      password: shareForm.password || undefined,
+      allow_download: shareForm.allow_download,
+      include_evidence: shareForm.include_evidence,
+    });
+    setShareLink(share.share_url);
+  }
+
+  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section><div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {
