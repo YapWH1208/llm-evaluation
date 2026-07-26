@@ -37,14 +37,14 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7]
     database.initialize()
     database.initialize()
 
     columns = {column["name"] for column in inspect(database.engine).get_columns("evaluation_runs")}
     assert "prompt_package_id" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 6
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 7
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -60,5 +60,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         user_token_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 6))
         assert user_token_migration is not None
         assert user_token_migration.migration_id == "20260722_add_user_api_tokens"
+        judge_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 7))
+        assert judge_migration is not None
+        assert judge_migration.migration_id == "20260726_add_judge_assessments"
     assert database.migration_preview() == ()
     database.dispose()

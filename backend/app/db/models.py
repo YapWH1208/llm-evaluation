@@ -241,6 +241,30 @@ class HumanReview(Base):
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
 
+
+class JudgeAssessment(Base):
+    """LLM-as-judge assessment retained separately from deterministic and human evidence."""
+
+    __tablename__ = "judge_assessments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    sample_attempt_id: Mapped[str] = mapped_column(
+        ForeignKey("sample_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    judge_endpoint_id: Mapped[str] = mapped_column(
+        ForeignKey("model_endpoints.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    rubric: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    score: Mapped[float | None] = mapped_column(nullable=True)
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
 class UserRole(StrEnum):
     ADMIN="admin"; EVALUATOR="evaluator"; REVIEWER="reviewer"; VIEWER="viewer"
 

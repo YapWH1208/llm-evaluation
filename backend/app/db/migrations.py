@@ -58,6 +58,10 @@ def _upgrade_v6_user_api_tokens(connection: Connection) -> None:
     _add_column_if_missing(connection, "users", "api_token_hash", "api_token_hash VARCHAR(64)")
 
 
+def _upgrade_v7_judge_assessments(_connection: Connection) -> None:
+    """The ORM creates durable LLM-as-judge assessment records."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -88,6 +92,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260722_add_user_api_tokens",
         description="Add hashed per-user bearer tokens for role-enforced API access.",
         upgrade=_upgrade_v6_user_api_tokens,
+    ),
+    Migration(
+        version=7,
+        migration_id="20260726_add_judge_assessments",
+        description="Add durable LLM-as-judge assessment evidence for sample attempts.",
+        upgrade=_upgrade_v7_judge_assessments,
     ),
 )
 
