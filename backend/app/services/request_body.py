@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
+from app.services.provider_headers import PROTECTED_REQUEST_FIELDS
 
 
 def adapter_defaults(protocol_profile: str) -> dict[str, object]:
@@ -20,6 +20,10 @@ def adapter_defaults(protocol_profile: str) -> dict[str, object]:
 
     if protocol_profile == "openai_responses":
         return {"max_output_tokens": 32, "store": False}
+    if protocol_profile == "gemini_generate_content":
+        return {"max_output_tokens": 32, "temperature": 0}
+    if protocol_profile == "ollama_chat":
+        return {"max_tokens": 32, "temperature": 0}
     return {"max_tokens": 32, "temperature": 0}
 
 

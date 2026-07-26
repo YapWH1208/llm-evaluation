@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.db.models import CapabilityDetection, ModelEndpoint
-from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
+from app.services.model_executor import OpenAIChatCompletionsExecutor, _endpoint_url, _extract_prediction, _extract_usage
 from app.services.provider_headers import provider_headers
 
 
@@ -42,7 +42,7 @@ class CapabilityDetector(Protocol):
 class OpenAIChatCompletionsCapabilityDetector:
     """Runs inexpensive OpenAI Chat Completions probes without storing secrets or media."""
 
-    ADAPTER_VERSION = "openai-compatible/2"
+    ADAPTER_VERSION = "provider-protocols/1"
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -61,7 +61,7 @@ class OpenAIChatCompletionsCapabilityDetector:
         api_key: str,
         capability_key: str,
     ) -> CapabilityDetectionResult:
-        if capability_key not in DEFAULT_CAPABILITY_KEYS or capability_key == "video_input":
+        if capability_key not in _supported_probe_capabilities(endpoint):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.UNSUPPORTED_BY_ADAPTER,
@@ -72,9 +72,9 @@ class OpenAIChatCompletionsCapabilityDetector:
         if capability_key == "system_message":
             messages.insert(0, {"role": "system", "content": "Reply with the single token OK."})
         if capability_key == "image_input":
-            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{_ONE_PIXEL_PNG}"}}]}]
+            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "image", "source": {"base64_data": _ONE_PIXEL_PNG}, "mime_type": "image/png"}]}]
         if capability_key == "audio_input":
-            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "input_audio", "input_audio": {"data": _SILENT_WAV, "format": "wav"}}]}]
+            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "audio", "source": {"base64_data": _SILENT_WAV}, "mime_type": "audio/wav"}]}]
 
         try:
             with httpx.Client(
@@ -127,7 +127,7 @@ class OpenAIChatCompletionsCapabilityDetector:
                 CapabilityDetection.FAILED,
                 self._evidence("unexpected_response", provider_status_code=response.status_code),
             )
-        if capability_key == "usage_reporting" and not isinstance(payload.get("usage"), dict):
+        if capability_key == "usage_reporting" and _extract_usage(payload) == (None, None):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
@@ -150,63 +150,37 @@ class OpenAIChatCompletionsCapabilityDetector:
 
     @staticmethod
     def _request_body(endpoint: ModelEndpoint, messages: list[dict[str, object]]) -> dict[str, Any]:
-        allowed_defaults = {
-            key: value
-            for key, value in (endpoint.default_request_body or {}).items()
-            if key not in PROTECTED_REQUEST_FIELDS
-        }
-        if _protocol_profile(endpoint) == "openai_responses":
-            return {
-                **allowed_defaults,
-                "model": endpoint.model_name,
-                "input": _responses_input(messages),
-                "max_output_tokens": 8,
-                "stream": False,
-                "store": False,
-            }
-        return {
-            **allowed_defaults,
-            "model": endpoint.model_name,
-            "messages": messages,
-            "temperature": 0,
-            "max_tokens": 8,
-            "stream": False,
-        }
+        profile = _protocol_profile(endpoint)
+        options: dict[str, object] = {"temperature": 0}
+        if profile == "openai_responses":
+            options["max_output_tokens"] = 8
+        else:
+            options["max_tokens"] = 8
+        return OpenAIChatCompletionsExecutor._build_request(
+            endpoint,
+            {"messages": messages, "request_body_evidence": {"effective_request_body": options}},
+        )
 
 
 def _protocol_profile(endpoint: ModelEndpoint) -> str:
     return str(getattr(endpoint, "protocol_profile", None) or "openai_chat_completions")
 
 
-def _endpoint_url(endpoint: ModelEndpoint) -> str:
-    suffix = "/responses" if _protocol_profile(endpoint) == "openai_responses" else "/chat/completions"
-    return f"{endpoint.base_url}{suffix}"
-
-
-def _responses_input(messages: list[dict[str, object]]) -> list[dict[str, object]]:
-    translated: list[dict[str, object]] = []
-    for message in messages:
-        content = message["content"]
-        if isinstance(content, str):
-            parts: list[dict[str, object]] = [{"type": "input_text", "text": content}]
-        else:
-            parts = []
-            for part in content if isinstance(content, list) else []:
-                if not isinstance(part, dict):
-                    continue
-                if part.get("type") == "text":
-                    parts.append({"type": "input_text", "text": part.get("text")})
-                elif part.get("type") == "image_url":
-                    image = part.get("image_url")
-                    if isinstance(image, dict):
-                        parts.append({"type": "input_image", "image_url": image.get("url")})
-                elif part.get("type") == "input_audio":
-                    parts.append({"type": "input_audio", "input_audio": part.get("input_audio")})
-        translated.append({"role": message["role"], "content": parts})
-    return translated
-
-
 def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, object]) -> bool:
-    if _protocol_profile(endpoint) == "openai_responses":
-        return isinstance(payload.get("output_text"), str) or isinstance(payload.get("output"), list)
-    return isinstance(payload.get("choices"), list)
+    try:
+        return bool(_extract_prediction(payload, _protocol_profile(endpoint)))
+    except (IndexError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _supported_probe_capabilities(endpoint: ModelEndpoint) -> set[str]:
+    profile = _protocol_profile(endpoint)
+    if profile in {"openai_chat_completions", "openai_responses", "azure_openai_chat_completions"}:
+        return set(DEFAULT_CAPABILITY_KEYS) - {"video_input"}
+    if profile in {"anthropic_messages", "gemini_generate_content"}:
+        return {"text_input", "image_input", "system_message", "usage_reporting"}
+    if profile == "ollama_chat":
+        return {"text_input", "image_input", "system_message", "usage_reporting"}
+    if profile == "custom_http_json":
+        return {"text_input"}
+    return set()

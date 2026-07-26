@@ -103,6 +103,19 @@ def test_model_endpoint_persists_supported_protocol_profile(tmp_path: Path) -> N
         assert updated.json()["protocol_profile"] == "openai_chat_completions"
 
 
+def test_model_endpoint_accepts_all_built_in_provider_protocol_profiles(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    profiles = ["anthropic_messages", "gemini_generate_content", "azure_openai_chat_completions", "ollama_chat", "custom_http_json"]
+    with TestClient(app) as client:
+        for profile in profiles:
+            response = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "protocol_profile": profile})
+            assert response.status_code == 201
+            assert response.json()["protocol_profile"] == profile
+        local = client.post("/api/v1/model-endpoints", json={"base_url": "http://127.0.0.1:11434", "api_key": "", "model_name": "llama", "protocol_profile": "ollama_chat"})
+        assert local.status_code == 201
+        assert local.json()["api_key_mask"] == "\u2022\u2022\u2022\u2022"
+
+
 def test_model_endpoint_persists_safe_custom_headers_and_metadata(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:

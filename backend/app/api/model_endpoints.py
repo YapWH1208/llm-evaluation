@@ -19,7 +19,15 @@ from app.services.model_executor import OpenAIChatCompletionsExecutor
 from app.services.provider_headers import validate_custom_headers
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
-ProtocolProfile = Literal["openai_chat_completions", "openai_responses"]
+ProtocolProfile = Literal[
+    "openai_chat_completions",
+    "openai_responses",
+    "anthropic_messages",
+    "gemini_generate_content",
+    "azure_openai_chat_completions",
+    "ollama_chat",
+    "custom_http_json",
+]
 
 
 class EndpointBase(BaseModel):

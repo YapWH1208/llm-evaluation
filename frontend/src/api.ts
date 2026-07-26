@@ -3,7 +3,7 @@ export type Endpoint = {
   display_name: string;
   base_url: string;
   model_name: string;
-  protocol_profile: "openai_chat_completions" | "openai_responses";
+  protocol_profile: "openai_chat_completions" | "openai_responses" | "anthropic_messages" | "gemini_generate_content" | "azure_openai_chat_completions" | "ollama_chat" | "custom_http_json";
   api_key_mask: string;
   custom_headers: Record<string, string>;
   status: "unverified" | "available" | "unavailable";

@@ -24,6 +24,22 @@ Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_
 
 Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting in both relational and MongoDB document stores, so a restart or an additional worker cannot reset an already consumed provider budget.
 
+## Provider protocol profiles
+
+Choose the protocol profile when creating a model endpoint. The platform appends the route shown below, owns authentication headers from the encrypted API key, and records the rendered provider request with each sample (never the key).
+
+| Profile | Base URL to save | Authentication and route |
+| --- | --- | --- |
+| OpenAI-compatible Chat Completions | API version root, for example `https://provider.example/v1` | Bearer key; appends `/chat/completions`. |
+| OpenAI Responses | API version root | Bearer key; appends `/responses`. |
+| Anthropic Messages | Provider origin, for example `https://api.anthropic.com` | `x-api-key` plus `anthropic-version` (defaults to `2023-06-01`); appends `/v1/messages`. |
+| Gemini GenerateContent | Gemini API version root, for example `https://generativelanguage.googleapis.com/v1beta` | `x-goog-api-key`; appends `/models/{model}:generateContent`. |
+| Azure OpenAI Chat Completions | Deployment route including its `api-version` query, for example `https://resource.openai.azure.com/openai/deployments/deployment?api-version=2025-01-01-preview` | `api-key`; appends `/chat/completions` before the query string. |
+| Ollama Chat | Ollama origin, for example `http://127.0.0.1:11434` | Appends `/api/chat`; its API key may be blank for an unauthenticated local service. |
+| Custom HTTP JSON | The complete provider endpoint, including any query string | Sends the conventional non-streaming chat JSON body and accepts `prediction`, `text`, `response`, `output_text`, or OpenAI-style output text. |
+
+Use custom headers for non-secret routing metadata such as a project identifier. Authentication headers are reserved for the encrypted endpoint credential. Native adapters reject unsupported media shapes before sending them; run capability detection after a successful connection test to persist the exact profile evidence.
+
 ## Dataset sources and credentials
 
 Dataset versions accept HTTP(S) and Git-release URLs, `hf://owner/repository/path/to/file` Hugging Face references, `file://` URLs, and local file paths. Optional credentials are referenced only by an environment-variable name (for example, `HUGGINGFACE_TOKEN`); the token value is never stored in the database or returned by the API. A download without its configured credential is marked `credential_required` until the deployment environment is updated.

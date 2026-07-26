@@ -65,3 +65,20 @@ def test_openai_detector_probes_image_and_audio_and_marks_video_adapter_unsuppor
     assert by_key["video_input"].status == CapabilityDetection.UNSUPPORTED_BY_ADAPTER
     assert observed[0]["messages"][0]["content"][1]["type"] == "image_url"
     assert observed[1]["messages"][0]["content"][1]["type"] == "input_audio"
+
+
+def test_gemini_detector_uses_native_probe_and_usage_shape() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://models.example.test/v1beta/models/gemini-test:generateContent"
+        assert request.headers["x-goog-api-key"] == "secret"
+        body = json.loads(request.content)
+        assert body["contents"] == [{"role": "user", "parts": [{"text": "Reply with OK."}]}]
+        assert body["generationConfig"] == {"temperature": 0, "maxOutputTokens": 8}
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "OK"}]}}], "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}})
+
+    endpoint = ModelEndpoint(display_name="Gemini", base_url="https://models.example.test/v1beta", model_name="gemini-test", protocol_profile="gemini_generate_content", encrypted_api_key="unused", api_key_mask="****test")
+    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["text_input", "usage_reporting", "audio_input"])
+    by_key = {result.capability_key: result for result in results}
+    assert by_key["text_input"].status == CapabilityDetection.PASSED
+    assert by_key["usage_reporting"].status == CapabilityDetection.PASSED
+    assert by_key["audio_input"].status == CapabilityDetection.UNSUPPORTED_BY_ADAPTER

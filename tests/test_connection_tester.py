@@ -67,6 +67,23 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
+def test_connection_probe_adapts_anthropic_messages_shape() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://models.example.test/v1/messages"
+        assert request.headers["x-api-key"] == "secret"
+        assert json.loads(request.content) == {
+            "model": "claude-test",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Respond with the single word OK."}]}],
+            "max_tokens": 8,
+            "stream": False,
+        }
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "OK"}]})
+
+    endpoint = ModelEndpoint(display_name="Anthropic", base_url="https://models.example.test", model_name="claude-test", protocol_profile="anthropic_messages", encrypted_api_key="not-used", api_key_mask="****test")
+    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
 def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
     class SuccessfulTester:
         def test(self, endpoint: ModelEndpoint, api_key: str) -> ConnectionTestResult:

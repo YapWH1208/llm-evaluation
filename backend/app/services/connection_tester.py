@@ -6,18 +6,8 @@ from typing import Protocol
 import httpx
 
 from app.db import ModelEndpoint
-from app.services.provider_headers import provider_headers
-
-PROTECTED_REQUEST_FIELDS = frozenset(
-    {
-        "model",
-        "messages",
-        "input",
-        "stream",
-        "tools",
-        "response_format",
-    }
-)
+from app.services.model_executor import _endpoint_url, _extract_prediction
+from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +22,7 @@ class ConnectionTester(Protocol):
 
 
 class OpenAIChatCompletionsConnectionTester:
-    """Performs a bounded, text-only OpenAI-compatible connection probe."""
+    """Performs a bounded, text-only probe for each built-in protocol profile."""
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -96,6 +86,28 @@ class OpenAIChatCompletionsConnectionTester:
                 "stream": False,
                 "store": False,
             }
+        if _protocol_profile(endpoint) == "anthropic_messages":
+            return {
+                **allowed_defaults,
+                "model": endpoint.model_name,
+                "messages": [{"role": "user", "content": [{"type": "text", "text": "Respond with the single word OK."}]}],
+                "max_tokens": 8,
+                "stream": False,
+            }
+        if _protocol_profile(endpoint) == "gemini_generate_content":
+            return {
+                **allowed_defaults,
+                "contents": [{"role": "user", "parts": [{"text": "Respond with the single word OK."}]}],
+                "generationConfig": {"temperature": 0, "maxOutputTokens": 8},
+            }
+        if _protocol_profile(endpoint) == "ollama_chat":
+            return {
+                **allowed_defaults,
+                "model": endpoint.model_name,
+                "messages": [{"role": "user", "content": "Respond with the single word OK."}],
+                "options": {"temperature": 0, "num_predict": 8},
+                "stream": False,
+            }
         return {
             **allowed_defaults,
             "model": endpoint.model_name,
@@ -115,17 +127,8 @@ def _protocol_profile(endpoint: ModelEndpoint) -> str:
     return str(getattr(endpoint, "protocol_profile", None) or "openai_chat_completions")
 
 
-def _endpoint_url(endpoint: ModelEndpoint) -> str:
-    suffix = "/responses" if _protocol_profile(endpoint) == "openai_responses" else "/chat/completions"
-    return f"{endpoint.base_url}{suffix}"
-
-
 def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, object]) -> bool:
-    if _protocol_profile(endpoint) == "openai_responses":
-        if isinstance(payload.get("output_text"), str):
-            return True
-        output = payload.get("output")
-        return isinstance(output, list) and any(
-            isinstance(item, dict) and item.get("type") == "message" for item in output
-        )
-    return isinstance(payload.get("choices"), list)
+    try:
+        return bool(_extract_prediction(payload, _protocol_profile(endpoint)))
+    except (IndexError, KeyError, TypeError, ValueError):
+        return False

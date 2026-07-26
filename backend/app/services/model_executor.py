@@ -8,14 +8,13 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from time import perf_counter
 from typing import Any, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 import httpx
 
 from app.db import ModelEndpoint
-from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
 from app.services.content_ir import ContentValidationError, normalize_content_parts
-from app.services.provider_headers import provider_headers
+from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
 from app.services.request_body import effective_request_options, request_snapshot_metadata
 
 
@@ -43,7 +42,7 @@ class ModelExecutor(Protocol):
 
 
 class OpenAIChatCompletionsExecutor:
-    """Executes one sample through an OpenAI-compatible Chat or Responses endpoint."""
+    """Executes a sample through one of the built-in provider protocol adapters."""
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -167,6 +166,14 @@ class OpenAIChatCompletionsExecutor:
             return _build_chat_request(endpoint, messages, request_options)
         if protocol_profile == "openai_responses":
             return _build_responses_request(endpoint, messages, request_options)
+        if protocol_profile == "anthropic_messages":
+            return _build_anthropic_request(endpoint, messages, request_options)
+        if protocol_profile == "gemini_generate_content":
+            return _build_gemini_request(endpoint, messages, request_options)
+        if protocol_profile == "ollama_chat":
+            return _build_ollama_request(endpoint, messages, request_options)
+        if protocol_profile in {"azure_openai_chat_completions", "custom_http_json"}:
+            return _build_chat_request(endpoint, messages, request_options)
         raise ValueError(f"Unsupported execution protocol profile: {protocol_profile}.")
 
 def _protocol_profile(endpoint: ModelEndpoint) -> str:
@@ -174,8 +181,21 @@ def _protocol_profile(endpoint: ModelEndpoint) -> str:
 
 
 def _endpoint_url(endpoint: ModelEndpoint) -> str:
-    suffix = "/responses" if _protocol_profile(endpoint) == "openai_responses" else "/chat/completions"
-    return f"{endpoint.base_url}{suffix}"
+    profile = _protocol_profile(endpoint)
+    if profile == "custom_http_json":
+        return endpoint.base_url
+    if profile == "anthropic_messages":
+        suffix = "/v1/messages"
+    elif profile == "gemini_generate_content":
+        suffix = f"/models/{endpoint.model_name}:generateContent"
+    elif profile == "ollama_chat":
+        suffix = "/api/chat"
+    elif profile == "openai_responses":
+        suffix = "/responses"
+    else:
+        suffix = "/chat/completions"
+    parsed = urlsplit(endpoint.base_url)
+    return urlunsplit((parsed.scheme, parsed.netloc, f"{parsed.path.rstrip('/')}{suffix}", parsed.query, ""))
 
 
 def _allowed_defaults(defaults: dict[str, object]) -> dict[str, Any]:
@@ -213,6 +233,96 @@ def _build_responses_request(
     }
 
 
+def _build_anthropic_request(
+    endpoint: ModelEndpoint,
+    messages: list[object],
+    request_options: dict[str, object],
+) -> dict[str, Any]:
+    allowed = _allowed_defaults(request_options)
+    system_parts: list[dict[str, object]] = []
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        content = _translate_anthropic_content(message.get("content"))
+        if role in {"system", "developer"}:
+            system_parts.extend(content)
+        elif role in {"user", "assistant"}:
+            translated.append({"role": role, "content": content})
+        else:
+            raise ValueError("Anthropic Messages supports system, user, and assistant messages only.")
+    max_tokens = allowed.pop("max_tokens", allowed.pop("max_output_tokens", 32))
+    request: dict[str, Any] = {
+        **allowed,
+        "model": endpoint.model_name,
+        "messages": translated,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    if system_parts:
+        request["system"] = system_parts
+    return request
+
+
+def _build_gemini_request(
+    endpoint: ModelEndpoint,
+    messages: list[object],
+    request_options: dict[str, object],
+) -> dict[str, Any]:
+    allowed = _allowed_defaults(request_options)
+    contents: list[dict[str, object]] = []
+    system_parts: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        parts = _translate_gemini_content(message.get("content"))
+        if role in {"system", "developer"}:
+            system_parts.extend(parts)
+        elif role == "assistant":
+            contents.append({"role": "model", "parts": parts})
+        elif role == "user":
+            contents.append({"role": "user", "parts": parts})
+        else:
+            raise ValueError("Gemini GenerateContent supports system, user, and assistant messages only.")
+    generation_config = dict(allowed.pop("generationConfig", {})) if isinstance(allowed.get("generationConfig"), dict) else {}
+    option_map = {"max_tokens": "maxOutputTokens", "max_output_tokens": "maxOutputTokens", "top_p": "topP", "top_k": "topK"}
+    for source, target in option_map.items():
+        if source in allowed:
+            generation_config[target] = allowed.pop(source)
+    if "temperature" in allowed:
+        generation_config["temperature"] = allowed.pop("temperature")
+    request: dict[str, Any] = {**allowed, "contents": contents}
+    if system_parts:
+        request["systemInstruction"] = {"parts": system_parts}
+    if generation_config:
+        request["generationConfig"] = generation_config
+    return request
+
+
+def _build_ollama_request(
+    endpoint: ModelEndpoint,
+    messages: list[object],
+    request_options: dict[str, object],
+) -> dict[str, Any]:
+    allowed = _allowed_defaults(request_options)
+    options = dict(allowed.pop("options", {})) if isinstance(allowed.get("options"), dict) else {}
+    option_map = {"max_tokens": "num_predict", "max_output_tokens": "num_predict", "top_p": "top_p", "top_k": "top_k", "temperature": "temperature", "seed": "seed"}
+    for source, target in option_map.items():
+        if source in allowed:
+            options[target] = allowed.pop(source)
+    request: dict[str, Any] = {
+        **allowed,
+        "model": endpoint.model_name,
+        "messages": _translate_ollama_messages(messages),
+        "stream": False,
+    }
+    if options:
+        request["options"] = options
+    return request
+
+
 def _snapshot_with_request_evidence(
     outbound_request: dict[str, Any],
     input_snapshot: dict[str, object],
@@ -227,29 +337,156 @@ def _snapshot_with_request_evidence(
 
 
 def _extract_prediction(payload: dict[str, Any], protocol_profile: str) -> str:
-    if protocol_profile == "openai_chat_completions":
+    if protocol_profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
         prediction = payload["choices"][0]["message"]["content"]
         if not isinstance(prediction, str):
             raise ValueError("Chat Completions response did not contain text content.")
         return prediction
-    output_text = payload.get("output_text")
-    if isinstance(output_text, str):
-        return output_text
-    fragments: list[str] = []
-    output = payload.get("output")
-    if isinstance(output, list):
-        for item in output:
-            if not isinstance(item, dict) or item.get("type") != "message":
-                continue
-            content = item.get("content")
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str):
-                    fragments.append(part["text"])
-    if not fragments:
+    if protocol_profile == "openai_responses":
+        output_text = payload.get("output_text")
+        if isinstance(output_text, str):
+            return output_text
+        fragments: list[str] = []
+        output = payload.get("output")
+        if isinstance(output, list):
+            for item in output:
+                if not isinstance(item, dict) or item.get("type") != "message":
+                    continue
+                content = item.get("content")
+                if not isinstance(content, list):
+                    continue
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                        fragments.append(part["text"])
+        if fragments:
+            return "".join(fragments)
         raise ValueError("Responses API response did not contain output text.")
-    return "".join(fragments)
+    if protocol_profile == "anthropic_messages":
+        content = payload.get("content")
+        if isinstance(content, list):
+            fragments = [part["text"] for part in content if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str)]
+            if fragments:
+                return "".join(fragments)
+        raise ValueError("Anthropic response did not contain text content.")
+    if protocol_profile == "gemini_generate_content":
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict):
+            content = candidates[0].get("content")
+            parts = content.get("parts") if isinstance(content, dict) else None
+            if isinstance(parts, list):
+                fragments = [part["text"] for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str)]
+                if fragments:
+                    return "".join(fragments)
+        raise ValueError("Gemini response did not contain text content.")
+    if protocol_profile == "ollama_chat":
+        message = payload.get("message")
+        prediction = message.get("content") if isinstance(message, dict) else None
+        if isinstance(prediction, str):
+            return prediction
+        raise ValueError("Ollama response did not contain text content.")
+    for candidate in (
+        payload.get("output_text"),
+        payload.get("text"),
+        payload.get("response"),
+        payload.get("prediction"),
+    ):
+        if isinstance(candidate, str):
+            return candidate
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        message = choices[0].get("message")
+        prediction = message.get("content") if isinstance(message, dict) else None
+        if isinstance(prediction, str):
+            return prediction
+    raise ValueError("Custom JSON response did not contain text content.")
+
+
+def _translate_anthropic_content(content: object) -> list[dict[str, object]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    parts = _normalized_content_parts(content)
+    translated: list[dict[str, object]] = []
+    for part in parts:
+        if part["type"] == "text":
+            translated.append({"type": "text", "text": part["text"]})
+        elif part["type"] == "image":
+            source = part["source"]
+            if not isinstance(source, dict):
+                raise ValueError("Anthropic image content requires a source object.")
+            if isinstance(source.get("base64_data"), str):
+                _validate_base64(source["base64_data"])
+                translated.append({"type": "image", "source": {"type": "base64", "media_type": part["mime_type"], "data": source["base64_data"]}})
+            elif isinstance(source.get("url"), str):
+                _validate_remote_media_url(source["url"])
+                translated.append({"type": "image", "source": {"type": "url", "url": source["url"]}})
+            else:
+                raise ValueError("Anthropic image content requires base64_data or a remote URL.")
+        else:
+            raise ValueError(f"Anthropic Messages does not support {part['type']} content through this adapter.")
+    return translated
+
+
+def _translate_gemini_content(content: object) -> list[dict[str, object]]:
+    if isinstance(content, str):
+        return [{"text": content}]
+    parts = _normalized_content_parts(content)
+    translated: list[dict[str, object]] = []
+    for part in parts:
+        if part["type"] == "text":
+            translated.append({"text": part["text"]})
+            continue
+        source = part["source"]
+        encoded = source.get("base64_data") if isinstance(source, dict) else None
+        if not isinstance(encoded, str):
+            raise ValueError(f"Gemini {part['type']} content requires base64_data through this adapter.")
+        _validate_base64(encoded)
+        translated.append({"inlineData": {"mimeType": part["mime_type"], "data": encoded}})
+    return translated
+
+
+def _translate_ollama_messages(messages: list[object]) -> list[dict[str, object]]:
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        if role not in {"system", "user", "assistant"}:
+            raise ValueError("Ollama Chat supports system, user, and assistant messages only.")
+        content = message.get("content")
+        if isinstance(content, str):
+            translated.append({"role": role, "content": content})
+            continue
+        parts = _normalized_content_parts(content)
+        text = "".join(part["text"] for part in parts if part["type"] == "text")
+        images: list[str] = []
+        for part in parts:
+            if part["type"] == "text":
+                continue
+            if part["type"] != "image":
+                raise ValueError(f"Ollama Chat does not support {part['type']} content through this adapter.")
+            source = part["source"]
+            encoded = source.get("base64_data") if isinstance(source, dict) else None
+            if not isinstance(encoded, str):
+                raise ValueError("Ollama image content requires base64_data through this adapter.")
+            _validate_base64(encoded)
+            images.append(encoded)
+        rendered: dict[str, object] = {"role": role, "content": text}
+        if images:
+            rendered["images"] = images
+        translated.append(rendered)
+    return translated
+
+
+def _normalized_content_parts(content: object) -> list[dict[str, Any]]:
+    if not isinstance(content, list):
+        raise ValueError("Message content must be text or a list of content parts.")
+    try:
+        parts = normalize_content_parts(content)
+    except ContentValidationError as error:
+        raise ValueError(str(error)) from error
+    if any(part["type"] == "tool_result" for part in parts):
+        raise ValueError("This protocol adapter does not support tool results.")
+    return parts
 
 
 def _translate_responses_messages(messages: list[object]) -> list[dict[str, object]]:
@@ -322,10 +559,15 @@ def _elapsed_ms(started_at: float) -> float:
 
 def _extract_usage(payload: dict[str, Any]) -> tuple[int | None, int | None]:
     usage = payload.get("usage")
-    if not isinstance(usage, dict):
-        return None, None
-    input_value = usage.get("prompt_tokens", usage.get("input_tokens"))
-    output_value = usage.get("completion_tokens", usage.get("output_tokens"))
+    if isinstance(usage, dict):
+        input_value = usage.get("prompt_tokens", usage.get("input_tokens"))
+        output_value = usage.get("completion_tokens", usage.get("output_tokens"))
+        return _nonnegative_int(input_value), _nonnegative_int(output_value)
+    usage_metadata = payload.get("usageMetadata")
+    if isinstance(usage_metadata, dict):
+        return _nonnegative_int(usage_metadata.get("promptTokenCount")), _nonnegative_int(usage_metadata.get("candidatesTokenCount"))
+    input_value = payload.get("prompt_eval_count")
+    output_value = payload.get("eval_count")
     return _nonnegative_int(input_value), _nonnegative_int(output_value)
 
 
