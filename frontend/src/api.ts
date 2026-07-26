@@ -128,6 +128,7 @@ export type AuditEvent = { id: string; actor_id: string | null; action: string; 
 export type SystemHealth = { status: string; database: string; schema_version: number };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+let bearerToken = window.sessionStorage.getItem("lle-api-token") ?? "";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -137,7 +138,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}), ...init?.headers },
     ...init,
   });
   if (!response.ok) {
@@ -156,6 +157,7 @@ async function systemRequest<T>(path: string): Promise<T> {
 }
 
 export const api = {
+  setBearerToken: (token: string) => { bearerToken = token.trim(); if (bearerToken) window.sessionStorage.setItem("lle-api-token", bearerToken); else window.sessionStorage.removeItem("lle-api-token"); },
   listEndpoints: () => request<Endpoint[]>("/model-endpoints"),
   createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
   testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
