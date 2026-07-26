@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  AuditEvent,
   ApiError,
   AnalyticsMatrix,
   Asset,
@@ -18,10 +19,12 @@ import {
   Review,
   RunSummary,
   SampleAttempt,
+  SystemHealth,
   Task,
+  User,
 } from "./api";
 
-type View = "dashboard" | "models" | "workspace" | "runs" | "queue" | "analysis" | "compare" | "reports";
+type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
 
 const initialEndpoint = {
@@ -46,6 +49,7 @@ const initialDataset = { dataset_id: "", version: "1", source_url: "", license_t
 const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
 const initialReview = { reviewer_id: "local-reviewer", score: "", labels: "", notes: "" };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
+const initialUser = { email: "", display_name: "", role: "viewer" };
 
 function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
@@ -108,6 +112,10 @@ export default function App() {
   const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsMatrix | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
+  const [userForm, setUserForm] = useState(initialUser);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [runRequestBody, setRunRequestBody] = useState("{}");
   const [reportType, setReportType] = useState<ReportType>("single_model");
@@ -116,8 +124,8 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextSuites, nextBenchmarks, nextTasks, nextAnalytics] = await Promise.all([
-      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listSuites(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(),
+    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextSuites, nextBenchmarks, nextTasks, nextAnalytics, nextUsers, nextAuditEvents, nextSystemHealth] = await Promise.all([
+      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listSuites(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(), api.listUsers().catch(() => []), api.listAuditEvents().catch(() => []), api.systemHealth().catch(() => null),
     ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
@@ -128,6 +136,9 @@ export default function App() {
     setBenchmarks(nextBenchmarks);
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
+    setUsers(nextUsers);
+    setAuditEvents(nextAuditEvents);
+    setSystemHealth(nextSystemHealth);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -152,7 +163,7 @@ export default function App() {
   }, [selectedRun, selectedRunInfo?.status]);
 
   useEffect(() => {
-    if (view !== "queue") return;
+    if (!["queue", "workers"].includes(view)) return;
     const events = new EventSource(api.workerEventsUrl());
     const update = () => { void refresh().catch(showError); };
     events.addEventListener("worker", update);
@@ -302,6 +313,17 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    setBusy("user");
+    try {
+      const created = await api.createUser(userForm);
+      setUserForm(initialUser);
+      setNotice(`User created. Copy this API token now: ${created.api_token}`);
+      await refresh();
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function createSuite(event: FormEvent) {
     event.preventDefault();
     const benchmark_list = suiteForm.benchmarks.split(",").map((value) => value.trim()).filter(Boolean).map((value) => {
@@ -425,7 +447,7 @@ export default function App() {
       </header>
 
       <nav className="tabs" aria-label="Workspace sections">
-        {(["dashboard", "models", "workspace", "runs", "queue", "analysis", "compare", "reports"] as View[]).map((item) => (
+        {(["dashboard", "models", "capabilities", "workspace", "benchmarks", "datasets", "suites", "runs", "queue", "workers", "analysis", "compare", "reports", "reviews", "users", "settings"] as View[]).map((item) => (
           <button className={view === item ? "tab selected" : "tab"} key={item} onClick={() => setView(item)}>{item}</button>
         ))}
       </nav>
@@ -468,6 +490,14 @@ export default function App() {
         </section>
       </>}
 
+      {view === "capabilities" && <section className="panel"><div className="section-title"><h2>Model capabilities</h2><span>Detection evidence and user declarations remain separate.</span></div>{endpoints.length === 0 ? <p className="empty">Add a model endpoint before probing capabilities.</p> : <div className="cards">{endpoints.map((endpoint) => <article className="card" key={endpoint.id}><h3>{endpoint.display_name}</h3><div className="actions"><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button></div>{capabilities[endpoint.id] ? <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}>{item.capability_key}<select value={item.user_declared_status} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div> : <p className="muted">No probe result loaded yet.</p>}</article>)}</div>}</section>}
+
+      {view === "benchmarks" && <section className="panel"><div className="section-title"><h2>Benchmarks</h2><span>{benchmarks.length} registered versions</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th><th>Modalities</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td>{benchmark.display_name}</td><td>{benchmark.version}</td><td>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td><td>{Array.isArray(benchmark.manifest.modalities) ? benchmark.manifest.modalities.join(", ") : "--"}</td></tr>)}</tbody></table></div></section>}
+
+      {view === "datasets" && <section className="panel"><div className="section-title"><h2>Datasets</h2><span>{datasets.length} tracked revisions</span></div>{datasets.length === 0 ? <p className="empty">Register datasets from the Workspace catalog.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><h3>{dataset.dataset_id} v{dataset.version}</h3><p className="muted">{dataset.source_url || "No source URL"}</p><span className={`badge ${dataset.status}`}>{dataset.status}</span>{dataset.status !== "ready" && <button disabled={busy === `dataset-${dataset.id}`} onClick={() => void prepareDataset(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : "Download and verify"}</button>}</article>)}</div>}</section>}
+
+      {view === "suites" && <section className="panel"><div className="section-title"><h2>Evaluation suites</h2><span>{suites.length} versioned suites</span></div>{suites.length === 0 ? <p className="empty">Create a suite from the Workspace catalog.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3>{suite.name} v{suite.version}</h3><p className="muted">{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on {endpoint.display_name}</button>)}</article>)}</div>}</section>}
+
       {view === "workspace" && <>
         <section className="grid two">
           <article className="panel"><h2>Create prompt package</h2><form onSubmit={createPrompt} className="form"><label>Name<input required value={promptForm.name} onChange={(event) => setPromptForm({ ...promptForm, name: event.target.value })} /></label><label>Version<input required value={promptForm.version} onChange={(event) => setPromptForm({ ...promptForm, version: event.target.value })} /></label><label>Prompt type<select value={promptForm.prompt_type} onChange={(event) => setPromptForm({ ...promptForm, prompt_type: event.target.value })}><option value="official">Official prompt</option><option value="platform_default">Platform default</option><option value="user_custom">User custom</option><option value="benchmark_variant">Benchmark variant</option><option value="language_specific">Language-specific</option></select></label><label>System message<textarea value={promptForm.system_message} onChange={(event) => setPromptForm({ ...promptForm, system_message: event.target.value })} /></label><label>User template<textarea required value={promptForm.user_template} onChange={(event) => setPromptForm({ ...promptForm, user_template: event.target.value })} placeholder="{{ question }}, {{ context }}, {{ image }}, {{ audio }}, {{ video }}, {{ language }}" /></label><label>Few-shot examples (JSON array)<textarea value={promptForm.few_shot_examples} onChange={(event) => setPromptForm({ ...promptForm, few_shot_examples: event.target.value })} spellCheck={false} /></label><label>Output format (JSON)<textarea value={promptForm.output_format} onChange={(event) => setPromptForm({ ...promptForm, output_format: event.target.value })} spellCheck={false} /></label><label>Response parser (JSON)<textarea value={promptForm.response_parser} onChange={(event) => setPromptForm({ ...promptForm, response_parser: event.target.value })} spellCheck={false} /></label><label>Scoring rule (JSON)<textarea value={promptForm.scoring_rule} onChange={(event) => setPromptForm({ ...promptForm, scoring_rule: event.target.value })} spellCheck={false} /></label><label>Change log<textarea value={promptForm.change_log} onChange={(event) => setPromptForm({ ...promptForm, change_log: event.target.value })} /></label><button disabled={busy === "prompt"}>Save versioned prompt</button></form></article>
@@ -486,11 +516,19 @@ export default function App() {
 
       {view === "queue" && <section className="panel"><div className="section-title"><h2>Task queue</h2><span>{tasks.length} tasks loaded</span></div>{tasks.length === 0 ? <p className="empty">No queued work exists.</p> : <div className="table-wrap"><table><thead><tr><th>Task</th><th>Run</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Worker</th><th>Created</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id}><td>{task.task_type}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status}</span></td><td><div className="actions"><span>{task.priority}</span><button className="secondary" disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority - 10)}>-10</button><button disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority + 10)}>+10</button></div></td><td>{task.attempt_count}</td><td>{task.leased_by ?? "--"}</td><td>{formatDate(task.created_at)}</td></tr>)}</tbody></table></div>}</section>}
 
+      {view === "workers" && <section className="panel"><div className="section-title"><h2>Workers</h2><span>Live updates are streamed from the worker event channel.</span></div>{tasks.length === 0 ? <p className="empty">No worker leases are active.</p> : <div className="table-wrap"><table><thead><tr><th>Worker</th><th>Task</th><th>Run</th><th>State</th><th>Lease expiry</th></tr></thead><tbody>{tasks.filter((task) => ["leased", "running"].includes(task.status)).map((task) => <tr key={task.id}><td>{task.leased_by ?? "--"}</td><td>{task.task_type}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status}</span></td><td>{formatDate(task.lease_expires_at)}</td></tr>)}</tbody></table></div>}</section>}
+
       {view === "analysis" && <AnalysisView analytics={analytics} />}
 
       {view === "compare" && <section className="panel"><h2>Model and run comparison</h2><p className="muted">Runs must use the same benchmark version. Differences are run A minus run B.</p><form className="comparison-form" onSubmit={compareRuns}><label>Run A<select required value={comparisonRunA} onChange={(event) => setComparisonRunA(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><label>Run B<select required value={comparisonRunB} onChange={(event) => setComparisonRunB(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"}>Compare</button></form>{comparison && <ComparisonView comparison={comparison} />}</section>}
 
       {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="comparison-form"><label>Report type<select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}><option value="single_model">Single-model complete</option><option value="multi_model_comparison">Multi-model comparison</option><option value="regression">Regression</option><option value="prompt_comparison">Prompt comparison</option><option value="benchmark">Benchmark</option><option value="reliability">Reliability</option><option value="cost">Cost</option><option value="human_review">Human review</option></select></label>{["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType) && <label>Related completed run<select value={relatedReportRunId} onChange={(event) => setRelatedReportRunId(event.target.value)}><option value="">Select run</option>{completedRuns.filter((run) => run.id !== selectedRunInfo.id).map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>}</div><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "pdf")}>Generate PDF</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "parquet")}>Generate Parquet</button></div><ReportsTable reports={reports} onShare={shareReport} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
+
+      {view === "reviews" && <section className="panel"><div className="section-title"><h2>Human review</h2><span>Reviewer scores remain separate from deterministic and judge evidence.</span></div>{selectedRunInfo ? <RunDetail run={selectedRunInfo} summary={runSummary} attempts={attempts} reports={[]} selectedAttempt={selectedAttempt} reviews={reviews} reviewForm={reviewForm} busy={busy} onReviewForm={setReviewForm} onReview={openReview} onCreateReview={createReview} onGenerateReport={generateReport} /> : <p className="empty">Select a run and sample from the Runs page to review it.</p>}</section>}
+
+      {view === "users" && <section className="grid two"><article className="panel"><h2>Create user</h2><form className="form" onSubmit={createUser}><label>Email<input required type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} /></label><label>Display name<input required value={userForm.display_name} onChange={(event) => setUserForm({ ...userForm, display_name: event.target.value })} /></label><label>Role<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}><option value="viewer">Viewer</option><option value="reviewer">Reviewer</option><option value="evaluator">Evaluator</option><option value="admin">Admin</option></select></label><button disabled={busy === "user"}>Create API-token user</button></form></article><article className="panel"><h2>Users and audit trail</h2>{users.length === 0 ? <p className="empty">User administration needs an administrator bearer token when server authentication is enabled.</p> : <div className="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Created</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td>{user.display_name}<br /><small>{user.email}</small></td><td>{user.role}</td><td>{user.status}</td><td>{formatDate(user.created_at)}</td></tr>)}</tbody></table></div>}<h3>Recent audit events</h3>{auditEvents.length === 0 ? <p className="empty">No events available.</p> : <div className="table-wrap"><table><thead><tr><th>Action</th><th>Entity</th><th>When</th></tr></thead><tbody>{auditEvents.slice(0, 12).map((event) => <tr key={event.id}><td>{event.action}</td><td>{event.entity_type}</td><td>{formatDate(event.created_at)}</td></tr>)}</tbody></table></div>}</article></section>}
+
+      {view === "settings" && <section className="grid two"><article className="panel"><h2>System settings</h2><p className="muted">Runtime settings are configured through the deployment environment; sensitive values never return to the browser.</p><dl><dt>Database</dt><dd>{systemHealth?.database ?? "Unavailable"}</dd><dt>Schema version</dt><dd>{systemHealth?.schema_version ?? "--"}</dd><dt>Health</dt><dd>{systemHealth?.status ?? "Unavailable"}</dd><dt>Theme</dt><dd>{theme}</dd></dl></article><article className="panel"><h2>SQLite operating guidance</h2><p>SQLite is suitable for local or small-team use. Use PostgreSQL or MongoDB for multi-process, distributed worker deployments; configure global worker ceilings with deployment environment settings.</p><button className="secondary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>Switch to {theme === "dark" ? "light" : "dark"} mode</button></article></section>}
     </main>
   );
 }

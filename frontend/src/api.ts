@@ -123,6 +123,9 @@ export type Asset = { id: string; original_filename: string; media_kind: "image"
 export type Task = { id: string; run_id: string; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsMatrix = { heatmap: Array<{ run_id: string; model_endpoint_id: string; model_name: string; benchmark_id: string; benchmark_version: string; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; required_capabilities: string[] }>; capability_matrix: Array<{ model_endpoint_id: string; capability: string; run_count: number; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null }> };
 export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
+export type User = { id: string; email: string; display_name: string; role: string; status: string; created_at: string };
+export type AuditEvent = { id: string; actor_id: string | null; action: string; entity_type: string; entity_id: string | null; details: Record<string, unknown> | null; created_at: string };
+export type SystemHealth = { status: string; database: string; schema_version: number };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -143,6 +146,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(detail, response.status);
   }
   if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+async function systemRequest<T>(path: string): Promise<T> {
+  const response = await fetch(`${apiBase.replace(/\/api\/v1$/, "")}${path}`);
+  if (!response.ok) throw new ApiError("System request failed.", response.status);
   return response.json() as Promise<T>;
 }
 
@@ -188,4 +197,8 @@ export const api = {
   listTasks: () => request<Task[]>("/tasks"),
   updateTaskPriority: (taskId: string, priority: number) => request<Task>(`/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ priority }) }),
   analyticsMatrix: () => request<AnalyticsMatrix>("/analytics/matrix"),
+  listUsers: () => request<User[]>("/users"),
+  createUser: (body: Record<string, unknown>) => request<User & { api_token: string }>("/users", { method: "POST", body: JSON.stringify(body) }),
+  listAuditEvents: () => request<AuditEvent[]>("/audit-events"),
+  systemHealth: () => systemRequest<SystemHealth>("/health"),
 };
