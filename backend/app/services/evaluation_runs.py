@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.benchmarks import get_installed_plugin
@@ -13,6 +14,7 @@ from app.db import (
     TaskStatus,
     TaskUnit,
 )
+from app.db.models import ModelCapability
 
 
 class RunCreationError(ValueError):
@@ -57,6 +59,12 @@ def create_benchmark_run(
     samples = plugin.samples(sample_limit)
     if not samples:
         raise RunCreationError("At least one benchmark sample is required.")
+    compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
+    if compatibility["unsupported"]:
+        raise RunCreationError(
+            "Model endpoint is incompatible with required benchmark capabilities: "
+            + ", ".join(compatibility["unsupported"])
+        )
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise RunCreationError("Prompt package not found.")
@@ -75,6 +83,7 @@ def create_benchmark_run(
             "default_request_body": endpoint.default_request_body,
         },
         "sample_ids": [sample.sample_id for sample in samples],
+        "capability_compatibility": compatibility,
         "prompt_package": (
             {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
              "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
@@ -148,3 +157,33 @@ def _estimate_request_tokens(prompt: str) -> int:
     """Conservative dependency-free estimate used only for TPM admission control."""
 
     return max(1, (len(prompt) + 3) // 4) + 32
+
+
+def _capability_compatibility(
+    session: Session,
+    endpoint_id: str,
+    manifest: dict[str, object],
+) -> dict[str, list[str]]:
+    required = [
+        capability
+        for capability in manifest.get("required_capabilities", [])
+        if isinstance(capability, str)
+    ]
+    records = {
+        record.capability_key: record
+        for record in session.scalars(
+            select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id)
+        )
+    }
+    unsupported = [
+        capability
+        for capability in required
+        if records.get(capability)
+        and records[capability].effective_status in {"unsupported", "detected_user_unsupported"}
+    ]
+    unverified = [
+        capability
+        for capability in required
+        if capability not in records or records[capability].effective_status == "unverified"
+    ]
+    return {"required": required, "unsupported": unsupported, "unverified": unverified}
