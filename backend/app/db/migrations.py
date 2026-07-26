@@ -72,6 +72,10 @@ def _upgrade_v8_usage_and_cost_evidence(connection: Connection) -> None:
     _add_column_if_missing(connection, "sample_attempts", "estimated_cost", "estimated_cost FLOAT")
 
 
+def _upgrade_v9_report_shares(_connection: Connection) -> None:
+    """The ORM creates expiring report-share records."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -114,6 +118,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_usage_and_cost_evidence",
         description="Add provider usage, latency, and estimated cost evidence to sample attempts.",
         upgrade=_upgrade_v8_usage_and_cost_evidence,
+    ),
+    Migration(
+        version=9,
+        migration_id="20260726_add_report_shares",
+        description="Add expiring, revocable, password-protected report share records.",
+        upgrade=_upgrade_v9_report_shares,
     ),
 )
 

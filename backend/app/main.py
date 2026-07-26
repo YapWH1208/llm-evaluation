@@ -15,6 +15,7 @@ from app.api.evaluation_runs import router as evaluation_runs_router
 from app.api.model_endpoints import router as model_endpoints_router
 from app.api.prompt_packages import router as prompt_packages_router
 from app.api.workers import router as workers_router
+from app.api.reports import public_router as shared_reports_router
 from app.api.reports import router as reports_router
 from app.api.comparisons import router as comparisons_router
 from app.api.reviews import router as reviews_router
@@ -82,6 +83,7 @@ def create_app(
     app.include_router(prompt_packages_router)
     app.include_router(workers_router)
     app.include_router(reports_router)
+    app.include_router(shared_reports_router)
     app.include_router(comparisons_router)
     app.include_router(reviews_router)
     app.include_router(admin_router)

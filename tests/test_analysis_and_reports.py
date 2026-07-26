@@ -112,3 +112,16 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert downloaded.status_code == 200
         assert "# Evaluation report: text-quick-check" in downloaded.text
         assert "Estimated cost" in downloaded.text
+
+        share = client.post(
+            f"/api/v1/reports/{report.json()['id']}/shares",
+            json={"password": "view-only-password"},
+        )
+        assert share.status_code == 201
+        assert client.get(share.json()["share_url"]).status_code == 401
+        public_report = client.get(share.json()["share_url"], headers={"X-Report-Password": "view-only-password"})
+        assert public_report.status_code == 200
+        assert "# Evaluation report" in public_report.text
+        revoked = client.post(f"/api/v1/reports/{report.json()['id']}/shares/{share.json()['id']}/revoke")
+        assert revoked.status_code == 200
+        assert client.get(share.json()["share_url"], headers={"X-Report-Password": "view-only-password"}).status_code == 404

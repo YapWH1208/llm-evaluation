@@ -218,6 +218,14 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function shareReport(report: Report) {
+    setBusy(`share-${report.id}`);
+    try {
+      const share = await api.createReportShare(report.id);
+      setNotice(`Read-only share link (expires ${formatDate(share.expires_at)}): ${share.share_url}`);
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function createPrompt(event: FormEvent) {
     event.preventDefault();
     setBusy("prompt");
@@ -407,7 +415,7 @@ export default function App() {
 
       {view === "compare" && <section className="panel"><h2>Model and run comparison</h2><p className="muted">Runs must use the same benchmark version. Differences are run A minus run B.</p><form className="comparison-form" onSubmit={compareRuns}><label>Run A<select required value={comparisonRunA} onChange={(event) => setComparisonRunA(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><label>Run B<select required value={comparisonRunB} onChange={(event) => setComparisonRunB(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"}>Compare</button></form>{comparison && <ComparisonView comparison={comparison} />}</section>}
 
-      {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button></div><ReportsTable reports={reports} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
+      {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button></div><ReportsTable reports={reports} onShare={shareReport} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
     </main>
   );
 }
@@ -442,8 +450,8 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
   return <div className="comparison-result"><div className="metric-grid"><Metric label="A-only correct" value={comparison.outcomes.run_a_only_correct} detail="sample outcomes" /><Metric label="B-only correct" value={comparison.outcomes.run_b_only_correct} detail="sample outcomes" /><Metric label="Latency difference" value={`${display(comparison.differences.average_latency_ms)} ms`} detail="A minus B" /><Metric label="Cost difference" value={display(comparison.differences.estimated_cost, 6)} detail="A minus B" /></div><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>A - B</th></tr></thead><tbody><tr><td>Accuracy</td><td>{percent(comparison.run_a_summary.samples.accuracy)}</td><td>{percent(comparison.run_b_summary.samples.accuracy)}</td><td>{percent(comparison.differences.accuracy)}</td></tr><tr><td>Success rate</td><td>{percent(comparison.run_a_summary.samples.success_rate)}</td><td>{percent(comparison.run_b_summary.samples.success_rate)}</td><td>{percent(comparison.differences.success_rate)}</td></tr><tr><td>P95 latency</td><td>{display(comparison.run_a_summary.latency_ms.p95)} ms</td><td>{display(comparison.run_b_summary.latency_ms.p95)} ms</td><td>{display(comparison.differences.p95_latency_ms)} ms</td></tr><tr><td>Output tokens</td><td>{display(comparison.run_a_summary.tokens.output)}</td><td>{display(comparison.run_b_summary.tokens.output)}</td><td>{display(comparison.differences.output_tokens)}</td></tr></tbody></table></div></div>;
 }
 
-function ReportsTable({ reports }: { reports: Report[] }) {
-  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a></td></tr>)}</tbody></table></div>;
+function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
+  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a>{onShare && report.format !== "json" && report.format !== "csv" && <button className="secondary" onClick={() => void onShare(report)}>Share</button>}</div></td></tr>)}</tbody></table></div>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {

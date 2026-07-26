@@ -233,6 +233,19 @@ class Report(Base):
     generator_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+
+class ReportShare(Base):
+    __tablename__ = "report_shares"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    report_id: Mapped[str] = mapped_column(ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    allow_download: Mapped[bool] = mapped_column(nullable=False, default=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 class HumanReview(Base):
     __tablename__="human_reviews"
     id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))

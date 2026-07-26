@@ -116,6 +116,7 @@ export type Review = { id: string; sample_attempt_id: string; reviewer_id: strin
 export type Asset = { id: string; original_filename: string; media_kind: "image" | "audio" | "video" | "file"; mime_type: string; size_bytes: number; sha256: string; created_at: string };
 export type Task = { id: string; run_id: string; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsMatrix = { heatmap: Array<{ run_id: string; model_endpoint_id: string; model_name: string; benchmark_id: string; benchmark_version: string; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; required_capabilities: string[] }>; capability_matrix: Array<{ model_endpoint_id: string; capability: string; run_count: number; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null }> };
+export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -157,6 +158,7 @@ export const api = {
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
   createReport: (runId: string, format: "html" | "json" | "csv" | "markdown") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
+  createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
   dashboard: () => request<Dashboard>("/dashboard"),
   compare: (runA: string, runB: string) => request<Comparison>(`/comparisons?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`),
