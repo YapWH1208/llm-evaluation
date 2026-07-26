@@ -27,6 +27,7 @@ const initialEndpoint = {
   input_cost_per_million: "",
   output_cost_per_million: "",
   currency: "USD",
+  default_request_body: "{}",
 };
 const initialPrompt = { name: "", version: "1", system_message: "", user_template: "{{ question }}" };
 const initialDataset = { dataset_id: "", version: "1", source_url: "", license_text: "" };
@@ -110,15 +111,20 @@ export default function App() {
   }, [selectedRun, selectedRunInfo?.status]);
 
   function showError(error: unknown) {
-    setNotice(error instanceof ApiError ? error.message : "Unable to reach the evaluation service.");
+    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : "Unable to reach the evaluation service.");
   }
 
   async function createEndpoint(event: FormEvent) {
     event.preventDefault();
     setBusy("endpoint");
     try {
+      const defaultRequestBody: unknown = JSON.parse(form.default_request_body);
+      if (!defaultRequestBody || Array.isArray(defaultRequestBody) || typeof defaultRequestBody !== "object") {
+        throw new Error("Default request body must be a JSON object.");
+      }
       await api.createEndpoint({
         ...form,
+        default_request_body: defaultRequestBody,
         input_cost_per_million: optionalNumber(form.input_cost_per_million),
         output_cost_per_million: optionalNumber(form.output_cost_per_million),
         currency: form.currency.toUpperCase(),
@@ -144,6 +150,15 @@ export default function App() {
       const detected = await api.detectCapabilities(endpointId);
       setCapabilities((current) => ({ ...current, [endpointId]: detected }));
       setNotice("Capability probe completed. Declared capability settings were not changed.");
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
+  async function declareCapability(endpointId: string, capability: Capability, status: "supported" | "unsupported" | "unknown") {
+    setBusy(`declare-${endpointId}-${capability.capability_key}`);
+    try {
+      const updated = await api.declareCapability(endpointId, capability.capability_key, status);
+      setCapabilities((current) => ({ ...current, [endpointId]: (current[endpointId] ?? []).map((item) => item.capability_key === updated.capability_key ? updated : item) }));
+      setNotice("User capability declaration saved alongside detection evidence.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -335,6 +350,7 @@ export default function App() {
               <label>Base URL<input required type="url" value={form.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} placeholder="https://provider.example/v1" /></label>
               <label>Model name<input required value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value })} placeholder="model-id" /></label>
               <label>API key<input required type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder="Stored encrypted" /></label>
+              <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
               <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>
               <button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : "Save encrypted endpoint"}</button>
             </form>
@@ -350,7 +366,7 @@ export default function App() {
             <div><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p><p className="muted">{endpoint.base_url}</p></div>
             <div className="split"><span className={`badge ${endpoint.status}`}>{endpoint.status}</span><span className="muted">{endpoint.max_concurrency} concurrent · {money(endpoint.input_cost_per_million, endpoint.currency)} in / 1M</span></div>
             <div className="actions"><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue Quick Check</button></div>
-            {capabilities[endpoint.id] && <p className="muted">{capabilities[endpoint.id].map((item) => `${item.capability_key}: ${item.effective_status}`).join(" · ")}</p>}
+            {capabilities[endpoint.id] && <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}>{item.capability_key}<select value={item.user_declared_status} disabled={busy === `declare-${endpoint.id}-${item.capability_key}`} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div>}
           </article>)}</div>}
         </section>
       </>}
