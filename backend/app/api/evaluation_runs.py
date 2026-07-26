@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -72,6 +72,7 @@ class EvaluationRunResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+    archived_at: datetime | None = None
 
 
 class SampleAttemptResponse(BaseModel):
@@ -201,12 +202,20 @@ def create_custom_run(
 
 
 @router.get("", response_model=list[EvaluationRunResponse])
-def list_evaluation_runs(request: Request, session: SessionDependency) -> list[EvaluationRun | dict[str, Any]]:
+def list_evaluation_runs(
+    request: Request,
+    session: SessionDependency,
+    include_archived: bool = False,
+) -> list[EvaluationRun | dict[str, Any]]:
     store = get_document_store(request)
     if store is not None:
-        return store.list_documents("evaluation_runs", sort=[("created_at", -1)])
+        runs = store.list_documents("evaluation_runs", sort=[("created_at", -1)])
+        return runs if include_archived else [run for run in runs if run.get("archived_at") is None]
     assert session is not None
-    return list(session.scalars(select(EvaluationRun).order_by(EvaluationRun.created_at.desc())))
+    query = select(EvaluationRun).order_by(EvaluationRun.created_at.desc())
+    if not include_archived:
+        query = query.where(EvaluationRun.archived_at.is_(None))
+    return list(session.scalars(query))
 
 @router.post("/{run_id}/pause", response_model=EvaluationRunResponse)
 def pause_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
@@ -273,6 +282,67 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
     session.query(TaskUnit).filter(TaskUnit.run_id == run.id).update({TaskUnit.status: TaskStatus.CANCELLED.value})
     session.query(SampleAttempt).filter(SampleAttempt.run_id == run.id, SampleAttempt.status == SampleAttemptStatus.PENDING.value).update({SampleAttempt.status: SampleAttemptStatus.CANCELLED.value})
     session.commit(); session.refresh(run); return run
+
+
+@router.post("/{run_id}/archive", response_model=EvaluationRunResponse)
+def archive_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
+    """Hide a terminal run while retaining its complete immutable evidence."""
+
+    terminal = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+    store = get_document_store(request)
+    if store is not None:
+        run = store.get_document("evaluation_runs", run_id)
+        if run is None:
+            raise HTTPException(404, "Evaluation run not found")
+        if run["status"] not in terminal:
+            raise HTTPException(409, "Only terminal evaluation runs can be archived")
+        updated = store.update_document("evaluation_runs", run_id, {"archived_at": run.get("archived_at") or datetime.now(timezone.utc)})
+        assert updated is not None
+        return updated
+    assert session is not None
+    run = session.get(EvaluationRun, run_id)
+    if run is None:
+        raise HTTPException(404, "Evaluation run not found")
+    if run.status not in terminal:
+        raise HTTPException(409, "Only terminal evaluation runs can be archived")
+    run.archived_at = run.archived_at or datetime.now(timezone.utc)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> Response:
+    """Permanently delete a run only after it has been explicitly archived."""
+
+    store = get_document_store(request)
+    if store is not None:
+        run = store.get_document("evaluation_runs", run_id)
+        if run is None:
+            raise HTTPException(404, "Evaluation run not found")
+        if run.get("archived_at") is None:
+            raise HTTPException(409, "Archive the evaluation run before deleting it")
+        attempt_ids = [str(item["id"]) for item in store.list_documents("sample_attempts", query={"run_id": run_id})]
+        report_ids = [str(item["id"]) for item in store.list_documents("reports", query={"run_id": run_id})]
+        if attempt_ids:
+            store.delete_documents("human_reviews", {"sample_attempt_id": {"$in": attempt_ids}})
+            store.delete_documents("judge_assessments", {"sample_attempt_id": {"$in": attempt_ids}})
+        if report_ids:
+            store.delete_documents("report_shares", {"report_id": {"$in": report_ids}})
+        store.delete_documents("task_units", {"run_id": run_id})
+        store.delete_documents("sample_attempts", {"run_id": run_id})
+        store.delete_documents("reports", {"run_id": run_id})
+        store.delete_document("evaluation_runs", run_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    assert session is not None
+    run = session.get(EvaluationRun, run_id)
+    if run is None:
+        raise HTTPException(404, "Evaluation run not found")
+    if run.archived_at is None:
+        raise HTTPException(409, "Archive the evaluation run before deleting it")
+    session.delete(run)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{run_id}/clone", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)

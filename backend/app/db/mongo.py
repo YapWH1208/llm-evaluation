@@ -391,6 +391,12 @@ class MongoDocumentStore:
         result = self.database[collection_name].delete_one({"_id": document_id})
         return bool(getattr(result, "deleted_count", 0))
 
+    def delete_documents(self, collection_name: str, query: dict[str, Any]) -> int:
+        """Delete scoped documents for a completed cascading operation."""
+
+        result = self.database[collection_name].delete_many(query)
+        return int(getattr(result, "deleted_count", 0))
+
     def reclaim_expired_leases(self) -> int:
         now = _utc_now()
         leased = self.database["task_units"].find(

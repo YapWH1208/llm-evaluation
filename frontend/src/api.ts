@@ -37,6 +37,7 @@ export type EvaluationRun = {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  archived_at: string | null;
 };
 
 export type SampleAttempt = {
@@ -178,6 +179,8 @@ export const api = {
   cancelRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/cancel`, { method: "POST" }),
   cloneRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/clone`, { method: "POST" }),
   retryFailedRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/retry-failed`, { method: "POST" }),
+  archiveRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/archive`, { method: "POST" }),
+  deleteRun: (runId: string) => request<void>(`/evaluation-runs/${runId}`, { method: "DELETE" }),
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,

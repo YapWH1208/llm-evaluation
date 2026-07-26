@@ -511,3 +511,24 @@ def test_prompt_scoring_rule_is_snapshotted_and_applied_to_execution(tmp_path: P
         assert attempt["reference_snapshot"]["scoring"] == {"type":"regex_match","pattern":"BLUE"}
         assert attempt["status"] == "succeeded"
         assert attempt["score"] == 0.0
+
+
+def test_terminal_run_must_be_archived_before_deletion(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'archive.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        assert client.post(f"/api/v1/evaluation-runs/{run['id']}/execute").json()["status"] == "completed"
+        assert client.delete(f"/api/v1/evaluation-runs/{run['id']}").status_code == 409
+        archived = client.post(f"/api/v1/evaluation-runs/{run['id']}/archive")
+        assert archived.status_code == 200
+        assert archived.json()["archived_at"] is not None
+        assert client.get("/api/v1/evaluation-runs").json() == []
+        assert client.get(f"/api/v1/evaluation-runs/{run['id']}").status_code == 200
+        assert client.delete(f"/api/v1/evaluation-runs/{run['id']}").status_code == 204
+        assert client.get(f"/api/v1/evaluation-runs/{run['id']}").status_code == 404

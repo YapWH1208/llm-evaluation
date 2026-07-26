@@ -110,6 +110,10 @@ def _upgrade_v15_dataset_source_credentials(connection: Connection) -> None:
     _add_column_if_missing(connection, "dataset_versions", "credential_env_var", "credential_env_var VARCHAR(128)")
 
 
+def _upgrade_v16_run_archiving(connection: Connection) -> None:
+    _add_column_if_missing(connection, "evaluation_runs", "archived_at", "archived_at DATETIME")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -194,6 +198,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_dataset_source_credentials",
         description="Add environment-referenced dataset download credentials.",
         upgrade=_upgrade_v15_dataset_source_credentials,
+    ),
+    Migration(
+        version=16,
+        migration_id="20260726_add_run_archiving",
+        description="Add a durable archive marker before terminal evaluation runs may be deleted.",
+        upgrade=_upgrade_v16_run_archiving,
     ),
 )
 
