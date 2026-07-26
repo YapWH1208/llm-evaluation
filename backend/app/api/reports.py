@@ -15,7 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, ReportShare
+from app.db.mongo import MongoDocumentStore
 from app.services.reports import ReportError, generate_report
+from app.services.mongo_reports import generate_mongo_report
 
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -58,7 +60,9 @@ class ReportShareResponse(BaseModel):
     share_url: str | None = None
 
 
-def get_session(request: Request) -> Generator[Session, None, None]:
+def get_session(request: Request) -> Generator[Session | None, None, None]:
+    if getattr(request.app.state,"document_store",None) is not None:
+        yield None;return
     session = request.app.state.database.get_session()
     try:
         yield session
@@ -66,19 +70,25 @@ def get_session(request: Request) -> Generator[Session, None, None]:
         session.close()
 
 
-SessionDependency = Annotated[Session, Depends(get_session)]
+SessionDependency = Annotated[Session | None, Depends(get_session)]
 
 
 @router.post("", response_model=ReportResponse)
-def create(payload: ReportCreate, request: Request, session: SessionDependency) -> Report:
+def create(payload: ReportCreate, request: Request, session: SessionDependency) -> Report | dict:
+    store:MongoDocumentStore|None=getattr(request.app.state,"document_store",None)
     try:
+        if store is not None:return generate_mongo_report(store,payload.run_id,payload.format,request.app.state.settings.data_root)
+        assert session is not None
         return generate_report(session, payload.run_id, payload.format, request.app.state.settings.data_root)
     except ReportError as error:
         raise HTTPException(409, str(error)) from error
 
 
 @router.get("/run/{run_id}", response_model=list[ReportResponse])
-def list_for_run(run_id: str, session: SessionDependency) -> list[Report]:
+def list_for_run(run_id: str, request: Request, session: SessionDependency) -> list[Report|dict]:
+    store:MongoDocumentStore|None=getattr(request.app.state,"document_store",None)
+    if store is not None:return store.list_documents("reports",query={"run_id":run_id},sort=[("generated_at",-1)])
+    assert session is not None
     return list(session.scalars(select(Report).where(Report.run_id == run_id).order_by(Report.generated_at.desc())))
 
 
