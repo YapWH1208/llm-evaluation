@@ -4,6 +4,8 @@ import base64
 import binascii
 import ipaddress
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from time import perf_counter
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -26,6 +28,7 @@ class SampleExecutionResult:
     latency_ms: float | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    retry_after_seconds: float | None = None
 
 
 class ModelExecutor(Protocol):
@@ -104,6 +107,7 @@ class OpenAIChatCompletionsExecutor:
                 f"http_{response.status_code}",
                 f"Provider returned HTTP {response.status_code}.",
                 latency_ms=_elapsed_ms(started_at),
+                retry_after_seconds=_parse_retry_after(response.headers.get("retry-after")),
             )
 
         try:
@@ -193,6 +197,24 @@ def _nonnegative_int(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if number >= 0 else None
+
+
+def _parse_retry_after(value: str | None, now: datetime | None = None) -> float | None:
+    """Return a non-negative Retry-After delay from a provider response header."""
+
+    if not value:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        delay = (retry_at - (now or datetime.now(timezone.utc))).total_seconds()
+    return max(0.0, delay)
 
 
 def _translate_messages(messages: list[object]) -> list[dict[str, object]]:

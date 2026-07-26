@@ -88,3 +88,20 @@ def test_openai_executor_rejects_local_remote_media_target() -> None:
     assert result.success is False
     assert result.error_type == "invalid_sample"
     assert "private or local" in (result.error_message or "")
+
+
+def test_openai_executor_parses_retry_after_from_rate_limited_response() -> None:
+    endpoint = ModelEndpoint(
+        display_name="executor test",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****test",
+    )
+    result = OpenAIChatCompletionsExecutor(
+        httpx.MockTransport(lambda _request: httpx.Response(429, headers={"Retry-After": "12"}))
+    ).execute(endpoint, "secret", {"messages": [{"role": "user", "content": "hello"}]})
+
+    assert result.success is False
+    assert result.error_type == "http_429"
+    assert result.retry_after_seconds == 12

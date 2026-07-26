@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,6 +29,11 @@ DEFAULT_RETRY_POLICY = {
     "max_attempts": 3,
     "base_delay_seconds": 2,
     "max_delay_seconds": 60,
+    "strategy": "exponential_jitter",
+    "jitter_ratio": 0.2,
+    "max_total_wait_seconds": 600,
+    "respect_retry_after": True,
+    "retry_response_parse_errors": True,
 }
 
 
@@ -97,18 +103,35 @@ def execute_leased_text_task(
     attempts = _prepare_attempts_for_execution(session, task)
     api_key = cipher.decrypt(endpoint.encrypted_api_key)
     retry_sample_ids: list[str] = []
+    provider_retry_after_seconds: float | None = None
+    policy = _retry_policy(task.payload)
     for attempt in attempts:
         _mark_attempt_running(session, attempt)
         result = model_executor.execute(endpoint, api_key, attempt.input_snapshot)
         _record_result(attempt, result, endpoint)
-        if not result.success and _is_retryable(result.error_type):
+        if not result.success and _is_retryable(result.error_type, policy):
             retry_sample_ids.append(attempt.sample_id)
+            if result.retry_after_seconds is not None:
+                provider_retry_after_seconds = max(
+                    provider_retry_after_seconds or 0.0,
+                    result.retry_after_seconds,
+                )
         session.commit()
 
     retry_sample_ids = sorted(set(retry_sample_ids))
-    policy = _retry_policy(task.payload)
-    if retry_sample_ids and task.attempt_count < policy["max_attempts"]:
-        _schedule_retry(session, run, task, retry_sample_ids, policy)
+    if (
+        retry_sample_ids
+        and task.attempt_count < policy["max_attempts"]
+        and _schedule_retry(
+            session,
+            run,
+            task,
+            retry_sample_ids,
+            policy,
+            provider_retry_after_seconds=provider_retry_after_seconds,
+        )
+    ):
+        pass
     else:
         _finalize_task_and_run(session, run, task)
     session.refresh(run)
@@ -203,9 +226,11 @@ def _estimate_cost(
     return round(input_cost + output_cost, 12)
 
 
-def _is_retryable(error_type: str | None) -> bool:
+def _is_retryable(error_type: str | None, policy: dict[str, Any]) -> bool:
     if error_type in {"timeout", "connection_error"}:
         return True
+    if error_type == "response_parse_error":
+        return bool(policy["retry_response_parse_errors"])
     if not error_type or not error_type.startswith("http_"):
         return False
     try:
@@ -215,13 +240,21 @@ def _is_retryable(error_type: str | None) -> bool:
     return status_code in {408, 409, 425, 429} or 500 <= status_code <= 599
 
 
-def _retry_policy(payload: dict[str, Any]) -> dict[str, int]:
+def _retry_policy(payload: dict[str, Any]) -> dict[str, Any]:
     configured = payload.get("retry_policy") if isinstance(payload, dict) else None
     configured = configured if isinstance(configured, dict) else {}
+    strategy = configured.get("strategy", DEFAULT_RETRY_POLICY["strategy"])
+    if strategy not in {"fixed", "exponential", "exponential_jitter"}:
+        strategy = DEFAULT_RETRY_POLICY["strategy"]
     return {
         "max_attempts": max(1, int(configured.get("max_attempts", DEFAULT_RETRY_POLICY["max_attempts"]))),
         "base_delay_seconds": max(0, int(configured.get("base_delay_seconds", DEFAULT_RETRY_POLICY["base_delay_seconds"]))),
         "max_delay_seconds": max(0, int(configured.get("max_delay_seconds", DEFAULT_RETRY_POLICY["max_delay_seconds"]))),
+        "strategy": strategy,
+        "jitter_ratio": min(1.0, max(0.0, float(configured.get("jitter_ratio", DEFAULT_RETRY_POLICY["jitter_ratio"])))),
+        "max_total_wait_seconds": max(0, int(configured.get("max_total_wait_seconds", DEFAULT_RETRY_POLICY["max_total_wait_seconds"]))),
+        "respect_retry_after": bool(configured.get("respect_retry_after", DEFAULT_RETRY_POLICY["respect_retry_after"])),
+        "retry_response_parse_errors": bool(configured.get("retry_response_parse_errors", DEFAULT_RETRY_POLICY["retry_response_parse_errors"])),
     }
 
 
@@ -230,19 +263,62 @@ def _schedule_retry(
     run: EvaluationRun,
     task: TaskUnit,
     retry_sample_ids: list[str],
-    policy: dict[str, int],
-) -> None:
-    delay_seconds = min(
-        policy["max_delay_seconds"],
-        policy["base_delay_seconds"] * (2 ** max(0, task.attempt_count - 1)),
+    policy: dict[str, Any],
+    *,
+    provider_retry_after_seconds: float | None,
+) -> bool:
+    delay_seconds = _retry_delay_seconds(
+        task.attempt_count,
+        policy,
+        provider_retry_after_seconds=provider_retry_after_seconds,
     )
-    task.payload = {**task.payload, "retry_sample_ids": retry_sample_ids}
+    previous_wait = _nonnegative_float((task.payload or {}).get("retry_total_wait_seconds", 0))
+    if previous_wait + delay_seconds > policy["max_total_wait_seconds"]:
+        task.payload = {
+            **task.payload,
+            "retry_exhausted_reason": "max_total_wait_seconds",
+            "retry_total_wait_seconds": previous_wait,
+        }
+        return False
+    task.payload = {
+        **task.payload,
+        "retry_sample_ids": retry_sample_ids,
+        "retry_total_wait_seconds": round(previous_wait + delay_seconds, 3),
+        "last_retry_delay_seconds": delay_seconds,
+    }
     task.status = TaskStatus.RETRY_SCHEDULED.value
     task.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
     clear_lease(task)
     _update_run_progress(session, run, retry_sample_ids)
     run.status = RunStatus.QUEUED.value
     session.commit()
+    return True
+
+
+def _retry_delay_seconds(
+    attempt_count: int,
+    policy: dict[str, Any],
+    *,
+    provider_retry_after_seconds: float | None,
+) -> float:
+    base_delay = float(policy["base_delay_seconds"])
+    if policy["strategy"] == "fixed":
+        delay = base_delay
+    else:
+        delay = base_delay * (2 ** max(0, attempt_count - 1))
+    delay = min(float(policy["max_delay_seconds"]), delay)
+    if policy["strategy"] == "exponential_jitter" and delay:
+        delay *= 1 + random.uniform(-policy["jitter_ratio"], policy["jitter_ratio"])
+    if policy["respect_retry_after"] and provider_retry_after_seconds is not None:
+        delay = max(delay, provider_retry_after_seconds)
+    return round(max(0.0, delay), 3)
+
+
+def _nonnegative_float(value: object) -> float:
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _finalize_task_and_run(session: Session, run: EvaluationRun, task: TaskUnit) -> None:

@@ -12,6 +12,7 @@ from app.db.models import EndpointRateWindow
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_executor import _retry_delay_seconds
 
 
 class SuccessfulTester:
@@ -55,6 +56,19 @@ class FatalThenSuccessfulExecutor:
         if self.fail:
             return SampleExecutionResult(False, {"model": endpoint.model_name}, None, None, "http_400", "Invalid request.")
         return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+
+class RetryAfterExecutor:
+    def execute(self, endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+        return SampleExecutionResult(
+            False,
+            {"model": endpoint.model_name},
+            None,
+            None,
+            "http_429",
+            "Provider returned HTTP 429.",
+            retry_after_seconds=120,
+        )
 
 
 def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path) -> None:
@@ -236,6 +250,54 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         assert final_run["status"] == "completed"
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "failed"), (2, "succeeded")]
+
+
+def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=RetryAfterExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        with app.state.database.get_session() as session:
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"]))
+            assert task is not None
+            task.payload = {
+                **task.payload,
+                "retry_policy": {
+                    "max_attempts": 3,
+                    "base_delay_seconds": 1,
+                    "max_delay_seconds": 2,
+                    "jitter_ratio": 0,
+                    "max_total_wait_seconds": 30,
+                },
+            }
+            session.commit()
+
+        execution = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert execution.status_code == 200
+        assert execution.json()["status"] == "completed_with_errors"
+        with app.state.database.get_session() as session:
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"]))
+            assert task is not None
+            assert task.payload["retry_exhausted_reason"] == "max_total_wait_seconds"
+            assert task.payload["retry_total_wait_seconds"] == 0
+
+
+def test_retry_delay_supports_fixed_exponential_jitter_and_provider_hint() -> None:
+    policy = {
+        "base_delay_seconds": 2,
+        "max_delay_seconds": 10,
+        "strategy": "exponential_jitter",
+        "jitter_ratio": 0,
+        "respect_retry_after": True,
+    }
+    assert _retry_delay_seconds(3, policy, provider_retry_after_seconds=None) == 8
+    assert _retry_delay_seconds(3, policy, provider_retry_after_seconds=12) == 12
+    assert _retry_delay_seconds(3, {**policy, "strategy": "fixed"}, provider_retry_after_seconds=None) == 2
 
 
 def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: Path) -> None:
