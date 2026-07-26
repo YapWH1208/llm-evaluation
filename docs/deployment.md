@@ -20,6 +20,8 @@ python -m app.cli database validate
 
 The task lease protocol uses conditional state updates and lease tokens. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
 
+Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Endpoint-level maximum concurrency, RPM, and TPM remain independently enforced; the scheduler admits work only when every configured limit has capacity.
+
 ## Docker Compose
 
 1. Generate a Fernet key.

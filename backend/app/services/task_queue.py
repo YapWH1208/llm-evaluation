@@ -54,6 +54,8 @@ def claim_task(
     lease_seconds: int = 60,
     *,
     run_id: str | None = None,
+    system_max_concurrency: int | None = None,
+    worker_max_concurrency: int | None = None,
 ) -> TaskUnit | None:
     """Atomically lease one due task, optionally restricting the claim to one run."""
 
@@ -78,7 +80,13 @@ def claim_task(
             .join(EvaluationRun, EvaluationRun.model_endpoint_id == ModelEndpoint.id)
             .where(EvaluationRun.id == task.run_id)
         )
-        if endpoint is None or not _endpoint_has_capacity(session, endpoint):
+        if endpoint is None or not _has_execution_capacity(
+            session,
+            endpoint,
+            worker_id=worker_id,
+            system_max_concurrency=system_max_concurrency,
+            worker_max_concurrency=worker_max_concurrency,
+        ):
             continue
         if not _reserve_endpoint_budget(session, endpoint, task, now):
             continue
@@ -156,14 +164,36 @@ def clear_lease(task: TaskUnit) -> None:
     task.heartbeat_at = None
 
 
-def _endpoint_has_capacity(session: Session, endpoint: ModelEndpoint) -> bool:
+def _has_execution_capacity(
+    session: Session,
+    endpoint: ModelEndpoint,
+    *,
+    worker_id: str,
+    system_max_concurrency: int | None,
+    worker_max_concurrency: int | None,
+) -> bool:
+    active_statuses = [TaskStatus.LEASED.value, TaskStatus.RUNNING.value]
+    if system_max_concurrency is not None:
+        system_active = session.scalar(
+            select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(active_statuses))
+        ) or 0
+        if system_active >= system_max_concurrency:
+            return False
+    if worker_max_concurrency is not None:
+        worker_active = session.scalar(
+            select(func.count()).select_from(TaskUnit).where(
+                TaskUnit.status.in_(active_statuses), TaskUnit.leased_by == worker_id
+            )
+        ) or 0
+        if worker_active >= worker_max_concurrency:
+            return False
     active_tasks = session.scalar(
         select(func.count())
         .select_from(TaskUnit)
         .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
         .where(
             EvaluationRun.model_endpoint_id == endpoint.id,
-            TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
+            TaskUnit.status.in_(active_statuses),
         )
     ) or 0
     return active_tasks < endpoint.max_concurrency

@@ -384,6 +384,29 @@ def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path
             assert window.request_count == 1
 
 
+def test_worker_claim_honors_system_and_worker_concurrency_limits(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}",
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+            system_max_concurrency=1,
+            worker_max_concurrency=1,
+        ),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint_a = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-a.example.test/v1","api_key":"secret-a","model_name":"a","max_concurrency":3}).json()
+        endpoint_b = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-b.example.test/v1","api_key":"secret-b","model_name":"b","max_concurrency":3}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint_a['id']}/connection-test").status_code == 200
+        assert client.post(f"/api/v1/model-endpoints/{endpoint_b['id']}/connection-test").status_code == 200
+        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_a["id"], "sample_limit": 1}).status_code == 201
+        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_b["id"], "sample_limit": 1}).status_code == 201
+        first = client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"})
+        assert first.status_code == 200 and first.json() is not None
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
+
+
 def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
     with TestClient(app) as client:

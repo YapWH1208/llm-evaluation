@@ -20,6 +20,8 @@ class Settings:
     mongodb_database: str | None = None
     application_name: str = "LLM/SLM Evaluation Platform"
     application_version: str = "0.1.0"
+    system_max_concurrency: int | None = None
+    worker_max_concurrency: int | None = None
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -33,6 +35,8 @@ class Settings:
             database_init_mode=getenv("LLE_DATABASE_INIT_MODE", "auto_migrate"),
             database_backup_before_migrate=getenv("LLE_DATABASE_BACKUP_BEFORE_MIGRATE", "false").lower() in {"1", "true", "yes"},
             mongodb_database=getenv("LLE_MONGODB_DATABASE"),
+            system_max_concurrency=_optional_positive_int(getenv("LLE_SYSTEM_MAX_CONCURRENCY")),
+            worker_max_concurrency=_optional_positive_int(getenv("LLE_WORKER_MAX_CONCURRENCY")),
         )
 
     @property
@@ -59,3 +63,15 @@ class Settings:
             return self.mongodb_database
         path = urlparse(self.database_url).path.strip("/")
         return path.split("/", 1)[0] or "llm_evaluation"
+
+
+def _optional_positive_int(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise ValueError("Concurrency environment settings must be positive integers.") from error
+    if parsed < 1:
+        raise ValueError("Concurrency environment settings must be positive integers.")
+    return parsed

@@ -44,7 +44,8 @@ def claim(payload:ClaimRequest,request:Request,session:SessionDependency)->TaskU
     store=get_document_store(request)
     if store is not None:return store.claim_task(worker_id=payload.worker_id,lease_seconds=payload.lease_seconds)
     assert session is not None
-    return claim_task(session,payload.worker_id,payload.lease_seconds)
+    settings = request.app.state.settings
+    return claim_task(session,payload.worker_id,payload.lease_seconds,system_max_concurrency=settings.system_max_concurrency,worker_max_concurrency=settings.worker_max_concurrency)
 @router.post("/tasks/{task_id}/heartbeat",response_model=TaskResponse)
 def heartbeat(task_id:str,payload:HeartbeatRequest,request:Request,session:SessionDependency)->TaskUnit|dict[str,Any]:
     store=get_document_store(request)
