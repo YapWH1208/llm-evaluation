@@ -344,3 +344,22 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe() -> None:
         assert execution.status_code == 200
         assert execution.json()["status"] == "succeeded"
         assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
+
+
+def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses() -> None:
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        benchmarks = api.get("/api/v1/benchmarks")
+        assert benchmarks.status_code == 200
+        assert any(item["benchmark_id"] == "text-quick-check" for item in benchmarks.json())
+        prompt = api.post("/api/v1/prompt-packages", json={"name": "qa", "version": "1", "user_template": "{{ question }}"})
+        assert prompt.status_code == 201
+        assert api.get("/api/v1/prompt-packages").json()[0]["id"] == prompt.json()["id"]
+        dataset = api.post("/api/v1/datasets", json={"dataset_id": "demo", "version": "1", "license_text": "accept me"})
+        assert dataset.status_code == 201
+        assert dataset.json()["status"] == "license_required"
+        accepted = api.post(f"/api/v1/datasets/{dataset.json()['id']}/accept-license")
+        assert accepted.status_code == 200
+        assert accepted.json()["status"] == "not_downloaded"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import hashlib
 import hmac
 
@@ -252,5 +253,6 @@ def _ensure_mongo_builtin_benchmarks(document_store: MongoDocumentStore) -> None
                 "status": "available",
                 "manifest": manifest,
                 "source": "builtin",
+                "created_at": datetime.now(timezone.utc),
             },
         )

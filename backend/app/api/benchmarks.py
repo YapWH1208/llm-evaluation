@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import BenchmarkDefinition
+from app.db.mongo import MongoDocumentStore
 
 
 router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])
@@ -32,7 +33,10 @@ class BenchmarkResponse(BenchmarkCreate):
     created_at: datetime
 
 
-def get_session(request: Request) -> Generator[Session, None, None]:
+def get_session(request: Request) -> Generator[Session | None, None, None]:
+    if getattr(request.app.state, "document_store", None) is not None:
+        yield None
+        return
     session = request.app.state.database.get_session()
     try:
         yield session
@@ -40,16 +44,32 @@ def get_session(request: Request) -> Generator[Session, None, None]:
         session.close()
 
 
-SessionDependency = Annotated[Session, Depends(get_session)]
+SessionDependency = Annotated[Session | None, Depends(get_session)]
+
+def get_document_store(request: Request) -> MongoDocumentStore | None:
+    return getattr(request.app.state, "document_store", None)
 
 
 @router.get("", response_model=list[BenchmarkResponse])
-def list_benchmarks(session: SessionDependency) -> list[BenchmarkDefinition]:
+def list_benchmarks(request: Request, session: SessionDependency) -> list[BenchmarkDefinition | dict[str, Any]]:
+    store = get_document_store(request)
+    if store is not None:
+        return store.list_documents("benchmark_definitions", sort=[("created_at", -1)])
+    assert session is not None
     return list(session.scalars(select(BenchmarkDefinition).order_by(BenchmarkDefinition.created_at.desc())))
 
 
 @router.post("", response_model=BenchmarkResponse, status_code=status.HTTP_201_CREATED)
-def register_benchmark(payload: BenchmarkCreate, session: SessionDependency) -> BenchmarkDefinition:
+def register_benchmark(payload: BenchmarkCreate, request: Request, session: SessionDependency) -> BenchmarkDefinition | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        if store.list_documents("benchmark_definitions", query={"benchmark_id": payload.benchmark_id, "version": payload.version}):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist")
+        return store.insert_document(
+            "benchmark_definitions",
+            {**payload.model_dump(), "status": "registered", "source": "user", "created_at": datetime.now()},
+        )
+    assert session is not None
     definition = BenchmarkDefinition(
         **payload.model_dump(),
         status="registered",
