@@ -88,6 +88,11 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert dashboard.json()["api"]["estimated_cost_by_currency"] == {"USD": 0.00016}
         assert dashboard.json()["quality"]["samples"]["total"] == 4
 
+        matrix = client.get("/api/v1/analytics/matrix")
+        assert matrix.status_code == 200
+        assert len(matrix.json()["heatmap"]) == 2
+        assert matrix.json()["capability_matrix"][0]["capability"] == "text_input"
+
         comparison = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_b})
         assert comparison.status_code == 200
         compared = comparison.json()

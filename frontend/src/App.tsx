@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 import {
   api,
   ApiError,
+  AnalyticsMatrix,
   Asset,
   Benchmark,
   Capability,
@@ -18,7 +19,7 @@ import {
   Task,
 } from "./api";
 
-type View = "dashboard" | "models" | "workspace" | "runs" | "queue" | "compare" | "reports";
+type View = "dashboard" | "models" | "workspace" | "runs" | "queue" | "analysis" | "compare" | "reports";
 
 const initialEndpoint = {
   base_url: "",
@@ -80,13 +81,14 @@ export default function App() {
   const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
   const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsMatrix | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks, nextTasks] = await Promise.all([
-      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(), api.listTasks(),
+    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks, nextTasks, nextAnalytics] = await Promise.all([
+      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(),
     ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
@@ -95,6 +97,7 @@ export default function App() {
     setDatasets(nextDatasets);
     setBenchmarks(nextBenchmarks);
     setTasks(nextTasks);
+    setAnalytics(nextAnalytics);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -345,7 +348,7 @@ export default function App() {
       </header>
 
       <nav className="tabs" aria-label="Workspace sections">
-        {(["dashboard", "models", "workspace", "runs", "queue", "compare", "reports"] as View[]).map((item) => (
+        {(["dashboard", "models", "workspace", "runs", "queue", "analysis", "compare", "reports"] as View[]).map((item) => (
           <button className={view === item ? "tab selected" : "tab"} key={item} onClick={() => setView(item)}>{item}</button>
         ))}
       </nav>
@@ -400,6 +403,8 @@ export default function App() {
 
       {view === "queue" && <section className="panel"><div className="section-title"><h2>Task queue</h2><span>{tasks.length} tasks loaded</span></div>{tasks.length === 0 ? <p className="empty">No queued work exists.</p> : <div className="table-wrap"><table><thead><tr><th>Task</th><th>Run</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Worker</th><th>Created</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id}><td>{task.task_type}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status}</span></td><td><div className="actions"><span>{task.priority}</span><button className="secondary" disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority - 10)}>-10</button><button disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority + 10)}>+10</button></div></td><td>{task.attempt_count}</td><td>{task.leased_by ?? "--"}</td><td>{formatDate(task.created_at)}</td></tr>)}</tbody></table></div>}</section>}
 
+      {view === "analysis" && <AnalysisView analytics={analytics} />}
+
       {view === "compare" && <section className="panel"><h2>Model and run comparison</h2><p className="muted">Runs must use the same benchmark version. Differences are run A minus run B.</p><form className="comparison-form" onSubmit={compareRuns}><label>Run A<select required value={comparisonRunA} onChange={(event) => setComparisonRunA(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><label>Run B<select required value={comparisonRunB} onChange={(event) => setComparisonRunB(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"}>Compare</button></form>{comparison && <ComparisonView comparison={comparison} />}</section>}
 
       {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button></div><ReportsTable reports={reports} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
@@ -426,6 +431,11 @@ function RunDetail({ run, summary, attempts, reports, selectedAttempt, reviews, 
     {selectedAttempt && <section className="grid two"><article className="panel"><h2>Human review: {selectedAttempt.sample_id}</h2><form className="form" onSubmit={onCreateReview}><label>Reviewer ID<input required value={reviewForm.reviewer_id} onChange={(event) => onReviewForm({ ...reviewForm, reviewer_id: event.target.value })} /></label><label>Score<input type="number" min="0" max="1" step="0.01" value={reviewForm.score} onChange={(event) => onReviewForm({ ...reviewForm, score: event.target.value })} /></label><label>Labels (comma-separated)<input value={reviewForm.labels} onChange={(event) => onReviewForm({ ...reviewForm, labels: event.target.value })} /></label><label>Notes<textarea value={reviewForm.notes} onChange={(event) => onReviewForm({ ...reviewForm, notes: event.target.value })} /></label><button disabled={busy === "review-submit"}>Save review</button></form></article><article className="panel"><h2>Saved reviews</h2>{reviews.length === 0 ? <p className="empty">No human review has been saved for this attempt.</p> : <div className="review-list">{reviews.map((review) => <article className="review" key={review.id}><strong>{review.reviewer_id} · {review.score ?? "no score"}</strong><p>{review.notes || "No notes"}</p><small>{review.labels.join(", ") || "No labels"} · {formatDate(review.created_at)}</small></article>)}</div>}</article></section>}
     <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button></div></div><ReportsTable reports={reports} /></section>
   </>;
+}
+
+function AnalysisView({ analytics }: { analytics: AnalyticsMatrix | null }) {
+  if (!analytics) return <section className="panel"><p className="empty">Loading analysis matrix...</p></section>;
+  return <><section className="panel"><div className="section-title"><h2>Model × benchmark heatmap</h2><span>{analytics.heatmap.length} completed runs</span></div>{analytics.heatmap.length === 0 ? <p className="empty">Complete runs to populate the heatmap.</p> : <div className="table-wrap"><table><thead><tr><th>Model</th><th>Benchmark</th><th>Accuracy</th><th>Success</th><th>Errors</th><th>Average latency</th><th>Estimated cost</th></tr></thead><tbody>{analytics.heatmap.map((cell) => <tr key={cell.run_id}><td>{cell.model_name}</td><td>{cell.benchmark_id} v{cell.benchmark_version}</td><td>{percent(cell.accuracy)}</td><td>{percent(cell.success_rate)}</td><td>{percent(cell.error_rate)}</td><td>{display(cell.average_latency_ms)} ms</td><td>{money(cell.estimated_cost, cell.currency)}</td></tr>)}</tbody></table></div>}</section><section className="panel"><div className="section-title"><h2>Capability matrix</h2><span>Aggregated from benchmark requirements</span></div>{analytics.capability_matrix.length === 0 ? <p className="empty">No capability evidence is available yet.</p> : <div className="table-wrap"><table><thead><tr><th>Endpoint</th><th>Capability</th><th>Runs</th><th>Accuracy</th><th>Average latency</th><th>Estimated cost</th></tr></thead><tbody>{analytics.capability_matrix.map((cell) => <tr key={`${cell.model_endpoint_id}-${cell.capability}`}><td>{cell.model_endpoint_id.slice(0, 8)}</td><td>{cell.capability}</td><td>{cell.run_count}</td><td>{percent(cell.accuracy)}</td><td>{display(cell.average_latency_ms)} ms</td><td>{display(cell.estimated_cost, 6)}</td></tr>)}</tbody></table></div>}</section></>;
 }
 
 function ComparisonView({ comparison }: { comparison: Comparison }) {
