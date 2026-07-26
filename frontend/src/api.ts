@@ -152,6 +152,7 @@ export const api = {
   retryFailedRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/retry-failed`, { method: "POST" }),
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
+  runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
   createReport: (runId: string, format: "html" | "json" | "csv" | "markdown") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,

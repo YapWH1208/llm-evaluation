@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -243,6 +246,41 @@ def get_run_summary(run_id: str, session: SessionDependency) -> dict[str, Any]:
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
     return build_run_summary(session, run)
+
+
+@router.get("/{run_id}/events")
+async def stream_run_events(run_id: str, request: Request, session: SessionDependency) -> StreamingResponse:
+    if session.get(EvaluationRun, run_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+
+    async def event_stream():
+        previous: str | None = None
+        terminal_statuses = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+        while True:
+            with request.app.state.database.get_session() as event_session:
+                run = event_session.get(EvaluationRun, run_id)
+                if run is None:
+                    return
+                payload = {
+                    "run_id": run.id,
+                    "status": run.status,
+                    "total_samples": run.total_samples,
+                    "completed_samples": run.completed_samples,
+                    "successful_samples": run.successful_samples,
+                    "failed_samples": run.failed_samples,
+                    "summary": build_run_summary(event_session, run),
+                }
+            serialized = json.dumps(payload, separators=(",", ":"))
+            if serialized != previous:
+                yield f"event: run\ndata: {serialized}\n\n"
+                previous = serialized
+            if payload["status"] in terminal_statuses:
+                return
+            if await request.is_disconnected():
+                return
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/{run_id}", response_model=EvaluationRunResponse)

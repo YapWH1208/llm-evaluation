@@ -29,7 +29,7 @@ from app.services.connection_tester import ConnectionTester, OpenAIChatCompletio
 from app.services.capability_detector import CapabilityDetector, OpenAIChatCompletionsCapabilityDetector
 from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
 from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
-from app.db.models import User, UserRole
+from app.db.models import AuditEvent, User, UserRole
 from sqlalchemy import select
 
 
@@ -99,7 +99,10 @@ def create_app(
             return JSONResponse({"detail": "Your role is not permitted to perform this action."}, status_code=403)
         request.state.actor_id = actor_id
         request.state.actor_role = role
-        return await call_next(request)
+        response = await call_next(request)
+        if request.method in {"POST", "PATCH", "PUT", "DELETE"} and response.status_code < 400:
+            _record_mutation_audit(database, request, response.status_code)
+        return response
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
@@ -148,3 +151,26 @@ def _allowed_roles(path: str, method: str) -> set[str]:
     if method in {"POST", "PATCH", "PUT", "DELETE"}:
         return evaluator_roles
     return all_roles
+
+
+def _record_mutation_audit(database: Database, request, status_code: int) -> None:
+    """Record metadata only; request bodies can contain API keys and sample content."""
+
+    parts = [part for part in request.url.path.split("/") if part]
+    entity_type = parts[2] if len(parts) > 2 else "system"
+    entity_id = parts[3] if len(parts) > 3 else None
+    try:
+        with database.get_session() as session:
+            session.add(
+                AuditEvent(
+                    actor_id=getattr(request.state, "actor_id", None),
+                    action=f"api.{request.method.lower()}",
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    details={"path": request.url.path, "status_code": status_code},
+                )
+            )
+            session.commit()
+    except Exception:
+        # Audit availability must not turn a successful external model action into an unknown outcome.
+        return

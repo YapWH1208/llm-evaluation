@@ -98,6 +98,17 @@ export default function App() {
   const completedRuns = useMemo(() => runs.filter((run) => run.status.startsWith("completed")), [runs]);
   const selectedRunInfo = runs.find((run) => run.id === selectedRun) ?? null;
 
+  useEffect(() => {
+    if (!selectedRun || !selectedRunInfo || !["queued", "running"].includes(selectedRunInfo.status)) return;
+    const events = new EventSource(api.runEventsUrl(selectedRun));
+    const update = () => {
+      void selectRun(selectedRun);
+      void refresh();
+    };
+    events.addEventListener("run", update);
+    return () => events.close();
+  }, [selectedRun, selectedRunInfo?.status]);
+
   function showError(error: unknown) {
     setNotice(error instanceof ApiError ? error.message : "Unable to reach the evaluation service.");
   }
