@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError, mask_secret
 from app.db import EndpointStatus, ModelEndpoint
+from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
@@ -109,7 +110,10 @@ class ModelEndpointResponse(BaseModel):
     updated_at: datetime
 
 
-def get_session(request: Request) -> Generator[Session, None, None]:
+def get_session(request: Request) -> Generator[Session | None, None, None]:
+    if getattr(request.app.state, "document_store", None) is not None:
+        yield None
+        return
     session = request.app.state.database.get_session()
     try:
         yield session
@@ -128,7 +132,7 @@ def get_connection_tester(request: Request) -> ConnectionTester:
     return request.app.state.connection_tester
 
 
-SessionDependency = Annotated[Session, Depends(get_session)]
+SessionDependency = Annotated[Session | None, Depends(get_session)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ConnectionTesterDependency = Annotated[ConnectionTester, Depends(get_connection_tester)]
 
@@ -140,13 +144,59 @@ def get_endpoint_or_404(session: Session, endpoint_id: str) -> ModelEndpoint:
     return endpoint
 
 
+def get_document_store(request: Request) -> MongoDocumentStore | None:
+    return getattr(request.app.state, "document_store", None)
+
+
+def get_document_endpoint_or_404(store: MongoDocumentStore, endpoint_id: str) -> dict[str, Any]:
+    endpoint = store.get_document("model_endpoints", endpoint_id)
+    if endpoint is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model endpoint not found")
+    return endpoint
+
+
+def _endpoint_proxy(endpoint: dict[str, Any]) -> Any:
+    """Give protocol adapters attribute access without coupling them to a database."""
+
+    return type("DocumentEndpoint", (), endpoint)()
+
+
 @router.post("", response_model=ModelEndpointResponse, status_code=status.HTTP_201_CREATED)
 def create_model_endpoint(
     payload: ModelEndpointCreate,
+    request: Request,
     session: SessionDependency,
     cipher: CipherDependency,
-) -> ModelEndpoint:
+) -> ModelEndpoint | dict[str, Any]:
     api_key = payload.api_key.get_secret_value()
+    store = get_document_store(request)
+    if store is not None:
+        now = datetime.now(timezone.utc)
+        return store.insert_document(
+            "model_endpoints",
+            {
+                "display_name": payload.display_name or payload.model_name,
+                "base_url": payload.base_url,
+                "model_name": payload.model_name,
+                "protocol_profile": "openai_chat_completions",
+                "encrypted_api_key": cipher.encrypt(api_key),
+                "api_key_mask": mask_secret(api_key),
+                "default_request_body": payload.default_request_body,
+                "timeout_seconds": payload.timeout_seconds,
+                "max_concurrency": payload.max_concurrency,
+                "requests_per_minute": payload.requests_per_minute,
+                "tokens_per_minute": payload.tokens_per_minute,
+                "input_cost_per_million": payload.input_cost_per_million,
+                "output_cost_per_million": payload.output_cost_per_million,
+                "currency": payload.currency.upper(),
+                "status": EndpointStatus.UNVERIFIED.value,
+                "last_tested_at": None,
+                "last_connection_error": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+    assert session is not None
     endpoint = ModelEndpoint(
         display_name=payload.display_name or payload.model_name,
         base_url=payload.base_url,
@@ -169,12 +219,27 @@ def create_model_endpoint(
 
 
 @router.get("", response_model=list[ModelEndpointResponse])
-def list_model_endpoints(session: SessionDependency) -> list[ModelEndpoint]:
+def list_model_endpoints(
+    request: Request,
+    session: SessionDependency,
+) -> list[ModelEndpoint | dict[str, Any]]:
+    store = get_document_store(request)
+    if store is not None:
+        return store.list_documents("model_endpoints", sort=[("created_at", -1)])
+    assert session is not None
     return list(session.scalars(select(ModelEndpoint).order_by(ModelEndpoint.created_at.desc())))
 
 
 @router.get("/{endpoint_id}", response_model=ModelEndpointResponse)
-def get_model_endpoint(endpoint_id: str, session: SessionDependency) -> ModelEndpoint:
+def get_model_endpoint(
+    endpoint_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> ModelEndpoint | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        return get_document_endpoint_or_404(store, endpoint_id)
+    assert session is not None
     return get_endpoint_or_404(session, endpoint_id)
 
 
@@ -189,10 +254,38 @@ class ConnectionTestResponse(BaseModel):
 @router.post("/{endpoint_id}/connection-test", response_model=ConnectionTestResponse)
 def test_model_endpoint_connection(
     endpoint_id: str,
+    request: Request,
     session: SessionDependency,
     cipher: CipherDependency,
     connection_tester: ConnectionTesterDependency,
 ) -> ConnectionTestResponse:
+    store = get_document_store(request)
+    if store is not None:
+        endpoint = get_document_endpoint_or_404(store, endpoint_id)
+        try:
+            api_key = cipher.decrypt(str(endpoint["encrypted_api_key"]))
+        except SecretConfigurationError as error:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        result: ConnectionTestResult = connection_tester.test(_endpoint_proxy(endpoint), api_key)
+        tested_at = datetime.now(timezone.utc)
+        endpoint_status = EndpointStatus.AVAILABLE.value if result.success else EndpointStatus.UNAVAILABLE.value
+        store.update_document(
+            "model_endpoints",
+            endpoint_id,
+            {
+                "last_tested_at": tested_at,
+                "status": endpoint_status,
+                "last_connection_error": None if result.success else result.message,
+            },
+        )
+        return ConnectionTestResponse(
+            success=result.success,
+            status=endpoint_status,
+            message=result.message,
+            provider_status_code=result.provider_status_code,
+            tested_at=tested_at,
+        )
+    assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
     try:
         api_key = cipher.decrypt(endpoint.encrypted_api_key)
@@ -221,9 +314,25 @@ def test_model_endpoint_connection(
 def update_model_endpoint(
     endpoint_id: str,
     payload: ModelEndpointUpdate,
+    request: Request,
     session: SessionDependency,
     cipher: CipherDependency,
-) -> ModelEndpoint:
+) -> ModelEndpoint | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        get_document_endpoint_or_404(store, endpoint_id)
+        update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
+        update_values = {key: value for key, value in update_values.items() if value is not None}
+        if "currency" in update_values:
+            update_values["currency"] = str(update_values["currency"]).upper()
+        if "api_key" in payload.model_fields_set and payload.api_key is not None:
+            api_key = payload.api_key.get_secret_value()
+            update_values["encrypted_api_key"] = cipher.encrypt(api_key)
+            update_values["api_key_mask"] = mask_secret(api_key)
+        updated = store.update_document("model_endpoints", endpoint_id, update_values)
+        assert updated is not None
+        return updated
+    assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
     update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
 
@@ -242,7 +351,13 @@ def update_model_endpoint(
 
 
 @router.delete("/{endpoint_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_model_endpoint(endpoint_id: str, session: SessionDependency) -> Response:
+def delete_model_endpoint(endpoint_id: str, request: Request, session: SessionDependency) -> Response:
+    store = get_document_store(request)
+    if store is not None:
+        if not store.delete_document("model_endpoints", endpoint_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model endpoint not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
     session.delete(endpoint)
     session.commit()

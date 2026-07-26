@@ -3,9 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore, MongoValidation
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
+from app.main import create_app
+from app.services.connection_tester import ConnectionTestResult
 
 
 class FakeAdmin:
@@ -35,13 +40,14 @@ class FakeCollection:
                 matches.sort(key=lambda document: document.get(key), reverse=direction < 0)
         return dict(matches[0]) if matches else None
 
-    def find(self, query: dict[str, Any], _projection: dict[str, int] | None = None) -> list[dict[str, Any]]:
-        return [dict(document) for document in self.documents if _matches(document, query)]
+    def find(self, query: dict[str, Any], _projection: dict[str, int] | None = None) -> "FakeCursor":
+        return FakeCursor([dict(document) for document in self.documents if _matches(document, query)])
 
-    def find_one_and_update(self, query: dict[str, Any], update: dict[str, Any], *, sort: list[tuple[str, int]], return_document: Any) -> dict[str, Any] | None:
+    def find_one_and_update(self, query: dict[str, Any], update: dict[str, Any], *, sort: list[tuple[str, int]] | None = None, return_document: Any) -> dict[str, Any] | None:
         matches = [document for document in self.documents if _matches(document, query)]
-        for key, direction in reversed(sort):
-            matches.sort(key=lambda document: document.get(key), reverse=direction < 0)
+        if sort:
+            for key, direction in reversed(sort):
+                matches.sort(key=lambda document: document.get(key), reverse=direction < 0)
         if not matches:
             return None
         matches[0].update(update["$set"])
@@ -51,6 +57,20 @@ class FakeCollection:
         for document in self.documents:
             if _matches(document, query):
                 document.update(update["$set"])
+
+    def delete_one(self, query: dict[str, Any]):
+        for index, document in enumerate(self.documents):
+            if _matches(document, query):
+                self.documents.pop(index)
+                return type("DeleteResult", (), {"deleted_count": 1})()
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
+
+class FakeCursor(list[dict[str, Any]]):
+    def sort(self, specification: list[tuple[str, int]]) -> "FakeCursor":
+        for key, direction in reversed(specification):
+            super().sort(key=lambda document: document.get(key), reverse=direction < 0)
+        return self
 
 
 class FakeDatabase:
@@ -171,3 +191,39 @@ def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, c
     assert cli.main(["database", "initialize"]) == 0
     assert '"database": "mongodb"' in capsys.readouterr().out
     assert created[0].closed is True
+
+
+class SuccessfulTester:
+    def test(self, _endpoint: Any, _api_key: str) -> ConnectionTestResult:
+        return ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
+def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
+    client = FakeClient()
+    settings = Settings(
+        database_url="mongodb://mongo.test/platform",
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=store)
+
+    with TestClient(app) as api:
+        created = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        )
+        assert created.status_code == 201
+        endpoint = created.json()
+        assert endpoint["status"] == "unverified"
+        assert "secret" not in str(endpoint)
+
+        tested = api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test")
+        assert tested.status_code == 200
+        assert tested.json()["status"] == "available"
+
+        updated = api.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"max_concurrency": 3})
+        assert updated.status_code == 200
+        assert updated.json()["max_concurrency"] == 3
+        assert api.get("/api/v1/model-endpoints").json()[0]["id"] == endpoint["id"]
+        assert api.delete(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 204
+        assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 404

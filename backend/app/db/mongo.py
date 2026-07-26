@@ -202,6 +202,48 @@ class MongoDocumentStore:
             return_document=_return_document_after(),
         )
 
+    def insert_document(self, collection_name: str, document: dict[str, Any]) -> dict[str, Any]:
+        """Insert a normalized platform document and return the persisted mapping."""
+
+        value = dict(document)
+        value.setdefault("_id", value.get("id") or str(uuid4()))
+        value.setdefault("id", str(value["_id"]))
+        self.database[collection_name].insert_one(value)
+        return _public_document(value)
+
+    def get_document(self, collection_name: str, document_id: str) -> dict[str, Any] | None:
+        document = self.database[collection_name].find_one({"_id": document_id})
+        return _public_document(document) if isinstance(document, dict) else None
+
+    def list_documents(
+        self,
+        collection_name: str,
+        *,
+        query: dict[str, Any] | None = None,
+        sort: list[tuple[str, int]] | None = None,
+    ) -> list[dict[str, Any]]:
+        cursor = self.database[collection_name].find(query or {})
+        if sort:
+            cursor = cursor.sort(sort)
+        return [_public_document(document) for document in cursor]
+
+    def update_document(
+        self,
+        collection_name: str,
+        document_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        document = self.database[collection_name].find_one_and_update(
+            {"_id": document_id},
+            {"$set": {**values, "updated_at": _utc_now()}},
+            return_document=_return_document_after(),
+        )
+        return _public_document(document) if isinstance(document, dict) else None
+
+    def delete_document(self, collection_name: str, document_id: str) -> bool:
+        result = self.database[collection_name].delete_one({"_id": document_id})
+        return bool(getattr(result, "deleted_count", 0))
+
     def reclaim_expired_leases(self) -> int:
         now = _utc_now()
         leased = self.database["task_units"].find(
@@ -259,3 +301,10 @@ def _return_document_after() -> Any:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _public_document(document: dict[str, Any]) -> dict[str, Any]:
+    value = dict(document)
+    value["id"] = str(value.get("id") or value.get("_id"))
+    value.pop("_id", None)
+    return value

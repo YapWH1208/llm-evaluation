@@ -28,6 +28,7 @@ from app.api.tasks import router as tasks_router
 from app.api.analytics import router as analytics_router
 from app.core.config import Settings
 from app.db.database import Database
+from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
 from app.services.capability_detector import CapabilityDetector, OpenAIChatCompletionsCapabilityDetector
 from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
@@ -47,19 +48,35 @@ def create_app(
     connection_tester: ConnectionTester | None = None,
     model_executor: ModelExecutor | None = None,
     capability_detector: CapabilityDetector | None = None,
+    document_store: MongoDocumentStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_environment()
-    database = Database(settings)
+    database = Database(settings) if settings.database_kind != "mongodb" else None
+    document_store = (
+        document_store or MongoDocumentStore(settings)
+        if settings.database_kind == "mongodb"
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        database.initialize()
-        if settings.database_init_mode.lower().strip() == "auto_migrate":
+        if document_store is not None:
+            document_store.initialize()
+            _ensure_mongo_builtin_benchmarks(document_store)
+        else:
+            assert database is not None
+            database.initialize()
+        if document_store is None and settings.database_init_mode.lower().strip() == "auto_migrate":
+            assert database is not None
             with database.get_session() as session:
                 ensure_builtin_benchmark_definitions(session)
         app.state.database = database
+        app.state.document_store = document_store
         yield
-        database.dispose()
+        if document_store is not None:
+            document_store.close()
+        elif database is not None:
+            database.dispose()
 
     app = FastAPI(
         title=settings.application_name,
@@ -98,7 +115,7 @@ def create_app(
     async def require_configured_api_token(request, call_next):
         if not request.url.path.startswith("/api/v1"):
             return await call_next(request)
-        role, actor_id = _authenticate_request(request, settings, database)
+        role, actor_id = _authenticate_request(request, settings, database, document_store)
         if role is None:
             return JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
         if role not in _allowed_roles(request.url.path, request.method):
@@ -107,7 +124,7 @@ def create_app(
         request.state.actor_role = role
         response = await call_next(request)
         if request.method in {"POST", "PATCH", "PUT", "DELETE"} and response.status_code < 400:
-            _record_mutation_audit(database, request, response.status_code)
+            _record_mutation_audit(database, document_store, request, response.status_code)
         return response
     app.include_router(evaluation_runs_router)
 
@@ -125,7 +142,12 @@ def create_app(
 app = create_app()
 
 
-def _authenticate_request(request, settings: Settings, database: Database) -> tuple[str | None, str | None]:
+def _authenticate_request(
+    request,
+    settings: Settings,
+    database: Database | None,
+    document_store: MongoDocumentStore | None,
+) -> tuple[str | None, str | None]:
     if not settings.admin_token:
         return UserRole.ADMIN.value, None
     supplied = request.headers.get("Authorization", "")
@@ -135,6 +157,14 @@ def _authenticate_request(request, settings: Settings, database: Database) -> tu
     if not supplied.startswith("Bearer "):
         return None, None
     token_hash = hashlib.sha256(supplied.removeprefix("Bearer ").encode()).hexdigest()
+    if document_store is not None:
+        users = document_store.list_documents(
+            "users", query={"api_token_hash": token_hash, "status": "active"}
+        )
+        if not users:
+            return None, None
+        return str(users[0]["role"]), str(users[0]["id"])
+    assert database is not None
     with database.get_session() as session:
         user = session.scalar(select(User).where(User.api_token_hash == token_hash, User.status == "active"))
         if user is None:
@@ -159,13 +189,31 @@ def _allowed_roles(path: str, method: str) -> set[str]:
     return all_roles
 
 
-def _record_mutation_audit(database: Database, request, status_code: int) -> None:
+def _record_mutation_audit(
+    database: Database | None,
+    document_store: MongoDocumentStore | None,
+    request,
+    status_code: int,
+) -> None:
     """Record metadata only; request bodies can contain API keys and sample content."""
 
     parts = [part for part in request.url.path.split("/") if part]
     entity_type = parts[2] if len(parts) > 2 else "system"
     entity_id = parts[3] if len(parts) > 3 else None
     try:
+        if document_store is not None:
+            document_store.insert_document(
+                "audit_events",
+                {
+                    "actor_id": getattr(request.state, "actor_id", None),
+                    "action": f"api.{request.method.lower()}",
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "details": {"path": request.url.path, "status_code": status_code},
+                },
+            )
+            return
+        assert database is not None
         with database.get_session() as session:
             session.add(
                 AuditEvent(
@@ -180,3 +228,29 @@ def _record_mutation_audit(database: Database, request, status_code: int) -> Non
     except Exception:
         # Audit availability must not turn a successful external model action into an unknown outcome.
         return
+
+
+def _ensure_mongo_builtin_benchmarks(document_store: MongoDocumentStore) -> None:
+    """Register the same built-in benchmark manifests in document storage."""
+
+    from app.benchmarks import BUILTIN_PLUGINS
+
+    for plugin in BUILTIN_PLUGINS:
+        manifest = plugin.manifest
+        existing = document_store.list_documents(
+            "benchmark_definitions",
+            query={"benchmark_id": manifest["benchmark_id"], "version": manifest["version"]},
+        )
+        if existing:
+            continue
+        document_store.insert_document(
+            "benchmark_definitions",
+            {
+                "benchmark_id": manifest["benchmark_id"],
+                "version": manifest["version"],
+                "display_name": manifest["display_name"],
+                "status": "available",
+                "manifest": manifest,
+                "source": "builtin",
+            },
+        )
