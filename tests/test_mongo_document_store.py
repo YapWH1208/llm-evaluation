@@ -13,6 +13,7 @@ from app.main import create_app
 from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
 from app.services.connection_tester import ConnectionTestResult
+from app.services.model_executor import SampleExecutionResult
 
 
 class FakeAdmin:
@@ -122,6 +123,8 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
                 return False
             if "$lte" in expected and not (actual <= expected["$lte"]):
                 return False
+            if "$gte" in expected and not (actual >= expected["$gte"]):
+                return False
             continue
         if actual != expected:
             return False
@@ -156,7 +159,7 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     claimed = store.claim_task(worker_id="worker-a", lease_seconds=30)
 
     assert claimed is not None
-    assert claimed["_id"] == "high"
+    assert claimed["id"] == "high"
     assert claimed["status"] == "leased"
     tasks.documents[1]["status"] = "running"
     tasks.documents[1]["lease_expires_at"] = now - timedelta(seconds=1)
@@ -272,3 +275,72 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
         assert detected.status_code == 200
         assert detected.json()[0]["effective_status"] == "verified_by_both"
         assert detected.json()[0]["detection_evidence"]["adapter_version"] == "test/1"
+
+
+def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
+    class ExactExecutor:
+        def execute(self, endpoint: Any, api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            assert endpoint.model_name == "model"
+            assert api_key == "secret"
+            assert input_snapshot["messages"]
+            return SampleExecutionResult(
+                True,
+                {"model": endpoint.model_name, "messages": input_snapshot["messages"]},
+                '{"choices":[{"message":{"content":"4"}}]}',
+                "4",
+                latency_ms=12.5,
+                input_tokens=5,
+                output_tokens=1,
+            )
+
+    client = FakeClient()
+    settings = Settings(
+        database_url="mongodb://mongo.test/platform",
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactExecutor(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
+    with TestClient(app) as api:
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert run.status_code == 201
+        completed = api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute")
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "completed"
+        attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
+        assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
+        assert attempts.json()[0]["request_snapshot"]["model"] == "model"
+
+
+def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe() -> None:
+    class ExactExecutor:
+        def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
+
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactExecutor(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        task = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
+        heartbeat = api.post(f"/api/v1/workers/tasks/{task['id']}/heartbeat", json={"lease_token": task["lease_token"]})
+        assert heartbeat.status_code == 200
+        execution = api.post(f"/api/v1/workers/tasks/{task['id']}/execute", json={"lease_token": task["lease_token"]})
+        assert execution.status_code == 200
+        assert execution.json()["status"] == "succeeded"
+        assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"

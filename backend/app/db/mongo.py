@@ -186,7 +186,7 @@ class MongoDocumentStore:
         }
         if run_id is not None:
             query["run_id"] = run_id
-        return self.database["task_units"].find_one_and_update(
+        document = self.database["task_units"].find_one_and_update(
             query,
             {
                 "$set": {
@@ -201,6 +201,33 @@ class MongoDocumentStore:
             sort=[("priority", -1), ("created_at", 1)],
             return_document=_return_document_after(),
         )
+        return _public_document(document) if isinstance(document, dict) else None
+
+    def heartbeat_task(
+        self,
+        *,
+        task_id: str,
+        lease_token: str,
+        lease_seconds: int = 60,
+    ) -> dict[str, Any] | None:
+        now = _utc_now()
+        document = self.database["task_units"].find_one_and_update(
+            {
+                "_id": task_id,
+                "lease_token": lease_token,
+                "status": {"$in": ["leased", "running"]},
+                "lease_expires_at": {"$gte": now},
+            },
+            {
+                "$set": {
+                    "heartbeat_at": now,
+                    "lease_expires_at": now + timedelta(seconds=lease_seconds),
+                    "updated_at": now,
+                }
+            },
+            return_document=_return_document_after(),
+        )
+        return _public_document(document) if isinstance(document, dict) else None
 
     def insert_document(self, collection_name: str, document: dict[str, Any]) -> dict[str, Any]:
         """Insert a normalized platform document and return the persisted mapping."""
