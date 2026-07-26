@@ -15,6 +15,7 @@ from app.db import (
     TaskUnit,
 )
 from app.db.models import ModelCapability
+from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
 
 
@@ -56,6 +57,15 @@ def create_benchmark_run(
         raise RunCreationError("Model endpoint not found.")
     if endpoint.status != EndpointStatus.AVAILABLE.value:
         raise RunCreationError("Model endpoint must pass a connection test before scheduling a run.")
+
+    definition = session.scalar(
+        select(BenchmarkDefinition).where(
+            BenchmarkDefinition.benchmark_id == benchmark_id,
+            BenchmarkDefinition.version == benchmark_version,
+        )
+    )
+    if definition is not None and definition.status in {"disabled", "deprecated", "broken"}:
+        raise RunCreationError(f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled.")
 
     plugin = get_installed_plugin(benchmark_id, benchmark_version)
     if plugin is None:

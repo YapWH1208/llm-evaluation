@@ -26,3 +26,9 @@ def test_builtin_benchmark_manifest_is_registered_and_selectable(tmp_path: Path)
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"benchmark_id":"text-quick-check","benchmark_version":"1.0.0","sample_limit":1})
         assert run.status_code == 201
         assert run.json()["configuration_snapshot"]["benchmark"]["manifest"]["scoring"]["type"] == "exact_match"
+
+        disabled = client.patch(f"/api/v1/benchmarks/{quick_check['id']}", json={"status": "disabled"})
+        assert disabled.status_code == 200
+        blocked = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"benchmark_id":"text-quick-check","benchmark_version":"1.0.0","sample_limit":1})
+        assert blocked.status_code == 409
+        assert "disabled" in blocked.json()["detail"]

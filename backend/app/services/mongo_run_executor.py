@@ -44,6 +44,9 @@ def create_mongo_benchmark_run(
         raise MongoRunExecutionError("Model endpoint not found.")
     if endpoint.get("status") != "available":
         raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
+    definitions = store.list_documents("benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version})
+    if definitions and definitions[0].get("status") in {"disabled", "deprecated", "broken"}:
+        raise MongoRunExecutionError(f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled.")
     plugin = get_installed_plugin(benchmark_id, benchmark_version)
     if plugin is None:
         raise MongoRunExecutionError("Benchmark plugin is not installed for the requested version.")
