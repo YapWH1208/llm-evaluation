@@ -94,6 +94,17 @@ def list_for_run(run_id: str, request: Request, session: SessionDependency) -> l
 
 @router.post("/{report_id}/shares", response_model=ReportShareResponse, status_code=status.HTTP_201_CREATED)
 def create_share(report_id: str, payload: ReportShareCreate, request: Request, session: SessionDependency) -> ReportShareResponse:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        report = store.get_document("reports", report_id)
+        if report is None: raise HTTPException(404, "Report not found")
+        if report["format"] in {"json", "csv"} and not (payload.include_evidence and payload.allow_download): raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
+        now = datetime.now(timezone.utc); expires_at = payload.expires_at or now + timedelta(days=7)
+        if _as_utc(expires_at) <= now: raise HTTPException(422, "Share expiration must be in the future.")
+        token = secrets.token_urlsafe(32); password = payload.password.get_secret_value() if payload.password is not None else None
+        share = store.insert_document("report_shares", {"report_id": report_id, "token_hash": _hash_value(token), "password_hash": _hash_value(password) if password else None, "expires_at": expires_at, "allow_download": payload.allow_download, "revoked_at": None, "created_at": now})
+        return _share_document_response(share, request, token)
+    assert session is not None
     report = _get_report(report_id, session)
     if report.format in {"json", "csv"} and not (payload.include_evidence and payload.allow_download):
         raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
@@ -118,12 +129,24 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
 
 @router.get("/{report_id}/shares", response_model=list[ReportShareResponse])
 def list_shares(report_id: str, request: Request, session: SessionDependency) -> list[ReportShareResponse]:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        if store.get_document("reports", report_id) is None: raise HTTPException(404, "Report not found")
+        return [_share_document_response(item, request) for item in store.list_documents("report_shares", query={"report_id": report_id}, sort=[("created_at", -1)])]
+    assert session is not None
     _get_report(report_id, session)
     return [_share_response(share, request) for share in session.scalars(select(ReportShare).where(ReportShare.report_id == report_id).order_by(ReportShare.created_at.desc()))]
 
 
 @router.post("/{report_id}/shares/{share_id}/revoke", response_model=ReportShareResponse)
 def revoke_share(report_id: str, share_id: str, request: Request, session: SessionDependency) -> ReportShareResponse:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        share = store.get_document("report_shares", share_id)
+        if share is None or share["report_id"] != report_id: raise HTTPException(404, "Report share not found")
+        updated = store.update_document("report_shares", share_id, {"revoked_at": datetime.now(timezone.utc)}); assert updated is not None
+        return _share_document_response(updated, request)
+    assert session is not None
     share = session.get(ReportShare, share_id)
     if share is None or share.report_id != report_id:
         raise HTTPException(404, "Report share not found")
@@ -134,13 +157,29 @@ def revoke_share(report_id: str, share_id: str, request: Request, session: Sessi
 
 
 @router.get("/{report_id}/download")
-def download(report_id: str, session: SessionDependency) -> FileResponse:
+def download(report_id: str, request: Request, session: SessionDependency) -> FileResponse:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        report=store.get_document("reports",report_id)
+        if report is None: raise HTTPException(404,"Report not found")
+        return _report_file_response(type("Report",(),report)(),download=True)
+    assert session is not None
     report = _get_report(report_id, session)
     return _report_file_response(report, download=True)
 
 
 @public_router.get("/{token}")
 def open_shared_report(token: str, request: Request, session: SessionDependency) -> FileResponse:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        matches=store.list_documents("report_shares",query={"token_hash":_hash_value(token)})
+        share=matches[0] if matches else None; now=datetime.now(timezone.utc)
+        if share is None or share.get("revoked_at") is not None or _as_utc(share["expires_at"]) <= now: raise HTTPException(404,"Shared report not found or expired")
+        if share.get("password_hash") is not None and not hmac.compare_digest(_hash_value(request.headers.get("X-Report-Password", "")),str(share["password_hash"])): raise HTTPException(401,"Valid report-share password required")
+        report=store.get_document("reports",str(share["report_id"]))
+        if report is None: raise HTTPException(404,"Report not found")
+        return _report_file_response(type("Report",(),report)(),download=bool(share["allow_download"]))
+    assert session is not None
     share = session.scalar(select(ReportShare).where(ReportShare.token_hash == _hash_value(token)))
     now = datetime.now(timezone.utc)
     if share is None or share.revoked_at is not None or _as_utc(share.expires_at) <= now:
@@ -179,6 +218,11 @@ def _share_response(share: ReportShare, request: Request, token: str | None = No
         created_at=share.created_at,
         share_url=f"{base_url}/shared-reports/{token}" if token else None,
     )
+
+
+def _share_document_response(share: dict, request: Request, token: str | None = None) -> ReportShareResponse:
+    base_url=str(request.base_url).rstrip("/")
+    return ReportShareResponse(id=str(share["id"]),report_id=str(share["report_id"]),expires_at=share["expires_at"],allow_download=bool(share["allow_download"]),revoked_at=share.get("revoked_at"),created_at=share["created_at"],share_url=f"{base_url}/shared-reports/{token}" if token else None)
 
 
 def _hash_value(value: str) -> str:
