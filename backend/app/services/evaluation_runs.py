@@ -17,6 +17,7 @@ from app.db import (
 from app.db.models import ModelCapability
 from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
+from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
 
 
 class RunCreationError(ValueError):
@@ -111,6 +112,10 @@ def create_benchmark_run(
              "few_shot_examples": prompt_package.few_shot_examples}
             if prompt_package else None
         ),
+        "prompt_standardization": (
+            {"is_standard": not standardization_flags(prompt_package), "flags": standardization_flags(prompt_package)}
+            if prompt_package else {"is_standard": True, "flags": []}
+        ),
         "evaluation_suite": suite_snapshot,
         "request_body_evidence": request_body_evidence,
     }
@@ -194,15 +199,29 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
     if prompt_package is None:
         return [{"role": "user", "content": question}]
     template = prompt_package.user_template
-    if "{{ question }}" not in template:
-        raise RunCreationError("Prompt package user template must contain {{ question }}.")
     messages: list[dict[str, object]] = []
     if prompt_package.system_message:
         messages.append({"role": "system", "content": prompt_package.system_message})
     for example in prompt_package.few_shot_examples:
         if isinstance(example, dict) and isinstance(example.get("role"), str) and isinstance(example.get("content"), str):
             messages.append({"role": example["role"], "content": example["content"]})
-    messages.append({"role": "user", "content": template.replace("{{ question }}", question)})
+    try:
+        rendered = render_template(
+            template,
+            {
+                "question": question,
+                "choices": "",
+                "context": "",
+                "image": "",
+                "audio": "",
+                "video": "",
+                "language": "",
+                "output_schema": "",
+            },
+        )
+    except PromptTemplateError as error:
+        raise RunCreationError(str(error)) from error
+    messages.append({"role": "user", "content": rendered})
     return messages
 
 

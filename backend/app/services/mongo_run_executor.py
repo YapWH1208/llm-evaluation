@@ -21,6 +21,7 @@ from app.services.content_ir import ContentValidationError, normalize_content_pa
 from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.services.request_body import resolve_request_body
+from app.services.prompt_templates import standardization_flags
 
 
 class MongoRunExecutionError(ValueError):
@@ -94,6 +95,10 @@ def create_mongo_benchmark_run(
             }
             if prompt_package
             else None
+        ),
+        "prompt_standardization": (
+            {"is_standard": not standardization_flags(_proxy(prompt_package)), "flags": standardization_flags(_proxy(prompt_package))}
+            if prompt_package else {"is_standard": True, "flags": []}
         ),
         "evaluation_suite": suite_snapshot,
         "request_body_evidence": request_body_evidence,
