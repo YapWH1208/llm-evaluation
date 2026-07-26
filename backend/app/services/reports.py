@@ -18,7 +18,7 @@ class ReportError(ValueError):
     pass
 
 
-_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md", "pdf": "pdf"}
+_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "parquet": "parquet", "html": "html", "markdown": "md", "pdf": "pdf"}
 
 
 def generate_report(session: Session, run_id: str, format: str, data_root: str) -> Report:
@@ -29,7 +29,7 @@ def generate_report(session: Session, run_id: str, format: str, data_root: str) 
         raise ReportError("Reports can only be generated after a run completes.")
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
-        raise ReportError("Supported report formats are json, csv, html, markdown, and pdf.")
+        raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
 
     payload = _build_report_payload(session, run)
     directory = Path(data_root).resolve() / "reports" / run.id
@@ -42,7 +42,7 @@ def generate_report(session: Session, run_id: str, format: str, data_root: str) 
         report_type="single_model",
         format=format,
         artifact_path=str(path),
-        generator_version="1.1.0",
+        generator_version="1.2.0",
     )
     session.add(report)
     session.commit()
@@ -141,6 +141,9 @@ def _write_report(path: Path, format: str, payload: dict[str, Any]) -> None:
     if format == "csv":
         _write_csv(path, payload)
         return
+    if format == "parquet":
+        _write_parquet(path, payload)
+        return
     if format == "markdown":
         path.write_text(_markdown_report(payload), encoding="utf-8")
         return
@@ -175,14 +178,34 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
         for attempt in payload["attempts"]:
-            writer.writerow(
-                {
-                    key: json.dumps(attempt[key], ensure_ascii=False)
-                    if key in {"input", "reference", "request", "human_reviews", "judge_assessments"}
-                    else attempt[key]
-                    for key in fields
-                }
-            )
+            writer.writerow(_tabular_attempt(attempt, fields))
+
+
+def _write_parquet(path: Path, payload: dict[str, Any]) -> None:
+    """Write the same evidence columns as CSV in a typed columnar artifact."""
+
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as error:  # pragma: no cover - packaging guard
+        raise ReportError("Parquet export requires the pyarrow runtime.") from error
+    fields = [
+        "sample_id", "attempt", "is_latest", "status", "prediction", "score",
+        "latency_ms", "input_tokens", "output_tokens", "estimated_cost",
+        "error_type", "error_message", "input", "reference", "request",
+        "raw_response", "human_reviews", "judge_assessments",
+    ]
+    rows = [_tabular_attempt(attempt, fields) for attempt in payload["attempts"]]
+    pq.write_table(pa.Table.from_pylist(rows), path, compression="zstd")
+
+
+def _tabular_attempt(attempt: dict[str, Any], fields: list[str]) -> dict[str, Any]:
+    return {
+        key: json.dumps(attempt[key], ensure_ascii=False)
+        if key in {"input", "reference", "request", "human_reviews", "judge_assessments"}
+        else attempt[key]
+        for key in fields
+    }
 
 
 def _markdown_report(payload: dict[str, Any]) -> str:

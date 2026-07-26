@@ -98,7 +98,7 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
     if store is not None:
         report = store.get_document("reports", report_id)
         if report is None: raise HTTPException(404, "Report not found")
-        if report["format"] in {"json", "csv"} and not (payload.include_evidence and payload.allow_download): raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
+        if report["format"] in {"json", "csv", "parquet"} and not (payload.include_evidence and payload.allow_download): raise HTTPException(409, "Raw-evidence JSON/CSV/Parquet reports require explicit evidence sharing and download permission.")
         now = datetime.now(timezone.utc); expires_at = payload.expires_at or now + timedelta(days=7)
         if _as_utc(expires_at) <= now: raise HTTPException(422, "Share expiration must be in the future.")
         token = secrets.token_urlsafe(32); password = payload.password.get_secret_value() if payload.password is not None else None
@@ -106,8 +106,8 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
         return _share_document_response(share, request, token)
     assert session is not None
     report = _get_report(report_id, session)
-    if report.format in {"json", "csv"} and not (payload.include_evidence and payload.allow_download):
-        raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
+    if report.format in {"json", "csv", "parquet"} and not (payload.include_evidence and payload.allow_download):
+        raise HTTPException(409, "Raw-evidence JSON/CSV/Parquet reports require explicit evidence sharing and download permission.")
     now = datetime.now(timezone.utc)
     expires_at = payload.expires_at or now + timedelta(days=7)
     if _as_utc(expires_at) <= now:
@@ -203,7 +203,7 @@ def _report_file_response(report: Report, *, download: bool) -> FileResponse:
     path = Path(report.artifact_path)
     if not path.is_file():
         raise HTTPException(404, "Report artifact is no longer available")
-    media_type = {"json": "application/json", "csv": "text/csv", "html": "text/html", "markdown": "text/markdown", "pdf": "application/pdf"}.get(report.format, "application/octet-stream")
+    media_type = {"json": "application/json", "csv": "text/csv", "parquet": "application/vnd.apache.parquet", "html": "text/html", "markdown": "text/markdown", "pdf": "application/pdf"}.get(report.format, "application/octet-stream")
     return FileResponse(path, filename=path.name if download else None, media_type=media_type)
 
 

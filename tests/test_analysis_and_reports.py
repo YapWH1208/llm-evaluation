@@ -119,6 +119,14 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert pdf_download.headers["content-type"].startswith("application/pdf")
         assert pdf_download.content.startswith(b"%PDF-1.4")
 
+        parquet = client.post("/api/v1/reports", json={"run_id": run_a, "format": "parquet"})
+        assert parquet.status_code == 200
+        parquet_download = client.get(f"/api/v1/reports/{parquet.json()['id']}/download")
+        assert parquet_download.headers["content-type"].startswith("application/vnd.apache.parquet")
+        assert parquet_download.content[:4] == b"PAR1"
+        assert parquet_download.content[-4:] == b"PAR1"
+        assert client.post(f"/api/v1/reports/{parquet.json()['id']}/shares", json={}).status_code == 409
+
         share = client.post(
             f"/api/v1/reports/{report.json()['id']}/shares",
             json={"password": "view-only-password"},
