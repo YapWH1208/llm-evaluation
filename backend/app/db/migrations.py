@@ -54,6 +54,10 @@ def _upgrade_v5_benchmark_definitions(_connection: Connection) -> None:
     """The ORM creates the versioned benchmark manifest table."""
 
 
+def _upgrade_v6_user_api_tokens(connection: Connection) -> None:
+    _add_column_if_missing(connection, "users", "api_token_hash", "api_token_hash VARCHAR(64)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -78,6 +82,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260722_add_benchmark_definitions",
         description="Add versioned benchmark manifests and plugin registration records.",
         upgrade=_upgrade_v5_benchmark_definitions,
+    ),
+    Migration(
+        version=6,
+        migration_id="20260722_add_user_api_tokens",
+        description="Add hashed per-user bearer tokens for role-enforced API access.",
+        upgrade=_upgrade_v6_user_api_tokens,
     ),
 )
 

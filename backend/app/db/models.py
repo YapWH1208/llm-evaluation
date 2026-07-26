@@ -251,6 +251,7 @@ class User(Base):
     display_name: Mapped[str]=mapped_column(String(200),nullable=False)
     role: Mapped[str]=mapped_column(String(32),nullable=False,default=UserRole.VIEWER.value)
     status: Mapped[str]=mapped_column(String(32),nullable=False,default="active")
+    api_token_hash: Mapped[str|None]=mapped_column(String(64),nullable=True,unique=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
 
 class AuditEvent(Base):

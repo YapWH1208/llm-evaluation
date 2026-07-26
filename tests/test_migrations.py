@@ -37,14 +37,14 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6]
     database.initialize()
     database.initialize()
 
     columns = {column["name"] for column in inspect(database.engine).get_columns("evaluation_runs")}
     assert "prompt_package_id" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 5
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 6
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -57,5 +57,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         benchmark_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 5))
         assert benchmark_migration is not None
         assert benchmark_migration.migration_id == "20260722_add_benchmark_definitions"
+        user_token_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 6))
+        assert user_token_migration is not None
+        assert user_token_migration.migration_id == "20260722_add_user_api_tokens"
     assert database.migration_preview() == ()
     database.dispose()

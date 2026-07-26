@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hashlib
 import hmac
 
 from fastapi import FastAPI
@@ -27,6 +28,8 @@ from app.services.connection_tester import ConnectionTester, OpenAIChatCompletio
 from app.services.capability_detector import CapabilityDetector, OpenAIChatCompletionsCapabilityDetector
 from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
 from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
+from app.db.models import User, UserRole
+from sqlalchemy import select
 
 
 class HealthResponse(BaseModel):
@@ -63,7 +66,7 @@ def create_app(
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
     app.state.settings = settings
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
@@ -84,11 +87,15 @@ def create_app(
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):
-        if settings.admin_token and request.url.path.startswith("/api/v1"):
-            supplied = request.headers.get("Authorization", "")
-            expected = f"Bearer {settings.admin_token}"
-            if not hmac.compare_digest(supplied, expected):
-                return JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
+        if not request.url.path.startswith("/api/v1"):
+            return await call_next(request)
+        role, actor_id = _authenticate_request(request, settings, database)
+        if role is None:
+            return JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
+        if role not in _allowed_roles(request.url.path, request.method):
+            return JSONResponse({"detail": "Your role is not permitted to perform this action."}, status_code=403)
+        request.state.actor_id = actor_id
+        request.state.actor_role = role
         return await call_next(request)
     app.include_router(evaluation_runs_router)
 
@@ -104,3 +111,37 @@ def create_app(
 
 
 app = create_app()
+
+
+def _authenticate_request(request, settings: Settings, database: Database) -> tuple[str | None, str | None]:
+    if not settings.admin_token:
+        return UserRole.ADMIN.value, None
+    supplied = request.headers.get("Authorization", "")
+    expected = f"Bearer {settings.admin_token}"
+    if hmac.compare_digest(supplied, expected):
+        return UserRole.ADMIN.value, None
+    if not supplied.startswith("Bearer "):
+        return None, None
+    token_hash = hashlib.sha256(supplied.removeprefix("Bearer ").encode()).hexdigest()
+    with database.get_session() as session:
+        user = session.scalar(select(User).where(User.api_token_hash == token_hash, User.status == "active"))
+        if user is None:
+            return None, None
+        return user.role, user.id
+
+
+def _allowed_roles(path: str, method: str) -> set[str]:
+    all_roles = {role.value for role in UserRole}
+    evaluator_roles = {UserRole.ADMIN.value, UserRole.EVALUATOR.value}
+    reviewer_roles = evaluator_roles | {UserRole.REVIEWER.value}
+    if path.startswith("/api/v1/users") or path.startswith("/api/v1/audit-events"):
+        return {UserRole.ADMIN.value}
+    if path.startswith("/api/v1/workers"):
+        return {UserRole.ADMIN.value}
+    if path.startswith("/api/v1/benchmarks") and method != "GET":
+        return {UserRole.ADMIN.value}
+    if path.startswith("/api/v1/reviews") and method != "GET":
+        return reviewer_roles
+    if method in {"POST", "PATCH", "PUT", "DELETE"}:
+        return evaluator_roles
+    return all_roles
