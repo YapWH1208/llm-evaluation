@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     EndpointRateWindow,
+    EndpointSecondRateWindow,
     EvaluationRun,
     ModelEndpoint,
     SampleAttempt,
@@ -205,11 +206,27 @@ def _reserve_endpoint_budget(
     task: TaskUnit,
     now: datetime,
 ) -> bool:
-    request_count, estimated_tokens = _task_budget(task)
-    if endpoint.requests_per_minute is None and endpoint.tokens_per_minute is None:
+    request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens = _task_budget(task)
+    if all(
+        limit is None
+        for limit in (
+            endpoint.requests_per_second,
+            endpoint.requests_per_minute,
+            endpoint.tokens_per_minute,
+            endpoint.input_tokens_per_minute,
+            endpoint.output_tokens_per_minute,
+        )
+    ):
         return True
 
+    second_started_at = int(now.timestamp())
     window_started_at = int(now.timestamp() // 60) * 60
+    second_usage = session.scalar(
+        select(EndpointSecondRateWindow).where(
+            EndpointSecondRateWindow.model_endpoint_id == endpoint.id,
+            EndpointSecondRateWindow.window_started_at == second_started_at,
+        )
+    )
     usage = session.scalar(
         select(EndpointRateWindow).where(
             EndpointRateWindow.model_endpoint_id == endpoint.id,
@@ -218,6 +235,10 @@ def _reserve_endpoint_budget(
     )
     existing_requests = usage.request_count if usage else 0
     existing_tokens = usage.estimated_token_count if usage else 0
+    existing_input_tokens = usage.estimated_input_token_count if usage else 0
+    existing_output_tokens = usage.estimated_output_token_count if usage else 0
+    if endpoint.requests_per_second is not None and (second_usage.request_count if second_usage else 0) + request_count > endpoint.requests_per_second:
+        return False
     if (
         endpoint.requests_per_minute is not None
         and existing_requests + request_count > endpoint.requests_per_minute
@@ -228,21 +249,39 @@ def _reserve_endpoint_budget(
         and existing_tokens + estimated_tokens > endpoint.tokens_per_minute
     ):
         return False
+    if endpoint.input_tokens_per_minute is not None and existing_input_tokens + estimated_input_tokens > endpoint.input_tokens_per_minute:
+        return False
+    if endpoint.output_tokens_per_minute is not None and existing_output_tokens + estimated_output_tokens > endpoint.output_tokens_per_minute:
+        return False
+    if second_usage is None:
+        session.add(
+            EndpointSecondRateWindow(
+                model_endpoint_id=endpoint.id,
+                window_started_at=second_started_at,
+                request_count=request_count,
+            )
+        )
+    else:
+        second_usage.request_count += request_count
     if usage is None:
         usage = EndpointRateWindow(
             model_endpoint_id=endpoint.id,
             window_started_at=window_started_at,
             request_count=request_count,
             estimated_token_count=estimated_tokens,
+            estimated_input_token_count=estimated_input_tokens,
+            estimated_output_token_count=estimated_output_tokens,
         )
         session.add(usage)
     else:
         usage.request_count += request_count
         usage.estimated_token_count += estimated_tokens
+        usage.estimated_input_token_count += estimated_input_tokens
+        usage.estimated_output_token_count += estimated_output_tokens
     return True
 
 
-def _task_budget(task: TaskUnit) -> tuple[int, int]:
+def _task_budget(task: TaskUnit) -> tuple[int, int, int, int]:
     payload = task.payload if isinstance(task.payload, dict) else {}
     sample_ids = payload.get("retry_sample_ids") or payload.get("sample_ids") or []
     fallback_requests = len([item for item in sample_ids if isinstance(item, str)])
@@ -259,4 +298,6 @@ def _task_budget(task: TaskUnit) -> tuple[int, int]:
     if payload.get("retry_sample_ids"):
         estimated_tokens = max(1, estimated_tokens // max(1, fallback_requests))
         request_count = fallback_requests
-    return request_count, estimated_tokens
+    estimated_output_tokens = min(estimated_tokens, request_count * 32)
+    estimated_input_tokens = max(0, estimated_tokens - estimated_output_tokens)
+    return request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens

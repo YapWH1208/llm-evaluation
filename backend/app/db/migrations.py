@@ -90,6 +90,14 @@ def _upgrade_v12_run_suite_reference(connection: Connection) -> None:
     _add_column_if_missing(connection, "evaluation_runs", "suite_id", "suite_id VARCHAR(36)")
 
 
+def _upgrade_v13_extended_rate_limits(connection: Connection) -> None:
+    _add_column_if_missing(connection, "model_endpoints", "requests_per_second", "requests_per_second INTEGER")
+    _add_column_if_missing(connection, "model_endpoints", "input_tokens_per_minute", "input_tokens_per_minute INTEGER")
+    _add_column_if_missing(connection, "model_endpoints", "output_tokens_per_minute", "output_tokens_per_minute INTEGER")
+    _add_column_if_missing(connection, "endpoint_rate_windows", "estimated_input_token_count", "estimated_input_token_count INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(connection, "endpoint_rate_windows", "estimated_output_token_count", "estimated_output_token_count INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -156,6 +164,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_run_suite_reference",
         description="Link evaluation runs to immutable suite selections.",
         upgrade=_upgrade_v12_run_suite_reference,
+    ),
+    Migration(
+        version=13,
+        migration_id="20260726_add_extended_rate_limits",
+        description="Add durable RPS and directional token-per-minute admission accounting.",
+        upgrade=_upgrade_v13_extended_rate_limits,
     ),
 )
 

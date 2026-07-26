@@ -43,6 +43,7 @@ _COLLECTIONS = (
     "model_endpoints",
     "model_capabilities",
     "endpoint_rate_windows",
+    "endpoint_second_rate_windows",
     "media_assets",
     "benchmark_definitions",
     "prompt_packages",
@@ -70,6 +71,9 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
         ((("model_endpoint_id", 1), ("capability_key", 1)), {"unique": True}),
     ),
     "endpoint_rate_windows": (
+        ((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),
+    ),
+    "endpoint_second_rate_windows": (
         ((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),
     ),
     "media_assets": (

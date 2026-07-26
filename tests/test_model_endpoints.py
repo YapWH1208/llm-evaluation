@@ -30,7 +30,10 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
                 "model_name": "example-model",
                 "default_request_body": {"temperature": 0},
                 "max_concurrency": 3,
+                "requests_per_second": 5,
                 "requests_per_minute": 120,
+                "input_tokens_per_minute": 7000,
+                "output_tokens_per_minute": 3000,
             },
         )
         assert created.status_code == 201
@@ -40,6 +43,8 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
         assert created_body["api_key_mask"] == "••••-key"
         assert "api_key" not in created_body
         assert "encrypted_api_key" not in created_body
+        assert created_body["requests_per_second"] == 5
+        assert created_body["input_tokens_per_minute"] == 7000
 
         listed = client.get("/api/v1/model-endpoints")
         assert listed.status_code == 200
@@ -47,11 +52,12 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
 
         updated = client.patch(
             f"/api/v1/model-endpoints/{endpoint_id}",
-            json={"api_key": "replacement-secret", "tokens_per_minute": 9000},
+            json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000},
         )
         assert updated.status_code == 200
         assert updated.json()["api_key_mask"] == "••••cret"
         assert updated.json()["tokens_per_minute"] == 9000
+        assert updated.json()["output_tokens_per_minute"] == 4000
 
         with app.state.database.get_session() as session:
             stored = session.scalar(select(ModelEndpoint).where(ModelEndpoint.id == endpoint_id))

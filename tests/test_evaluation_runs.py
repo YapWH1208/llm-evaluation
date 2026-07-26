@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import EvaluationRun, SampleAttempt, TaskUnit
 from app.db import ModelEndpoint
-from app.db.models import EndpointRateWindow
+from app.db.models import EndpointRateWindow, EndpointSecondRateWindow
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
@@ -405,6 +405,26 @@ def test_worker_claim_honors_system_and_worker_concurrency_limits(tmp_path: Path
         assert first.status_code == 200 and first.json() is not None
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
+
+
+def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -> None:
+    rps_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'rps.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
+    with TestClient(rps_app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"requests_per_second":1}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
+        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is not None
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
+        with rps_app.state.database.get_session() as session:
+            assert session.scalar(select(EndpointSecondRateWindow)).request_count == 1
+
+    tokens_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'tokens.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
+    with TestClient(tokens_app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"output_tokens_per_minute":16}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
+        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
 
 
 def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:

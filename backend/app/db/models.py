@@ -77,8 +77,11 @@ class ModelEndpoint(Base):
     )
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     max_concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    requests_per_second: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requests_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tokens_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_tokens_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
     input_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
     output_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
@@ -149,9 +152,23 @@ class EndpointRateWindow(Base):
     window_started_at: Mapped[int] = mapped_column(Integer, nullable=False)
     request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     estimated_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_input_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_output_token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class EndpointSecondRateWindow(Base):
+    """Durable one-second request admission accounting for endpoint RPS limits."""
+
+    __tablename__ = "endpoint_second_rate_windows"
+    __table_args__ = (UniqueConstraint("model_endpoint_id", "window_started_at", name="uq_endpoint_second_rate_window"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    model_endpoint_id: Mapped[str] = mapped_column(ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    window_started_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class MediaAsset(Base):

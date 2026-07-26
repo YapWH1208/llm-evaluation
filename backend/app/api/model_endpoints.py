@@ -30,8 +30,11 @@ class EndpointBase(BaseModel):
     default_request_body: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: Annotated[int, Field(ge=1, le=600)] = 60
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
+    requests_per_second: Annotated[int | None, Field(ge=1)] = None
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    input_tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    output_tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
     input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     currency: Annotated[str, Field(min_length=3, max_length=8)] = "USD"
@@ -78,8 +81,11 @@ class ModelEndpointUpdate(BaseModel):
     default_request_body: dict[str, Any] | None = None
     timeout_seconds: Annotated[int | None, Field(ge=1, le=600)] = None
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
+    requests_per_second: Annotated[int | None, Field(ge=1)] = None
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    input_tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    output_tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
     input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     currency: Annotated[str | None, Field(min_length=3, max_length=8)] = None
@@ -120,8 +126,11 @@ class ModelEndpointResponse(BaseModel):
     default_request_body: dict[str, Any]
     timeout_seconds: int
     max_concurrency: int
+    requests_per_second: int | None
     requests_per_minute: int | None
     tokens_per_minute: int | None
+    input_tokens_per_minute: int | None
+    output_tokens_per_minute: int | None
     input_cost_per_million: float | None
     output_cost_per_million: float | None
     currency: str
@@ -209,8 +218,11 @@ def create_model_endpoint(
                 "default_request_body": payload.default_request_body,
                 "timeout_seconds": payload.timeout_seconds,
                 "max_concurrency": payload.max_concurrency,
+                "requests_per_second": payload.requests_per_second,
                 "requests_per_minute": payload.requests_per_minute,
                 "tokens_per_minute": payload.tokens_per_minute,
+                "input_tokens_per_minute": payload.input_tokens_per_minute,
+                "output_tokens_per_minute": payload.output_tokens_per_minute,
                 "input_cost_per_million": payload.input_cost_per_million,
                 "output_cost_per_million": payload.output_cost_per_million,
                 "currency": payload.currency.upper(),
@@ -235,8 +247,11 @@ def create_model_endpoint(
         default_request_body=payload.default_request_body,
         timeout_seconds=payload.timeout_seconds,
         max_concurrency=payload.max_concurrency,
+        requests_per_second=payload.requests_per_second,
         requests_per_minute=payload.requests_per_minute,
         tokens_per_minute=payload.tokens_per_minute,
+        input_tokens_per_minute=payload.input_tokens_per_minute,
+        output_tokens_per_minute=payload.output_tokens_per_minute,
         input_cost_per_million=payload.input_cost_per_million,
         output_cost_per_million=payload.output_cost_per_million,
         currency=payload.currency.upper(),

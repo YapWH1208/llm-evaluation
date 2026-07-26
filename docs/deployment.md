@@ -22,6 +22,8 @@ The task lease protocol uses conditional state updates and lease tokens. Run mul
 
 Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Endpoint-level maximum concurrency, RPM, and TPM remain independently enforced; the scheduler admits work only when every configured limit has capacity.
 
+Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting, so a restart or an additional worker cannot reset an already consumed provider budget.
+
 ## Docker Compose
 
 1. Generate a Fernet key.

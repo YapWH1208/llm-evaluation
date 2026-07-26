@@ -8,8 +8,11 @@ export type Endpoint = {
   custom_headers: Record<string, string>;
   status: "unverified" | "available" | "unavailable";
   max_concurrency: number;
+  requests_per_second: number | null;
   requests_per_minute: number | null;
   tokens_per_minute: number | null;
+  input_tokens_per_minute: number | null;
+  output_tokens_per_minute: number | null;
   input_cost_per_million: number | null;
   output_cost_per_million: number | null;
   currency: string;
