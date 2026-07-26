@@ -33,3 +33,58 @@ def test_openai_executor_records_provider_usage_and_latency() -> None:
     assert result.input_tokens == 11
     assert result.output_tokens == 3
     assert result.latency_ms is not None and result.latency_ms >= 0
+
+
+def test_openai_executor_translates_image_and_audio_content_ir() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content)["messages"][0]["content"]
+        assert content == [
+            {"type": "text", "text": "Describe this input"},
+            {"type": "image_url", "image_url": {"url": "https://media.example.test/photo.png"}},
+            {"type": "input_audio", "input_audio": {"data": "aGVsbG8=", "format": "mp3"}},
+        ]
+        return httpx.Response(200, json={"choices": [{"message": {"content": "description"}}]})
+
+    endpoint = ModelEndpoint(
+        display_name="multimodal executor test",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****test",
+    )
+    result = OpenAIChatCompletionsExecutor(httpx.MockTransport(handler)).execute(
+        endpoint,
+        "secret",
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this input"},
+                        {"type": "image", "source": {"url": "https://media.example.test/photo.png"}, "mime_type": "image/png"},
+                        {"type": "audio", "source": {"base64_data": "aGVsbG8="}, "mime_type": "audio/mpeg"},
+                    ],
+                }
+            ]
+        },
+    )
+    assert result.success is True
+    assert result.prediction == "description"
+
+
+def test_openai_executor_rejects_local_remote_media_target() -> None:
+    endpoint = ModelEndpoint(
+        display_name="executor test",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****test",
+    )
+    result = OpenAIChatCompletionsExecutor().execute(
+        endpoint,
+        "secret",
+        {"messages": [{"role": "user", "content": [{"type": "image", "source": {"url": "http://127.0.0.1/private.png"}, "mime_type": "image/png"}]}]},
+    )
+    assert result.success is False
+    assert result.error_type == "invalid_sample"
+    assert "private or local" in (result.error_message or "")
