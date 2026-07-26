@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import CapabilityDeclaration, CapabilityDetection, ModelCapability, ModelEndpoint
+from app.db.mongo import MongoDocumentStore
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.services.capability_detector import CapabilityDetector, CapabilityDetectionResult, DEFAULT_CAPABILITY_KEYS
 
@@ -31,12 +32,15 @@ class CapabilityResponse(BaseModel):
     id: str; capability_key: str; user_declared_status: str; auto_detection_status: str; effective_status: str
     detection_evidence: dict[str, Any] | None; detector_version: str | None; last_detected_at: datetime | None
 
-def session_for_request(request: Request) -> Generator[Session, None, None]:
+def session_for_request(request: Request) -> Generator[Session | None, None, None]:
+    if getattr(request.app.state, "document_store", None) is not None:
+        yield None
+        return
     session = request.app.state.database.get_session()
     try: yield session
     finally: session.close()
 
-SessionDependency = Annotated[Session, Depends(session_for_request)]
+SessionDependency = Annotated[Session | None, Depends(session_for_request)]
 
 
 def get_cipher(request: Request) -> SecretCipher:
@@ -53,6 +57,21 @@ def get_capability_detector(request: Request) -> CapabilityDetector:
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 CapabilityDetectorDependency = Annotated[CapabilityDetector, Depends(get_capability_detector)]
 
+
+def get_document_store(request: Request) -> MongoDocumentStore | None:
+    return getattr(request.app.state, "document_store", None)
+
+
+def get_document_endpoint_or_404(store: MongoDocumentStore, endpoint_id: str) -> dict[str, Any]:
+    endpoint = store.get_document("model_endpoints", endpoint_id)
+    if endpoint is None:
+        raise HTTPException(404, "Model endpoint not found")
+    return endpoint
+
+
+def _endpoint_proxy(endpoint: dict[str, Any]) -> Any:
+    return type("DocumentEndpoint", (), endpoint)()
+
 def effective(user: CapabilityDeclaration, detected: str) -> str:
     if user is CapabilityDeclaration.UNSUPPORTED and detected == CapabilityDetection.PASSED.value: return "detected_user_unsupported"
     if user is CapabilityDeclaration.UNSUPPORTED: return "unsupported"
@@ -63,12 +82,54 @@ def effective(user: CapabilityDeclaration, detected: str) -> str:
     return "unverified"
 
 @router.get("", response_model=list[CapabilityResponse])
-def list_capabilities(endpoint_id: str, session: SessionDependency) -> list[ModelCapability]:
+def list_capabilities(
+    endpoint_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> list[ModelCapability | dict[str, Any]]:
+    store = get_document_store(request)
+    if store is not None:
+        get_document_endpoint_or_404(store, endpoint_id)
+        return store.list_documents(
+            "model_capabilities",
+            query={"model_endpoint_id": endpoint_id},
+            sort=[("capability_key", 1)],
+        )
+    assert session is not None
     if session.get(ModelEndpoint, endpoint_id) is None: raise HTTPException(404, "Model endpoint not found")
     return list(session.scalars(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id).order_by(ModelCapability.capability_key)))
 
 @router.put("", response_model=CapabilityResponse)
-def declare_capability(endpoint_id: str, payload: CapabilityUpdate, session: SessionDependency) -> ModelCapability:
+def declare_capability(
+    endpoint_id: str,
+    payload: CapabilityUpdate,
+    request: Request,
+    session: SessionDependency,
+) -> ModelCapability | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        get_document_endpoint_or_404(store, endpoint_id)
+        existing = store.list_documents(
+            "model_capabilities",
+            query={"model_endpoint_id": endpoint_id, "capability_key": payload.capability_key},
+        )
+        detected = str(existing[0]["auto_detection_status"]) if existing else CapabilityDetection.NOT_TESTED.value
+        values = {
+            "model_endpoint_id": endpoint_id,
+            "capability_key": payload.capability_key,
+            "user_declared_status": payload.user_declared_status.value,
+            "auto_detection_status": detected,
+            "effective_status": effective(payload.user_declared_status, detected),
+            "detection_evidence": existing[0].get("detection_evidence") if existing else None,
+            "detector_version": existing[0].get("detector_version") if existing else None,
+            "last_detected_at": existing[0].get("last_detected_at") if existing else None,
+        }
+        if existing:
+            updated = store.update_document("model_capabilities", str(existing[0]["id"]), values)
+            assert updated is not None
+            return updated
+        return store.insert_document("model_capabilities", values)
+    assert session is not None
     if session.get(ModelEndpoint, endpoint_id) is None: raise HTTPException(404, "Model endpoint not found")
     item = session.scalar(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id, ModelCapability.capability_key == payload.capability_key))
     if item is None:
@@ -84,10 +145,52 @@ def declare_capability(endpoint_id: str, payload: CapabilityUpdate, session: Ses
 def detect_capabilities(
     endpoint_id: str,
     payload: CapabilityDetectionRequest,
+    request: Request,
     session: SessionDependency,
     cipher: CipherDependency,
     detector: CapabilityDetectorDependency,
-) -> list[ModelCapability]:
+) -> list[ModelCapability | dict[str, Any]]:
+    store = get_document_store(request)
+    if store is not None:
+        endpoint = get_document_endpoint_or_404(store, endpoint_id)
+        capability_keys = payload.normalized_keys()
+        if not capability_keys:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "At least one capability key is required")
+        results = detector.detect(
+            _endpoint_proxy(endpoint),
+            cipher.decrypt(str(endpoint["encrypted_api_key"])),
+            capability_keys,
+        )
+        by_key = {result.capability_key: result for result in results}
+        now = datetime.now(timezone.utc)
+        updated: list[dict[str, Any]] = []
+        for key in capability_keys:
+            result = by_key.get(key)
+            if result is None:
+                continue
+            existing = store.list_documents(
+                "model_capabilities",
+                query={"model_endpoint_id": endpoint_id, "capability_key": key},
+            )
+            user_status = str(existing[0]["user_declared_status"]) if existing else CapabilityDeclaration.UNKNOWN.value
+            values = {
+                "model_endpoint_id": endpoint_id,
+                "capability_key": key,
+                "user_declared_status": user_status,
+                "auto_detection_status": result.status.value,
+                "effective_status": effective(CapabilityDeclaration(user_status), result.status.value),
+                "detection_evidence": result.evidence,
+                "detector_version": str(result.evidence.get("adapter_version", "unknown")),
+                "last_detected_at": now,
+            }
+            if existing:
+                item = store.update_document("model_capabilities", str(existing[0]["id"]), values)
+                assert item is not None
+            else:
+                item = store.insert_document("model_capabilities", values)
+            updated.append(item)
+        return updated
+    assert session is not None
     endpoint = session.get(ModelEndpoint, endpoint_id)
     if endpoint is None:
         raise HTTPException(404, "Model endpoint not found")

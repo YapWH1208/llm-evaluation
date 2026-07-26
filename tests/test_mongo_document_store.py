@@ -10,6 +10,8 @@ from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore, MongoValidation
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
+from app.db.models import CapabilityDetection
+from app.services.capability_detector import CapabilityDetectionResult
 from app.services.connection_tester import ConnectionTestResult
 
 
@@ -227,3 +229,46 @@ def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
         assert api.get("/api/v1/model-endpoints").json()[0]["id"] == endpoint["id"]
         assert api.delete(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 204
         assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 404
+
+
+def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() -> None:
+    class Detector:
+        def detect(self, endpoint: Any, api_key: str, capability_keys: list[str]):
+            assert endpoint.model_name == "model"
+            assert api_key == "secret"
+            assert capability_keys == ["text_input"]
+            return [
+                CapabilityDetectionResult(
+                    "text_input",
+                    CapabilityDetection.PASSED,
+                    {"adapter_version": "test/1", "outcome": "passed"},
+                )
+            ]
+
+    client = FakeClient()
+    settings = Settings(
+        database_url="mongodb://mongo.test/platform",
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(
+        settings,
+        capability_detector=Detector(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
+    with TestClient(app) as api:
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
+        declared = api.put(
+            f"/api/v1/model-endpoints/{endpoint['id']}/capabilities",
+            json={"capability_key": "text_input", "user_declared_status": "supported"},
+        )
+        assert declared.json()["effective_status"] == "user_verified"
+        detected = api.post(
+            f"/api/v1/model-endpoints/{endpoint['id']}/capabilities/detect",
+            json={"capability_keys": ["text_input"]},
+        )
+        assert detected.status_code == 200
+        assert detected.json()[0]["effective_status"] == "verified_by_both"
+        assert detected.json()[0]["detection_evidence"]["adapter_version"] == "test/1"
