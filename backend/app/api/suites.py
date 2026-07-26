@@ -146,9 +146,13 @@ def create_suite_runs(suite_id: str, payload: SuiteRunCreate, request: Request, 
             benchmark_id = selection["benchmark_id"]
             benchmark_version = str(selection.get("version", "1.0.0"))
             prompt_package_id = selection.get("prompt_package_id")
+            if prompt_package_id is None:
+                overrides = values.get("default_prompt_overrides")
+                if isinstance(overrides, dict):
+                    prompt_package_id = overrides.get(f"{benchmark_id}@{benchmark_version}", overrides.get(benchmark_id))
             if prompt_package_id is not None and not isinstance(prompt_package_id, str):
                 raise RunCreationError("Suite prompt_package_id must be a string.")
-            snapshot = {"id": values["id"], "name": values["name"], "version": values["version"], "default_request_body": values["default_request_body"], "weight_configuration": values["weight_configuration"], "selection": selection}
+            snapshot = {"id": values["id"], "name": values["name"], "version": values["version"], "default_prompt_overrides": values.get("default_prompt_overrides", {}), "default_request_body": values["default_request_body"], "weight_configuration": values["weight_configuration"], "selection": selection, "effective_prompt_package_id": prompt_package_id}
             if store is not None:
                 run = create_mongo_benchmark_run(store, model_endpoint_id=payload.model_endpoint_id, sample_limit=payload.sample_limit, prompt_package_id=prompt_package_id, benchmark_id=benchmark_id, benchmark_version=benchmark_version, suite_id=str(values["id"]), suite_snapshot=snapshot, request_body_override=payload.request_body_override)
             else:

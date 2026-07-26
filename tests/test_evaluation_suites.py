@@ -49,7 +49,9 @@ def test_mongodb_evaluation_suite_crud(tmp_path) -> None:
 def test_suite_schedules_a_run_with_immutable_suite_snapshot(tmp_path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
     with TestClient(app) as api:
-        suite = api.post("/api/v1/evaluation-suites", json=_suite()).json()
+        prompt = api.post("/api/v1/prompt-packages", json={"name": "suite-prompt", "version": "1", "user_template": "Answer only: {{ question }}"}).json()
+        payload = {**_suite(), "default_prompt_overrides": {"text-quick-check@1.0.0": prompt["id"]}}
+        suite = api.post("/api/v1/evaluation-suites", json=payload).json()
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "default_request_body": {"temperature": 0.8}}).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         scheduled = api.post(f"/api/v1/evaluation-suites/{suite['id']}/runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
@@ -58,6 +60,8 @@ def test_suite_schedules_a_run_with_immutable_suite_snapshot(tmp_path) -> None:
         stored = api.get(f"/api/v1/evaluation-runs/{run['id']}").json()
         assert stored["suite_id"] == suite["id"]
         assert stored["configuration_snapshot"]["evaluation_suite"]["name"] == "release-gate"
+        assert stored["prompt_package_id"] == prompt["id"]
+        assert stored["configuration_snapshot"]["evaluation_suite"]["effective_prompt_package_id"] == prompt["id"]
         evidence = stored["configuration_snapshot"]["request_body_evidence"]
         assert evidence["effective_request_body"]["temperature"] == 0
         assert evidence["layers"]["suite_defaults"] == {"temperature": 0}
