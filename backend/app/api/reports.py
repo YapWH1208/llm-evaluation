@@ -32,4 +32,4 @@ def download(report_id:str,session:SessionDependency):
     if report is None:raise HTTPException(404,"Report not found")
     path=Path(report.artifact_path)
     if not path.is_file():raise HTTPException(404,"Report artifact is no longer available")
-    return FileResponse(path,filename=path.name,media_type={"json":"application/json","csv":"text/csv","html":"text/html"}.get(report.format,"application/octet-stream"))
+    return FileResponse(path,filename=path.name,media_type={"json":"application/json","csv":"text/csv","html":"text/html","markdown":"text/markdown"}.get(report.format,"application/octet-stream"))

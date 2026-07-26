@@ -13,6 +13,7 @@ from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run
 from app.services.model_executor import ModelExecutor
+from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
@@ -187,6 +188,14 @@ def list_sample_attempts(run_id: str, session: SessionDependency) -> list[Sample
             .order_by(SampleAttempt.created_at)
         )
     )
+
+
+@router.get("/{run_id}/summary")
+def get_run_summary(run_id: str, session: SessionDependency) -> dict[str, Any]:
+    run = session.get(EvaluationRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+    return build_run_summary(session, run)
 
 
 @router.get("/{run_id}", response_model=EvaluationRunResponse)
