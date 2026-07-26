@@ -226,6 +226,24 @@ class DatasetVersion(Base):
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+
+class EvaluationSuite(Base):
+    """A versioned collection of benchmark selections and run defaults."""
+
+    __tablename__ = "evaluation_suites"
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_evaluation_suite_name_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    benchmark_list: Mapped[list[object]] = mapped_column(JSON, nullable=False, default=list)
+    default_prompt_overrides: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    default_request_body: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    weight_configuration: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    version: Mapped[str] = mapped_column(String(64), nullable=False, default="1")
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 class Report(Base):
     __tablename__ = "reports"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

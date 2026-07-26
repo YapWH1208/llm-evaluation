@@ -37,14 +37,14 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     database.initialize()
     database.initialize()
 
     columns = {column["name"] for column in inspect(database.engine).get_columns("evaluation_runs")}
     assert "prompt_package_id" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 10
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 11
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -72,5 +72,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         metadata_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 10))
         assert metadata_migration is not None
         assert metadata_migration.migration_id == "20260726_add_endpoint_metadata"
+        suite_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 11))
+        assert suite_migration is not None
+        assert suite_migration.migration_id == "20260726_add_evaluation_suites"
     assert database.migration_preview() == ()
     database.dispose()

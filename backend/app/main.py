@@ -27,6 +27,7 @@ from app.api.benchmarks import router as benchmarks_router
 from app.api.judge_assessments import router as judge_assessments_router
 from app.api.tasks import router as tasks_router
 from app.api.analytics import router as analytics_router
+from app.api.suites import router as suites_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.mongo import MongoDocumentStore
@@ -111,6 +112,7 @@ def create_app(
     app.include_router(judge_assessments_router)
     app.include_router(tasks_router)
     app.include_router(analytics_router)
+    app.include_router(suites_router)
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):

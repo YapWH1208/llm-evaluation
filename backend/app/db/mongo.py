@@ -47,6 +47,7 @@ _COLLECTIONS = (
     "benchmark_definitions",
     "prompt_packages",
     "dataset_versions",
+    "evaluation_suites",
     "evaluation_runs",
     "task_units",
     "sample_attempts",
@@ -82,6 +83,9 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
     ),
     "dataset_versions": (
         ((("dataset_id", 1), ("version", 1), ("revision", 1)), {"unique": True}),
+    ),
+    "evaluation_suites": (
+        ((("name", 1), ("version", 1)), {"unique": True}),
     ),
     "report_shares": (
         ((("token_hash", 1),), {"unique": True}),

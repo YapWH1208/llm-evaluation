@@ -82,6 +82,10 @@ def _upgrade_v10_endpoint_metadata(connection: Connection) -> None:
     _add_column_if_missing(connection, "model_endpoints", "notes", "notes TEXT")
 
 
+def _upgrade_v11_evaluation_suites(_connection: Connection) -> None:
+    """The ORM creates versioned evaluation suite storage."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -136,6 +140,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_endpoint_metadata",
         description="Add safe custom headers, tags, and notes to model endpoints.",
         upgrade=_upgrade_v10_endpoint_metadata,
+    ),
+    Migration(
+        version=11,
+        migration_id="20260726_add_evaluation_suites",
+        description="Add versioned evaluation-suite definitions.",
+        upgrade=_upgrade_v11_evaluation_suites,
     ),
 )
 
