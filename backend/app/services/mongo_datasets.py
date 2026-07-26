@@ -65,6 +65,21 @@ def download_mongo_dataset(
         raise DatasetError(str(error)) from error
 
 
+def clear_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_root: str) -> dict[str, Any]:
+    dataset = _get_dataset(store, dataset_id)
+    local_path = dataset.get("local_path")
+    if isinstance(local_path, str) and local_path:
+        root = (Path(data_root).resolve() / "datasets").resolve()
+        target = Path(local_path).resolve()
+        if not target.is_relative_to(root):
+            raise DatasetError("Dataset cache path is outside the configured dataset root.")
+        target.unlink(missing_ok=True)
+    status = "license_required" if dataset.get("license_text") and dataset.get("license_accepted_at") is None else "not_downloaded"
+    updated = store.update_document("dataset_versions", dataset_id, {"local_path": None, "status": status, "error_message": None})
+    assert updated is not None
+    return updated
+
+
 def _get_dataset(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
     dataset = store.get_document("dataset_versions", dataset_id)
     if dataset is None:

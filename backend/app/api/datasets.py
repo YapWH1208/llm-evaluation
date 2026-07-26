@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, download_dataset
-from app.services.mongo_datasets import accept_mongo_dataset_license, download_mongo_dataset
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, download_dataset
+from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
@@ -64,4 +64,13 @@ def download_dataset_version(dataset_version_id:str,request:Request,session:Sess
         if store is not None:return download_mongo_dataset(store,dataset_version_id,request.app.state.settings.data_root)
         assert session is not None
         return download_dataset(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
+    except DatasetError as error: raise HTTPException(409,str(error)) from error
+
+@router.delete("/{dataset_version_id}/cache",response_model=DatasetResponse)
+def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:SessionDependency)->DatasetVersion|dict:
+    store=get_document_store(request)
+    try:
+        if store is not None:return clear_mongo_dataset_cache(store,dataset_version_id,request.app.state.settings.data_root)
+        assert session is not None
+        return clear_dataset_cache(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
     except DatasetError as error: raise HTTPException(409,str(error)) from error

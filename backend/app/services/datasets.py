@@ -56,3 +56,17 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
         raise DatasetError(str(error)) from error
     session.commit(); session.refresh(dataset)
     return dataset
+
+
+def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
+    if dataset.local_path:
+        root = (Path(data_root).resolve() / "datasets").resolve()
+        target = Path(dataset.local_path).resolve()
+        if not target.is_relative_to(root):
+            raise DatasetError("Dataset cache path is outside the configured dataset root.")
+        target.unlink(missing_ok=True)
+    dataset.local_path = None
+    dataset.status = DatasetStatus.LICENSE_REQUIRED.value if dataset.license_text and dataset.license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
+    dataset.error_message = None
+    session.commit(); session.refresh(dataset)
+    return dataset
