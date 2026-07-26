@@ -175,6 +175,7 @@ def test_openai_executor_translates_responses_api_multimodal_input_and_output() 
                 {"type": "input_image", "image_url": "https://media.example.test/photo.png"},
                 {"type": "input_audio", "input_audio": {"data": "aGVsbG8=", "format": "mp3"}},
                 {"type": "input_file", "file_data": "JVBERi0=", "filename": "input-file"},
+                {"type": "input_file", "file_data": "AAAA", "filename": "input-video"},
             ]}],
             "stream": False,
             "store": False,
@@ -191,6 +192,7 @@ def test_openai_executor_translates_responses_api_multimodal_input_and_output() 
             {"type": "image", "source": {"url": "https://media.example.test/photo.png"}, "mime_type": "image/png"},
             {"type": "audio", "source": {"base64_data": "aGVsbG8="}, "mime_type": "audio/mpeg"},
             {"type": "file", "source": {"base64_data": "JVBERi0="}, "mime_type": "application/pdf"},
+            {"type": "video", "source": {"base64_data": "AAAA"}, "mime_type": "video/mp4"},
         ]}]},
     )
     assert result.success is True

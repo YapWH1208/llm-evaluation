@@ -297,18 +297,19 @@ def _translate_responses_content_part(part: dict[str, Any]) -> dict[str, object]
         if audio_format not in {"wav", "mp3"}:
             raise ValueError("Responses API audio supports WAV or MP3 content only.")
         return {"type": "input_audio", "input_audio": {"data": encoded, "format": audio_format}}
-    if part_type == "file":
+    if part_type in {"file", "video"}:
         source = part["source"]
         if not isinstance(source, dict):
-            raise ValueError("File content parts require a source object.")
+            raise ValueError("File and video content parts require a source object.")
+        filename = "input-video" if part_type == "video" else "input-file"
         if isinstance(source.get("url"), str):
             _validate_remote_media_url(source["url"])
-            return {"type": "input_file", "file_url": source["url"], "filename": "input-file"}
+            return {"type": "input_file", "file_url": source["url"], "filename": filename}
         if isinstance(source.get("base64_data"), str):
             _validate_base64(source["base64_data"])
-            return {"type": "input_file", "file_data": source["base64_data"], "filename": "input-file"}
-        raise ValueError("Responses API file content requires base64_data or a remote URL.")
-    raise ValueError("Responses API does not support video content through this adapter. Use a compatible provider adapter.")
+            return {"type": "input_file", "file_data": source["base64_data"], "filename": filename}
+        raise ValueError("Responses API file and video content requires base64_data or a remote URL.")
+    raise ValueError(f"Responses API does not support {part_type} content through this adapter.")
 
 
 def normalize_exact_match(value: str) -> str:
