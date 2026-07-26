@@ -23,6 +23,9 @@ dev = [
 postgresql = [
   "psycopg[binary]>=3.2,<4.0",
 ]
+mongodb = [
+  "pymongo>=4.6,<5.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
