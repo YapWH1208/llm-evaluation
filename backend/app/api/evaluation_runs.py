@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run
+from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
@@ -26,6 +27,13 @@ class EvaluationRunCreate(BaseModel):
     prompt_package_id: str | None = None
     benchmark_id: str = "text-quick-check"
     benchmark_version: str = "1.0.0"
+
+
+class CustomMultimodalRunCreate(BaseModel):
+    model_endpoint_id: str
+    sample_id: Annotated[str, Field(min_length=1, max_length=255)] = "custom-sample"
+    messages: list[dict[str, Any]]
+    reference_answer: Annotated[str, Field(min_length=1, max_length=10000)]
 
 
 class EvaluationRunResponse(BaseModel):
@@ -115,6 +123,26 @@ def create_evaluation_run(
             if str(error) == "Model endpoint not found."
             else status.HTTP_409_CONFLICT
         )
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/custom-multimodal", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
+def create_custom_run(
+    payload: CustomMultimodalRunCreate,
+    request: Request,
+    session: SessionDependency,
+) -> EvaluationRun:
+    try:
+        return create_custom_multimodal_run(
+            session,
+            data_root=request.app.state.settings.data_root,
+            model_endpoint_id=payload.model_endpoint_id,
+            sample_id=payload.sample_id,
+            messages=payload.messages,
+            reference_answer=payload.reference_answer,
+        )
+    except CustomRunError as error:
+        status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
