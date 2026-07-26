@@ -19,9 +19,19 @@ class ReportError(ValueError):
 
 
 _FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "parquet": "parquet", "html": "html", "markdown": "md", "pdf": "pdf"}
+REPORT_TYPES = frozenset({"single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "cost", "human_review"})
+_COMPARISON_REPORT_TYPES = frozenset({"multi_model_comparison", "regression", "prompt_comparison"})
 
 
-def generate_report(session: Session, run_id: str, format: str, data_root: str) -> Report:
+def generate_report(
+    session: Session,
+    run_id: str,
+    format: str,
+    data_root: str,
+    *,
+    report_type: str = "single_model",
+    related_run_ids: list[str] | None = None,
+) -> Report:
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise ReportError("Evaluation run not found.")
@@ -30,16 +40,23 @@ def generate_report(session: Session, run_id: str, format: str, data_root: str) 
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
         raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
+    if report_type not in REPORT_TYPES:
+        raise ReportError("Unsupported report type.")
 
     payload = _build_report_payload(session, run)
+    related_runs = _related_run_overviews(session, run, related_run_ids or [])
+    if report_type in _COMPARISON_REPORT_TYPES and not related_runs:
+        raise ReportError(f"{report_type} reports require at least one related completed run.")
+    payload["report_type"] = report_type
+    payload["related_runs"] = related_runs
     directory = Path(data_root).resolve() / "reports" / run.id
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"report.{extension}"
+    path = directory / f"{report_type}.{extension}"
     _write_report(path, format, payload)
 
     report = Report(
         run_id=run.id,
-        report_type="single_model",
+        report_type=report_type,
         format=format,
         artifact_path=str(path),
         generator_version="1.2.0",
@@ -48,6 +65,31 @@ def generate_report(session: Session, run_id: str, format: str, data_root: str) 
     session.commit()
     session.refresh(report)
     return report
+
+
+def _related_run_overviews(session: Session, primary_run: EvaluationRun, related_run_ids: list[str]) -> list[dict[str, Any]]:
+    overviews: list[dict[str, Any]] = []
+    seen = {primary_run.id}
+    for run_id in related_run_ids:
+        if not isinstance(run_id, str) or not run_id or run_id in seen:
+            continue
+        seen.add(run_id)
+        run = session.get(EvaluationRun, run_id)
+        if run is None:
+            raise ReportError(f"Related evaluation run not found: {run_id}")
+        if run.status not in {"completed", "completed_with_errors"}:
+            raise ReportError("Related runs must be completed before report generation.")
+        overviews.append(
+            {
+                "run_id": run.id,
+                "benchmark": {"id": run.benchmark_id, "version": run.benchmark_version},
+                "model_endpoint_id": run.model_endpoint_id,
+                "status": run.status,
+                "prompt_standardization": run.configuration_snapshot.get("prompt_standardization"),
+                "summary": build_run_summary(session, run),
+            }
+        )
+    return overviews
 
 
 def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any]:
@@ -216,7 +258,7 @@ def _markdown_report(payload: dict[str, Any]) -> str:
     cost = summary["cost"]
     currency = cost["currency"] or "unconfigured currency"
     rows = [
-        f"# Evaluation report: {payload['benchmark']['id']}",
+        f"# {_report_title(payload)}: {payload['benchmark']['id']}",
         "",
         f"Run: `{payload['run_id']}`  ",
         f"Status: **{payload['status']}**",
@@ -255,6 +297,11 @@ def _markdown_report(payload: dict[str, Any]) -> str:
                 error=_markdown_cell(attempt["error_type"] or ""),
             )
         )
+    if payload.get("related_runs"):
+        rows.extend(["", "## Related completed runs", "", "| Run | Benchmark | Accuracy | Success | Estimated cost |", "| --- | --- | ---: | ---: | ---: |"])
+        for related in payload["related_runs"]:
+            summary = related["summary"]
+            rows.append(f"| `{related['run_id']}` | {related['benchmark']['id']} | {_display_percent(summary['samples']['accuracy'])} | {_display_percent(summary['samples']['success_rate'])} | {_display(summary['cost']['estimated'])} |")
     return "\n".join(rows) + "\n"
 
 
@@ -282,7 +329,7 @@ def _html_report(payload: dict[str, Any]) -> str:
 <html lang=\"en\"><head><meta charset=\"utf-8\"><title>Evaluation report</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1200px;margin:2rem auto;padding:0 1rem}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #cbd5e1;padding:.5rem;text-align:left}}th{{background:#f1f5f9}}.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem}}.metric{{padding:1rem;background:#f8fafc;border-radius:.5rem}}</style>
 </head><body>
-<h1>{html.escape(payload['benchmark']['id'])} evaluation report</h1>
+<h1>{html.escape(_report_title(payload))}: {html.escape(payload['benchmark']['id'])}</h1>
 <p>Run {html.escape(payload['run_id'])} · Status: <strong>{html.escape(payload['status'])}</strong></p>
 <h2>Executive summary</h2>
 <div class=\"metrics\">
@@ -294,6 +341,7 @@ def _html_report(payload: dict[str, Any]) -> str:
 </div>
 <h2>Sample evidence</h2>
 <table><thead><tr><th>Sample</th><th>Attempt</th><th>Current</th><th>Status</th><th>Score</th><th>Latency (ms)</th><th>Tokens</th><th>Estimated cost</th><th>Error</th></tr></thead><tbody>{table_rows}</tbody></table>
+{_related_runs_html(payload)}
 </body></html>"""
 
 
@@ -303,7 +351,7 @@ def _pdf_report(payload: dict[str, Any]) -> bytes:
     latency = summary["latency_ms"]
     cost = summary["cost"]
     lines = [
-        f"Evaluation report: {payload['benchmark']['id']}",
+        f"{_report_title(payload)}: {payload['benchmark']['id']}",
         f"Run: {payload['run_id']}",
         f"Status: {payload['status']}",
         "",
@@ -348,6 +396,24 @@ def _pdf_report(payload: dict[str, Any]) -> bytes:
         output.extend(f"{offset:010d} 00000 n \n".encode())
     output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
     return bytes(output)
+
+
+def _report_title(payload: dict[str, Any]) -> str:
+    report_type = str(payload.get("report_type", "single_model"))
+    if report_type == "single_model":
+        return "Evaluation report"
+    return report_type.replace("_", " ").title() + " report"
+
+
+def _related_runs_html(payload: dict[str, Any]) -> str:
+    related = payload.get("related_runs")
+    if not isinstance(related, list) or not related:
+        return ""
+    rows = "".join(
+        f"<tr><td>{html.escape(str(item['run_id']))}</td><td>{html.escape(str(item['benchmark']['id']))}</td><td>{html.escape(_display_percent(item['summary']['samples']['accuracy']))}</td><td>{html.escape(_display_percent(item['summary']['samples']['success_rate']))}</td></tr>"
+        for item in related
+    )
+    return f"<h2>Related completed runs</h2><table><thead><tr><th>Run</th><th>Benchmark</th><th>Accuracy</th><th>Success</th></tr></thead><tbody>{rows}</tbody></table>"
 
 
 def _pdf_escape(value: object) -> str:

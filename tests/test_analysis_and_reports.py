@@ -105,6 +105,21 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert compared["differences"]["average_latency_ms"] == -50.0
         assert len(compared["sample_outcomes"]) == 2
 
+        multi_report = client.post(
+            "/api/v1/reports",
+            json={"run_id": run_a, "format": "json", "report_type": "multi_model_comparison", "related_run_ids": [run_b]},
+        )
+        assert multi_report.status_code == 200
+        assert multi_report.json()["report_type"] == "multi_model_comparison"
+        multi_payload = client.get(f"/api/v1/reports/{multi_report.json()['id']}/download").json()
+        assert multi_payload["related_runs"][0]["run_id"] == run_b
+        assert multi_payload["related_runs"][0]["summary"]["samples"]["accuracy"] == 0.0
+        assert client.post("/api/v1/reports", json={"run_id": run_a, "format": "json", "report_type": "regression"}).status_code == 409
+
+        cost_report = client.post("/api/v1/reports", json={"run_id": run_a, "format": "json", "report_type": "cost"})
+        assert cost_report.status_code == 200
+        assert cost_report.json()["report_type"] == "cost"
+
         report = client.post("/api/v1/reports", json={"run_id": run_a, "format": "markdown"})
         assert report.status_code == 200
         assert report.json()["format"] == "markdown"

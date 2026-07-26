@@ -14,6 +14,7 @@ import {
   EvaluationSuite,
   PromptPackage,
   Report,
+  ReportType,
   Review,
   RunSummary,
   SampleAttempt,
@@ -107,6 +108,8 @@ export default function App() {
   const [analytics, setAnalytics] = useState<AnalyticsMatrix | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [runRequestBody, setRunRequestBody] = useState("{}");
+  const [reportType, setReportType] = useState<ReportType>("single_model");
+  const [relatedReportRunId, setRelatedReportRunId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -253,8 +256,9 @@ export default function App() {
   async function generateReport(runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") {
     setBusy(`report-${runId}-${format}`);
     try {
-      const report = await api.createReport(runId, format);
-      setNotice(`${format.toUpperCase()} report generated.`);
+      const comparisonType = ["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType);
+      const report = await api.createReport(runId, format, reportType, comparisonType && relatedReportRunId ? [relatedReportRunId] : []);
+      setNotice(`${format.toUpperCase()} ${reportType.replaceAll("_", " ")} report generated.`);
       window.open(api.reportDownloadUrl(report.id), "_blank", "noopener,noreferrer");
       if (selectedRun === runId) await selectRun(runId);
       await refresh();
@@ -479,7 +483,7 @@ export default function App() {
 
       {view === "compare" && <section className="panel"><h2>Model and run comparison</h2><p className="muted">Runs must use the same benchmark version. Differences are run A minus run B.</p><form className="comparison-form" onSubmit={compareRuns}><label>Run A<select required value={comparisonRunA} onChange={(event) => setComparisonRunA(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><label>Run B<select required value={comparisonRunB} onChange={(event) => setComparisonRunB(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"}>Compare</button></form>{comparison && <ComparisonView comparison={comparison} />}</section>}
 
-      {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "pdf")}>Generate PDF</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "parquet")}>Generate Parquet</button></div><ReportsTable reports={reports} onShare={shareReport} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
+      {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="comparison-form"><label>Report type<select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}><option value="single_model">Single-model complete</option><option value="multi_model_comparison">Multi-model comparison</option><option value="regression">Regression</option><option value="prompt_comparison">Prompt comparison</option><option value="benchmark">Benchmark</option><option value="reliability">Reliability</option><option value="cost">Cost</option><option value="human_review">Human review</option></select></label>{["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType) && <label>Related completed run<select value={relatedReportRunId} onChange={(event) => setRelatedReportRunId(event.target.value)}><option value="">Select run</option>{completedRuns.filter((run) => run.id !== selectedRunInfo.id).map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>}</div><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "pdf")}>Generate PDF</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "parquet")}>Generate Parquet</button></div><ReportsTable reports={reports} onShare={shareReport} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
     </main>
   );
 }

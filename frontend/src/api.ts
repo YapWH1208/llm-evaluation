@@ -63,6 +63,7 @@ export type RunSummary = {
 };
 
 export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generator_version: string; generated_at: string };
+export type ReportType = "single_model" | "multi_model_comparison" | "regression" | "prompt_comparison" | "benchmark" | "reliability" | "cost" | "human_review";
 export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
 export type Dashboard = {
   runs: { active: number; completed: number; recent_completed: Array<{ id: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
@@ -162,7 +163,7 @@ export const api = {
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
   workerEventsUrl: () => `${apiBase}/workers/events`,
-  createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
+  createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,

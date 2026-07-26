@@ -6,7 +6,7 @@ import secrets
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
@@ -27,6 +27,8 @@ public_router = APIRouter(prefix="/shared-reports", tags=["shared reports"])
 class ReportCreate(BaseModel):
     run_id: str
     format: str = "html"
+    report_type: Literal["single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "cost", "human_review"] = "single_model"
+    related_run_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ReportResponse(BaseModel):
@@ -77,9 +79,9 @@ SessionDependency = Annotated[Session | None, Depends(get_session)]
 def create(payload: ReportCreate, request: Request, session: SessionDependency) -> Report | dict:
     store:MongoDocumentStore|None=getattr(request.app.state,"document_store",None)
     try:
-        if store is not None:return generate_mongo_report(store,payload.run_id,payload.format,request.app.state.settings.data_root)
+        if store is not None:return generate_mongo_report(store,payload.run_id,payload.format,request.app.state.settings.data_root,report_type=payload.report_type,related_run_ids=payload.related_run_ids)
         assert session is not None
-        return generate_report(session, payload.run_id, payload.format, request.app.state.settings.data_root)
+        return generate_report(session, payload.run_id, payload.format, request.app.state.settings.data_root, report_type=payload.report_type, related_run_ids=payload.related_run_ids)
     except ReportError as error:
         raise HTTPException(409, str(error)) from error
 
