@@ -113,6 +113,12 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert "# Evaluation report: text-quick-check" in downloaded.text
         assert "Estimated cost" in downloaded.text
 
+        pdf = client.post("/api/v1/reports", json={"run_id": run_a, "format": "pdf"})
+        assert pdf.status_code == 200
+        pdf_download = client.get(f"/api/v1/reports/{pdf.json()['id']}/download")
+        assert pdf_download.headers["content-type"].startswith("application/pdf")
+        assert pdf_download.content.startswith(b"%PDF-1.4")
+
         share = client.post(
             f"/api/v1/reports/{report.json()['id']}/shares",
             json={"password": "view-only-password"},

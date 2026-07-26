@@ -18,7 +18,7 @@ class ReportError(ValueError):
     pass
 
 
-_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md"}
+_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md", "pdf": "pdf"}
 
 
 def generate_report(session: Session, run_id: str, format: str, data_root: str) -> Report:
@@ -29,7 +29,7 @@ def generate_report(session: Session, run_id: str, format: str, data_root: str) 
         raise ReportError("Reports can only be generated after a run completes.")
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
-        raise ReportError("Supported report formats are json, csv, html, and markdown.")
+        raise ReportError("Supported report formats are json, csv, html, markdown, and pdf.")
 
     payload = _build_report_payload(session, run)
     directory = Path(data_root).resolve() / "reports" / run.id
@@ -143,6 +143,9 @@ def _write_report(path: Path, format: str, payload: dict[str, Any]) -> None:
         return
     if format == "markdown":
         path.write_text(_markdown_report(payload), encoding="utf-8")
+        return
+    if format == "pdf":
+        path.write_bytes(_pdf_report(payload))
         return
     path.write_text(_html_report(payload), encoding="utf-8")
 
@@ -269,6 +272,63 @@ def _html_report(payload: dict[str, Any]) -> str:
 <h2>Sample evidence</h2>
 <table><thead><tr><th>Sample</th><th>Attempt</th><th>Current</th><th>Status</th><th>Score</th><th>Latency (ms)</th><th>Tokens</th><th>Estimated cost</th><th>Error</th></tr></thead><tbody>{table_rows}</tbody></table>
 </body></html>"""
+
+
+def _pdf_report(payload: dict[str, Any]) -> bytes:
+    summary = payload["summary"]
+    samples = summary["samples"]
+    latency = summary["latency_ms"]
+    cost = summary["cost"]
+    lines = [
+        f"Evaluation report: {payload['benchmark']['id']}",
+        f"Run: {payload['run_id']}",
+        f"Status: {payload['status']}",
+        "",
+        "Executive summary",
+        f"Completion: {samples['completed']}/{samples['total']} ({_display_percent(samples['completion_rate'])})",
+        f"Accuracy: {_display_percent(samples['accuracy'])}",
+        f"Success rate: {_display_percent(samples['success_rate'])}",
+        f"Average latency: {_display(latency['average'])} ms; P95: {_display(latency['p95'])} ms",
+        f"Tokens (input/output): {summary['tokens']['input']}/{summary['tokens']['output']}",
+        f"Estimated cost: {_display(cost['estimated'])} {cost['currency'] or ''}",
+        "",
+        "Sample outcomes",
+    ]
+    lines.extend(
+        f"{attempt['sample_id']} | attempt {attempt['attempt']} | {attempt['status']} | score {_display(attempt['score'])} | {_display(attempt['latency_ms'])} ms"
+        for attempt in payload["attempts"][:25]
+    )
+    content_lines = ["BT", "/F1 12 Tf", "50 760 Td", "15 TL"]
+    for index, line in enumerate(lines):
+        if index:
+            content_lines.append("T*")
+        content_lines.append(f"({_pdf_escape(line)}) Tj")
+    content_lines.append("ET")
+    content = "\n".join(content_lines).encode("latin-1", errors="replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, object_data in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{index} 0 obj\n".encode())
+        output.extend(object_data)
+        output.extend(b"\nendobj\n")
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode())
+    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
+    return bytes(output)
+
+
+def _pdf_escape(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _display(value: object) -> str:

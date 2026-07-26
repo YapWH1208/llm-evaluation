@@ -154,7 +154,7 @@ def _report_file_response(report: Report, *, download: bool) -> FileResponse:
     path = Path(report.artifact_path)
     if not path.is_file():
         raise HTTPException(404, "Report artifact is no longer available")
-    media_type = {"json": "application/json", "csv": "text/csv", "html": "text/html", "markdown": "text/markdown"}.get(report.format, "application/octet-stream")
+    media_type = {"json": "application/json", "csv": "text/csv", "html": "text/html", "markdown": "text/markdown", "pdf": "application/pdf"}.get(report.format, "application/octet-stream")
     return FileResponse(path, filename=path.name if download else None, media_type=media_type)
 
 

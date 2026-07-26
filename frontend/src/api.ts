@@ -156,7 +156,7 @@ export const api = {
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
-  createReport: (runId: string, format: "html" | "json" | "csv" | "markdown") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
+  createReport: (runId: string, format: "html" | "json" | "csv" | "markdown" | "pdf") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
