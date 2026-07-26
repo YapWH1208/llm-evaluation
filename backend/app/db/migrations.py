@@ -62,6 +62,16 @@ def _upgrade_v7_judge_assessments(_connection: Connection) -> None:
     """The ORM creates durable LLM-as-judge assessment records."""
 
 
+def _upgrade_v8_usage_and_cost_evidence(connection: Connection) -> None:
+    _add_column_if_missing(connection, "model_endpoints", "input_cost_per_million", "input_cost_per_million FLOAT")
+    _add_column_if_missing(connection, "model_endpoints", "output_cost_per_million", "output_cost_per_million FLOAT")
+    _add_column_if_missing(connection, "model_endpoints", "currency", "currency VARCHAR(8) NOT NULL DEFAULT 'USD'")
+    _add_column_if_missing(connection, "sample_attempts", "latency_ms", "latency_ms FLOAT")
+    _add_column_if_missing(connection, "sample_attempts", "input_tokens", "input_tokens INTEGER")
+    _add_column_if_missing(connection, "sample_attempts", "output_tokens", "output_tokens INTEGER")
+    _add_column_if_missing(connection, "sample_attempts", "estimated_cost", "estimated_cost FLOAT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -98,6 +108,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_judge_assessments",
         description="Add durable LLM-as-judge assessment evidence for sample attempts.",
         upgrade=_upgrade_v7_judge_assessments,
+    ),
+    Migration(
+        version=8,
+        migration_id="20260726_add_usage_and_cost_evidence",
+        description="Add provider usage, latency, and estimated cost evidence to sample attempts.",
+        upgrade=_upgrade_v8_usage_and_cost_evidence,
     ),
 )
 

@@ -30,6 +30,9 @@ class ExactAnswerExecutor:
             request_snapshot={"model": endpoint.model_name, "messages": input_snapshot["messages"]},
             raw_response=f'{{"choices":[{{"message":{{"content":"{prediction}"}}}}]}}',
             prediction=prediction,
+            latency_ms=125.5,
+            input_tokens=10,
+            output_tokens=5,
         )
 
 
@@ -60,6 +63,8 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
                 "base_url": "https://models.example.test/v1",
                 "api_key": "test-secret-key",
                 "model_name": "example-model",
+                "input_cost_per_million": 2,
+                "output_cost_per_million": 4,
             },
         )
         endpoint_id = endpoint.json()["id"]
@@ -142,6 +147,8 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
                 "base_url": "https://models.example.test/v1",
                 "api_key": "test-secret-key",
                 "model_name": "example-model",
+                "input_cost_per_million": 2,
+                "output_cost_per_million": 4,
             },
         )
         endpoint_id = endpoint.json()["id"]
@@ -168,6 +175,10 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
         assert {attempt["score"] for attempt in attempts.json()} == {1.0}
         assert all(attempt["request_snapshot"] for attempt in attempts.json())
         assert all(attempt["raw_response"] for attempt in attempts.json())
+        assert {attempt["latency_ms"] for attempt in attempts.json()} == {125.5}
+        assert {attempt["input_tokens"] for attempt in attempts.json()} == {10}
+        assert {attempt["output_tokens"] for attempt in attempts.json()} == {5}
+        assert {attempt["estimated_cost"] for attempt in attempts.json()} == {0.00004}
 
         assert client.post(f"/api/v1/evaluation-runs/{run_id}/execute").status_code == 409
 

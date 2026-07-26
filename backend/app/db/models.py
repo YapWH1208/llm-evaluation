@@ -78,6 +78,9 @@ class ModelEndpoint(Base):
     max_concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     requests_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tokens_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
+    output_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
@@ -428,6 +431,10 @@ class SampleAttempt(Base):
     raw_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     parsed_prediction: Mapped[str | None] = mapped_column(Text, nullable=True)
     score: Mapped[float | None] = mapped_column(nullable=True)
+    latency_ms: Mapped[float | None] = mapped_column(nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(nullable=True)
     error_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(

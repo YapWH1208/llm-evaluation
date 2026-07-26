@@ -100,7 +100,7 @@ def execute_leased_text_task(
     for attempt in attempts:
         _mark_attempt_running(session, attempt)
         result = model_executor.execute(endpoint, api_key, attempt.input_snapshot)
-        _record_result(attempt, result)
+        _record_result(attempt, result, endpoint)
         if not result.success and _is_retryable(result.error_type):
             retry_sample_ids.append(attempt.sample_id)
         session.commit()
@@ -167,10 +167,14 @@ def _mark_attempt_running(session: Session, attempt: SampleAttempt) -> None:
     session.commit()
 
 
-def _record_result(attempt: SampleAttempt, result: SampleExecutionResult) -> None:
+def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoint: ModelEndpoint) -> None:
     attempt.request_snapshot = result.request_snapshot
     attempt.raw_response = result.raw_response
     attempt.parsed_prediction = result.prediction
+    attempt.latency_ms = result.latency_ms
+    attempt.input_tokens = result.input_tokens
+    attempt.output_tokens = result.output_tokens
+    attempt.estimated_cost = _estimate_cost(endpoint, result.input_tokens, result.output_tokens)
     attempt.completed_at = datetime.now(timezone.utc)
     if result.success and result.prediction is not None:
         reference_answer = str(attempt.reference_snapshot["answer"])
@@ -185,6 +189,18 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult) -> Non
     attempt.score = None
     attempt.error_type = result.error_type or "execution_error"
     attempt.error_message = result.error_message or "Sample execution failed."
+
+
+def _estimate_cost(
+    endpoint: ModelEndpoint,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> float | None:
+    if input_tokens is None and output_tokens is None:
+        return None
+    input_cost = (input_tokens or 0) * (endpoint.input_cost_per_million or 0) / 1_000_000
+    output_cost = (output_tokens or 0) * (endpoint.output_cost_per_million or 0) / 1_000_000
+    return round(input_cost + output_cost, 12)
 
 
 def _is_retryable(error_type: str | None) -> bool:

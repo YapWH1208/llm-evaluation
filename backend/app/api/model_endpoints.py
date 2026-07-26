@@ -26,6 +26,9 @@ class EndpointBase(BaseModel):
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
+    output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
+    currency: Annotated[str, Field(min_length=3, max_length=8)] = "USD"
 
     @field_validator("base_url")
     @classmethod
@@ -62,6 +65,9 @@ class ModelEndpointUpdate(BaseModel):
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
+    input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
+    output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
+    currency: Annotated[str | None, Field(min_length=3, max_length=8)] = None
     api_key: SecretStr | None = None
 
     @field_validator("base_url")
@@ -93,6 +99,9 @@ class ModelEndpointResponse(BaseModel):
     max_concurrency: int
     requests_per_minute: int | None
     tokens_per_minute: int | None
+    input_cost_per_million: float | None
+    output_cost_per_million: float | None
+    currency: str
     status: str
     last_tested_at: datetime | None
     last_connection_error: str | None
@@ -149,6 +158,9 @@ def create_model_endpoint(
         max_concurrency=payload.max_concurrency,
         requests_per_minute=payload.requests_per_minute,
         tokens_per_minute=payload.tokens_per_minute,
+        input_cost_per_million=payload.input_cost_per_million,
+        output_cost_per_million=payload.output_cost_per_million,
+        currency=payload.currency.upper(),
     )
     session.add(endpoint)
     session.commit()

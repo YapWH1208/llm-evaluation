@@ -57,6 +57,10 @@ class SampleAttemptResponse(BaseModel):
     raw_response: str | None
     parsed_prediction: str | None
     score: float | None
+    latency_ms: float | None
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost: float | None
     error_type: str | None
     error_message: str | None
     status: str
