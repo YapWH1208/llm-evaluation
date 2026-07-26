@@ -20,6 +20,9 @@ dependencies = [
 dev = [
   "pytest>=8.0,<9.0",
 ]
+postgresql = [
+  "psycopg[binary]>=3.2,<4.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

@@ -1,31 +1,53 @@
 # LLM/SLM Evaluation Platform
 
-SQLite-first implementation of the API-hosted model evaluation platform described in `docs/`.
+An API-hosted model evaluation workspace with encrypted endpoint credentials, reproducible runs, durable sample evidence, multimodal custom checks, human/LLM judging, reports, comparisons, queue controls, and a React web application.
 
-## Current increment
-
-The service initializes a local SQLite database automatically and exposes a health endpoint. Model endpoint management and evaluation runs are the next increments.
-
-## Run locally
+## Quick start (SQLite)
 
 ```powershell
 python -m pip install -e ".[dev]"
+$env:LLE_SECRET_ENCRYPTION_KEY = (python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 uvicorn app.main:app --app-dir backend --reload
 ```
 
-The default database is `data/llm_evaluation.db`. Override it with `LLE_DATABASE_URL`, for example:
+In another terminal:
 
 ```powershell
-$env:LLE_DATABASE_URL = "sqlite:///C:/temp/llm_evaluation.db"
+Set-Location frontend
+npm.cmd install
+npm.cmd run dev
 ```
 
-Before adding a model API key, configure a Fernet encryption key. Generate one locally with:
+Open the web workspace at `http://127.0.0.1:5173`. The API is available at `http://127.0.0.1:8000/docs` and defaults to `data/llm_evaluation.db`.
+
+## Database operations
+
+SQLite and PostgreSQL share the SQLAlchemy schema, forward-only migrations, queue semantics, and database initialization controls.
 
 ```powershell
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-$env:LLE_SECRET_ENCRYPTION_KEY = "paste-the-generated-key-here"
+# Show pending migrations without changing a database
+python -m app.cli database preview
+
+# Create/upgrade structures and validate the resulting version
+python -m app.cli database initialize
+
+# Fail unless an existing database is complete and current
+python -m app.cli database validate
 ```
 
-The API never returns a stored API key; it only displays a masked suffix.
+Set `LLE_DATABASE_INIT_MODE` to `auto_migrate` (default), `preview`, or `validate`. Set `LLE_DATABASE_BACKUP_BEFORE_MIGRATE=true` to create a consistent SQLite backup in `data/backups` before pending migrations run.
 
-Open `http://127.0.0.1:8000/docs` for the API and `http://127.0.0.1:8000/health` for the health check.
+## PostgreSQL team deployment
+
+```powershell
+python -m pip install -e ".[dev,postgresql]"
+$env:LLE_DATABASE_URL = "postgresql+psycopg://lle:change-me@127.0.0.1:5432/lle"
+$env:LLE_SECRET_ENCRYPTION_KEY = "your-Fernet-key"
+uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+```
+
+See [deployment.md](docs/deployment.md) for Docker Compose, environment variables, backups, and production checks.
+
+## Security notes
+
+Endpoint API keys are encrypted at rest and only a masked suffix is returned. Enable `LLE_ADMIN_TOKEN` and create scoped user tokens for role-based access. The platform audits successful mutating API calls without recording request bodies, keys, prompts, or model responses in the audit entry.
