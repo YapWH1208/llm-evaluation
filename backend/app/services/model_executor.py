@@ -15,6 +15,7 @@ import httpx
 from app.db import ModelEndpoint
 from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
 from app.services.content_ir import ContentValidationError, normalize_content_parts
+from app.services.provider_headers import provider_headers
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +74,7 @@ class OpenAIChatCompletionsExecutor:
             ) as client:
                 response = client.post(
                     _endpoint_url(endpoint),
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers=provider_headers(endpoint, api_key),
                     json=request_snapshot,
                 )
         except httpx.TimeoutException:

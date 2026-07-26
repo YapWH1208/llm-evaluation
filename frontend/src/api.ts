@@ -5,6 +5,7 @@ export type Endpoint = {
   model_name: string;
   protocol_profile: "openai_chat_completions" | "openai_responses";
   api_key_mask: string;
+  custom_headers: Record<string, string>;
   status: "unverified" | "available" | "unavailable";
   max_concurrency: number;
   requests_per_minute: number | null;
@@ -12,6 +13,8 @@ export type Endpoint = {
   input_cost_per_million: number | null;
   output_cost_per_million: number | null;
   currency: string;
+  tags: string[];
+  notes: string | null;
   last_connection_error: string | null;
 };
 

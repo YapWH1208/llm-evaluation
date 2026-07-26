@@ -26,10 +26,13 @@ const initialEndpoint = {
   api_key: "",
   model_name: "",
   protocol_profile: "openai_chat_completions",
+  custom_headers: "{}",
   display_name: "",
   input_cost_per_million: "",
   output_cost_per_million: "",
   currency: "USD",
+  tags: "",
+  notes: "",
   default_request_body: "{}",
 };
 const initialPrompt = { name: "", version: "1", system_message: "", user_template: "{{ question }}" };
@@ -126,12 +129,19 @@ export default function App() {
     setBusy("endpoint");
     try {
       const defaultRequestBody: unknown = JSON.parse(form.default_request_body);
+      const customHeaders: unknown = JSON.parse(form.custom_headers);
       if (!defaultRequestBody || Array.isArray(defaultRequestBody) || typeof defaultRequestBody !== "object") {
         throw new Error("Default request body must be a JSON object.");
+      }
+      if (!customHeaders || Array.isArray(customHeaders) || typeof customHeaders !== "object") {
+        throw new Error("Custom headers must be a JSON object.");
       }
       await api.createEndpoint({
         ...form,
         default_request_body: defaultRequestBody,
+        custom_headers: customHeaders,
+        tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        notes: form.notes || null,
         input_cost_per_million: optionalNumber(form.input_cost_per_million),
         output_cost_per_million: optionalNumber(form.output_cost_per_million),
         currency: form.currency.toUpperCase(),
@@ -375,8 +385,10 @@ export default function App() {
               <label>Model name<input required value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value })} placeholder="model-id" /></label>
               <label>Protocol profile<select value={form.protocol_profile} onChange={(event) => setForm({ ...form, protocol_profile: event.target.value as "openai_chat_completions" | "openai_responses" })}><option value="openai_chat_completions">OpenAI-compatible Chat Completions</option><option value="openai_responses">OpenAI-compatible Responses API</option></select></label>
               <label>API key<input required type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder="Stored encrypted" /></label>
+              <label>Custom headers (JSON)<textarea value={form.custom_headers} onChange={(event) => setForm({ ...form, custom_headers: event.target.value })} spellCheck={false} placeholder='{"X-Provider-Project":"project-id"}' /></label>
               <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
               <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>
+              <label>Tags (comma-separated)<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="production, vision" /></label><label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
               <button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : "Save encrypted endpoint"}</button>
             </form>
           </article>

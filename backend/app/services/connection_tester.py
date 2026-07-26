@@ -6,6 +6,7 @@ from typing import Protocol
 import httpx
 
 from app.db import ModelEndpoint
+from app.services.provider_headers import provider_headers
 
 PROTECTED_REQUEST_FIELDS = frozenset(
     {
@@ -46,7 +47,7 @@ class OpenAIChatCompletionsConnectionTester:
             ) as client:
                 response = client.post(
                     _endpoint_url(endpoint),
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers=provider_headers(endpoint, api_key),
                     json=request_body,
                 )
         except httpx.TimeoutException:

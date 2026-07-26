@@ -35,6 +35,17 @@ def test_openai_executor_records_provider_usage_and_latency() -> None:
     assert result.latency_ms is not None and result.latency_ms >= 0
 
 
+def test_openai_executor_includes_safe_endpoint_headers() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer secret"
+        assert request.headers["X-Project"] == "demo"
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    endpoint = ModelEndpoint(display_name="headers", base_url="https://models.example.test/v1", model_name="model", encrypted_api_key="unused", api_key_mask="****test", custom_headers={"X-Project": "demo"})
+    result = OpenAIChatCompletionsExecutor(httpx.MockTransport(handler)).execute(endpoint, "secret", {"messages": [{"role": "user", "content": "hello"}]})
+    assert result.success is True
+
+
 def test_openai_executor_translates_image_and_audio_content_ir() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         content = json.loads(request.content)["messages"][0]["content"]

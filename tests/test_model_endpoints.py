@@ -93,6 +93,19 @@ def test_model_endpoint_persists_supported_protocol_profile(tmp_path: Path) -> N
         assert updated.json()["protocol_profile"] == "openai_chat_completions"
 
 
+def test_model_endpoint_persists_safe_custom_headers_and_metadata(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as client:
+        response = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "custom_headers": {"X-Project": "demo"}, "tags": ["vision", "test"], "notes": "safe routing metadata"})
+        assert response.status_code == 201
+        body = response.json()
+        assert body["custom_headers"] == {"X-Project": "demo"}
+        assert body["tags"] == ["vision", "test"]
+        assert body["notes"] == "safe routing metadata"
+        rejected = client.patch(f"/api/v1/model-endpoints/{body['id']}", json={"custom_headers": {"Authorization": "not-allowed"}})
+        assert rejected.status_code == 422
+
+
 def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) -> None:
     app = create_app(
         Settings(

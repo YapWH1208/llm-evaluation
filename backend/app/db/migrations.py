@@ -76,6 +76,12 @@ def _upgrade_v9_report_shares(_connection: Connection) -> None:
     """The ORM creates expiring report-share records."""
 
 
+def _upgrade_v10_endpoint_metadata(connection: Connection) -> None:
+    _add_column_if_missing(connection, "model_endpoints", "custom_headers", "custom_headers JSON NOT NULL DEFAULT '{}'")
+    _add_column_if_missing(connection, "model_endpoints", "tags", "tags JSON NOT NULL DEFAULT '[]'")
+    _add_column_if_missing(connection, "model_endpoints", "notes", "notes TEXT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -124,6 +130,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_report_shares",
         description="Add expiring, revocable, password-protected report share records.",
         upgrade=_upgrade_v9_report_shares,
+    ),
+    Migration(
+        version=10,
+        migration_id="20260726_add_endpoint_metadata",
+        description="Add safe custom headers, tags, and notes to model endpoints.",
+        upgrade=_upgrade_v10_endpoint_metadata,
     ),
 )
 

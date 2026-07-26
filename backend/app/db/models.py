@@ -69,6 +69,7 @@ class ModelEndpoint(Base):
     )
     encrypted_api_key: Mapped[str] = mapped_column(String, nullable=False)
     api_key_mask: Mapped[str] = mapped_column(String(16), nullable=False)
+    custom_headers: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     default_request_body: Mapped[dict[str, object]] = mapped_column(
         JSON,
         nullable=False,
@@ -81,6 +82,8 @@ class ModelEndpoint(Base):
     input_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
     output_cost_per_million: Mapped[float | None] = mapped_column(nullable=True)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,

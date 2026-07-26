@@ -14,6 +14,7 @@ from app.core.secrets import SecretCipher, SecretConfigurationError, mask_secret
 from app.db import EndpointStatus, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
+from app.services.provider_headers import validate_custom_headers
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
 ProtocolProfile = Literal["openai_chat_completions", "openai_responses"]
@@ -24,6 +25,7 @@ class EndpointBase(BaseModel):
     base_url: Annotated[str, Field(min_length=1, max_length=2048)]
     model_name: Annotated[str, Field(min_length=1, max_length=255)]
     protocol_profile: ProtocolProfile = "openai_chat_completions"
+    custom_headers: dict[str, str] = Field(default_factory=dict)
     default_request_body: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: Annotated[int, Field(ge=1, le=600)] = 60
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
@@ -32,6 +34,8 @@ class EndpointBase(BaseModel):
     input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     currency: Annotated[str, Field(min_length=3, max_length=8)] = "USD"
+    tags: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(default_factory=list, max_length=32)
+    notes: Annotated[str | None, Field(max_length=4000)] = None
 
     @field_validator("base_url")
     @classmethod
@@ -54,6 +58,11 @@ class EndpointBase(BaseModel):
             )
         return value
 
+    @field_validator("custom_headers")
+    @classmethod
+    def validate_custom_headers(cls, value: dict[str, str]) -> dict[str, str]:
+        return validate_custom_headers(value)
+
 
 class ModelEndpointCreate(EndpointBase):
     api_key: SecretStr
@@ -64,6 +73,7 @@ class ModelEndpointUpdate(BaseModel):
     base_url: Annotated[str | None, Field(min_length=1, max_length=2048)] = None
     model_name: Annotated[str | None, Field(min_length=1, max_length=255)] = None
     protocol_profile: ProtocolProfile | None = None
+    custom_headers: dict[str, str] | None = None
     default_request_body: dict[str, Any] | None = None
     timeout_seconds: Annotated[int | None, Field(ge=1, le=600)] = None
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
@@ -72,6 +82,8 @@ class ModelEndpointUpdate(BaseModel):
     input_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     output_cost_per_million: Annotated[float | None, Field(ge=0)] = None
     currency: Annotated[str | None, Field(min_length=3, max_length=8)] = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=64)]] | None = Field(default=None, max_length=32)
+    notes: Annotated[str | None, Field(max_length=4000)] = None
     api_key: SecretStr | None = None
 
     @field_validator("base_url")
@@ -88,6 +100,11 @@ class ModelEndpointUpdate(BaseModel):
             return value
         return EndpointBase.validate_default_request_body(value)
 
+    @field_validator("custom_headers")
+    @classmethod
+    def validate_custom_headers(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return None if value is None else validate_custom_headers(value)
+
 
 class ModelEndpointResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -98,6 +115,7 @@ class ModelEndpointResponse(BaseModel):
     model_name: str
     protocol_profile: str
     api_key_mask: str
+    custom_headers: dict[str, str]
     default_request_body: dict[str, Any]
     timeout_seconds: int
     max_concurrency: int
@@ -106,6 +124,8 @@ class ModelEndpointResponse(BaseModel):
     input_cost_per_million: float | None
     output_cost_per_million: float | None
     currency: str
+    tags: list[str]
+    notes: str | None
     status: str
     last_tested_at: datetime | None
     last_connection_error: str | None
@@ -184,6 +204,7 @@ def create_model_endpoint(
                 "protocol_profile": payload.protocol_profile,
                 "encrypted_api_key": cipher.encrypt(api_key),
                 "api_key_mask": mask_secret(api_key),
+                "custom_headers": payload.custom_headers,
                 "default_request_body": payload.default_request_body,
                 "timeout_seconds": payload.timeout_seconds,
                 "max_concurrency": payload.max_concurrency,
@@ -192,6 +213,8 @@ def create_model_endpoint(
                 "input_cost_per_million": payload.input_cost_per_million,
                 "output_cost_per_million": payload.output_cost_per_million,
                 "currency": payload.currency.upper(),
+                "tags": payload.tags,
+                "notes": payload.notes,
                 "status": EndpointStatus.UNVERIFIED.value,
                 "last_tested_at": None,
                 "last_connection_error": None,
@@ -207,6 +230,7 @@ def create_model_endpoint(
         protocol_profile=payload.protocol_profile,
         encrypted_api_key=cipher.encrypt(api_key),
         api_key_mask=mask_secret(api_key),
+        custom_headers=payload.custom_headers,
         default_request_body=payload.default_request_body,
         timeout_seconds=payload.timeout_seconds,
         max_concurrency=payload.max_concurrency,
@@ -215,6 +239,8 @@ def create_model_endpoint(
         input_cost_per_million=payload.input_cost_per_million,
         output_cost_per_million=payload.output_cost_per_million,
         currency=payload.currency.upper(),
+        tags=payload.tags,
+        notes=payload.notes,
     )
     session.add(endpoint)
     session.commit()

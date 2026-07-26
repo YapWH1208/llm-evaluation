@@ -8,6 +8,7 @@ import httpx
 
 from app.db.models import CapabilityDetection, ModelEndpoint
 from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
+from app.services.provider_headers import provider_headers
 
 
 DEFAULT_CAPABILITY_KEYS = (
@@ -83,7 +84,7 @@ class OpenAIChatCompletionsCapabilityDetector:
             ) as client:
                 response = client.post(
                     _endpoint_url(endpoint),
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers=provider_headers(endpoint, api_key),
                     json=self._request_body(endpoint, messages),
                 )
         except httpx.TimeoutException:
