@@ -55,6 +55,7 @@ class EvaluationRunResponse(BaseModel):
     id: str
     model_endpoint_id: str
     prompt_package_id: str | None
+    suite_id: str | None = None
     benchmark_id: str
     benchmark_version: str
     configuration_snapshot: dict[str, Any]

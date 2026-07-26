@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationSuite
 from app.db.mongo import MongoDocumentStore
+from app.services.evaluation_runs import RunCreationError, create_benchmark_run
+from app.services.mongo_run_executor import MongoRunExecutionError, create_mongo_benchmark_run
 
 
 router = APIRouter(prefix="/api/v1/evaluation-suites", tags=["evaluation suites"])
@@ -40,6 +42,11 @@ class EvaluationSuiteResponse(EvaluationSuiteCreate):
     id: str
     created_by: str | None
     created_at: datetime
+
+
+class SuiteRunCreate(BaseModel):
+    model_endpoint_id: str
+    sample_limit: int | None = Field(default=None, ge=1, le=3)
 
 
 def get_session(request: Request) -> Generator[Session | None, None, None]:
@@ -117,3 +124,36 @@ def update_suite(suite_id: str, payload: EvaluationSuiteUpdate, request: Request
     session.commit()
     session.refresh(suite)
     return suite
+
+
+@router.post("/{suite_id}/runs", status_code=status.HTTP_201_CREATED)
+def create_suite_runs(suite_id: str, payload: SuiteRunCreate, request: Request, session: SessionDependency) -> list[dict[str, Any]]:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    suite: EvaluationSuite | dict[str, Any] | None = store.get_document("evaluation_suites", suite_id) if store is not None else session.get(EvaluationSuite, suite_id)  # type: ignore[union-attr]
+    if suite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation suite not found")
+    values = suite if isinstance(suite, dict) else {
+        "id": suite.id, "name": suite.name, "version": suite.version, "benchmark_list": suite.benchmark_list,
+        "default_prompt_overrides": suite.default_prompt_overrides, "default_request_body": suite.default_request_body,
+        "weight_configuration": suite.weight_configuration,
+    }
+    results: list[dict[str, Any]] = []
+    try:
+        for selection in values["benchmark_list"]:
+            if not isinstance(selection, dict) or not isinstance(selection.get("benchmark_id"), str):
+                raise RunCreationError("Suite benchmarks require benchmark_id entries.")
+            benchmark_id = selection["benchmark_id"]
+            benchmark_version = str(selection.get("version", "1.0.0"))
+            prompt_package_id = selection.get("prompt_package_id")
+            if prompt_package_id is not None and not isinstance(prompt_package_id, str):
+                raise RunCreationError("Suite prompt_package_id must be a string.")
+            snapshot = {"id": values["id"], "name": values["name"], "version": values["version"], "default_request_body": values["default_request_body"], "weight_configuration": values["weight_configuration"], "selection": selection}
+            if store is not None:
+                run = create_mongo_benchmark_run(store, model_endpoint_id=payload.model_endpoint_id, sample_limit=payload.sample_limit, prompt_package_id=prompt_package_id, benchmark_id=benchmark_id, benchmark_version=benchmark_version, suite_id=str(values["id"]), suite_snapshot=snapshot)
+            else:
+                assert session is not None
+                run = create_benchmark_run(session, model_endpoint_id=payload.model_endpoint_id, sample_limit=payload.sample_limit, prompt_package_id=prompt_package_id, benchmark_id=benchmark_id, benchmark_version=benchmark_version, suite_id=str(values["id"]), suite_snapshot=snapshot)
+            results.append(run if isinstance(run, dict) else {"id": run.id, "suite_id": run.suite_id, "benchmark_id": run.benchmark_id, "benchmark_version": run.benchmark_version, "status": run.status})
+    except (RunCreationError, MongoRunExecutionError) as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return results

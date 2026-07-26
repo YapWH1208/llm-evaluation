@@ -34,6 +34,8 @@ def create_mongo_benchmark_run(
     prompt_package_id: str | None,
     benchmark_id: str,
     benchmark_version: str,
+    suite_id: str | None = None,
+    suite_snapshot: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
     if endpoint is None:
@@ -81,12 +83,14 @@ def create_mongo_benchmark_run(
             if prompt_package
             else None
         ),
+        "evaluation_suite": suite_snapshot,
     }
     run = store.insert_document(
         "evaluation_runs",
         {
             "model_endpoint_id": model_endpoint_id,
             "prompt_package_id": prompt_package_id,
+            "suite_id": suite_id,
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
             "configuration_snapshot": snapshot,

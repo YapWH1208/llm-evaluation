@@ -86,6 +86,10 @@ def _upgrade_v11_evaluation_suites(_connection: Connection) -> None:
     """The ORM creates versioned evaluation suite storage."""
 
 
+def _upgrade_v12_run_suite_reference(connection: Connection) -> None:
+    _add_column_if_missing(connection, "evaluation_runs", "suite_id", "suite_id VARCHAR(36)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -146,6 +150,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_evaluation_suites",
         description="Add versioned evaluation-suite definitions.",
         upgrade=_upgrade_v11_evaluation_suites,
+    ),
+    Migration(
+        version=12,
+        migration_id="20260726_add_run_suite_reference",
+        description="Link evaluation runs to immutable suite selections.",
+        upgrade=_upgrade_v12_run_suite_reference,
     ),
 )
 

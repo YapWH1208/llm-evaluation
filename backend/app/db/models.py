@@ -375,6 +375,9 @@ class EvaluationRun(Base):
         nullable=True,
         index=True,
     )
+    suite_id: Mapped[str | None] = mapped_column(
+        ForeignKey("evaluation_suites.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     benchmark_id: Mapped[str] = mapped_column(String(128), nullable=False)
     benchmark_version: Mapped[str] = mapped_column(String(64), nullable=False)
     configuration_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)

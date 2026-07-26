@@ -46,6 +46,8 @@ def create_benchmark_run(
     prompt_package_id: str | None,
     benchmark_id: str,
     benchmark_version: str,
+    suite_id: str | None = None,
+    suite_snapshot: dict[str, object] | None = None,
 ) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
@@ -90,10 +92,12 @@ def create_benchmark_run(
              "few_shot_examples": prompt_package.few_shot_examples}
             if prompt_package else None
         ),
+        "evaluation_suite": suite_snapshot,
     }
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
+        suite_id=suite_id,
         benchmark_id=benchmark_id,
         benchmark_version=benchmark_version,
         configuration_snapshot=snapshot,
