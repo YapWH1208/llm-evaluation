@@ -1,0 +1,33 @@
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+
+from app.core.config import Settings
+from app.main import create_app
+from app.services.connection_tester import ConnectionTestResult
+
+
+class SuccessfulTester:
+    def test(self, _endpoint, _api_key: str) -> ConnectionTestResult:
+        return ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
+def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        tasks = client.get("/api/v1/tasks", params={"run_id": run["id"]}).json()
+        assert len(tasks) == 1
+        assert tasks[0]["priority"] == 0
+        updated = client.patch(f"/api/v1/tasks/{tasks[0]['id']}", json={"priority": 25})
+        assert updated.status_code == 200
+        assert updated.json()["priority"] == 25

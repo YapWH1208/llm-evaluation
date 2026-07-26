@@ -15,9 +15,10 @@ import {
   Review,
   RunSummary,
   SampleAttempt,
+  Task,
 } from "./api";
 
-type View = "dashboard" | "models" | "workspace" | "runs" | "compare" | "reports";
+type View = "dashboard" | "models" | "workspace" | "runs" | "queue" | "compare" | "reports";
 
 const initialEndpoint = {
   base_url: "",
@@ -78,13 +79,14 @@ export default function App() {
   const [reviewForm, setReviewForm] = useState(initialReview);
   const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
   const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks] = await Promise.all([
-      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(),
+    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks, nextTasks] = await Promise.all([
+      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(), api.listTasks(),
     ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
@@ -92,6 +94,7 @@ export default function App() {
     setPrompts(nextPrompts);
     setDatasets(nextDatasets);
     setBenchmarks(nextBenchmarks);
+    setTasks(nextTasks);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -321,6 +324,15 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function updateTaskPriority(task: Task, priority: number) {
+    setBusy(`task-${task.id}`);
+    try {
+      const updated = await api.updateTaskPriority(task.id, priority);
+      setTasks((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setNotice(`Task priority updated to ${updated.priority}.`);
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   return (
     <main>
       <header className="hero">
@@ -333,7 +345,7 @@ export default function App() {
       </header>
 
       <nav className="tabs" aria-label="Workspace sections">
-        {(["dashboard", "models", "workspace", "runs", "compare", "reports"] as View[]).map((item) => (
+        {(["dashboard", "models", "workspace", "runs", "queue", "compare", "reports"] as View[]).map((item) => (
           <button className={view === item ? "tab selected" : "tab"} key={item} onClick={() => setView(item)}>{item}</button>
         ))}
       </nav>
@@ -385,6 +397,8 @@ export default function App() {
         <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{!["completed", "completed_with_errors", "cancelled"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
         {selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewForm={reviewForm} busy={busy} onReviewForm={setReviewForm} onReview={openReview} onCreateReview={createReview} onGenerateReport={generateReport} />}
       </>}
+
+      {view === "queue" && <section className="panel"><div className="section-title"><h2>Task queue</h2><span>{tasks.length} tasks loaded</span></div>{tasks.length === 0 ? <p className="empty">No queued work exists.</p> : <div className="table-wrap"><table><thead><tr><th>Task</th><th>Run</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Worker</th><th>Created</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.id}><td>{task.task_type}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status}</span></td><td><div className="actions"><span>{task.priority}</span><button className="secondary" disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority - 10)}>-10</button><button disabled={busy === `task-${task.id}` || !["pending", "retry_scheduled"].includes(task.status)} onClick={() => void updateTaskPriority(task, task.priority + 10)}>+10</button></div></td><td>{task.attempt_count}</td><td>{task.leased_by ?? "--"}</td><td>{formatDate(task.created_at)}</td></tr>)}</tbody></table></div>}</section>}
 
       {view === "compare" && <section className="panel"><h2>Model and run comparison</h2><p className="muted">Runs must use the same benchmark version. Differences are run A minus run B.</p><form className="comparison-form" onSubmit={compareRuns}><label>Run A<select required value={comparisonRunA} onChange={(event) => setComparisonRunA(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><label>Run B<select required value={comparisonRunB} onChange={(event) => setComparisonRunB(event.target.value)}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"}>Compare</button></form>{comparison && <ComparisonView comparison={comparison} />}</section>}
 

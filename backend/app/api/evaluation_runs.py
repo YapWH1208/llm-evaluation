@@ -6,7 +6,7 @@ from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -227,17 +227,31 @@ def execute_evaluation_run(
 
 
 @router.get("/{run_id}/attempts", response_model=list[SampleAttemptResponse])
-def list_sample_attempts(run_id: str, session: SessionDependency) -> list[SampleAttempt]:
+def list_sample_attempts(
+    run_id: str,
+    session: SessionDependency,
+    attempt_status: Annotated[str | None, Query(alias="status")] = None,
+    error_type: str | None = None,
+    correct: bool | None = None,
+    min_latency_ms: Annotated[float | None, Query(ge=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> list[SampleAttempt]:
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-    return list(
-        session.scalars(
-            select(SampleAttempt)
-            .where(SampleAttempt.run_id == run.id)
-            .order_by(SampleAttempt.created_at)
-        )
-    )
+    query = select(SampleAttempt).where(SampleAttempt.run_id == run.id)
+    if attempt_status:
+        query = query.where(SampleAttempt.status == attempt_status)
+    if error_type:
+        query = query.where(SampleAttempt.error_type == error_type)
+    if correct is True:
+        query = query.where(SampleAttempt.score == 1)
+    if correct is False:
+        query = query.where(SampleAttempt.score != 1)
+    if min_latency_ms is not None:
+        query = query.where(SampleAttempt.latency_ms >= min_latency_ms)
+    return list(session.scalars(query.order_by(SampleAttempt.created_at).offset(offset).limit(limit)))
 
 
 @router.get("/{run_id}/summary")
