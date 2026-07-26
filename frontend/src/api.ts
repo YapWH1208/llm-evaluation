@@ -98,6 +98,7 @@ export type Dataset = {
   version: string;
   revision: string;
   source_url: string | null;
+  credential_env_var: string | null;
   license_text: string | null;
   license_accepted_at: string | null;
   status: string;

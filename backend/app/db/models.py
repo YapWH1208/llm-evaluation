@@ -227,7 +227,7 @@ class PromptPackage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 class DatasetStatus(StrEnum):
-    NOT_DOWNLOADED="not_downloaded"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; LICENSE_REQUIRED="license_required"; FAILED="failed"
+    NOT_DOWNLOADED="not_downloaded"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; LICENSE_REQUIRED="license_required"; CREDENTIAL_REQUIRED="credential_required"; FAILED="failed"
 
 class DatasetVersion(Base):
     __tablename__ = "dataset_versions"
@@ -237,6 +237,7 @@ class DatasetVersion(Base):
     version: Mapped[str] = mapped_column(String(64), nullable=False)
     revision: Mapped[str] = mapped_column(String(128), nullable=False, default="default")
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    credential_env_var: Mapped[str | None] = mapped_column(String(128), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     local_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     license_text: Mapped[str | None] = mapped_column(Text, nullable=True)

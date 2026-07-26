@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError
+from app.services.datasets import DatasetError, resolve_dataset_source, write_dataset_source
 
 
 def accept_mongo_dataset_license(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
@@ -31,9 +29,6 @@ def download_mongo_dataset(
     source_url = dataset.get("source_url")
     if not isinstance(source_url, str) or not source_url:
         raise DatasetError("Dataset has no downloadable source URL.")
-    parsed = urlparse(source_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise DatasetError("Dataset source URL must be HTTP or HTTPS.")
     if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
         store.update_document("dataset_versions", dataset_id, {"status": "license_required"})
         raise DatasetError("Dataset license must be accepted before download.")
@@ -42,15 +37,9 @@ def download_mongo_dataset(
     target = destination / "dataset.bin"
     temporary = destination / "dataset.part"
     store.update_document("dataset_versions", dataset_id, {"status": "downloading", "error_message": None})
-    digest = hashlib.sha256()
     try:
-        with httpx.stream("GET", source_url, timeout=60, follow_redirects=True) as response:
-            response.raise_for_status()
-            with temporary.open("wb") as file:
-                for chunk in response.iter_bytes():
-                    file.write(chunk)
-                    digest.update(chunk)
-        actual_checksum = digest.hexdigest()
+        source, headers = resolve_dataset_source(source_url, str(dataset["revision"]), dataset.get("credential_env_var") if isinstance(dataset.get("credential_env_var"), str) else None)
+        actual_checksum = write_dataset_source(source, temporary, headers)
         store.update_document("dataset_versions", dataset_id, {"status": "verifying"})
         expected_checksum = dataset.get("checksum")
         if isinstance(expected_checksum, str) and expected_checksum.lower() != actual_checksum:
@@ -60,7 +49,12 @@ def download_mongo_dataset(
         updated = store.update_document("dataset_versions", dataset_id, {"checksum": actual_checksum, "local_path": str(target), "status": "ready", "error_message": None})
         assert updated is not None
         return updated
-    except (httpx.HTTPError, OSError, DatasetError) as error:
+    except (DatasetError, httpx.HTTPStatusError) as error:
+        status_code = getattr(getattr(error, "response", None), "status_code", 0)
+        credential_required = dataset.get("credential_env_var") and ("environment variable" in str(error) or status_code in {401, 403})
+        store.update_document("dataset_versions", dataset_id, {"status": "credential_required" if credential_required else "failed", "error_message": str(error)[:500]})
+        raise DatasetError(str(error)) from error
+    except (httpx.HTTPError, OSError) as error:
         store.update_document("dataset_versions", dataset_id, {"status": "failed", "error_message": str(error)[:500]})
         raise DatasetError(str(error)) from error
 

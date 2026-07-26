@@ -24,6 +24,10 @@ Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_
 
 Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting in both relational and MongoDB document stores, so a restart or an additional worker cannot reset an already consumed provider budget.
 
+## Dataset sources and credentials
+
+Dataset versions accept HTTP(S) and Git-release URLs, `hf://owner/repository/path/to/file` Hugging Face references, `file://` URLs, and local file paths. Optional credentials are referenced only by an environment-variable name (for example, `HUGGINGFACE_TOKEN`); the token value is never stored in the database or returned by the API. A download without its configured credential is marked `credential_required` until the deployment environment is updated.
+
 ## Docker Compose
 
 1. Generate a Fernet key.

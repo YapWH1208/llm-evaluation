@@ -37,14 +37,14 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     database.initialize()
     database.initialize()
 
     columns = {column["name"] for column in inspect(database.engine).get_columns("evaluation_runs")}
     assert "prompt_package_id" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 14
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 15
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -84,5 +84,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         hierarchy_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 14))
         assert hierarchy_migration is not None
         assert hierarchy_migration.migration_id == "20260726_add_hierarchical_concurrency_limits"
+        dataset_credential_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 15))
+        assert dataset_credential_migration is not None
+        assert dataset_credential_migration.migration_id == "20260726_add_dataset_source_credentials"
     assert database.migration_preview() == ()
     database.dispose()

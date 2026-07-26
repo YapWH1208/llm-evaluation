@@ -106,6 +106,10 @@ def _upgrade_v14_hierarchical_concurrency_limits(connection: Connection) -> None
     _add_column_if_missing(connection, "evaluation_runs", "max_concurrency", "max_concurrency INTEGER")
 
 
+def _upgrade_v15_dataset_source_credentials(connection: Connection) -> None:
+    _add_column_if_missing(connection, "dataset_versions", "credential_env_var", "credential_env_var VARCHAR(128)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -184,6 +188,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_hierarchical_concurrency_limits",
         description="Add per-user, API-key, benchmark, and run concurrency admission controls.",
         upgrade=_upgrade_v14_hierarchical_concurrency_limits,
+    ),
+    Migration(
+        version=15,
+        migration_id="20260726_add_dataset_source_credentials",
+        description="Add environment-referenced dataset download credentials.",
+        upgrade=_upgrade_v15_dataset_source_credentials,
     ),
 )
 

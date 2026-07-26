@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
     dataset_id: str = Field(min_length=1, max_length=128); version: str = Field(min_length=1, max_length=64)
     revision: str = "default"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
+    credential_env_var: str | None = Field(default=None, pattern=r"^[A-Z_][A-Z0-9_]{0,127}$")
 class DatasetResponse(DatasetCreate):
     model_config = ConfigDict(from_attributes=True)
     id: str; local_path: str | None; license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
