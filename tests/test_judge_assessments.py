@@ -46,3 +46,19 @@ def test_llm_judge_saves_independent_assessment_evidence(tmp_path: Path) -> None
         assert assessment.json()["status"] == "succeeded"
         listed = client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}")
         assert [item["id"] for item in listed.json()] == [assessment.json()["id"]]
+
+
+def test_target_model_cannot_judge_its_own_attempt(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as client:
+        target = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"target-key","model_name":"target-model"}).json()
+        with app.state.database.get_session() as session:
+            endpoint = session.get(ModelEndpoint, target["id"])
+            assert endpoint is not None
+            endpoint.status = "available"
+            session.commit()
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":target["id"],"sample_limit":1}).json()
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        response = client.post("/api/v1/judge-assessments", json={"sample_attempt_id":attempt["id"],"judge_endpoint_id":target["id"]})
+        assert response.status_code == 409
+        assert "cannot judge its own" in response.json()["detail"]

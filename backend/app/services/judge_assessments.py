@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher
-from app.db.models import EndpointStatus, JudgeAssessment, ModelEndpoint, SampleAttempt
+from app.db.models import EndpointStatus, EvaluationRun, JudgeAssessment, ModelEndpoint, SampleAttempt
 from app.services.model_executor import ModelExecutor
 
 
@@ -31,6 +31,9 @@ def assess_sample_attempt(
         raise JudgeAssessmentError("Judge model endpoint not found.")
     if endpoint.status != EndpointStatus.AVAILABLE.value:
         raise JudgeAssessmentError("Judge model endpoint must pass a connection test.")
+    run = session.get(EvaluationRun, attempt.run_id)
+    if run is not None and run.model_endpoint_id == endpoint.id:
+        raise JudgeAssessmentError("A model endpoint cannot judge its own evaluation output.")
 
     assessment = JudgeAssessment(
         sample_attempt_id=attempt.id,
