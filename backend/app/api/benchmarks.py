@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,6 +31,12 @@ class BenchmarkResponse(BenchmarkCreate):
     status: str
     source: str
     created_at: datetime
+
+
+class BenchmarkUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    manifest: dict[str, Any] | None = None
+    status: Literal["registered", "enabled", "disabled"] | None = None
 
 
 def get_session(request: Request) -> Generator[Session | None, None, None]:
@@ -83,3 +89,44 @@ def register_benchmark(payload: BenchmarkCreate, request: Request, session: Sess
         raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist") from error
     session.refresh(definition)
     return definition
+
+
+@router.get("/{benchmark_definition_id}", response_model=BenchmarkResponse)
+def get_benchmark(benchmark_definition_id: str, request: Request, session: SessionDependency) -> BenchmarkDefinition | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        item = store.get_document("benchmark_definitions", benchmark_definition_id)
+        if item is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+        return item
+    assert session is not None
+    item = session.get(BenchmarkDefinition, benchmark_definition_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+    return item
+
+
+@router.patch("/{benchmark_definition_id}", response_model=BenchmarkResponse)
+def update_benchmark(
+    benchmark_definition_id: str,
+    payload: BenchmarkUpdate,
+    request: Request,
+    session: SessionDependency,
+) -> BenchmarkDefinition | dict[str, Any]:
+    values = payload.model_dump(exclude_unset=True)
+    store = get_document_store(request)
+    if store is not None:
+        if store.get_document("benchmark_definitions", benchmark_definition_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+        updated = store.update_document("benchmark_definitions", benchmark_definition_id, values)
+        assert updated is not None
+        return updated
+    assert session is not None
+    item = session.get(BenchmarkDefinition, benchmark_definition_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+    for field, value in values.items():
+        setattr(item, field, value)
+    session.commit()
+    session.refresh(item)
+    return item

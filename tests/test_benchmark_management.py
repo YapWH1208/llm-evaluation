@@ -1,0 +1,35 @@
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+
+from app.core.config import Settings
+from app.db.mongo import MongoDocumentStore
+from app.main import create_app
+from tests.test_mongo_document_store import FakeClient
+
+
+def _payload() -> dict[str, object]:
+    return {"benchmark_id": "vision-smoke", "version": "1", "display_name": "Vision smoke", "manifest": {"modalities": ["image"]}}
+
+
+def test_benchmark_definition_can_be_read_updated_and_disabled(tmp_path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/benchmarks", json=_payload())
+        assert created.status_code == 201
+        benchmark_id = created.json()["id"]
+        assert api.get(f"/api/v1/benchmarks/{benchmark_id}").json()["display_name"] == "Vision smoke"
+        updated = api.patch(f"/api/v1/benchmarks/{benchmark_id}", json={"status": "disabled", "display_name": "Vision smoke v2"})
+        assert updated.status_code == 200
+        assert updated.json()["status"] == "disabled"
+        assert updated.json()["display_name"] == "Vision smoke v2"
+
+
+def test_mongodb_benchmark_definition_can_be_updated(tmp_path) -> None:
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/benchmarks", json=_payload()).json()
+        updated = api.patch(f"/api/v1/benchmarks/{created['id']}", json={"status": "enabled"})
+        assert updated.status_code == 200
+        assert updated.json()["status"] == "enabled"
