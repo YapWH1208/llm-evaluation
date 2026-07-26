@@ -38,7 +38,7 @@ const initialEndpoint = {
 };
 const initialPrompt = { name: "", version: "1", system_message: "", user_template: "{{ question }}" };
 const initialDataset = { dataset_id: "", version: "1", source_url: "", license_text: "" };
-const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0" };
+const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
 const initialReview = { reviewer_id: "local-reviewer", score: "", labels: "", notes: "" };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
 
@@ -60,6 +60,12 @@ function money(value: number | null | undefined, currency: string | null | undef
 
 function optionalNumber(value: string) {
   return value.trim() === "" ? null : Number(value);
+}
+
+function parseJsonObject(value: string, label: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(value);
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error(`${label} must be a JSON object.`);
+  return parsed as Record<string, unknown>;
 }
 
 export default function App() {
@@ -91,6 +97,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsMatrix | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState("");
+  const [runRequestBody, setRunRequestBody] = useState("{}");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -187,7 +194,7 @@ export default function App() {
   async function createRun(endpointId: string) {
     setBusy(`run-${endpointId}`);
     try {
-      const run = await api.createRun(endpointId, selectedPromptId || undefined);
+      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"));
       await selectRun(run.id);
       setView("runs");
       setNotice("Text Quick Check queued with an immutable configuration snapshot.");
@@ -271,12 +278,12 @@ export default function App() {
       return { benchmark_id, version };
     });
     setBusy("suite");
-    try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list }); setSuiteForm(initialSuite); setNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
+    try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list, default_request_body: parseJsonObject(suiteForm.default_request_body, "Suite default request body"), default_prompt_overrides: parseJsonObject(suiteForm.default_prompt_overrides, "Suite default prompt overrides"), weight_configuration: parseJsonObject(suiteForm.weight_configuration, "Suite weight configuration") }); setSuiteForm(initialSuite); setNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function queueSuite(suiteId: string, endpointId: string) {
     setBusy(`suite-${suiteId}`);
-    try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId); setNotice(`${nextRuns.length} suite run(s) queued.`); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
+    try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId, parseJsonObject(runRequestBody, "Run Request Body override")); setNotice(`${nextRuns.length} suite run(s) queued.`); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function uploadAsset(event: ChangeEvent<HTMLInputElement>) {
@@ -415,7 +422,8 @@ export default function App() {
           <article className="panel">
             <h2>Run configuration</h2>
             <label className="select-label">Prompt package for a new run<select value={selectedPromptId} onChange={(event) => setSelectedPromptId(event.target.value)}><option value="">Built-in benchmark prompt</option>{prompts.map((prompt) => <option key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
-            <p className="muted">Connection tests and execution use the saved endpoint. API keys never return to the browser. Prices are optional and only make cost estimates when provider usage is reported.</p>
+            <label>Run Request Body override (JSON)<textarea value={runRequestBody} onChange={(event) => setRunRequestBody(event.target.value)} spellCheck={false} placeholder='{"temperature":0}' /></label>
+            <p className="muted">Connection tests and execution use the saved endpoint. The run override is merged after suite and benchmark defaults; benchmark-forced fields still win. API keys never return to the browser.</p>
           </article>
         </section>
         <section className="panel"><div className="section-title"><h2>Models</h2><span>{endpoints.length} configured</span></div>
@@ -434,7 +442,7 @@ export default function App() {
           <article className="panel"><h2>Register dataset version</h2><form onSubmit={createDataset} className="form"><label>Dataset ID<input required value={datasetForm.dataset_id} onChange={(event) => setDatasetForm({ ...datasetForm, dataset_id: event.target.value })} /></label><label>Version<input required value={datasetForm.version} onChange={(event) => setDatasetForm({ ...datasetForm, version: event.target.value })} /></label><label>Source URL<input type="url" value={datasetForm.source_url} onChange={(event) => setDatasetForm({ ...datasetForm, source_url: event.target.value })} /></label><label>License text<textarea value={datasetForm.license_text} onChange={(event) => setDatasetForm({ ...datasetForm, license_text: event.target.value })} /></label><button disabled={busy === "dataset"}>Register dataset</button></form></article>
         </section>
         <section className="grid two"><article className="panel"><h2>Custom multimodal quick check</h2><form className="form" onSubmit={createMultimodalRun}><label>Endpoint<select required value={multimodalForm.endpoint_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Sample ID<input required value={multimodalForm.sample_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, sample_id: event.target.value })} /></label><label>Prompt<textarea required value={multimodalForm.prompt} onChange={(event) => setMultimodalForm({ ...multimodalForm, prompt: event.target.value })} placeholder="Describe or answer a question about the attached media." /></label><label>Expected text answer<textarea required value={multimodalForm.reference_answer} onChange={(event) => setMultimodalForm({ ...multimodalForm, reference_answer: event.target.value })} /></label><label>Uploaded media<select required value={multimodalForm.asset_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, asset_id: event.target.value })}><option value="">Upload an asset first</option>{uploadedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.original_filename} · {asset.media_kind}</option>)}</select></label><button disabled={busy === "multimodal-run"}>Queue multimodal run</button></form></article><article className="panel"><h2>Media asset upload</h2><p className="muted">Files are validated by MIME signature, content-addressed, and stored outside browser memory before they enter a run snapshot.</p><label className="file-picker">Choose image, audio, video, or PDF<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/wav,audio/mpeg,video/mp4,video/webm,application/pdf" onChange={(event) => void uploadAsset(event)} /></label>{busy === "asset-upload" && <p className="muted">Uploading and validating asset...</p>}{uploadedAssets.length > 0 && <div className="asset-list">{uploadedAssets.map((asset) => <button className={multimodalForm.asset_id === asset.id ? "asset selected" : "asset"} key={asset.id} onClick={() => setMultimodalForm({ ...multimodalForm, asset_id: asset.id })}><strong>{asset.original_filename}</strong><span>{asset.media_kind} · {display(asset.size_bytes)} bytes</span></button>)}</div>}</article></section>
-        <section className="grid two"><article className="panel"><h2>Create evaluation suite</h2><form onSubmit={createSuite} className="form"><label>Name<input required value={suiteForm.name} onChange={(event) => setSuiteForm({ ...suiteForm, name: event.target.value })} /></label><label>Version<input required value={suiteForm.version} onChange={(event) => setSuiteForm({ ...suiteForm, version: event.target.value })} /></label><label>Benchmarks (id@version)<input required value={suiteForm.benchmarks} onChange={(event) => setSuiteForm({ ...suiteForm, benchmarks: event.target.value })} /></label><label>Description<textarea value={suiteForm.description} onChange={(event) => setSuiteForm({ ...suiteForm, description: event.target.value })} /></label><button disabled={busy === "suite"}>Save suite</button></form></article><article className="panel"><h2>Evaluation suites</h2>{suites.length === 0 ? <p className="empty">No suites have been created.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3>{suite.name} v{suite.version}</h3><p className="muted">{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on {endpoint.display_name}</button>)}</article>)}</div>}</article></section>
+        <section className="grid two"><article className="panel"><h2>Create evaluation suite</h2><form onSubmit={createSuite} className="form"><label>Name<input required value={suiteForm.name} onChange={(event) => setSuiteForm({ ...suiteForm, name: event.target.value })} /></label><label>Version<input required value={suiteForm.version} onChange={(event) => setSuiteForm({ ...suiteForm, version: event.target.value })} /></label><label>Benchmarks (id@version)<input required value={suiteForm.benchmarks} onChange={(event) => setSuiteForm({ ...suiteForm, benchmarks: event.target.value })} /></label><label>Suite default Request Body (JSON)<textarea value={suiteForm.default_request_body} onChange={(event) => setSuiteForm({ ...suiteForm, default_request_body: event.target.value })} spellCheck={false} /></label><label>Prompt overrides (JSON)<textarea value={suiteForm.default_prompt_overrides} onChange={(event) => setSuiteForm({ ...suiteForm, default_prompt_overrides: event.target.value })} spellCheck={false} /></label><label>Weight configuration (JSON)<textarea value={suiteForm.weight_configuration} onChange={(event) => setSuiteForm({ ...suiteForm, weight_configuration: event.target.value })} spellCheck={false} /></label><label>Description<textarea value={suiteForm.description} onChange={(event) => setSuiteForm({ ...suiteForm, description: event.target.value })} /></label><button disabled={busy === "suite"}>Save suite</button></form></article><article className="panel"><h2>Evaluation suites</h2>{suites.length === 0 ? <p className="empty">No suites have been created.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3>{suite.name} v{suite.version}</h3><p className="muted">{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on {endpoint.display_name}</button>)}</article>)}</div>}</article></section>
         <section className="panel"><div className="section-title"><h2>Benchmark registry</h2><span>{benchmarks.length} registered</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td>{benchmark.display_name}</td><td>{benchmark.version}</td><td>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td></tr>)}</tbody></table></div></section>
         <section className="panel"><div className="section-title"><h2>Dataset cache</h2><span>{datasets.length} registered</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset version to manage downloads and licenses.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div><h3>{dataset.dataset_id} v{dataset.version}</h3><p className="muted">{dataset.source_url || "No source URL"}</p>{dataset.error_message && <p className="error">{dataset.error_message}</p>}</div><span className={`badge ${dataset.status}`}>{dataset.status}</span>{dataset.status !== "ready" && <div className="actions"><button disabled={busy === `dataset-${dataset.id}`} onClick={() => void prepareDataset(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : "Download and verify"}</button></div>}</article>)}</div>}</section>
       </>}
