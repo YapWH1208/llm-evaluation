@@ -19,11 +19,14 @@ export type Endpoint = {
   tags: string[];
   notes: string | null;
   last_connection_error: string | null;
+  api_key_max_concurrency: number | null;
 };
 
 export type EvaluationRun = {
   id: string;
   model_endpoint_id: string;
+  created_by: string | null;
+  max_concurrency: number | null;
   benchmark_id: string;
   benchmark_version: string;
   status: string;
@@ -126,7 +129,7 @@ export type Asset = { id: string; original_filename: string; media_kind: "image"
 export type Task = { id: string; run_id: string; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsMatrix = { heatmap: Array<{ run_id: string; model_endpoint_id: string; model_name: string; benchmark_id: string; benchmark_version: string; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; required_capabilities: string[] }>; capability_matrix: Array<{ model_endpoint_id: string; capability: string; run_count: number; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null }> };
 export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
-export type User = { id: string; email: string; display_name: string; role: string; status: string; created_at: string };
+export type User = { id: string; email: string; display_name: string; role: string; status: string; max_concurrency: number | null; created_at: string };
 export type AuditEvent = { id: string; actor_id: string | null; action: string; entity_type: string; entity_id: string | null; details: Record<string, unknown> | null; created_at: string };
 export type SystemHealth = { status: string; database: string; schema_version: number };
 
@@ -165,7 +168,7 @@ export const api = {
   createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
   testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
-  createRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride }) }),
+  createRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
   createCustomMultimodalRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/custom-multimodal", { method: "POST", body: JSON.stringify(body) }),
   executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
   pauseRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/pause`, { method: "POST" }),
@@ -189,7 +192,7 @@ export const api = {
   listDatasets: () => request<Dataset[]>("/datasets"),
   listSuites: () => request<EvaluationSuite[]>("/evaluation-suites"),
   createSuite: (body: Record<string, unknown>) => request<EvaluationSuite>("/evaluation-suites", { method: "POST", body: JSON.stringify(body) }),
-  createSuiteRuns: (suiteId: string, modelEndpointId: string, requestBodyOverride: Record<string, unknown> = {}) => request<EvaluationRun[]>(`/evaluation-suites/${suiteId}/runs`, { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, request_body_override: requestBodyOverride }) }),
+  createSuiteRuns: (suiteId: string, modelEndpointId: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<EvaluationRun[]>(`/evaluation-suites/${suiteId}/runs`, { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),

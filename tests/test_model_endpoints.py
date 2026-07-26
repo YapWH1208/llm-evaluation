@@ -30,6 +30,7 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
                 "model_name": "example-model",
                 "default_request_body": {"temperature": 0},
                 "max_concurrency": 3,
+                "api_key_max_concurrency": 2,
                 "requests_per_second": 5,
                 "requests_per_minute": 120,
                 "input_tokens_per_minute": 7000,
@@ -45,6 +46,7 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
         assert "encrypted_api_key" not in created_body
         assert created_body["requests_per_second"] == 5
         assert created_body["input_tokens_per_minute"] == 7000
+        assert created_body["api_key_max_concurrency"] == 2
 
         listed = client.get("/api/v1/model-endpoints")
         assert listed.status_code == 200
@@ -64,6 +66,8 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
             assert stored is not None
             assert "replacement-secret" not in stored.encrypted_api_key
             assert SecretCipher(encryption_key).decrypt(stored.encrypted_api_key) == "replacement-secret"
+            assert stored.api_key_fingerprint is not None
+            assert "replacement-secret" not in stored.api_key_fingerprint
 
         deleted = client.delete(f"/api/v1/model-endpoints/{endpoint_id}")
         assert deleted.status_code == 204

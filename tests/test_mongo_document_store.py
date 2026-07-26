@@ -170,6 +170,23 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     assert client["override"]["sample_attempts"].documents[0]["status"] == "pending"
 
 
+def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    now = datetime.now(timezone.utc)
+    first_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
+    second_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
+    first_run = store.insert_document("evaluation_runs", {"model_endpoint_id": first_endpoint["id"], "benchmark_id": "benchmark", "benchmark_version": "1", "max_concurrency": 1})
+    second_run = store.insert_document("evaluation_runs", {"model_endpoint_id": second_endpoint["id"], "benchmark_id": "benchmark", "benchmark_version": "1"})
+    for run in (first_run, first_run, second_run):
+        store.insert_document("task_units", {"run_id": run["id"], "status": "pending", "priority": 1, "payload": {"sample_ids": ["sample"], "estimated_request_count": 1}, "created_at": now})
+
+    assert store.claim_task(worker_id="worker-a", run_id=first_run["id"]) is not None
+    assert store.claim_task(worker_id="worker-b", run_id=first_run["id"]) is None
+    assert store.claim_task(worker_id="worker-c", run_id=second_run["id"]) is None
+
+
 def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, capsys) -> None:
     import app.cli as cli
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime, timezone
+import hashlib
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
@@ -30,6 +31,7 @@ class EndpointBase(BaseModel):
     default_request_body: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: Annotated[int, Field(ge=1, le=600)] = 60
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
+    api_key_max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     requests_per_second: Annotated[int | None, Field(ge=1)] = None
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
@@ -81,6 +83,7 @@ class ModelEndpointUpdate(BaseModel):
     default_request_body: dict[str, Any] | None = None
     timeout_seconds: Annotated[int | None, Field(ge=1, le=600)] = None
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
+    api_key_max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     requests_per_second: Annotated[int | None, Field(ge=1)] = None
     requests_per_minute: Annotated[int | None, Field(ge=1)] = None
     tokens_per_minute: Annotated[int | None, Field(ge=1)] = None
@@ -126,6 +129,7 @@ class ModelEndpointResponse(BaseModel):
     default_request_body: dict[str, Any]
     timeout_seconds: int
     max_concurrency: int
+    api_key_max_concurrency: int | None
     requests_per_second: int | None
     requests_per_minute: int | None
     tokens_per_minute: int | None
@@ -213,11 +217,13 @@ def create_model_endpoint(
                 "model_name": payload.model_name,
                 "protocol_profile": payload.protocol_profile,
                 "encrypted_api_key": cipher.encrypt(api_key),
+                "api_key_fingerprint": _api_key_fingerprint(api_key),
                 "api_key_mask": mask_secret(api_key),
                 "custom_headers": payload.custom_headers,
                 "default_request_body": payload.default_request_body,
                 "timeout_seconds": payload.timeout_seconds,
                 "max_concurrency": payload.max_concurrency,
+                "api_key_max_concurrency": payload.api_key_max_concurrency,
                 "requests_per_second": payload.requests_per_second,
                 "requests_per_minute": payload.requests_per_minute,
                 "tokens_per_minute": payload.tokens_per_minute,
@@ -242,11 +248,13 @@ def create_model_endpoint(
         model_name=payload.model_name,
         protocol_profile=payload.protocol_profile,
         encrypted_api_key=cipher.encrypt(api_key),
+        api_key_fingerprint=_api_key_fingerprint(api_key),
         api_key_mask=mask_secret(api_key),
         custom_headers=payload.custom_headers,
         default_request_body=payload.default_request_body,
         timeout_seconds=payload.timeout_seconds,
         max_concurrency=payload.max_concurrency,
+        api_key_max_concurrency=payload.api_key_max_concurrency,
         requests_per_second=payload.requests_per_second,
         requests_per_minute=payload.requests_per_minute,
         tokens_per_minute=payload.tokens_per_minute,
@@ -401,6 +409,7 @@ def update_model_endpoint(
             api_key = payload.api_key.get_secret_value()
             update_values["encrypted_api_key"] = cipher.encrypt(api_key)
             update_values["api_key_mask"] = mask_secret(api_key)
+            update_values["api_key_fingerprint"] = _api_key_fingerprint(api_key)
         updated = store.update_document("model_endpoints", endpoint_id, update_values)
         assert updated is not None
         return updated
@@ -416,10 +425,17 @@ def update_model_endpoint(
         api_key = payload.api_key.get_secret_value()
         endpoint.encrypted_api_key = cipher.encrypt(api_key)
         endpoint.api_key_mask = mask_secret(api_key)
+        endpoint.api_key_fingerprint = _api_key_fingerprint(api_key)
 
     session.commit()
     session.refresh(endpoint)
     return endpoint
+
+
+def _api_key_fingerprint(api_key: str) -> str:
+    """Group endpoints sharing one provider credential without exposing that credential."""
+
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
 @router.delete("/{endpoint_id}", status_code=status.HTTP_204_NO_CONTENT)

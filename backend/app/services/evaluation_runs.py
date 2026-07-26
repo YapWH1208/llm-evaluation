@@ -52,6 +52,8 @@ def create_benchmark_run(
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
     request_body_override: dict[str, object] | None = None,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
 ) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
@@ -123,6 +125,8 @@ def create_benchmark_run(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
         suite_id=suite_id,
+        created_by=created_by,
+        max_concurrency=max_concurrency,
         benchmark_id=benchmark_id,
         benchmark_version=benchmark_version,
         configuration_snapshot=snapshot,

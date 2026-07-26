@@ -68,6 +68,7 @@ class ModelEndpoint(Base):
         default="openai_chat_completions",
     )
     encrypted_api_key: Mapped[str] = mapped_column(String, nullable=False)
+    api_key_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     api_key_mask: Mapped[str] = mapped_column(String(16), nullable=False)
     custom_headers: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     default_request_body: Mapped[dict[str, object]] = mapped_column(
@@ -77,6 +78,7 @@ class ModelEndpoint(Base):
     )
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     max_concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    api_key_max_concurrency: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requests_per_second: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requests_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tokens_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -329,6 +331,7 @@ class User(Base):
     display_name: Mapped[str]=mapped_column(String(200),nullable=False)
     role: Mapped[str]=mapped_column(String(32),nullable=False,default=UserRole.VIEWER.value)
     status: Mapped[str]=mapped_column(String(32),nullable=False,default="active")
+    max_concurrency: Mapped[int | None]=mapped_column(Integer,nullable=True)
     api_token_hash: Mapped[str|None]=mapped_column(String(64),nullable=True,unique=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
 
@@ -395,6 +398,8 @@ class EvaluationRun(Base):
     suite_id: Mapped[str | None] = mapped_column(
         ForeignKey("evaluation_suites.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    max_concurrency: Mapped[int | None] = mapped_column(Integer, nullable=True)
     benchmark_id: Mapped[str] = mapped_column(String(128), nullable=False)
     benchmark_version: Mapped[str] = mapped_column(String(64), nullable=False)
     configuration_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)

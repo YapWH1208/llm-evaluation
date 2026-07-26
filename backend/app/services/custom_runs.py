@@ -32,6 +32,8 @@ def create_custom_multimodal_run(
     sample_id: str,
     messages: list[dict[str, Any]],
     reference_answer: str,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
 ) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
@@ -47,6 +49,8 @@ def create_custom_multimodal_run(
     )
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
+        created_by=created_by,
+        max_concurrency=max_concurrency,
         benchmark_id="custom-multimodal",
         benchmark_version="1.0.0",
         configuration_snapshot={

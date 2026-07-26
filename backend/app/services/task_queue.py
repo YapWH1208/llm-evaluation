@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     EndpointRateWindow,
     EndpointSecondRateWindow,
+    BenchmarkDefinition,
     EvaluationRun,
     ModelEndpoint,
     SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
     TaskUnit,
+    User,
 )
 
 
@@ -84,6 +86,7 @@ def claim_task(
         if endpoint is None or not _has_execution_capacity(
             session,
             endpoint,
+            task=task,
             worker_id=worker_id,
             system_max_concurrency=system_max_concurrency,
             worker_max_concurrency=worker_max_concurrency,
@@ -169,11 +172,15 @@ def _has_execution_capacity(
     session: Session,
     endpoint: ModelEndpoint,
     *,
+    task: TaskUnit,
     worker_id: str,
     system_max_concurrency: int | None,
     worker_max_concurrency: int | None,
 ) -> bool:
     active_statuses = [TaskStatus.LEASED.value, TaskStatus.RUNNING.value]
+    run = session.get(EvaluationRun, task.run_id)
+    if run is None:
+        return False
     if system_max_concurrency is not None:
         system_active = session.scalar(
             select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(active_statuses))
@@ -188,6 +195,58 @@ def _has_execution_capacity(
         ) or 0
         if worker_active >= worker_max_concurrency:
             return False
+    if run.max_concurrency is not None:
+        run_active = session.scalar(
+            select(func.count()).select_from(TaskUnit).where(
+                TaskUnit.status.in_(active_statuses), TaskUnit.run_id == run.id
+            )
+        ) or 0
+        if run_active >= run.max_concurrency:
+            return False
+    if run.created_by:
+        user = session.get(User, run.created_by)
+        if user is not None and user.max_concurrency is not None:
+            user_active = session.scalar(
+                select(func.count())
+                .select_from(TaskUnit)
+                .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
+                .where(TaskUnit.status.in_(active_statuses), EvaluationRun.created_by == run.created_by)
+            ) or 0
+            if user_active >= user.max_concurrency:
+                return False
+    if endpoint.api_key_max_concurrency is not None and endpoint.api_key_fingerprint:
+        credential_active = session.scalar(
+            select(func.count())
+            .select_from(TaskUnit)
+            .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
+            .join(ModelEndpoint, ModelEndpoint.id == EvaluationRun.model_endpoint_id)
+            .where(
+                TaskUnit.status.in_(active_statuses),
+                ModelEndpoint.api_key_fingerprint == endpoint.api_key_fingerprint,
+            )
+        ) or 0
+        if credential_active >= endpoint.api_key_max_concurrency:
+            return False
+    benchmark = session.scalar(
+        select(BenchmarkDefinition).where(
+            BenchmarkDefinition.benchmark_id == run.benchmark_id,
+            BenchmarkDefinition.version == run.benchmark_version,
+        )
+    )
+    benchmark_limit = _positive_limit((benchmark.manifest if benchmark is not None else {}).get("max_concurrency"))
+    if benchmark_limit is not None:
+        benchmark_active = session.scalar(
+            select(func.count())
+            .select_from(TaskUnit)
+            .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
+            .where(
+                TaskUnit.status.in_(active_statuses),
+                EvaluationRun.benchmark_id == run.benchmark_id,
+                EvaluationRun.benchmark_version == run.benchmark_version,
+            )
+        ) or 0
+        if benchmark_active >= benchmark_limit:
+            return False
     active_tasks = session.scalar(
         select(func.count())
         .select_from(TaskUnit)
@@ -198,6 +257,14 @@ def _has_execution_capacity(
         )
     ) or 0
     return active_tasks < endpoint.max_concurrency
+
+
+def _positive_limit(value: object) -> int | None:
+    try:
+        limit = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
 
 
 def _reserve_endpoint_budget(

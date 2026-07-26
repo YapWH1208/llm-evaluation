@@ -70,6 +70,9 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
     "model_capabilities": (
         ((("model_endpoint_id", 1), ("capability_key", 1)), {"unique": True}),
     ),
+    "model_endpoints": (
+        ((("api_key_fingerprint", 1),), {"sparse": True}),
+    ),
     "endpoint_rate_windows": (
         ((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),
     ),
@@ -184,9 +187,12 @@ class MongoDocumentStore:
         worker_id: str,
         lease_seconds: int = 60,
         run_id: str | None = None,
+        system_max_concurrency: int | None = None,
+        worker_max_concurrency: int | None = None,
     ) -> dict[str, Any] | None:
-        """Atomically claim one due task using MongoDB's find-and-update semantics."""
+        """Atomically claim one due task after applying every admission ceiling."""
 
+        self.reclaim_expired_leases()
         now = _utc_now()
         query: dict[str, Any] = {
             "status": {"$in": ["pending", "retry_scheduled"]},
@@ -194,22 +200,128 @@ class MongoDocumentStore:
         }
         if run_id is not None:
             query["run_id"] = run_id
-        document = self.database["task_units"].find_one_and_update(
-            query,
-            {
-                "$set": {
-                    "status": "leased",
-                    "leased_by": worker_id,
-                    "lease_token": str(uuid4()),
-                    "lease_expires_at": now + timedelta(seconds=lease_seconds),
-                    "heartbeat_at": now,
-                    "updated_at": now,
-                }
-            },
-            sort=[("priority", -1), ("created_at", 1)],
-            return_document=_return_document_after(),
-        )
-        return _public_document(document) if isinstance(document, dict) else None
+        candidates = self.list_documents("task_units", query=query, sort=[("priority", -1), ("created_at", 1)])[:20]
+        for task in candidates:
+            if not task.get("run_id"):
+                document = self.database["task_units"].find_one_and_update(
+                    {"_id": task["id"], **query},
+                    {"$set": {"status": "leased", "leased_by": worker_id, "lease_token": str(uuid4()), "lease_expires_at": now + timedelta(seconds=lease_seconds), "heartbeat_at": now, "updated_at": now}},
+                    return_document=_return_document_after(),
+                )
+                if isinstance(document, dict):
+                    return _public_document(document)
+                continue
+            run = self.get_document("evaluation_runs", str(task["run_id"]))
+            if run is None:
+                continue
+            endpoint = self.get_document("model_endpoints", str(run["model_endpoint_id"]))
+            if endpoint is None or not self._has_execution_capacity(
+                task=task,
+                run=run,
+                endpoint=endpoint,
+                worker_id=worker_id,
+                system_max_concurrency=system_max_concurrency,
+                worker_max_concurrency=worker_max_concurrency,
+            ):
+                continue
+            if not self._reserve_endpoint_budget(endpoint=endpoint, task=task, now=now):
+                continue
+            document = self.database["task_units"].find_one_and_update(
+                {"_id": task["id"], **query},
+                {
+                    "$set": {
+                        "status": "leased",
+                        "leased_by": worker_id,
+                        "lease_token": str(uuid4()),
+                        "lease_expires_at": now + timedelta(seconds=lease_seconds),
+                        "heartbeat_at": now,
+                        "updated_at": now,
+                    }
+                },
+                return_document=_return_document_after(),
+            )
+            if isinstance(document, dict):
+                return _public_document(document)
+        return None
+
+    def _has_execution_capacity(
+        self,
+        *,
+        task: dict[str, Any],
+        run: dict[str, Any],
+        endpoint: dict[str, Any],
+        worker_id: str,
+        system_max_concurrency: int | None,
+        worker_max_concurrency: int | None,
+    ) -> bool:
+        active = self.list_documents("task_units", query={"status": {"$in": ["leased", "running"]}})
+        if system_max_concurrency is not None and len(active) >= system_max_concurrency:
+            return False
+        if worker_max_concurrency is not None and sum(task.get("leased_by") == worker_id for task in active) >= worker_max_concurrency:
+            return False
+        run_limit = _positive_limit(run.get("max_concurrency"))
+        if run_limit is not None and sum(task.get("run_id") == run["id"] for task in active) >= run_limit:
+            return False
+        active_runs = [self.get_document("evaluation_runs", str(active_task["run_id"])) for active_task in active]
+        created_by = run.get("created_by")
+        if created_by:
+            user = self.get_document("users", str(created_by))
+            user_limit = _positive_limit(user.get("max_concurrency")) if user else None
+            if user_limit is not None:
+                if sum(item is not None and item.get("created_by") == created_by for item in active_runs) >= user_limit:
+                    return False
+        fingerprint = endpoint.get("api_key_fingerprint")
+        credential_limit = _positive_limit(endpoint.get("api_key_max_concurrency"))
+        if fingerprint and credential_limit is not None:
+            active_endpoints = [self.get_document("model_endpoints", str(item["model_endpoint_id"])) for item in active_runs if item]
+            if sum(item is not None and item.get("api_key_fingerprint") == fingerprint for item in active_endpoints) >= credential_limit:
+                return False
+        definitions = self.list_documents("benchmark_definitions", query={"benchmark_id": run["benchmark_id"], "version": run["benchmark_version"]})
+        manifest = definitions[0].get("manifest") if definitions else {}
+        benchmark_limit = _positive_limit(manifest.get("max_concurrency") if isinstance(manifest, dict) else None)
+        if benchmark_limit is not None:
+            if sum(item is not None and item.get("benchmark_id") == run["benchmark_id"] and item.get("benchmark_version") == run["benchmark_version"] for item in active_runs) >= benchmark_limit:
+                return False
+        endpoint_limit = _positive_limit(endpoint.get("max_concurrency")) or 1
+        return sum(item is not None and item.get("model_endpoint_id") == endpoint["id"] for item in active_runs) < endpoint_limit
+
+    def _reserve_endpoint_budget(self, *, endpoint: dict[str, Any], task: dict[str, Any], now: datetime) -> bool:
+        limits = ("requests_per_second", "requests_per_minute", "tokens_per_minute", "input_tokens_per_minute", "output_tokens_per_minute")
+        if not any(_positive_limit(endpoint.get(name)) is not None for name in limits):
+            return True
+        request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens = _task_budget(task)
+        second_started_at = int(now.timestamp())
+        minute_started_at = int(now.timestamp() // 60) * 60
+        endpoint_id = str(endpoint["id"])
+        second_rows = self.list_documents("endpoint_second_rate_windows", query={"model_endpoint_id": endpoint_id, "window_started_at": second_started_at})
+        minute_rows = self.list_documents("endpoint_rate_windows", query={"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at})
+        second_row = second_rows[0] if second_rows else None
+        minute_row = minute_rows[0] if minute_rows else None
+        existing_requests = int(minute_row.get("request_count", 0)) if minute_row else 0
+        existing_tokens = int(minute_row.get("estimated_token_count", 0)) if minute_row else 0
+        existing_input = int(minute_row.get("estimated_input_token_count", 0)) if minute_row else 0
+        existing_output = int(minute_row.get("estimated_output_token_count", 0)) if minute_row else 0
+        existing_second = int(second_row.get("request_count", 0)) if second_row else 0
+        if (_positive_limit(endpoint.get("requests_per_second")) is not None and existing_second + request_count > int(endpoint["requests_per_second"])):
+            return False
+        if (_positive_limit(endpoint.get("requests_per_minute")) is not None and existing_requests + request_count > int(endpoint["requests_per_minute"])):
+            return False
+        if (_positive_limit(endpoint.get("tokens_per_minute")) is not None and existing_tokens + estimated_tokens > int(endpoint["tokens_per_minute"])):
+            return False
+        if (_positive_limit(endpoint.get("input_tokens_per_minute")) is not None and existing_input + estimated_input_tokens > int(endpoint["input_tokens_per_minute"])):
+            return False
+        if (_positive_limit(endpoint.get("output_tokens_per_minute")) is not None and existing_output + estimated_output_tokens > int(endpoint["output_tokens_per_minute"])):
+            return False
+        if second_row is None:
+            self.insert_document("endpoint_second_rate_windows", {"model_endpoint_id": endpoint_id, "window_started_at": second_started_at, "request_count": request_count})
+        else:
+            self.update_document("endpoint_second_rate_windows", str(second_row["id"]), {"request_count": existing_second + request_count})
+        values = {"request_count": existing_requests + request_count, "estimated_token_count": existing_tokens + estimated_tokens, "estimated_input_token_count": existing_input + estimated_input_tokens, "estimated_output_token_count": existing_output + estimated_output_tokens}
+        if minute_row is None:
+            self.insert_document("endpoint_rate_windows", {"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at, **values})
+        else:
+            self.update_document("endpoint_rate_windows", str(minute_row["id"]), values)
+        return True
 
     def heartbeat_task(
         self,
@@ -336,6 +448,33 @@ def _return_document_after() -> Any:
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _positive_limit(value: object) -> int | None:
+    try:
+        limit = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
+
+
+def _task_budget(task: dict[str, Any]) -> tuple[int, int, int, int]:
+    payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
+    sample_ids = payload.get("retry_sample_ids") or payload.get("sample_ids") or []
+    fallback_requests = len([item for item in sample_ids if isinstance(item, str)])
+    try:
+        request_count = max(1, int(payload.get("estimated_request_count", fallback_requests)))
+    except (TypeError, ValueError):
+        request_count = max(1, fallback_requests)
+    try:
+        estimated_tokens = max(0, int(payload.get("estimated_token_count", 0)))
+    except (TypeError, ValueError):
+        estimated_tokens = 0
+    if payload.get("retry_sample_ids"):
+        estimated_tokens = max(1, estimated_tokens // max(1, fallback_requests))
+        request_count = fallback_requests
+    estimated_output_tokens = min(estimated_tokens, request_count * 32)
+    return request_count, estimated_tokens, max(0, estimated_tokens - estimated_output_tokens), estimated_output_tokens
 
 
 def _public_document(document: dict[str, Any]) -> dict[str, Any]:

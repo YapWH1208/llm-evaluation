@@ -13,10 +13,10 @@ from app.db.models import AuditEvent, User, UserRole
 from app.db.mongo import MongoDocumentStore
 
 router=APIRouter(prefix="/api/v1",tags=["administration"])
-class UserCreate(BaseModel): email:str=Field(min_length=3,max_length=320);display_name:str=Field(min_length=1,max_length=200);role:UserRole=UserRole.VIEWER
+class UserCreate(BaseModel): email:str=Field(min_length=3,max_length=320);display_name:str=Field(min_length=1,max_length=200);role:UserRole=UserRole.VIEWER;max_concurrency:int|None=Field(default=None,ge=1,le=1000)
 class UserResponse(BaseModel):
     model_config=ConfigDict(from_attributes=True)
-    id:str;email:str;display_name:str;role:str;status:str;created_at:datetime
+    id:str;email:str;display_name:str;role:str;status:str;max_concurrency:int|None=None;created_at:datetime
 class UserCreateResponse(UserResponse): api_token:str
 class AuditResponse(BaseModel):
     model_config=ConfigDict(from_attributes=True)
@@ -35,10 +35,10 @@ def create_user(payload:UserCreate,request:Request,session:SessionDependency)->U
     if store is not None:
         email=payload.email.lower()
         if store.list_documents("users",query={"email":email}):raise HTTPException(409,"User email already exists")
-        user=store.insert_document("users",{"email":email,"display_name":payload.display_name,"role":payload.role.value,"status":"active","api_token_hash":hashlib.sha256(api_token.encode()).hexdigest(),"created_at":datetime.now(timezone.utc)})
+        user=store.insert_document("users",{"email":email,"display_name":payload.display_name,"role":payload.role.value,"status":"active","max_concurrency":payload.max_concurrency,"api_token_hash":hashlib.sha256(api_token.encode()).hexdigest(),"created_at":datetime.now(timezone.utc)})
         return UserCreateResponse(**user,api_token=api_token)
     assert session is not None
-    user=User(email=payload.email.lower(),display_name=payload.display_name,role=payload.role.value,api_token_hash=hashlib.sha256(api_token.encode()).hexdigest());session.add(user)
+    user=User(email=payload.email.lower(),display_name=payload.display_name,role=payload.role.value,max_concurrency=payload.max_concurrency,api_token_hash=hashlib.sha256(api_token.encode()).hexdigest());session.add(user)
     try:session.flush()
     except IntegrityError as error:session.rollback();raise HTTPException(409,"User email already exists") from error
     session.add(AuditEvent(actor_id=getattr(request.state,"actor_id",None),action="user.created",entity_type="user",entity_id=user.id,details={"email":user.email,"role":user.role}));session.commit();session.refresh(user)

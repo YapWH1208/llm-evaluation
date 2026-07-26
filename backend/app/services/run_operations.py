@@ -24,6 +24,8 @@ def clone_run(session: Session, run_id: str) -> EvaluationRun:
             prompt_package_id=source.prompt_package_id,
             benchmark_id=source.benchmark_id,
             benchmark_version=source.benchmark_version,
+            created_by=source.created_by,
+            max_concurrency=source.max_concurrency,
         )
     except RunCreationError as error:
         raise RunOperationError(str(error)) from error

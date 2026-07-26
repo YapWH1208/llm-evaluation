@@ -41,6 +41,7 @@ class EvaluationRunCreate(BaseModel):
     benchmark_id: str = "text-quick-check"
     benchmark_version: str = "1.0.0"
     request_body_override: dict[str, Any] = Field(default_factory=dict)
+    max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
 
 
 class CustomMultimodalRunCreate(BaseModel):
@@ -48,6 +49,7 @@ class CustomMultimodalRunCreate(BaseModel):
     sample_id: Annotated[str, Field(min_length=1, max_length=255)] = "custom-sample"
     messages: list[dict[str, Any]]
     reference_answer: Annotated[str, Field(min_length=1, max_length=10000)]
+    max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
 
 
 class EvaluationRunResponse(BaseModel):
@@ -57,6 +59,8 @@ class EvaluationRunResponse(BaseModel):
     model_endpoint_id: str
     prompt_package_id: str | None
     suite_id: str | None = None
+    created_by: str | None = None
+    max_concurrency: int | None = None
     benchmark_id: str
     benchmark_version: str
     configuration_snapshot: dict[str, Any]
@@ -142,6 +146,8 @@ def create_evaluation_run(
                 benchmark_id=payload.benchmark_id,
                 benchmark_version=payload.benchmark_version,
                 request_body_override=payload.request_body_override,
+                created_by=getattr(request.state, "actor_id", None),
+                max_concurrency=payload.max_concurrency,
             )
         assert session is not None
         return create_benchmark_run(
@@ -152,6 +158,8 @@ def create_evaluation_run(
             benchmark_id=payload.benchmark_id,
             benchmark_version=payload.benchmark_version,
             request_body_override=payload.request_body_override,
+            created_by=getattr(request.state, "actor_id", None),
+            max_concurrency=payload.max_concurrency,
         )
     except (RunCreationError, MongoRunExecutionError) as error:
         status_code = (
@@ -171,7 +179,7 @@ def create_custom_run(
     store = get_document_store(request)
     if store is not None:
         try:
-            return create_mongo_custom_multimodal_run(store, data_root=request.app.state.settings.data_root, model_endpoint_id=payload.model_endpoint_id, sample_id=payload.sample_id, messages=payload.messages, reference_answer=payload.reference_answer)
+            return create_mongo_custom_multimodal_run(store, data_root=request.app.state.settings.data_root, model_endpoint_id=payload.model_endpoint_id, sample_id=payload.sample_id, messages=payload.messages, reference_answer=payload.reference_answer, created_by=getattr(request.state, "actor_id", None), max_concurrency=payload.max_concurrency)
         except MongoRunExecutionError as error:
             status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
             raise HTTPException(status_code, str(error)) from error
@@ -184,6 +192,8 @@ def create_custom_run(
             sample_id=payload.sample_id,
             messages=payload.messages,
             reference_answer=payload.reference_answer,
+            created_by=getattr(request.state, "actor_id", None),
+            max_concurrency=payload.max_concurrency,
         )
     except CustomRunError as error:
         status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT

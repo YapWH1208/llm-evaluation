@@ -42,7 +42,9 @@ def get_document_store(request:Request)->MongoDocumentStore|None:return getattr(
 @router.post("/claim",response_model=TaskResponse|None)
 def claim(payload:ClaimRequest,request:Request,session:SessionDependency)->TaskUnit|dict[str,Any]|None:
     store=get_document_store(request)
-    if store is not None:return store.claim_task(worker_id=payload.worker_id,lease_seconds=payload.lease_seconds)
+    if store is not None:
+        settings=request.app.state.settings
+        return store.claim_task(worker_id=payload.worker_id,lease_seconds=payload.lease_seconds,system_max_concurrency=settings.system_max_concurrency,worker_max_concurrency=settings.worker_max_concurrency)
     assert session is not None
     settings = request.app.state.settings
     return claim_task(session,payload.worker_id,payload.lease_seconds,system_max_concurrency=settings.system_max_concurrency,worker_max_concurrency=settings.worker_max_concurrency)

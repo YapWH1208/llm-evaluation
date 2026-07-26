@@ -98,6 +98,14 @@ def _upgrade_v13_extended_rate_limits(connection: Connection) -> None:
     _add_column_if_missing(connection, "endpoint_rate_windows", "estimated_output_token_count", "estimated_output_token_count INTEGER NOT NULL DEFAULT 0")
 
 
+def _upgrade_v14_hierarchical_concurrency_limits(connection: Connection) -> None:
+    _add_column_if_missing(connection, "model_endpoints", "api_key_fingerprint", "api_key_fingerprint VARCHAR(64)")
+    _add_column_if_missing(connection, "model_endpoints", "api_key_max_concurrency", "api_key_max_concurrency INTEGER")
+    _add_column_if_missing(connection, "users", "max_concurrency", "max_concurrency INTEGER")
+    _add_column_if_missing(connection, "evaluation_runs", "created_by", "created_by VARCHAR(36)")
+    _add_column_if_missing(connection, "evaluation_runs", "max_concurrency", "max_concurrency INTEGER")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -170,6 +178,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_extended_rate_limits",
         description="Add durable RPS and directional token-per-minute admission accounting.",
         upgrade=_upgrade_v13_extended_rate_limits,
+    ),
+    Migration(
+        version=14,
+        migration_id="20260726_add_hierarchical_concurrency_limits",
+        description="Add per-user, API-key, benchmark, and run concurrency admission controls.",
+        upgrade=_upgrade_v14_hierarchical_concurrency_limits,
     ),
 )
 

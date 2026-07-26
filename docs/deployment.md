@@ -20,9 +20,9 @@ python -m app.cli database validate
 
 The task lease protocol uses conditional state updates and lease tokens. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
 
-Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Endpoint-level maximum concurrency, RPM, and TPM remain independently enforced; the scheduler admits work only when every configured limit has capacity.
+Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; administrators can set a user ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
 
-Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting, so a restart or an additional worker cannot reset an already consumed provider budget.
+Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting in both relational and MongoDB document stores, so a restart or an additional worker cannot reset an already consumed provider budget.
 
 ## Docker Compose
 

@@ -8,11 +8,12 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import EvaluationRun, SampleAttempt, TaskUnit
 from app.db import ModelEndpoint
-from app.db.models import EndpointRateWindow, EndpointSecondRateWindow
+from app.db.models import BenchmarkDefinition, EndpointRateWindow, EndpointSecondRateWindow, User
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.services.run_executor import _retry_delay_seconds
+from app.services.task_queue import claim_task
 
 
 class SuccessfulTester:
@@ -425,6 +426,56 @@ def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
+
+
+def test_worker_claim_honors_run_and_shared_api_key_concurrency_limits(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    with TestClient(app) as client:
+        first_endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-a.example.test/v1","api_key":"shared-provider-key","model_name":"a","max_concurrency":3,"api_key_max_concurrency":1}).json()
+        second_endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-b.example.test/v1","api_key":"shared-provider-key","model_name":"b","max_concurrency":3,"api_key_max_concurrency":1}).json()
+        for endpoint in (first_endpoint, second_endpoint):
+            assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        first_run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":first_endpoint["id"],"sample_limit":1,"max_concurrency":1}).json()
+        second_run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":second_endpoint["id"],"sample_limit":1}).json()
+        with app.state.database.get_session() as session:
+            session.add(TaskUnit(run_id=first_run["id"], task_type="evaluation_shard", payload={"sample_ids":["extra"],"estimated_request_count":1,"estimated_token_count":1}))
+            session.commit()
+            assert claim_task(session, "worker-a", run_id=first_run["id"]) is not None
+            assert claim_task(session, "worker-b", run_id=first_run["id"]) is None
+            assert claim_task(session, "worker-c", run_id=second_run["id"]) is None
+
+
+def test_worker_claim_honors_user_and_benchmark_concurrency_limits(tmp_path: Path) -> None:
+    user_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'user-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    with TestClient(user_app) as client:
+        endpoints = [client.post("/api/v1/model-endpoints", json={"base_url":f"https://models-{name}.example.test/v1","api_key":f"key-{name}","model_name":name,"max_concurrency":3}).json() for name in ("a", "b")]
+        for endpoint in endpoints:
+            assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        runs = [client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).json() for endpoint in endpoints]
+        with user_app.state.database.get_session() as session:
+            user = User(email="limited@example.test", display_name="Limited", role="evaluator", max_concurrency=1)
+            session.add(user)
+            session.flush()
+            for run_id in (runs[0]["id"], runs[1]["id"]):
+                session.get(EvaluationRun, run_id).created_by = user.id  # type: ignore[union-attr]
+            session.commit()
+            assert claim_task(session, "worker-a", run_id=runs[0]["id"]) is not None
+            assert claim_task(session, "worker-b", run_id=runs[1]["id"]) is None
+
+    benchmark_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'benchmark-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    with TestClient(benchmark_app) as client:
+        endpoints = [client.post("/api/v1/model-endpoints", json={"base_url":f"https://benchmark-{name}.example.test/v1","api_key":f"benchmark-key-{name}","model_name":name,"max_concurrency":3}).json() for name in ("a", "b")]
+        for endpoint in endpoints:
+            assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        with benchmark_app.state.database.get_session() as session:
+            definition = session.scalar(select(BenchmarkDefinition).where(BenchmarkDefinition.benchmark_id == "text-quick-check", BenchmarkDefinition.version == "1.0.0"))
+            assert definition is not None
+            definition.manifest = {**definition.manifest, "max_concurrency": 1}
+            session.commit()
+        runs = [client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).json() for endpoint in endpoints]
+        with benchmark_app.state.database.get_session() as session:
+            assert claim_task(session, "worker-a", run_id=runs[0]["id"]) is not None
+            assert claim_task(session, "worker-b", run_id=runs[1]["id"]) is None
 
 
 def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:

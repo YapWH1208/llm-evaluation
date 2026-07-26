@@ -39,6 +39,8 @@ def create_mongo_benchmark_run(
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
     request_body_override: dict[str, object] | None = None,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
 ) -> dict[str, Any]:
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
     if endpoint is None:
@@ -109,6 +111,8 @@ def create_mongo_benchmark_run(
             "model_endpoint_id": model_endpoint_id,
             "prompt_package_id": prompt_package_id,
             "suite_id": suite_id,
+            "created_by": created_by,
+            "max_concurrency": max_concurrency,
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
             "configuration_snapshot": snapshot,
@@ -204,6 +208,8 @@ def create_mongo_custom_multimodal_run(
     sample_id: str,
     messages: list[dict[str, Any]],
     reference_answer: str,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
 ) -> dict[str, Any]:
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
     if endpoint is None: raise MongoRunExecutionError("Model endpoint not found.")
@@ -212,7 +218,7 @@ def create_mongo_custom_multimodal_run(
     normalized = _normalize_mongo_messages(store, data_root, messages)
     request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
     task = store.insert_document("task_units", {"run_id":run["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized),"request_body_evidence":request_body_evidence},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
     return run
@@ -254,6 +260,9 @@ def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
         prompt_package_id=source.get("prompt_package_id"),
         benchmark_id=str(source["benchmark_id"]),
         benchmark_version=str(source["benchmark_version"]),
+        suite_id=source.get("suite_id"),
+        created_by=source.get("created_by"),
+        max_concurrency=source.get("max_concurrency"),
     )
 
 
