@@ -22,8 +22,17 @@ def normalize_content_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]
                 raise ContentValidationError("Text content parts require a non-empty text value.")
             normalized.append({"type": "text", "text": text})
             continue
+        if part_type == "tool_result":
+            tool_call_id = part.get("tool_call_id")
+            content = part.get("content")
+            if not isinstance(tool_call_id, str) or not tool_call_id:
+                raise ContentValidationError("Tool-result content parts require a non-empty tool_call_id.")
+            if not isinstance(content, str):
+                raise ContentValidationError("Tool-result content parts require string content.")
+            normalized.append({"type": "tool_result", "tool_call_id": tool_call_id, "content": content})
+            continue
         if part_type not in MEDIA_KINDS:
-            raise ContentValidationError("Content part type must be text, image, audio, video, or file.")
+            raise ContentValidationError("Content part type must be text, image, audio, video, file, or tool_result.")
         source = part.get("source")
         if not isinstance(source, dict):
             raise ContentValidationError("Media content parts require a source object.")

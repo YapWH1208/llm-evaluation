@@ -238,15 +238,19 @@ def _translate_responses_messages(messages: list[object]) -> list[dict[str, obje
             raise ValueError("Responses API messages require a user, assistant, system, or developer role.")
         if isinstance(content, str):
             parts = [{"type": "input_text", "text": content}]
+            tool_results: list[dict[str, object]] = []
         elif isinstance(content, list):
             try:
                 normalized = normalize_content_parts(content)
             except ContentValidationError as error:
                 raise ValueError(str(error)) from error
-            parts = [_translate_responses_content_part(part) for part in normalized]
+            parts = [_translate_responses_content_part(part) for part in normalized if part["type"] != "tool_result"]
+            tool_results = [{"type": "function_call_output", "call_id": part["tool_call_id"], "output": part["content"]} for part in normalized if part["type"] == "tool_result"]
         else:
             raise ValueError("Message content must be text or a list of content parts.")
-        translated.append({"role": role, "content": parts})
+        if parts:
+            translated.append({"role": role, "content": parts})
+        translated.extend(tool_results)
     return translated
 
 
@@ -345,6 +349,12 @@ def _translate_messages(messages: list[object]) -> list[dict[str, object]]:
             parts = normalize_content_parts(content)
         except ContentValidationError as error:
             raise ValueError(str(error)) from error
+        tool_results = [part for part in parts if part["type"] == "tool_result"]
+        if tool_results:
+            if len(parts) != 1 or role != "tool":
+                raise ValueError("Chat Completions tool results must be a standalone message with role tool.")
+            translated.append({"role": "tool", "tool_call_id": tool_results[0]["tool_call_id"], "content": tool_results[0]["content"]})
+            continue
         translated.append({"role": role, "content": [_translate_content_part(part) for part in parts]})
     return translated
 

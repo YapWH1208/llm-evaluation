@@ -552,7 +552,7 @@ def _normalize_mongo_messages(store: MongoDocumentStore, data_root: str, message
 
 
 def _resolve_mongo_asset(store: MongoDocumentStore, data_root: str, part: dict[str, Any]) -> dict[str, object]:
-    if part["type"] == "text" or not isinstance(part.get("source"),dict) or not part["source"].get("asset_id"): return part
+    if part["type"] in {"text", "tool_result"} or not isinstance(part.get("source"),dict) or not part["source"].get("asset_id"): return part
     asset_id = part["source"]["asset_id"]
     if not isinstance(asset_id,str): raise MongoRunExecutionError("Media asset ID must be a string.")
     asset = store.get_document("media_assets",asset_id)

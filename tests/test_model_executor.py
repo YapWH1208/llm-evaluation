@@ -149,3 +149,13 @@ def test_openai_executor_translates_responses_api_multimodal_input_and_output() 
     assert result.success is True
     assert result.prediction == "accepted"
     assert (result.input_tokens, result.output_tokens) == (15, 4)
+
+
+def test_responses_executor_translates_tool_results_as_function_outputs() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["input"] == [{"type": "function_call_output", "call_id": "call_1", "output": "tool evidence"}]
+        return httpx.Response(200, json={"output_text": "OK"})
+
+    endpoint = ModelEndpoint(display_name="responses", base_url="https://models.example.test/v1", model_name="responses", protocol_profile="openai_responses", encrypted_api_key="unused", api_key_mask="****test")
+    result = OpenAIChatCompletionsExecutor(httpx.MockTransport(handler)).execute(endpoint, "secret", {"messages": [{"role": "user", "content": [{"type": "tool_result", "tool_call_id": "call_1", "content": "tool evidence"}]}]})
+    assert result.success is True

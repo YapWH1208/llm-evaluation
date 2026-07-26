@@ -14,6 +14,7 @@ from app.core.secrets import SecretCipher, SecretConfigurationError, mask_secret
 from app.db import EndpointStatus, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
+from app.services.model_executor import OpenAIChatCompletionsExecutor
 from app.services.provider_headers import validate_custom_headers
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
@@ -281,6 +282,16 @@ class ConnectionTestResponse(BaseModel):
     tested_at: datetime
 
 
+class RequestPreviewRequest(BaseModel):
+    messages: list[dict[str, Any]]
+
+
+class RequestPreviewResponse(BaseModel):
+    protocol_profile: str
+    request_body: dict[str, Any]
+    protected_fields: list[str]
+
+
 @router.post("/{endpoint_id}/connection-test", response_model=ConnectionTestResponse)
 def test_model_endpoint_connection(
     endpoint_id: str,
@@ -338,6 +349,22 @@ def test_model_endpoint_connection(
         provider_status_code=result.provider_status_code,
         tested_at=tested_at,
     )
+
+
+@router.post("/{endpoint_id}/request-preview", response_model=RequestPreviewResponse)
+def preview_model_request(
+    endpoint_id: str,
+    payload: RequestPreviewRequest,
+    request: Request,
+    session: SessionDependency,
+) -> RequestPreviewResponse:
+    store = get_document_store(request)
+    endpoint: Any = _endpoint_proxy(get_document_endpoint_or_404(store, endpoint_id)) if store is not None else get_endpoint_or_404(session, endpoint_id)  # type: ignore[arg-type]
+    try:
+        request_body = OpenAIChatCompletionsExecutor._build_request(endpoint, {"messages": payload.messages})
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return RequestPreviewResponse(protocol_profile=str(endpoint.protocol_profile), request_body=request_body, protected_fields=sorted(PROTECTED_REQUEST_FIELDS))
 
 
 @router.patch("/{endpoint_id}", response_model=ModelEndpointResponse)

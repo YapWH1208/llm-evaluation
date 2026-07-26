@@ -118,7 +118,7 @@ def _resolve_asset_source(
     data_root: str,
     part: dict[str, Any],
 ) -> dict[str, object]:
-    if part["type"] == "text":
+    if part["type"] in {"text", "tool_result"}:
         return part
     source = part["source"]
     if not isinstance(source, dict) or not source.get("asset_id"):

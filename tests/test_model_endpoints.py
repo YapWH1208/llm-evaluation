@@ -106,6 +106,16 @@ def test_model_endpoint_persists_safe_custom_headers_and_metadata(tmp_path: Path
         assert rejected.status_code == 422
 
 
+def test_model_endpoint_request_preview_excludes_secrets(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "never-return", "model_name": "preview", "protocol_profile": "openai_responses"}).json()
+        preview = client.post(f"/api/v1/model-endpoints/{endpoint['id']}/request-preview", json={"messages": [{"role": "user", "content": "hello"}]})
+        assert preview.status_code == 200
+        assert preview.json()["request_body"]["input"][0]["content"] == [{"type": "input_text", "text": "hello"}]
+        assert "never-return" not in preview.text
+
+
 def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) -> None:
     app = create_app(
         Settings(
