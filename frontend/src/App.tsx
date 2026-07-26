@@ -22,6 +22,7 @@ import {
 } from "./api";
 
 type View = "dashboard" | "models" | "workspace" | "runs" | "queue" | "analysis" | "compare" | "reports";
+type Theme = "dark" | "light";
 
 const initialEndpoint = {
   base_url: "",
@@ -80,6 +81,7 @@ function parseJsonArray(value: string, label: string): unknown[] {
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
+  const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [runs, setRuns] = useState<EvaluationRun[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -129,6 +131,11 @@ export default function App() {
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("lle-theme", theme);
+  }, [theme]);
 
   const completedRuns = useMemo(() => runs.filter((run) => run.status.startsWith("completed")), [runs]);
   const selectedRunInfo = runs.find((run) => run.id === selectedRun) ?? null;
@@ -414,7 +421,7 @@ export default function App() {
           <h1>LLM / SLM Evaluation Platform</h1>
           <p>Reproducible runs, durable evidence, and cost-aware model decisions.</p>
         </div>
-        <div className="metric"><strong>{dashboard?.runs.completed ?? 0}</strong><span>completed runs</span></div>
+        <div className="actions"><button className="secondary" aria-pressed={theme === "light"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Light mode" : "Dark mode"}</button><div className="metric"><strong>{dashboard?.runs.completed ?? 0}</strong><span>completed runs</span></div></div>
       </header>
 
       <nav className="tabs" aria-label="Workspace sections">
