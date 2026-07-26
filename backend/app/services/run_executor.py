@@ -17,7 +17,8 @@ from app.db import (
     TaskStatus,
     TaskUnit,
 )
-from app.services.model_executor import ModelExecutor, SampleExecutionResult, normalize_exact_match
+from app.services.model_executor import ModelExecutor, SampleExecutionResult
+from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease, has_valid_lease
 
 
@@ -200,13 +201,16 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoi
     attempt.estimated_cost = _estimate_cost(endpoint, result.input_tokens, result.output_tokens)
     attempt.completed_at = datetime.now(timezone.utc)
     if result.success and result.prediction is not None:
-        reference_answer = str(attempt.reference_snapshot["answer"])
-        attempt.score = float(
-            normalize_exact_match(result.prediction) == normalize_exact_match(reference_answer)
-        )
-        attempt.status = SampleAttemptStatus.SUCCEEDED.value
-        attempt.error_type = None
-        attempt.error_message = None
+        try:
+            attempt.score = score_prediction(result.prediction, attempt.reference_snapshot)
+            attempt.status = SampleAttemptStatus.SUCCEEDED.value
+            attempt.error_type = None
+            attempt.error_message = None
+        except ScoringError as error:
+            attempt.score = None
+            attempt.status = SampleAttemptStatus.FAILED.value
+            attempt.error_type = "scoring_error"
+            attempt.error_message = str(error)
         return
     attempt.status = SampleAttemptStatus.FAILED.value
     attempt.score = None

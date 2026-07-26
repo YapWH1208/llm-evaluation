@@ -15,7 +15,8 @@ from app.benchmarks import get_installed_plugin
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import _build_messages, _estimate_request_tokens
-from app.services.model_executor import ModelExecutor, SampleExecutionResult, normalize_exact_match
+from app.services.model_executor import ModelExecutor, SampleExecutionResult
+from app.services.scoring import ScoringError, score_prediction
 from app.services.run_analysis import summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
@@ -72,6 +73,7 @@ def create_mongo_benchmark_run(
         suite_snapshot=suite_snapshot,
         request_body_override=request_body_override,
     )
+    scoring_rule = _mongo_effective_scoring_rule(plugin.manifest, prompt_package)
 
     prompt_proxy = _proxy(prompt_package) if prompt_package else None
     now = _utc_now()
@@ -94,6 +96,7 @@ def create_mongo_benchmark_run(
                 "system_message": prompt_package.get("system_message"),
                 "user_template": prompt_package["user_template"],
                 "few_shot_examples": prompt_package.get("few_shot_examples", []),
+                "scoring_rule": prompt_package.get("scoring_rule"),
             }
             if prompt_package
             else None
@@ -158,7 +161,7 @@ def create_mongo_benchmark_run(
                 "sample_id": sample.sample_id,
                 "attempt_number": 1,
                 "input_snapshot": {"messages": _build_messages(sample.prompt, prompt_proxy), "modality": "text", "request_body_evidence": request_body_evidence},
-                "reference_snapshot": {"type": "exact_match", "answer": sample.reference_answer},
+                "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
                 "request_snapshot": None,
                 "raw_response": None,
                 "parsed_prediction": None,
@@ -176,6 +179,14 @@ def create_mongo_benchmark_run(
             },
         )
     return run
+
+
+def _mongo_effective_scoring_rule(manifest: dict[str, object], prompt_package: dict[str, Any] | None) -> dict[str, object]:
+    prompt_rule = prompt_package.get("scoring_rule") if prompt_package else None
+    if isinstance(prompt_rule, dict) and prompt_rule:
+        return dict(prompt_rule)
+    benchmark_rule = manifest.get("scoring")
+    return dict(benchmark_rule) if isinstance(benchmark_rule, dict) and benchmark_rule else {"type": "exact_match"}
 
 
 def _mongo_request_body_evidence(
@@ -523,17 +534,10 @@ def _record_result(
         "completed_at": _utc_now(),
     }
     if result.success and result.prediction is not None:
-        values.update(
-            {
-                "score": float(
-                    normalize_exact_match(result.prediction)
-                    == normalize_exact_match(str(attempt["reference_snapshot"]["answer"]))
-                ),
-                "status": "succeeded",
-                "error_type": None,
-                "error_message": None,
-            }
-        )
+        try:
+            values.update({"score": score_prediction(result.prediction, attempt["reference_snapshot"]), "status": "succeeded", "error_type": None, "error_message": None})
+        except ScoringError as error:
+            values.update({"score": None, "status": "failed", "error_type": "scoring_error", "error_message": str(error)})
     else:
         values.update(
             {

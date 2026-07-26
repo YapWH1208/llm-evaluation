@@ -92,6 +92,7 @@ def create_benchmark_run(
         suite_snapshot=suite_snapshot,
         request_body_override=request_body_override,
     )
+    scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_package)
 
     snapshot = {
         "benchmark": {
@@ -111,7 +112,7 @@ def create_benchmark_run(
         "prompt_package": (
             {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
              "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
-             "few_shot_examples": prompt_package.few_shot_examples}
+             "few_shot_examples": prompt_package.few_shot_examples, "scoring_rule": prompt_package.scoring_rule}
             if prompt_package else None
         ),
         "prompt_standardization": (
@@ -161,7 +162,7 @@ def create_benchmark_run(
                     "modality": "text",
                     "request_body_evidence": request_body_evidence,
                 },
-                reference_snapshot={"type": "exact_match", "answer": sample.reference_answer},
+                reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
             )
             for sample in samples
         ]
@@ -169,6 +170,15 @@ def create_benchmark_run(
     session.commit()
     session.refresh(run)
     return run
+
+
+def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:
+    if prompt_package is not None and isinstance(prompt_package.scoring_rule, dict) and prompt_package.scoring_rule:
+        return dict(prompt_package.scoring_rule)
+    benchmark_rule = manifest.get("scoring")
+    if isinstance(benchmark_rule, dict) and benchmark_rule:
+        return dict(benchmark_rule)
+    return {"type": "exact_match"}
 
 
 def _request_body_evidence(

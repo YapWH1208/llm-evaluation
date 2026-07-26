@@ -493,3 +493,21 @@ def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:
         attempts = client.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
         assert attempts[0]["input_snapshot"]["messages"][0]["role"] == "system"
         assert "Answer only:" in attempts[0]["input_snapshot"]["messages"][-1]["content"]
+
+
+def test_prompt_scoring_rule_is_snapshotted_and_applied_to_execution(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'scoring.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        prompt = client.post("/api/v1/prompt-packages", json={"name":"regex-score","version":"1","user_template":"{{ question }}","scoring_rule":{"type":"regex_match","pattern":"BLUE"}}).json()
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1,"prompt_package_id":prompt["id"]}).json()
+        assert client.post(f"/api/v1/evaluation-runs/{run['id']}/execute").status_code == 200
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["reference_snapshot"]["scoring"] == {"type":"regex_match","pattern":"BLUE"}
+        assert attempt["status"] == "succeeded"
+        assert attempt["score"] == 0.0
