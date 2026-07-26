@@ -141,6 +141,14 @@ export default function App() {
     return () => events.close();
   }, [selectedRun, selectedRunInfo?.status]);
 
+  useEffect(() => {
+    if (view !== "queue") return;
+    const events = new EventSource(api.workerEventsUrl());
+    const update = () => { void refresh().catch(showError); };
+    events.addEventListener("worker", update);
+    return () => events.close();
+  }, [view, refresh]);
+
   function showError(error: unknown) {
     setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : "Unable to reach the evaluation service.");
   }

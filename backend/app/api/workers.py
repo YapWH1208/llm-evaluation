@@ -1,9 +1,13 @@
 from __future__ import annotations
 from collections.abc import Generator
+import asyncio
+import json
 from datetime import datetime
 from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db.models import TaskUnit
 from app.db.mongo import MongoDocumentStore
@@ -73,3 +77,37 @@ def reclaim(request:Request,session:SessionDependency)->dict[str,int]:
     if store is not None:return {"reclaimed":store.reclaim_expired_leases()}
     assert session is not None
     return {"reclaimed":reclaim_expired_leases(session)}
+
+
+@router.get("/events")
+async def worker_events(request: Request, once: bool = False) -> StreamingResponse:
+    """Stream task progress, active workers, and retry-exhaustion notices."""
+
+    async def event_stream():
+        while True:
+            yield f"event: worker\ndata: {json.dumps(_worker_event_payload(request), default=str)}\n\n"
+            if once:
+                return
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+def _worker_event_payload(request: Request) -> dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        tasks = store.list_documents("task_units", sort=[("updated_at", -1)])
+        active = [task for task in tasks if task.get("status") in {"leased", "running"}]
+        return {
+            "queue": {"pending": sum(task.get("status") in {"pending", "retry_scheduled"} for task in tasks), "active": len(active)},
+            "workers": sorted({str(task["leased_by"]) for task in active if task.get("leased_by")}),
+            "errors": [{"task_id": task["id"], "run_id": task["run_id"], "retry_exhausted_reason": (task.get("payload") or {}).get("retry_exhausted_reason")} for task in tasks if task.get("status") == "failed"][:20],
+        }
+    with request.app.state.database.get_session() as session:
+        tasks = list(session.scalars(select(TaskUnit).order_by(TaskUnit.updated_at.desc())))
+        active = [task for task in tasks if task.status in {"leased", "running"}]
+        return {
+            "queue": {"pending": sum(task.status in {"pending", "retry_scheduled"} for task in tasks), "active": len(active)},
+            "workers": sorted({str(task.leased_by) for task in active if task.leased_by}),
+            "errors": [{"task_id": task.id, "run_id": task.run_id, "retry_exhausted_reason": (task.payload or {}).get("retry_exhausted_reason")} for task in tasks if task.status == "failed"][:20],
+        }

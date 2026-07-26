@@ -31,3 +31,13 @@ def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> Non
         updated = client.patch(f"/api/v1/tasks/{tasks[0]['id']}", json={"priority": 25})
         assert updated.status_code == 200
         assert updated.json()["priority"] == 25
+
+
+def test_worker_events_expose_queue_worker_and_error_snapshots(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
+    with TestClient(app) as client:
+        stream = client.get("/api/v1/workers/events?once=true")
+        assert stream.status_code == 200
+        assert stream.headers["content-type"].startswith("text/event-stream")
+        assert "event: worker" in stream.text
+        assert '"queue"' in stream.text
