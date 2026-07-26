@@ -1,7 +1,8 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
   ApiError,
+  Asset,
   Benchmark,
   Capability,
   Comparison,
@@ -30,6 +31,7 @@ const initialEndpoint = {
 const initialPrompt = { name: "", version: "1", system_message: "", user_template: "{{ question }}" };
 const initialDataset = { dataset_id: "", version: "1", source_url: "", license_text: "" };
 const initialReview = { reviewer_id: "local-reviewer", score: "", labels: "", notes: "" };
+const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
 
 function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
@@ -73,6 +75,8 @@ export default function App() {
   const [promptForm, setPromptForm] = useState(initialPrompt);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [reviewForm, setReviewForm] = useState(initialReview);
+  const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
+  const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -204,6 +208,42 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function uploadAsset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy("asset-upload");
+    try {
+      const dataUrl = await fileAsDataUrl(file);
+      const asset = await api.uploadAsset({ filename: file.name, mime_type: file.type, base64_data: dataUrl.split(",", 2)[1] ?? "" });
+      setUploadedAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+      setMultimodalForm((current) => ({ ...current, asset_id: asset.id }));
+      setNotice("Validated media asset uploaded and selected for the custom run.");
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
+  async function createMultimodalRun(event: FormEvent) {
+    event.preventDefault();
+    const asset = uploadedAssets.find((item) => item.id === multimodalForm.asset_id);
+    if (!asset || !multimodalForm.endpoint_id) {
+      setNotice("Select an available endpoint and upload or select a media asset first.");
+      return;
+    }
+    setBusy("multimodal-run");
+    try {
+      const run = await api.createCustomMultimodalRun({
+        model_endpoint_id: multimodalForm.endpoint_id,
+        sample_id: multimodalForm.sample_id,
+        reference_answer: multimodalForm.reference_answer,
+        messages: [{ role: "user", content: [{ type: "text", text: multimodalForm.prompt }, { type: asset.media_kind, source: { asset_id: asset.id }, mime_type: asset.mime_type }] }],
+      });
+      setMultimodalForm(initialMultimodal);
+      await selectRun(run.id);
+      setView("runs");
+      setNotice("Custom multimodal run queued with an immutable asset snapshot.");
+      await refresh();
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function prepareDataset(dataset: Dataset) {
     setBusy(`dataset-${dataset.id}`);
     try {
@@ -309,6 +349,7 @@ export default function App() {
           <article className="panel"><h2>Create prompt package</h2><form onSubmit={createPrompt} className="form"><label>Name<input required value={promptForm.name} onChange={(event) => setPromptForm({ ...promptForm, name: event.target.value })} /></label><label>Version<input required value={promptForm.version} onChange={(event) => setPromptForm({ ...promptForm, version: event.target.value })} /></label><label>System message<textarea value={promptForm.system_message} onChange={(event) => setPromptForm({ ...promptForm, system_message: event.target.value })} /></label><label>User template<textarea required value={promptForm.user_template} onChange={(event) => setPromptForm({ ...promptForm, user_template: event.target.value })} /></label><button disabled={busy === "prompt"}>Save versioned prompt</button></form></article>
           <article className="panel"><h2>Register dataset version</h2><form onSubmit={createDataset} className="form"><label>Dataset ID<input required value={datasetForm.dataset_id} onChange={(event) => setDatasetForm({ ...datasetForm, dataset_id: event.target.value })} /></label><label>Version<input required value={datasetForm.version} onChange={(event) => setDatasetForm({ ...datasetForm, version: event.target.value })} /></label><label>Source URL<input type="url" value={datasetForm.source_url} onChange={(event) => setDatasetForm({ ...datasetForm, source_url: event.target.value })} /></label><label>License text<textarea value={datasetForm.license_text} onChange={(event) => setDatasetForm({ ...datasetForm, license_text: event.target.value })} /></label><button disabled={busy === "dataset"}>Register dataset</button></form></article>
         </section>
+        <section className="grid two"><article className="panel"><h2>Custom multimodal quick check</h2><form className="form" onSubmit={createMultimodalRun}><label>Endpoint<select required value={multimodalForm.endpoint_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Sample ID<input required value={multimodalForm.sample_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, sample_id: event.target.value })} /></label><label>Prompt<textarea required value={multimodalForm.prompt} onChange={(event) => setMultimodalForm({ ...multimodalForm, prompt: event.target.value })} placeholder="Describe or answer a question about the attached media." /></label><label>Expected text answer<textarea required value={multimodalForm.reference_answer} onChange={(event) => setMultimodalForm({ ...multimodalForm, reference_answer: event.target.value })} /></label><label>Uploaded media<select required value={multimodalForm.asset_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, asset_id: event.target.value })}><option value="">Upload an asset first</option>{uploadedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.original_filename} · {asset.media_kind}</option>)}</select></label><button disabled={busy === "multimodal-run"}>Queue multimodal run</button></form></article><article className="panel"><h2>Media asset upload</h2><p className="muted">Files are validated by MIME signature, content-addressed, and stored outside browser memory before they enter a run snapshot.</p><label className="file-picker">Choose image, audio, video, or PDF<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/wav,audio/mpeg,video/mp4,video/webm,application/pdf" onChange={(event) => void uploadAsset(event)} /></label>{busy === "asset-upload" && <p className="muted">Uploading and validating asset...</p>}{uploadedAssets.length > 0 && <div className="asset-list">{uploadedAssets.map((asset) => <button className={multimodalForm.asset_id === asset.id ? "asset selected" : "asset"} key={asset.id} onClick={() => setMultimodalForm({ ...multimodalForm, asset_id: asset.id })}><strong>{asset.original_filename}</strong><span>{asset.media_kind} · {display(asset.size_bytes)} bytes</span></button>)}</div>}</article></section>
         <section className="panel"><div className="section-title"><h2>Benchmark registry</h2><span>{benchmarks.length} registered</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td>{benchmark.display_name}</td><td>{benchmark.version}</td><td>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td></tr>)}</tbody></table></div></section>
         <section className="panel"><div className="section-title"><h2>Dataset cache</h2><span>{datasets.length} registered</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset version to manage downloads and licenses.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div><h3>{dataset.dataset_id} v{dataset.version}</h3><p className="muted">{dataset.source_url || "No source URL"}</p>{dataset.error_message && <p className="error">{dataset.error_message}</p>}</div><span className={`badge ${dataset.status}`}>{dataset.status}</span>{dataset.status !== "ready" && <div className="actions"><button disabled={busy === `dataset-${dataset.id}`} onClick={() => void prepareDataset(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : "Download and verify"}</button></div>}</article>)}</div>}</section>
       </>}
@@ -352,4 +393,13 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
 
 function ReportsTable({ reports }: { reports: Report[] }) {
   return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a></td></tr>)}</tbody></table></div>;
+}
+
+function fileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read selected file."));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
 }

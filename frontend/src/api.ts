@@ -113,6 +113,7 @@ export type Comparison = {
 };
 
 export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: unknown[]; notes: string | null; created_at: string };
+export type Asset = { id: string; original_filename: string; media_kind: "image" | "audio" | "video" | "file"; mime_type: string; size_bytes: number; sha256: string; created_at: string };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -142,6 +143,7 @@ export const api = {
   testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
   createRun: (modelEndpointId: string, promptPackageId?: string) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null }) }),
+  createCustomMultimodalRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/custom-multimodal", { method: "POST", body: JSON.stringify(body) }),
   executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
   pauseRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/pause`, { method: "POST" }),
   resumeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/resume`, { method: "POST" }),
@@ -166,4 +168,5 @@ export const api = {
   detectCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities/detect`, { method: "POST" }),
   createReview: (body: Record<string, unknown>) => request<Review>("/reviews", { method: "POST", body: JSON.stringify(body) }),
   listReviews: (attemptId: string) => request<Review[]>(`/reviews/sample/${attemptId}`),
+  uploadAsset: (body: { filename: string; mime_type: string; base64_data: string }) => request<Asset>("/assets", { method: "POST", body: JSON.stringify(body) }),
 };
