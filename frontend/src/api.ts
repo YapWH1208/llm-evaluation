@@ -8,6 +8,9 @@ export type Endpoint = {
   max_concurrency: number;
   requests_per_minute: number | null;
   tokens_per_minute: number | null;
+  input_cost_per_million: number | null;
+  output_cost_per_million: number | null;
+  currency: string;
   last_connection_error: string | null;
 };
 
@@ -36,17 +39,35 @@ export type SampleAttempt = {
   raw_response: string | null;
   parsed_prediction: string | null;
   score: number | null;
+  latency_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  estimated_cost: number | null;
   error_type: string | null;
   error_message: string | null;
   status: string;
+  created_at: string;
+  completed_at: string | null;
 };
 
-export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generated_at: string };
+export type RunSummary = {
+  samples: { total: number; completed: number; successful: number; failed: number; completion_rate: number | null; success_rate: number | null; accuracy: number | null };
+  errors: { total: number; rate: number | null; api_errors: number; api_error_rate: number | null; parser_errors: number; parser_error_rate: number | null; by_type: Record<string, number> };
+  latency_ms: { measured_samples: number; average: number | null; p50: number | null; p95: number | null; p99: number | null };
+  tokens: { measured_samples: number; input: number; output: number; total: number };
+  cost: { measured_samples: number; estimated: number | null; actual: number | null; currency: string | null };
+};
+
+export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generator_version: string; generated_at: string };
+export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
 export type Dashboard = {
-  runs: { active: number; completed: number };
+  runs: { active: number; completed: number; recent_completed: Array<{ id: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
   queue: { pending: number; leased: number };
+  workers: { active: number };
   endpoints: { available: number; unavailable: number; total: number };
   datasets: { ready: number; blocked: number };
+  quality: RunSummary;
+  api: { request_error_rate: number | null; estimated_cost_by_currency: Record<string, number> };
   reports: number;
 };
 
@@ -80,6 +101,19 @@ export type Capability = {
   effective_status: string;
 };
 
+export type Comparison = {
+  run_a: string;
+  run_b: string;
+  benchmark: { id: string; version: string };
+  shared_samples: number;
+  outcomes: { both_correct: number; run_a_only_correct: number; run_b_only_correct: number; both_incorrect: number };
+  run_a_summary: RunSummary;
+  run_b_summary: RunSummary;
+  differences: { accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; p95_latency_ms: number | null; estimated_cost: number | null; output_tokens: number };
+};
+
+export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: unknown[]; notes: string | null; created_at: string };
+
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
 export class ApiError extends Error {
@@ -104,34 +138,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listEndpoints: () => request<Endpoint[]>("/model-endpoints"),
-  createEndpoint: (body: Record<string, unknown>) =>
-    request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
-  testEndpoint: (endpointId: string) =>
-    request<{ success: boolean; status: Endpoint["status"]; message: string }>(
-      `/model-endpoints/${endpointId}/connection-test`,
-      { method: "POST" },
-    ),
+  createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
+  testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
-  createRun: (modelEndpointId: string, promptPackageId?: string) =>
-    request<EvaluationRun>("/evaluation-runs", {
-      method: "POST",
-      body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null }),
-    }),
-  executeRun: (runId: string) =>
-    request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
+  createRun: (modelEndpointId: string, promptPackageId?: string) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null }) }),
+  executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
+  pauseRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/pause`, { method: "POST" }),
+  resumeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/resume`, { method: "POST" }),
+  cancelRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/cancel`, { method: "POST" }),
   listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
-  createReport: (runId: string, format: "html" | "json" | "csv") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
+  getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
+  createReport: (runId: string, format: "html" | "json" | "csv" | "markdown") => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format }) }),
+  listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
   dashboard: () => request<Dashboard>("/dashboard"),
+  compare: (runA: string, runB: string) => request<Comparison>(`/comparisons?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`),
+  listBenchmarks: () => request<Benchmark[]>("/benchmarks"),
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
-  createPromptPackage: (body: Record<string, unknown>) =>
-    request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
+  createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
   listDatasets: () => request<Dataset[]>("/datasets"),
-  createDataset: (body: Record<string, unknown>) =>
-    request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
+  createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
   listCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities`),
-  detectCapabilities: (endpointId: string) =>
-    request<Capability[]>(`/model-endpoints/${endpointId}/capabilities/detect`, { method: "POST" }),
+  detectCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities/detect`, { method: "POST" }),
+  createReview: (body: Record<string, unknown>) => request<Review>("/reviews", { method: "POST", body: JSON.stringify(body) }),
+  listReviews: (attemptId: string) => request<Review[]>(`/reviews/sample/${attemptId}`),
 };
