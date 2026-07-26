@@ -41,7 +41,7 @@ class ModelExecutor(Protocol):
 
 
 class OpenAIChatCompletionsExecutor:
-    """Executes one text sample through an OpenAI-compatible endpoint."""
+    """Executes one sample through an OpenAI-compatible Chat or Responses endpoint."""
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -72,7 +72,7 @@ class OpenAIChatCompletionsExecutor:
                 transport=self._transport,
             ) as client:
                 response = client.post(
-                    f"{endpoint.base_url}/chat/completions",
+                    _endpoint_url(endpoint),
                     headers={"Authorization": f"Bearer {api_key}"},
                     json=request_snapshot,
                 )
@@ -112,7 +112,7 @@ class OpenAIChatCompletionsExecutor:
 
         try:
             payload = response.json()
-            prediction = payload["choices"][0]["message"]["content"]
+            prediction = _extract_prediction(payload, _protocol_profile(endpoint))
             input_tokens, output_tokens = _extract_usage(payload)
         except (IndexError, KeyError, TypeError, ValueError):
             return SampleExecutionResult(
@@ -121,7 +121,7 @@ class OpenAIChatCompletionsExecutor:
                 raw_response,
                 None,
                 "response_parse_error",
-                "Provider returned an unexpected Chat Completions response.",
+                "Provider returned an unexpected response payload.",
                 latency_ms=_elapsed_ms(started_at),
             )
 
@@ -154,23 +154,132 @@ class OpenAIChatCompletionsExecutor:
         messages = input_snapshot.get("messages")
         if not isinstance(messages, list):
             raise ValueError("Text sample input must contain a messages list.")
-        protocol_profile = endpoint.protocol_profile or "openai_chat_completions"
-        if protocol_profile != "openai_chat_completions":
-            raise ValueError(f"Unsupported execution protocol profile: {protocol_profile}.")
+        protocol_profile = _protocol_profile(endpoint)
+        if protocol_profile == "openai_chat_completions":
+            return _build_chat_request(endpoint, messages)
+        if protocol_profile == "openai_responses":
+            return _build_responses_request(endpoint, messages)
+        raise ValueError(f"Unsupported execution protocol profile: {protocol_profile}.")
 
-        allowed_defaults = {
-            key: value
-            for key, value in (endpoint.default_request_body or {}).items()
-            if key not in PROTECTED_REQUEST_FIELDS
-        }
-        return {
-            **allowed_defaults,
-            "model": endpoint.model_name,
-            "messages": _translate_messages(messages),
-            "stream": False,
-            "temperature": 0,
-            "max_tokens": 32,
-        }
+def _protocol_profile(endpoint: ModelEndpoint) -> str:
+    return str(getattr(endpoint, "protocol_profile", None) or "openai_chat_completions")
+
+
+def _endpoint_url(endpoint: ModelEndpoint) -> str:
+    suffix = "/responses" if _protocol_profile(endpoint) == "openai_responses" else "/chat/completions"
+    return f"{endpoint.base_url}{suffix}"
+
+
+def _allowed_defaults(endpoint: ModelEndpoint) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in (endpoint.default_request_body or {}).items()
+        if key not in PROTECTED_REQUEST_FIELDS
+    }
+
+
+def _build_chat_request(endpoint: ModelEndpoint, messages: list[object]) -> dict[str, Any]:
+    return {
+        **_allowed_defaults(endpoint),
+        "model": endpoint.model_name,
+        "messages": _translate_messages(messages),
+        "stream": False,
+        "temperature": 0,
+        "max_tokens": 32,
+    }
+
+
+def _build_responses_request(endpoint: ModelEndpoint, messages: list[object]) -> dict[str, Any]:
+    return {
+        **_allowed_defaults(endpoint),
+        "model": endpoint.model_name,
+        "input": _translate_responses_messages(messages),
+        "stream": False,
+        "store": False,
+        "max_output_tokens": 32,
+    }
+
+
+def _extract_prediction(payload: dict[str, Any], protocol_profile: str) -> str:
+    if protocol_profile == "openai_chat_completions":
+        prediction = payload["choices"][0]["message"]["content"]
+        if not isinstance(prediction, str):
+            raise ValueError("Chat Completions response did not contain text content.")
+        return prediction
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+    fragments: list[str] = []
+    output = payload.get("output")
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, dict) or item.get("type") != "message":
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                    fragments.append(part["text"])
+    if not fragments:
+        raise ValueError("Responses API response did not contain output text.")
+    return "".join(fragments)
+
+
+def _translate_responses_messages(messages: list[object]) -> list[dict[str, object]]:
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        content = message.get("content")
+        if role not in {"user", "assistant", "system", "developer"}:
+            raise ValueError("Responses API messages require a user, assistant, system, or developer role.")
+        if isinstance(content, str):
+            parts = [{"type": "input_text", "text": content}]
+        elif isinstance(content, list):
+            try:
+                normalized = normalize_content_parts(content)
+            except ContentValidationError as error:
+                raise ValueError(str(error)) from error
+            parts = [_translate_responses_content_part(part) for part in normalized]
+        else:
+            raise ValueError("Message content must be text or a list of content parts.")
+        translated.append({"role": role, "content": parts})
+    return translated
+
+
+def _translate_responses_content_part(part: dict[str, Any]) -> dict[str, object]:
+    part_type = part["type"]
+    if part_type == "text":
+        return {"type": "input_text", "text": part["text"]}
+    if part_type == "image":
+        return {"type": "input_image", "image_url": _source_as_data_or_remote_url(part)}
+    if part_type == "audio":
+        source = part["source"]
+        encoded = source.get("base64_data") if isinstance(source, dict) else None
+        if not isinstance(encoded, str):
+            raise ValueError("Responses API audio content requires base64_data.")
+        _validate_base64(encoded)
+        audio_format = part["mime_type"].split("/", 1)[1]
+        if audio_format == "mpeg":
+            audio_format = "mp3"
+        if audio_format not in {"wav", "mp3"}:
+            raise ValueError("Responses API audio supports WAV or MP3 content only.")
+        return {"type": "input_audio", "input_audio": {"data": encoded, "format": audio_format}}
+    if part_type == "file":
+        source = part["source"]
+        if not isinstance(source, dict):
+            raise ValueError("File content parts require a source object.")
+        if isinstance(source.get("url"), str):
+            _validate_remote_media_url(source["url"])
+            return {"type": "input_file", "file_url": source["url"], "filename": "input-file"}
+        if isinstance(source.get("base64_data"), str):
+            _validate_base64(source["base64_data"])
+            return {"type": "input_file", "file_data": source["base64_data"], "filename": "input-file"}
+        raise ValueError("Responses API file content requires base64_data or a remote URL.")
+    raise ValueError("Responses API does not support video content through this adapter. Use a compatible provider adapter.")
+
 
 def normalize_exact_match(value: str) -> str:
     return " ".join(value.strip().split())

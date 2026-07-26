@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -16,12 +16,14 @@ from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
+ProtocolProfile = Literal["openai_chat_completions", "openai_responses"]
 
 
 class EndpointBase(BaseModel):
     display_name: Annotated[str | None, Field(max_length=200)] = None
     base_url: Annotated[str, Field(min_length=1, max_length=2048)]
     model_name: Annotated[str, Field(min_length=1, max_length=255)]
+    protocol_profile: ProtocolProfile = "openai_chat_completions"
     default_request_body: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: Annotated[int, Field(ge=1, le=600)] = 60
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
@@ -61,6 +63,7 @@ class ModelEndpointUpdate(BaseModel):
     display_name: Annotated[str | None, Field(max_length=200)] = None
     base_url: Annotated[str | None, Field(min_length=1, max_length=2048)] = None
     model_name: Annotated[str | None, Field(min_length=1, max_length=255)] = None
+    protocol_profile: ProtocolProfile | None = None
     default_request_body: dict[str, Any] | None = None
     timeout_seconds: Annotated[int | None, Field(ge=1, le=600)] = None
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
@@ -178,7 +181,7 @@ def create_model_endpoint(
                 "display_name": payload.display_name or payload.model_name,
                 "base_url": payload.base_url,
                 "model_name": payload.model_name,
-                "protocol_profile": "openai_chat_completions",
+                "protocol_profile": payload.protocol_profile,
                 "encrypted_api_key": cipher.encrypt(api_key),
                 "api_key_mask": mask_secret(api_key),
                 "default_request_body": payload.default_request_body,
@@ -201,6 +204,7 @@ def create_model_endpoint(
         display_name=payload.display_name or payload.model_name,
         base_url=payload.base_url,
         model_name=payload.model_name,
+        protocol_profile=payload.protocol_profile,
         encrypted_api_key=cipher.encrypt(api_key),
         api_key_mask=mask_secret(api_key),
         default_request_body=payload.default_request_body,

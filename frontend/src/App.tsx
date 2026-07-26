@@ -25,6 +25,7 @@ const initialEndpoint = {
   base_url: "",
   api_key: "",
   model_name: "",
+  protocol_profile: "openai_chat_completions",
   display_name: "",
   input_cost_per_million: "",
   output_cost_per_million: "",
@@ -372,6 +373,7 @@ export default function App() {
               <label>Display name<input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="My local model" /></label>
               <label>Base URL<input required type="url" value={form.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} placeholder="https://provider.example/v1" /></label>
               <label>Model name<input required value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value })} placeholder="model-id" /></label>
+              <label>Protocol profile<select value={form.protocol_profile} onChange={(event) => setForm({ ...form, protocol_profile: event.target.value as "openai_chat_completions" | "openai_responses" })}><option value="openai_chat_completions">OpenAI-compatible Chat Completions</option><option value="openai_responses">OpenAI-compatible Responses API</option></select></label>
               <label>API key<input required type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder="Stored encrypted" /></label>
               <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
               <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>

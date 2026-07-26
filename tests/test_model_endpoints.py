@@ -81,6 +81,18 @@ def test_model_endpoint_creation_requires_an_encryption_key(tmp_path: Path) -> N
     assert "LLE_SECRET_ENCRYPTION_KEY" in response.json()["detail"]
 
 
+def test_model_endpoint_persists_supported_protocol_profile(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as client:
+        response = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "responses", "protocol_profile": "openai_responses"})
+        assert response.status_code == 201
+        endpoint = response.json()
+        assert endpoint["protocol_profile"] == "openai_responses"
+        updated = client.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"protocol_profile": "openai_chat_completions"})
+        assert updated.status_code == 200
+        assert updated.json()["protocol_profile"] == "openai_chat_completions"
+
+
 def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) -> None:
     app = create_app(
         Settings(

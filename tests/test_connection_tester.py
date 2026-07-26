@@ -50,6 +50,23 @@ def test_openai_connection_probe_uses_a_small_protected_request() -> None:
     }
 
 
+def test_responses_connection_probe_uses_responses_shape() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://models.example.test/v1/responses"
+        assert json.loads(request.content) == {
+            "model": "responses-model",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}],
+            "max_output_tokens": 8,
+            "stream": False,
+            "store": False,
+        }
+        return httpx.Response(200, json={"output_text": "OK"})
+
+    endpoint = ModelEndpoint(display_name="Responses", base_url="https://models.example.test/v1", model_name="responses-model", protocol_profile="openai_responses", encrypted_api_key="not-used", api_key_mask="****test")
+    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
 def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
     class SuccessfulTester:
         def test(self, endpoint: ModelEndpoint, api_key: str) -> ConnectionTestResult:

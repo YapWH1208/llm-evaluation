@@ -41,7 +41,7 @@ class CapabilityDetector(Protocol):
 class OpenAIChatCompletionsCapabilityDetector:
     """Runs inexpensive OpenAI Chat Completions probes without storing secrets or media."""
 
-    ADAPTER_VERSION = "openai-chat-completions/1"
+    ADAPTER_VERSION = "openai-compatible/2"
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         self._transport = transport
@@ -82,7 +82,7 @@ class OpenAIChatCompletionsCapabilityDetector:
                 transport=self._transport,
             ) as client:
                 response = client.post(
-                    f"{endpoint.base_url}/chat/completions",
+                    _endpoint_url(endpoint),
                     headers={"Authorization": f"Bearer {api_key}"},
                     json=self._request_body(endpoint, messages),
                 )
@@ -120,7 +120,7 @@ class OpenAIChatCompletionsCapabilityDetector:
                 self._evidence("invalid_json", provider_status_code=response.status_code),
             )
 
-        if not isinstance(payload, dict) or not isinstance(payload.get("choices"), list):
+        if not isinstance(payload, dict) or not _has_expected_response_shape(endpoint, payload):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
@@ -154,6 +154,15 @@ class OpenAIChatCompletionsCapabilityDetector:
             for key, value in (endpoint.default_request_body or {}).items()
             if key not in PROTECTED_REQUEST_FIELDS
         }
+        if _protocol_profile(endpoint) == "openai_responses":
+            return {
+                **allowed_defaults,
+                "model": endpoint.model_name,
+                "input": _responses_input(messages),
+                "max_output_tokens": 8,
+                "stream": False,
+                "store": False,
+            }
         return {
             **allowed_defaults,
             "model": endpoint.model_name,
@@ -162,3 +171,41 @@ class OpenAIChatCompletionsCapabilityDetector:
             "max_tokens": 8,
             "stream": False,
         }
+
+
+def _protocol_profile(endpoint: ModelEndpoint) -> str:
+    return str(getattr(endpoint, "protocol_profile", None) or "openai_chat_completions")
+
+
+def _endpoint_url(endpoint: ModelEndpoint) -> str:
+    suffix = "/responses" if _protocol_profile(endpoint) == "openai_responses" else "/chat/completions"
+    return f"{endpoint.base_url}{suffix}"
+
+
+def _responses_input(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        content = message["content"]
+        if isinstance(content, str):
+            parts: list[dict[str, object]] = [{"type": "input_text", "text": content}]
+        else:
+            parts = []
+            for part in content if isinstance(content, list) else []:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    parts.append({"type": "input_text", "text": part.get("text")})
+                elif part.get("type") == "image_url":
+                    image = part.get("image_url")
+                    if isinstance(image, dict):
+                        parts.append({"type": "input_image", "image_url": image.get("url")})
+                elif part.get("type") == "input_audio":
+                    parts.append({"type": "input_audio", "input_audio": part.get("input_audio")})
+        translated.append({"role": message["role"], "content": parts})
+    return translated
+
+
+def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, object]) -> bool:
+    if _protocol_profile(endpoint) == "openai_responses":
+        return isinstance(payload.get("output_text"), str) or isinstance(payload.get("output"), list)
+    return isinstance(payload.get("choices"), list)

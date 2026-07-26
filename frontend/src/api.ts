@@ -3,6 +3,7 @@ export type Endpoint = {
   display_name: string;
   base_url: string;
   model_name: string;
+  protocol_profile: "openai_chat_completions" | "openai_responses";
   api_key_mask: string;
   status: "unverified" | "available" | "unavailable";
   max_concurrency: number;
