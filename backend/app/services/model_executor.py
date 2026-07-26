@@ -16,6 +16,7 @@ from app.db import ModelEndpoint
 from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.provider_headers import provider_headers
+from app.services.request_body import effective_request_options, request_snapshot_metadata
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +56,8 @@ class OpenAIChatCompletionsExecutor:
     ) -> SampleExecutionResult:
         started_at = perf_counter()
         try:
-            request_snapshot = self._build_request(endpoint, input_snapshot)
+            outbound_request = self._build_request(endpoint, input_snapshot)
+            request_snapshot = _snapshot_with_request_evidence(outbound_request, input_snapshot)
         except ValueError as error:
             return SampleExecutionResult(
                 False,
@@ -75,7 +77,7 @@ class OpenAIChatCompletionsExecutor:
                 response = client.post(
                     _endpoint_url(endpoint),
                     headers=provider_headers(endpoint, api_key),
-                    json=request_snapshot,
+                    json=outbound_request,
                 )
         except httpx.TimeoutException:
             return SampleExecutionResult(
@@ -156,10 +158,15 @@ class OpenAIChatCompletionsExecutor:
         if not isinstance(messages, list):
             raise ValueError("Text sample input must contain a messages list.")
         protocol_profile = _protocol_profile(endpoint)
+        request_options = effective_request_options(
+            input_snapshot,
+            protocol_profile=protocol_profile,
+            model_defaults=endpoint.default_request_body,
+        )
         if protocol_profile == "openai_chat_completions":
-            return _build_chat_request(endpoint, messages)
+            return _build_chat_request(endpoint, messages, request_options)
         if protocol_profile == "openai_responses":
-            return _build_responses_request(endpoint, messages)
+            return _build_responses_request(endpoint, messages, request_options)
         raise ValueError(f"Unsupported execution protocol profile: {protocol_profile}.")
 
 def _protocol_profile(endpoint: ModelEndpoint) -> str:
@@ -171,34 +178,52 @@ def _endpoint_url(endpoint: ModelEndpoint) -> str:
     return f"{endpoint.base_url}{suffix}"
 
 
-def _allowed_defaults(endpoint: ModelEndpoint) -> dict[str, Any]:
+def _allowed_defaults(defaults: dict[str, object]) -> dict[str, Any]:
     return {
         key: value
-        for key, value in (endpoint.default_request_body or {}).items()
+        for key, value in defaults.items()
         if key not in PROTECTED_REQUEST_FIELDS
     }
 
 
-def _build_chat_request(endpoint: ModelEndpoint, messages: list[object]) -> dict[str, Any]:
+def _build_chat_request(
+    endpoint: ModelEndpoint,
+    messages: list[object],
+    request_options: dict[str, object],
+) -> dict[str, Any]:
     return {
-        **_allowed_defaults(endpoint),
+        **_allowed_defaults(request_options),
         "model": endpoint.model_name,
         "messages": _translate_messages(messages),
         "stream": False,
-        "temperature": 0,
-        "max_tokens": 32,
     }
 
 
-def _build_responses_request(endpoint: ModelEndpoint, messages: list[object]) -> dict[str, Any]:
+def _build_responses_request(
+    endpoint: ModelEndpoint,
+    messages: list[object],
+    request_options: dict[str, object],
+) -> dict[str, Any]:
     return {
-        **_allowed_defaults(endpoint),
+        **_allowed_defaults(request_options),
         "model": endpoint.model_name,
         "input": _translate_responses_messages(messages),
         "stream": False,
         "store": False,
-        "max_output_tokens": 32,
     }
+
+
+def _snapshot_with_request_evidence(
+    outbound_request: dict[str, Any],
+    input_snapshot: dict[str, object],
+) -> dict[str, Any]:
+    """Persist provider request and locally generated merge evidence separately."""
+
+    snapshot = dict(outbound_request)
+    evidence = request_snapshot_metadata(input_snapshot)
+    if evidence is not None:
+        snapshot["_evaluation"] = {"request_body_evidence": evidence}
+    return snapshot
 
 
 def _extract_prediction(payload: dict[str, Any], protocol_profile: str) -> str:

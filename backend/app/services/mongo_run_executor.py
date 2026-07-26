@@ -20,6 +20,7 @@ from app.services.run_analysis import summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
+from app.services.request_body import resolve_request_body
 
 
 class MongoRunExecutionError(ValueError):
@@ -36,6 +37,7 @@ def create_mongo_benchmark_run(
     benchmark_version: str,
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
+    request_body_override: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
     if endpoint is None:
@@ -57,6 +59,13 @@ def create_mongo_benchmark_run(
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise MongoRunExecutionError("Prompt package not found.")
+
+    request_body_evidence = _mongo_request_body_evidence(
+        endpoint=endpoint,
+        benchmark_manifest=plugin.manifest,
+        suite_snapshot=suite_snapshot,
+        request_body_override=request_body_override,
+    )
 
     prompt_proxy = _proxy(prompt_package) if prompt_package else None
     now = _utc_now()
@@ -84,6 +93,7 @@ def create_mongo_benchmark_run(
             else None
         ),
         "evaluation_suite": suite_snapshot,
+        "request_body_evidence": request_body_evidence,
     }
     run = store.insert_document(
         "evaluation_runs",
@@ -135,7 +145,7 @@ def create_mongo_benchmark_run(
                 "task_id": task["id"],
                 "sample_id": sample.sample_id,
                 "attempt_number": 1,
-                "input_snapshot": {"messages": _build_messages(sample.prompt, prompt_proxy), "modality": "text"},
+                "input_snapshot": {"messages": _build_messages(sample.prompt, prompt_proxy), "modality": "text", "request_body_evidence": request_body_evidence},
                 "reference_snapshot": {"type": "exact_match", "answer": sample.reference_answer},
                 "request_snapshot": None,
                 "raw_response": None,
@@ -156,6 +166,28 @@ def create_mongo_benchmark_run(
     return run
 
 
+def _mongo_request_body_evidence(
+    *,
+    endpoint: dict[str, Any],
+    benchmark_manifest: dict[str, object],
+    suite_snapshot: dict[str, object] | None,
+    request_body_override: dict[str, object] | None,
+) -> dict[str, object]:
+    suite_defaults = suite_snapshot.get("default_request_body") if isinstance(suite_snapshot, dict) else None
+    benchmark_defaults = benchmark_manifest.get("default_request_body")
+    benchmark_forced = benchmark_manifest.get("forced_request_body")
+    if not isinstance(benchmark_forced, dict):
+        benchmark_forced = benchmark_manifest.get("required_request_body")
+    return resolve_request_body(
+        protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")),
+        model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None,
+        suite_defaults=suite_defaults if isinstance(suite_defaults, dict) else None,
+        benchmark_defaults=benchmark_defaults if isinstance(benchmark_defaults, dict) else None,
+        run_override=request_body_override,
+        benchmark_forced=benchmark_forced if isinstance(benchmark_forced, dict) else None,
+    )
+
+
 def create_mongo_custom_multimodal_run(
     store: MongoDocumentStore,
     *,
@@ -170,10 +202,11 @@ def create_mongo_custom_multimodal_run(
     if endpoint.get("status") != "available": raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
     if not sample_id.strip() or not reference_answer.strip(): raise MongoRunExecutionError("Custom samples require a sample ID and reference answer.")
     normalized = _normalize_mongo_messages(store, data_root, messages)
+    request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id]},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
     task = store.insert_document("task_units", {"run_id":run["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
-    store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized)},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
+    store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized),"request_body_evidence":request_body_evidence},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
     return run
 
 

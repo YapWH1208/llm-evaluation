@@ -15,6 +15,7 @@ from app.db import (
     TaskUnit,
 )
 from app.db.models import ModelCapability
+from app.services.request_body import resolve_request_body
 
 
 class RunCreationError(ValueError):
@@ -48,6 +49,7 @@ def create_benchmark_run(
     benchmark_version: str,
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
+    request_body_override: dict[str, object] | None = None,
 ) -> EvaluationRun:
     endpoint = session.get(ModelEndpoint, model_endpoint_id)
     if endpoint is None:
@@ -71,6 +73,13 @@ def create_benchmark_run(
     if prompt_package_id and prompt_package is None:
         raise RunCreationError("Prompt package not found.")
 
+    request_body_evidence = _request_body_evidence(
+        endpoint=endpoint,
+        benchmark_manifest=plugin.manifest,
+        suite_snapshot=suite_snapshot,
+        request_body_override=request_body_override,
+    )
+
     snapshot = {
         "benchmark": {
             "id": benchmark_id,
@@ -93,6 +102,7 @@ def create_benchmark_run(
             if prompt_package else None
         ),
         "evaluation_suite": suite_snapshot,
+        "request_body_evidence": request_body_evidence,
     }
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
@@ -130,6 +140,7 @@ def create_benchmark_run(
                 input_snapshot={
                     "messages": _build_messages(sample.prompt, prompt_package),
                     "modality": "text",
+                    "request_body_evidence": request_body_evidence,
                 },
                 reference_snapshot={"type": "exact_match", "answer": sample.reference_answer},
             )
@@ -139,6 +150,34 @@ def create_benchmark_run(
     session.commit()
     session.refresh(run)
     return run
+
+
+def _request_body_evidence(
+    *,
+    endpoint: ModelEndpoint,
+    benchmark_manifest: dict[str, object],
+    suite_snapshot: dict[str, object] | None,
+    request_body_override: dict[str, object] | None,
+) -> dict[str, object]:
+    """Build the frozen Request Body evidence attached to every sample attempt."""
+
+    suite_defaults = (
+        suite_snapshot.get("default_request_body")
+        if isinstance(suite_snapshot, dict)
+        else None
+    )
+    benchmark_defaults = benchmark_manifest.get("default_request_body")
+    benchmark_forced = benchmark_manifest.get("forced_request_body")
+    if not isinstance(benchmark_forced, dict):
+        benchmark_forced = benchmark_manifest.get("required_request_body")
+    return resolve_request_body(
+        protocol_profile=str(endpoint.protocol_profile),
+        model_defaults=endpoint.default_request_body,
+        suite_defaults=suite_defaults if isinstance(suite_defaults, dict) else None,
+        benchmark_defaults=benchmark_defaults if isinstance(benchmark_defaults, dict) else None,
+        run_override=request_body_override,
+        benchmark_forced=benchmark_forced if isinstance(benchmark_forced, dict) else None,
+    )
 
 
 def _build_messages(question: str, prompt_package: PromptPackage | None) -> list[dict[str, object]]:

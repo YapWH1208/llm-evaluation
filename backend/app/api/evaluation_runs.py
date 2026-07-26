@@ -40,6 +40,7 @@ class EvaluationRunCreate(BaseModel):
     prompt_package_id: str | None = None
     benchmark_id: str = "text-quick-check"
     benchmark_version: str = "1.0.0"
+    request_body_override: dict[str, Any] = Field(default_factory=dict)
 
 
 class CustomMultimodalRunCreate(BaseModel):
@@ -140,6 +141,7 @@ def create_evaluation_run(
                 prompt_package_id=payload.prompt_package_id,
                 benchmark_id=payload.benchmark_id,
                 benchmark_version=payload.benchmark_version,
+                request_body_override=payload.request_body_override,
             )
         assert session is not None
         return create_benchmark_run(
@@ -149,6 +151,7 @@ def create_evaluation_run(
             prompt_package_id=payload.prompt_package_id,
             benchmark_id=payload.benchmark_id,
             benchmark_version=payload.benchmark_version,
+            request_body_override=payload.request_body_override,
         )
     except (RunCreationError, MongoRunExecutionError) as error:
         status_code = (

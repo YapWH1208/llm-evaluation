@@ -17,6 +17,7 @@ from app.db.models import (
 )
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
+from app.services.request_body import resolve_request_body
 
 
 class CustomRunError(ValueError):
@@ -40,6 +41,10 @@ def create_custom_multimodal_run(
     if not sample_id.strip() or not reference_answer.strip():
         raise CustomRunError("Custom samples require a sample ID and reference answer.")
     normalized_messages = _normalize_messages(session, data_root, messages)
+    request_body_evidence = resolve_request_body(
+        protocol_profile=str(endpoint.protocol_profile),
+        model_defaults=endpoint.default_request_body,
+    )
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         benchmark_id="custom-multimodal",
@@ -52,6 +57,7 @@ def create_custom_multimodal_run(
                 "protocol_profile": endpoint.protocol_profile,
             },
             "sample_ids": [sample_id],
+            "request_body_evidence": request_body_evidence,
         },
         status=RunStatus.QUEUED.value,
         total_samples=1,
@@ -76,7 +82,7 @@ def create_custom_multimodal_run(
             run_id=run.id,
             task_id=task.id,
             sample_id=sample_id.strip(),
-            input_snapshot={"messages": normalized_messages, "modality": _sample_modality(normalized_messages)},
+            input_snapshot={"messages": normalized_messages, "modality": _sample_modality(normalized_messages), "request_body_evidence": request_body_evidence},
             reference_snapshot={"type": "exact_match", "answer": reference_answer},
         )
     )

@@ -4,6 +4,53 @@ import httpx
 
 from app.db.models import ModelEndpoint
 from app.services.model_executor import OpenAIChatCompletionsExecutor
+from app.services.request_body import resolve_request_body
+
+
+def test_request_body_resolution_records_layer_precedence_and_protected_fields() -> None:
+    evidence = resolve_request_body(
+        protocol_profile="openai_chat_completions",
+        model_defaults={"temperature": 0.8, "generation": {"top_p": 0.6}, "model": "blocked"},
+        suite_defaults={"temperature": 0.5, "generation": {"seed": 7}, "messages": "blocked"},
+        benchmark_defaults={"generation": {"top_p": 0.9}},
+        run_override={"temperature": 0.3, "generation": {"seed": 11}},
+        benchmark_forced={"temperature": 0, "response_schema": {"strict": True}},
+    )
+
+    assert evidence["effective_request_body"] == {
+        "temperature": 0,
+        "max_tokens": 32,
+        "generation": {"top_p": 0.9, "seed": 11},
+        "response_schema": {"strict": True},
+    }
+    assert {item["field"] for item in evidence["ignored_fields"]} == {"model", "messages"}
+    assert any(item["field"] == "temperature" and item["new_layer"] == "benchmark_forced" for item in evidence["overridden_fields"])
+
+
+def test_executor_sends_effective_request_body_and_persists_merge_evidence() -> None:
+    evidence = resolve_request_body(
+        protocol_profile="openai_chat_completions",
+        model_defaults={"temperature": 0.7},
+        suite_defaults={"temperature": 0.2},
+        run_override={"top_p": 0.9},
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["temperature"] == 0.2
+        assert body["top_p"] == 0.9
+        assert "_evaluation" not in body
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    endpoint = ModelEndpoint(display_name="hierarchy", base_url="https://models.example.test/v1", model_name="model", encrypted_api_key="unused", api_key_mask="****test", default_request_body={"temperature": 0.7})
+    result = OpenAIChatCompletionsExecutor(httpx.MockTransport(handler)).execute(
+        endpoint,
+        "secret",
+        {"messages": [{"role": "user", "content": "hello"}], "request_body_evidence": evidence},
+    )
+
+    assert result.success is True
+    assert result.request_snapshot["_evaluation"]["request_body_evidence"] == evidence
 
 
 def test_openai_executor_records_provider_usage_and_latency() -> None:
