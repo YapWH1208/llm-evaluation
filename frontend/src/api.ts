@@ -96,6 +96,7 @@ export type Dataset = {
   status: string;
   error_message: string | null;
 };
+export type EvaluationSuite = { id: string; name: string; description: string | null; benchmark_list: Array<Record<string, unknown>>; default_prompt_overrides: Record<string, unknown>; default_request_body: Record<string, unknown>; weight_configuration: Record<string, unknown>; version: string; created_by: string | null; created_at: string };
 
 export type Capability = {
   id: string;
@@ -170,6 +171,9 @@ export const api = {
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
   createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
   listDatasets: () => request<Dataset[]>("/datasets"),
+  listSuites: () => request<EvaluationSuite[]>("/evaluation-suites"),
+  createSuite: (body: Record<string, unknown>) => request<EvaluationSuite>("/evaluation-suites", { method: "POST", body: JSON.stringify(body) }),
+  createSuiteRuns: (suiteId: string, modelEndpointId: string) => request<EvaluationRun[]>(`/evaluation-suites/${suiteId}/runs`, { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId }) }),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
