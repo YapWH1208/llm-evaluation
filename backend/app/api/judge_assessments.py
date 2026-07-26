@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db.models import JudgeAssessment
+from app.db.mongo import MongoDocumentStore
 from app.services.judge_assessments import JudgeAssessmentError, assess_sample_attempt
+from app.services.mongo_judge_assessments import assess_mongo_sample_attempt
 from app.services.model_executor import ModelExecutor
 
 
@@ -40,7 +42,10 @@ class JudgeAssessmentResponse(BaseModel):
     created_at: datetime
 
 
-def get_session(request: Request) -> Generator[Session, None, None]:
+def get_session(request: Request) -> Generator[Session | None, None, None]:
+    if getattr(request.app.state, "document_store", None) is not None:
+        yield None
+        return
     session = request.app.state.database.get_session()
     try:
         yield session
@@ -59,7 +64,7 @@ def get_model_executor(request: Request) -> ModelExecutor:
     return request.app.state.model_executor
 
 
-SessionDependency = Annotated[Session, Depends(get_session)]
+SessionDependency = Annotated[Session | None, Depends(get_session)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 
@@ -67,11 +72,23 @@ ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 @router.post("", response_model=JudgeAssessmentResponse, status_code=status.HTTP_201_CREATED)
 def create_judge_assessment(
     payload: JudgeAssessmentCreate,
+    request: Request,
     session: SessionDependency,
     cipher: CipherDependency,
     model_executor: ModelExecutorDependency,
-) -> JudgeAssessment:
+) -> JudgeAssessment | dict[str, Any]:
     try:
+        store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+        if store is not None:
+            return assess_mongo_sample_attempt(
+                store,
+                sample_attempt_id=payload.sample_attempt_id,
+                judge_endpoint_id=payload.judge_endpoint_id,
+                rubric=payload.rubric,
+                cipher=cipher,
+                model_executor=model_executor,
+            )
+        assert session is not None
         return assess_sample_attempt(
             session,
             sample_attempt_id=payload.sample_attempt_id,
@@ -86,7 +103,15 @@ def create_judge_assessment(
 
 
 @router.get("/sample/{sample_attempt_id}", response_model=list[JudgeAssessmentResponse])
-def list_judge_assessments(sample_attempt_id: str, session: SessionDependency) -> list[JudgeAssessment]:
+def list_judge_assessments(sample_attempt_id: str, request: Request, session: SessionDependency) -> list[JudgeAssessment | dict[str, Any]]:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        return store.list_documents(
+            "judge_assessments",
+            query={"sample_attempt_id": sample_attempt_id},
+            sort=[("created_at", -1)],
+        )
+    assert session is not None
     return list(
         session.scalars(
             select(JudgeAssessment)

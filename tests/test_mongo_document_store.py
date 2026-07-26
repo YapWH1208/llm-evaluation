@@ -382,3 +382,60 @@ def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
         run = api.post("/api/v1/evaluation-runs/custom-multimodal", json={"model_endpoint_id":endpoint["id"],"sample_id":"image-1","reference_answer":"ok","messages":[{"role":"user","content":[{"type":"text","text":"Describe"},{"type":"image","source":{"asset_id":asset.json()["id"]},"mime_type":"image/png"}]}]})
         assert run.status_code == 201
         assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"
+
+
+def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) -> None:
+    class JudgeExecutor:
+        def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            if endpoint.model_name == "judge":
+                return SampleExecutionResult(
+                    True,
+                    {"model": endpoint.model_name},
+                    '{"choices":[{"message":{"content":"{\\"score\\": 0.75, \\"label\\": \\"good\\"}"}}]}',
+                    '{"score": 0.75, "label": "good"}',
+                )
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
+
+    client = FakeClient()
+    settings = Settings(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=JudgeExecutor(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
+    with TestClient(app) as api:
+        user = api.post("/api/v1/users", json={"email": "reviewer@example.test", "display_name": "Reviewer"})
+        assert user.status_code == 201
+        assert api.get("/api/v1/users").json()[0]["email"] == "reviewer@example.test"
+
+        endpoint_ids: list[str] = []
+        for model_name in ("target", "target-b", "judge"):
+            endpoint = api.post(
+                "/api/v1/model-endpoints",
+                json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": model_name},
+            ).json()
+            endpoint_ids.append(endpoint["id"])
+            assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+
+        first = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[0], "sample_limit": 1}).json()
+        second = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[1], "sample_limit": 1}).json()
+        assert api.post(f"/api/v1/evaluation-runs/{first['id']}/execute").status_code == 200
+        assert api.post(f"/api/v1/evaluation-runs/{second['id']}/execute").status_code == 200
+        comparison = api.get("/api/v1/comparisons", params={"run_a": first["id"], "run_b": second["id"]})
+        assert comparison.status_code == 200
+        assert comparison.json()["shared_samples"] == 1
+
+        attempt = api.get(f"/api/v1/evaluation-runs/{first['id']}/attempts").json()[0]
+        assessment = api.post(
+            "/api/v1/judge-assessments",
+            json={"sample_attempt_id": attempt["id"], "judge_endpoint_id": endpoint_ids[2], "rubric": {"quality": "high"}},
+        )
+        assert assessment.status_code == 201
+        assert assessment.json()["score"] == 0.75
+        assert api.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0]["label"] == "good"
+        assert api.get("/api/v1/audit-events").status_code == 200

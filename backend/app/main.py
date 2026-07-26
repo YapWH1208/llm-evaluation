@@ -211,6 +211,7 @@ def _record_mutation_audit(
                     "entity_type": entity_type,
                     "entity_id": entity_id,
                     "details": {"path": request.url.path, "status_code": status_code},
+                    "created_at": datetime.now(timezone.utc),
                 },
             )
             return
