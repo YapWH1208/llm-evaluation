@@ -363,3 +363,22 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         accepted = api.post(f"/api/v1/datasets/{dataset.json()['id']}/accept-license")
         assert accepted.status_code == 200
         assert accepted.json()["status"] == "not_downloaded"
+
+
+def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
+    class ExactExecutor:
+        def execute(self, endpoint: Any, _api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            assert input_snapshot["messages"][0]["content"][1]["type"] == "image"
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "ok")
+
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        asset = api.post("/api/v1/assets", json={"filename":"dot.png","mime_type":"image/png","base64_data":"iVBORw0KGgo="})
+        assert asset.status_code == 201
+        run = api.post("/api/v1/evaluation-runs/custom-multimodal", json={"model_endpoint_id":endpoint["id"],"sample_id":"image-1","reference_answer":"ok","messages":[{"role":"user","content":[{"type":"text","text":"Describe"},{"type":"image","source":{"asset_id":asset.json()["id"]},"mime_type":"image/png"}]}]})
+        assert run.status_code == 201
+        assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"

@@ -8,6 +8,7 @@ database is MongoDB.  All storage-specific operations remain in
 """
 
 from datetime import datetime, timedelta, timezone
+import base64
 from typing import Any
 
 from app.benchmarks import get_installed_plugin
@@ -16,6 +17,8 @@ from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import _build_messages, _estimate_request_tokens
 from app.services.model_executor import ModelExecutor, SampleExecutionResult, normalize_exact_match
 from app.services.run_analysis import summarize_attempts
+from app.services.content_ir import ContentValidationError, normalize_content_parts
+from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
 
 
@@ -146,6 +149,27 @@ def create_mongo_benchmark_run(
                 "completed_at": None,
             },
         )
+    return run
+
+
+def create_mongo_custom_multimodal_run(
+    store: MongoDocumentStore,
+    *,
+    data_root: str,
+    model_endpoint_id: str,
+    sample_id: str,
+    messages: list[dict[str, Any]],
+    reference_answer: str,
+) -> dict[str, Any]:
+    endpoint = store.get_document("model_endpoints", model_endpoint_id)
+    if endpoint is None: raise MongoRunExecutionError("Model endpoint not found.")
+    if endpoint.get("status") != "available": raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
+    if not sample_id.strip() or not reference_answer.strip(): raise MongoRunExecutionError("Custom samples require a sample ID and reference answer.")
+    normalized = _normalize_mongo_messages(store, data_root, messages)
+    now = _utc_now()
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id]},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    task = store.insert_document("task_units", {"run_id":run["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
+    store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized)},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
     return run
 
 
@@ -510,6 +534,42 @@ def _capability_compatibility(
         if capability not in records or records[capability].get("effective_status") == "unverified"
     ]
     return {"required": required, "unsupported": unsupported, "unverified": unverified}
+
+
+def _normalize_mongo_messages(store: MongoDocumentStore, data_root: str, messages: list[dict[str, Any]]) -> list[dict[str, object]]:
+    if not messages: raise MongoRunExecutionError("Custom samples require at least one message.")
+    normalized: list[dict[str, object]] = []
+    for message in messages:
+        role, content = message.get("role"), message.get("content")
+        if not isinstance(role, str) or not role: raise MongoRunExecutionError("Each message requires a role.")
+        if isinstance(content, str) and content:
+            normalized.append({"role":role,"content":content}); continue
+        if not isinstance(content, list): raise MongoRunExecutionError("Message content must be text or a content-part list.")
+        try: parts = normalize_content_parts(content)
+        except ContentValidationError as error: raise MongoRunExecutionError(str(error)) from error
+        normalized.append({"role":role,"content":[_resolve_mongo_asset(store,data_root,part) for part in parts]})
+    return normalized
+
+
+def _resolve_mongo_asset(store: MongoDocumentStore, data_root: str, part: dict[str, Any]) -> dict[str, object]:
+    if part["type"] == "text" or not isinstance(part.get("source"),dict) or not part["source"].get("asset_id"): return part
+    asset_id = part["source"]["asset_id"]
+    if not isinstance(asset_id,str): raise MongoRunExecutionError("Media asset ID must be a string.")
+    asset = store.get_document("media_assets",asset_id)
+    if asset is None: raise MongoRunExecutionError("Referenced media asset was not found.")
+    try: encoded = base64.b64encode(safe_asset_path(data_root,str(asset["storage_path"])).read_bytes()).decode("ascii")
+    except MediaAssetError as error: raise MongoRunExecutionError(str(error)) from error
+    return {"type":part["type"],"source":{"base64_data":encoded},"mime_type":str(asset["mime_type"])}
+
+
+def _sample_modality(messages: list[dict[str, object]]) -> str:
+    kinds = {part["type"] for message in messages if isinstance(message.get("content"),list) for part in message["content"] if isinstance(part,dict) and part.get("type") != "text"}
+    return "+".join(sorted(kinds | {"text"}))
+
+
+def _estimate_message_tokens(messages: list[dict[str, object]]) -> int:
+    text_length = sum(len(content) for message in messages if isinstance((content := message.get("content")),str))
+    return max(32, (text_length + 3) // 4 + 32)
 
 
 def _has_valid_lease(task: dict[str, Any], lease_token: str) -> bool:

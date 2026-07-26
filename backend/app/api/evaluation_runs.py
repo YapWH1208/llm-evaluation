@@ -25,6 +25,7 @@ from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
     clone_mongo_run,
+    create_mongo_custom_multimodal_run,
     create_mongo_benchmark_run,
     execute_mongo_queued_run,
     retry_failed_mongo_samples,
@@ -163,11 +164,13 @@ def create_custom_run(
     request: Request,
     session: SessionDependency,
 ) -> EvaluationRun:
-    if get_document_store(request) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="MongoDB custom multimodal runs are not available until the document-backed asset repository is enabled.",
-        )
+    store = get_document_store(request)
+    if store is not None:
+        try:
+            return create_mongo_custom_multimodal_run(store, data_root=request.app.state.settings.data_root, model_endpoint_id=payload.model_endpoint_id, sample_id=payload.sample_id, messages=payload.messages, reference_answer=payload.reference_answer)
+        except MongoRunExecutionError as error:
+            status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
+            raise HTTPException(status_code, str(error)) from error
     assert session is not None
     try:
         return create_custom_multimodal_run(
