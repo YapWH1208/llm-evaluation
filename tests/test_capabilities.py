@@ -1,10 +1,15 @@
 from pathlib import Path
+import json
+
+import httpx
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.main import create_app
 from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
+from app.services.capability_detector import OpenAIChatCompletionsCapabilityDetector
+from app.db.models import ModelEndpoint
 
 def test_capabilities_keep_user_declaration_separate(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()))
@@ -43,3 +48,20 @@ def test_capability_detection_records_safe_evidence_without_overwriting_user_dec
         assert detected["text_input"]["effective_status"] == "verified_by_both"
         assert detected["text_input"]["detection_evidence"] == {"adapter_version": "test/1", "outcome": "passed"}
         assert detected["image_input"]["auto_detection_status"] == "unsupported_by_adapter"
+
+
+def test_openai_detector_probes_image_and_audio_and_marks_video_adapter_unsupported() -> None:
+    observed: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
+    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["image_input", "audio_input", "video_input"])
+    by_key = {result.capability_key: result for result in results}
+    assert by_key["image_input"].status == CapabilityDetection.PASSED
+    assert by_key["audio_input"].status == CapabilityDetection.PASSED
+    assert by_key["video_input"].status == CapabilityDetection.UNSUPPORTED_BY_ADAPTER
+    assert observed[0]["messages"][0]["content"][1]["type"] == "image_url"
+    assert observed[1]["messages"][0]["content"][1]["type"] == "input_audio"

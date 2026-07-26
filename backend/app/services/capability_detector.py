@@ -10,7 +10,16 @@ from app.db.models import CapabilityDetection, ModelEndpoint
 from app.services.connection_tester import PROTECTED_REQUEST_FIELDS
 
 
-DEFAULT_CAPABILITY_KEYS = ("text_input", "system_message", "usage_reporting")
+DEFAULT_CAPABILITY_KEYS = (
+    "text_input",
+    "image_input",
+    "audio_input",
+    "video_input",
+    "system_message",
+    "usage_reporting",
+)
+_ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLdfQAAAABJRU5ErkJggg=="
+_SILENT_WAV = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,16 +60,20 @@ class OpenAIChatCompletionsCapabilityDetector:
         api_key: str,
         capability_key: str,
     ) -> CapabilityDetectionResult:
-        if capability_key not in DEFAULT_CAPABILITY_KEYS:
+        if capability_key not in DEFAULT_CAPABILITY_KEYS or capability_key == "video_input":
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.UNSUPPORTED_BY_ADAPTER,
                 self._evidence("not_run", reason="This adapter has no safe probe for the requested capability."),
             )
 
-        messages: list[dict[str, str]] = [{"role": "user", "content": "Reply with OK."}]
+        messages: list[dict[str, object]] = [{"role": "user", "content": "Reply with OK."}]
         if capability_key == "system_message":
             messages.insert(0, {"role": "system", "content": "Reply with the single token OK."})
+        if capability_key == "image_input":
+            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{_ONE_PIXEL_PNG}"}}]}]
+        if capability_key == "audio_input":
+            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "input_audio", "input_audio": {"data": _SILENT_WAV, "format": "wav"}}]}]
 
         try:
             with httpx.Client(
@@ -135,10 +148,10 @@ class OpenAIChatCompletionsCapabilityDetector:
         }
 
     @staticmethod
-    def _request_body(endpoint: ModelEndpoint, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def _request_body(endpoint: ModelEndpoint, messages: list[dict[str, object]]) -> dict[str, Any]:
         allowed_defaults = {
             key: value
-            for key, value in endpoint.default_request_body.items()
+            for key, value in (endpoint.default_request_body or {}).items()
             if key not in PROTECTED_REQUEST_FIELDS
         }
         return {
