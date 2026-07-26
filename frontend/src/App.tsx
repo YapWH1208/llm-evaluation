@@ -35,6 +35,9 @@ const initialEndpoint = {
   tags: "",
   notes: "",
   default_request_body: "{}",
+  max_concurrency: "1",
+  requests_per_minute: "",
+  tokens_per_minute: "",
 };
 const initialPrompt = { name: "", version: "1", system_message: "", user_template: "{{ question }}" };
 const initialDataset = { dataset_id: "", version: "1", source_url: "", license_text: "" };
@@ -156,6 +159,9 @@ export default function App() {
         notes: form.notes || null,
         input_cost_per_million: optionalNumber(form.input_cost_per_million),
         output_cost_per_million: optionalNumber(form.output_cost_per_million),
+        max_concurrency: Number(form.max_concurrency),
+        requests_per_minute: optionalNumber(form.requests_per_minute),
+        tokens_per_minute: optionalNumber(form.tokens_per_minute),
         currency: form.currency.toUpperCase(),
       });
       setForm(initialEndpoint);
@@ -414,6 +420,7 @@ export default function App() {
               <label>API key<input required type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder="Stored encrypted" /></label>
               <label>Custom headers (JSON)<textarea value={form.custom_headers} onChange={(event) => setForm({ ...form, custom_headers: event.target.value })} spellCheck={false} placeholder='{"X-Provider-Project":"project-id"}' /></label>
               <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
+              <div className="field-row"><label>Max concurrency<input required type="number" min="1" max="1000" value={form.max_concurrency} onChange={(event) => setForm({ ...form, max_concurrency: event.target.value })} /></label><label>Requests / minute<input type="number" min="1" value={form.requests_per_minute} onChange={(event) => setForm({ ...form, requests_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Tokens / minute<input type="number" min="1" value={form.tokens_per_minute} onChange={(event) => setForm({ ...form, tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
               <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>
               <label>Tags (comma-separated)<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="production, vision" /></label><label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
               <button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : "Save encrypted endpoint"}</button>
