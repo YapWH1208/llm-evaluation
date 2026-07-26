@@ -15,6 +15,7 @@ from app.services.evaluation_runs import RunCreationError, create_benchmark_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
+from app.services.run_operations import RunOperationError, clone_run, retry_failed_samples
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
 
@@ -149,6 +150,24 @@ def cancel_evaluation_run(run_id: str, session: SessionDependency) -> Evaluation
     session.query(TaskUnit).filter(TaskUnit.run_id == run.id).update({TaskUnit.status: TaskStatus.CANCELLED.value})
     session.query(SampleAttempt).filter(SampleAttempt.run_id == run.id, SampleAttempt.status == SampleAttemptStatus.PENDING.value).update({SampleAttempt.status: SampleAttemptStatus.CANCELLED.value})
     session.commit(); session.refresh(run); return run
+
+
+@router.post("/{run_id}/clone", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
+def clone_evaluation_run(run_id: str, session: SessionDependency) -> EvaluationRun:
+    try:
+        return clone_run(session, run_id)
+    except RunOperationError as error:
+        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code, str(error)) from error
+
+
+@router.post("/{run_id}/retry-failed", response_model=EvaluationRunResponse)
+def retry_failed_evaluation_samples(run_id: str, session: SessionDependency) -> EvaluationRun:
+    try:
+        return retry_failed_samples(session, run_id)
+    except RunOperationError as error:
+        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code, str(error)) from error
 
 
 @router.post("/{run_id}/execute", response_model=EvaluationRunResponse)

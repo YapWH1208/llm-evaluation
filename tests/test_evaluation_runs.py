@@ -47,6 +47,16 @@ class RetryOnceExecutor:
         return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
 
 
+class FatalThenSuccessfulExecutor:
+    def __init__(self) -> None:
+        self.fail = True
+
+    def execute(self, endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+        if self.fail:
+            return SampleExecutionResult(False, {"model": endpoint.model_name}, None, None, "http_400", "Invalid request.")
+        return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+
 def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path) -> None:
     app = create_app(
         Settings(
@@ -210,6 +220,35 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         assert second_execution.json()["status"] == "succeeded"
         final_run = client.get(f"/api/v1/evaluation-runs/{run['id']}").json()
         assert final_run["status"] == "completed"
+        attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
+        assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "failed"), (2, "succeeded")]
+
+
+def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: Path) -> None:
+    executor = FatalThenSuccessfulExecutor()
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=executor,
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).json()
+        cloned = client.post(f"/api/v1/evaluation-runs/{run['id']}/clone")
+        assert cloned.status_code == 201
+        assert cloned.json()["id"] != run["id"]
+        assert cloned.json()["configuration_snapshot"]["sample_ids"] == run["configuration_snapshot"]["sample_ids"]
+
+        first_execution = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert first_execution.json()["status"] == "completed_with_errors"
+        retried = client.post(f"/api/v1/evaluation-runs/{run['id']}/retry-failed")
+        assert retried.status_code == 200
+        assert retried.json()["status"] == "queued"
+
+        executor.fail = False
+        second_execution = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert second_execution.json()["status"] == "completed"
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "failed"), (2, "succeeded")]
 

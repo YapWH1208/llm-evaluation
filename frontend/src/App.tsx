@@ -143,15 +143,17 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function changeRun(run: EvaluationRun, action: "execute" | "pause" | "resume" | "cancel") {
+  async function changeRun(run: EvaluationRun, action: "execute" | "pause" | "resume" | "cancel" | "clone" | "retry") {
     setBusy(`${action}-${run.id}`);
     try {
-      if (action === "execute") await api.executeRun(run.id);
-      if (action === "pause") await api.pauseRun(run.id);
-      if (action === "resume") await api.resumeRun(run.id);
-      if (action === "cancel") await api.cancelRun(run.id);
-      setNotice(`Run ${action === "execute" ? "executed" : action + "d"}.`);
-      await selectRun(run.id);
+      const result = action === "execute" ? await api.executeRun(run.id)
+        : action === "pause" ? await api.pauseRun(run.id)
+          : action === "resume" ? await api.resumeRun(run.id)
+            : action === "cancel" ? await api.cancelRun(run.id)
+              : action === "clone" ? await api.cloneRun(run.id)
+                : await api.retryFailedRun(run.id);
+      setNotice(action === "clone" ? "Run cloned with a new immutable configuration snapshot." : action === "retry" ? "Failed samples were queued as new attempts." : `Run ${action === "execute" ? "executed" : action + "d"}.`);
+      await selectRun(result.id);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -312,7 +314,7 @@ export default function App() {
       </>}
 
       {view === "runs" && <>
-        <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{!["completed", "completed_with_errors", "cancelled"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
+        <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{!["completed", "completed_with_errors", "cancelled"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
         {selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewForm={reviewForm} busy={busy} onReviewForm={setReviewForm} onReview={openReview} onCreateReview={createReview} onGenerateReport={generateReport} />}
       </>}
 
