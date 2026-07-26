@@ -51,8 +51,9 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         database.initialize()
-        with database.get_session() as session:
-            ensure_builtin_benchmark_definitions(session)
+        if settings.database_init_mode.lower().strip() == "auto_migrate":
+            with database.get_session() as session:
+                ensure_builtin_benchmark_definitions(session)
         app.state.database = database
         yield
         database.dispose()
@@ -105,7 +106,7 @@ def create_app(
     def health() -> HealthResponse:
         return HealthResponse(
             status="ok",
-            database="sqlite" if settings.is_sqlite else "configured",
+            database=settings.database_kind,
             schema_version=Database.CURRENT_SCHEMA_VERSION,
         )
 
