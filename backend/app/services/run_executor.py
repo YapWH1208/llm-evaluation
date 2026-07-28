@@ -20,6 +20,7 @@ from app.db import (
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.aggregation import recompute_aggregate_metrics
+from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease, has_valid_lease
 
@@ -46,6 +47,7 @@ def execute_queued_text_run(
     run_id: str,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    data_root: str = "data",
 ) -> EvaluationRun:
     """Compatibility endpoint for a local interactive worker execution."""
 
@@ -67,6 +69,7 @@ def execute_queued_text_run(
             lease_token=task.lease_token,
             cipher=cipher,
             model_executor=model_executor,
+            data_root=data_root,
         )
         if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
             return run
@@ -80,6 +83,7 @@ def execute_leased_text_task(
     lease_token: str,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    data_root: str = "data",
 ) -> tuple[EvaluationRun, TaskUnit]:
     """Execute one leased task and either finish it or schedule a bounded retry."""
 
@@ -92,6 +96,8 @@ def execute_leased_text_task(
         return _execute_leased_scoring_task(session, task, lease_token)
     if task.task_type == TaskType.AGGREGATION.value:
         return _execute_leased_aggregation_task(session, task, lease_token)
+    if task.task_type == TaskType.REPORT_GENERATION.value:
+        return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
@@ -207,6 +213,50 @@ def _execute_leased_aggregation_task(
     task.payload = {**(task.payload or {}), "metric_count": len(metrics), "aggregation_version": "1.0.0"}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
+    run.status = RunStatus.GENERATING_REPORT.value
+    run.completed_at = None
+    _enqueue_stage_task(session, run, parent_task=task, task_type=TaskType.REPORT_GENERATION.value)
+    session.commit()
+    session.refresh(run)
+    session.refresh(task)
+    return run, task
+
+
+def _execute_leased_report_task(
+    session: Session,
+    task: TaskUnit,
+    lease_token: str,
+    *,
+    data_root: str,
+) -> tuple[EvaluationRun, TaskUnit]:
+    run = session.get(EvaluationRun, task.run_id)
+    if run is None:
+        raise RunExecutionError("Evaluation run not found.")
+    if run.status != RunStatus.GENERATING_REPORT.value or not has_valid_lease(task, lease_token):
+        raise RunExecutionError("Evaluation run is not ready for report generation.")
+    task.status = TaskStatus.RUNNING.value
+    task.attempt_count += 1
+    session.commit()
+    payload = task.payload if isinstance(task.payload, dict) else {}
+    try:
+        report = generate_report(
+            session,
+            run.id,
+            str(payload.get("format", "html")),
+            data_root,
+            report_type=str(payload.get("report_type", "single_model")),
+        )
+    except ReportError as error:
+        task.status = TaskStatus.FAILED.value
+        task.payload = {**payload, "report_error": str(error)}
+        clear_lease(task)
+        run.status = RunStatus.FAILED.value
+        run.completed_at = datetime.now(timezone.utc)
+        session.commit()
+        raise RunExecutionError(str(error)) from error
+    task.payload = {**payload, "report_id": report.id, "artifact_path": report.artifact_path}
+    task.status = TaskStatus.SUCCEEDED.value
+    clear_lease(task)
     run.status = RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value
     run.completed_at = datetime.now(timezone.utc)
     session.commit()
@@ -235,7 +285,7 @@ def _enqueue_stage_task(
         run_id=run.id,
         parent_task_id=parent_task.id,
         task_type=task_type,
-        payload={"pipeline_stage": task_type},
+        payload={"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model"} if task_type == TaskType.REPORT_GENERATION.value else {})},
         status=TaskStatus.PENDING.value,
         priority=parent_task.priority,
     )

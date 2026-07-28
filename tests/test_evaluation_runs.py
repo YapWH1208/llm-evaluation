@@ -162,7 +162,7 @@ def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
 
 def test_run_rejects_effectively_unsupported_benchmark_capability(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -230,7 +230,7 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
 def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> None:
     executor = RetryOnceExecutor()
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=executor,
     )
@@ -258,8 +258,12 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         aggregation_claim = client.post("/api/v1/workers/claim", json={"worker_id":"worker-d"}).json()
         assert aggregation_claim["task_type"] == "aggregation"
         assert client.post(f"/api/v1/workers/tasks/{aggregation_claim['id']}/execute", json={"lease_token":aggregation_claim["lease_token"]}).json()["status"] == "succeeded"
+        report_claim = client.post("/api/v1/workers/claim", json={"worker_id":"worker-e"}).json()
+        assert report_claim["task_type"] == "report_generation"
+        assert client.post(f"/api/v1/workers/tasks/{report_claim['id']}/execute", json={"lease_token":report_claim["lease_token"]}).json()["status"] == "succeeded"
         final_run = client.get(f"/api/v1/evaluation-runs/{run['id']}").json()
         assert final_run["status"] == "completed"
+        assert len(client.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "failed"), (2, "succeeded")]
 

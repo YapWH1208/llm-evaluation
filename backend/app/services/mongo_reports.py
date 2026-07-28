@@ -12,7 +12,7 @@ from app.services.reports import REPORT_TYPES, _COMPARISON_REPORT_TYPES, ReportE
 def generate_mongo_report(store: MongoDocumentStore, run_id: str, format: str, data_root: str, *, report_type: str = "single_model", related_run_ids: list[str] | None = None) -> dict[str, Any]:
     run=store.get_document("evaluation_runs",run_id)
     if run is None: raise ReportError("Evaluation run not found.")
-    if run["status"] not in {"completed","completed_with_errors"}: raise ReportError("Reports can only be generated after a run completes.")
+    if run["status"] not in {"completed","completed_with_errors","generating_report"}: raise ReportError("Reports can only be generated after a run completes.")
     extension=_FORMAT_EXTENSIONS.get(format)
     if extension is None: raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
     if report_type not in REPORT_TYPES: raise ReportError("Unsupported report type.")

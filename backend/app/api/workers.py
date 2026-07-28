@@ -64,10 +64,10 @@ def execute(task_id:str,payload:ExecuteRequest,request:Request,session:SessionDe
     store=get_document_store(request)
     try:
         if store is not None:
-            _,task=execute_mongo_leased_task(store,task_id=task_id,lease_token=payload.lease_token,cipher=cipher,model_executor=model_executor)
+            _,task=execute_mongo_leased_task(store,task_id=task_id,lease_token=payload.lease_token,cipher=cipher,model_executor=model_executor,data_root=str(request.app.state.settings.data_root))
             return task
         assert session is not None
-        _, task=execute_leased_text_task(session,task_id=task_id,lease_token=payload.lease_token,cipher=cipher,model_executor=model_executor)
+        _, task=execute_leased_text_task(session,task_id=task_id,lease_token=payload.lease_token,cipher=cipher,model_executor=model_executor,data_root=str(request.app.state.settings.data_root))
         return task
     except (RunExecutionError,MongoRunExecutionError) as error:
         status_code=404 if str(error)=="Task not found." else 409

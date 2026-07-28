@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet
@@ -337,13 +338,13 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
 
 
-def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe() -> None:
+def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Path) -> None:
     class ExactExecutor:
         def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(
         settings,
         connection_tester=SuccessfulTester(),
@@ -366,7 +367,11 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe() -> None:
         aggregation = api.post("/api/v1/workers/claim", json={"worker_id": "worker-c"}).json()
         assert aggregation["task_type"] == "aggregation"
         assert api.post(f"/api/v1/workers/tasks/{aggregation['id']}/execute", json={"lease_token": aggregation["lease_token"]}).json()["status"] == "succeeded"
+        report = api.post("/api/v1/workers/claim", json={"worker_id": "worker-d"}).json()
+        assert report["task_type"] == "report_generation"
+        assert api.post(f"/api/v1/workers/tasks/{report['id']}/execute", json={"lease_token": report["lease_token"]}).json()["status"] == "succeeded"
         assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
+        assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
 
 
 def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses() -> None:

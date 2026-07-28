@@ -35,7 +35,7 @@ def generate_report(
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise ReportError("Evaluation run not found.")
-    if run.status not in {"completed", "completed_with_errors"}:
+    if run.status not in {"completed", "completed_with_errors", "generating_report"}:
         raise ReportError("Reports can only be generated after a run completes.")
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
@@ -112,7 +112,9 @@ def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any
         )
     judges_by_attempt: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for assessment in session.scalars(
-        select(JudgeAssessment).join(SampleAttempt).where(SampleAttempt.run_id == run.id)
+        select(JudgeAssessment)
+        .join(SampleAttempt, JudgeAssessment.sample_attempt_id == SampleAttempt.id)
+        .where(SampleAttempt.run_id == run.id)
     ):
         judges_by_attempt[assessment.sample_attempt_id].append(
             {

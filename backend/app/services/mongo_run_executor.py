@@ -18,6 +18,7 @@ from app.services.evaluation_runs import _build_messages, _estimate_request_toke
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction
 from app.services.aggregation import recompute_mongo_aggregate_metrics
+from app.services.reports import ReportError
 from app.services.run_analysis import summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
@@ -283,6 +284,7 @@ def execute_mongo_queued_run(
     run_id: str,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    data_root: str = "data",
 ) -> dict[str, Any]:
     run = store.get_document("evaluation_runs", run_id)
     if run is None:
@@ -302,6 +304,7 @@ def execute_mongo_queued_run(
             lease_token=str(task["lease_token"]),
             cipher=cipher,
             model_executor=model_executor,
+            data_root=data_root,
         )
         if run.get("status") in {"completed", "completed_with_errors"}:
             return run
@@ -416,6 +419,7 @@ def execute_mongo_leased_task(
     lease_token: str,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    data_root: str = "data",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     task = store.get_document("task_units", task_id)
     if task is None:
@@ -426,6 +430,8 @@ def execute_mongo_leased_task(
         return _execute_mongo_scoring_task(store, task, lease_token)
     if task["task_type"] == "aggregation":
         return _execute_mongo_aggregation_task(store, task, lease_token)
+    if task["task_type"] == "report_generation":
+        return _execute_mongo_report_task(store, task, lease_token, data_root=data_root)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
@@ -560,6 +566,43 @@ def _execute_mongo_aggregation_task(
         str(task["id"]),
         {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": "1.0.0"}, "status": "succeeded", **_lease_values()},
     )
+    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "generating_report", "completed_at": None})
+    assert task is not None and run is not None
+    _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="report_generation")
+    return run, task
+
+
+def _execute_mongo_report_task(
+    store: MongoDocumentStore,
+    task: dict[str, Any],
+    lease_token: str,
+    *,
+    data_root: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    run = store.get_document("evaluation_runs", str(task["run_id"]))
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run not found.")
+    if run.get("status") != "generating_report" or not _has_valid_lease(task, lease_token):
+        raise MongoRunExecutionError("Evaluation run is not ready for report generation.")
+    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    assert task is not None
+    payload = _task_payload(task)
+    try:
+        from app.services.mongo_reports import generate_mongo_report
+
+        report = generate_mongo_report(
+            store,
+            str(run["id"]),
+            str(payload.get("format", "html")),
+            data_root,
+            report_type=str(payload.get("report_type", "single_model")),
+        )
+    except ReportError as error:
+        task = store.update_document("task_units", str(task["id"]), {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()})
+        run = store.update_document("evaluation_runs", str(run["id"]), {"status": "failed", "completed_at": _utc_now()})
+        assert task is not None and run is not None
+        raise MongoRunExecutionError(str(error)) from error
+    task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]}, **_lease_values()})
     final_status = "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"
     run = store.update_document("evaluation_runs", str(run["id"]), {"status": final_status, "completed_at": _utc_now()})
     assert task is not None and run is not None
@@ -587,7 +630,7 @@ def _enqueue_mongo_stage_task(
             "run_id": run["id"],
             "parent_task_id": parent_task["id"],
             "task_type": task_type,
-            "payload": {"pipeline_stage": task_type},
+            "payload": {"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model"} if task_type == "report_generation" else {})},
             "status": "pending",
             "priority": int(parent_task.get("priority", 0)),
             "attempt_count": 0,
