@@ -21,6 +21,11 @@ def test_benchmark_definition_can_be_read_updated_and_disabled(tmp_path) -> None
         updated = api.patch(f"/api/v1/benchmarks/{benchmark_id}", json={"status": "disabled", "display_name": "Vision smoke v2"})
         assert updated.status_code == 200
         assert updated.json()["status"] == "disabled"
+        assert api.get(f"/api/v1/benchmarks/{benchmark_id}/prompt").json()["prompt"] is None
+        assert api.get(f"/api/v1/benchmarks/{benchmark_id}/dataset-status").json() == []
+        pack = api.post("/api/v1/benchmarks/packs", json={"pack_name": "smoke", "benchmarks": [{"benchmark_id": "pack-smoke", "version": "1", "display_name": "Pack smoke", "manifest": {"modalities": ["text"]}}]})
+        assert pack.status_code == 201
+        assert pack.json()[0]["source"] == "pack:smoke"
         assert updated.json()["display_name"] == "Vision smoke v2"
 
 
