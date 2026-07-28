@@ -23,6 +23,8 @@ from app.services.aggregation import recompute_aggregate_metrics
 from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease, has_valid_lease
+from app.services.datasets import DatasetError, download_dataset
+from app.db.models import DatasetVersion
 
 
 class RunExecutionError(ValueError):
@@ -99,7 +101,7 @@ def execute_leased_text_task(
     if task.task_type == TaskType.REPORT_GENERATION.value:
         return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
     if task.task_type in {TaskType.DATASET_PREPARATION.value, TaskType.BENCHMARK.value, TaskType.JUDGE.value, TaskType.CLEANUP.value}:
-        return _execute_leased_stage_task(session, task)
+        return _execute_leased_stage_task(session, task, data_root=data_root)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
@@ -161,7 +163,7 @@ def execute_leased_text_task(
     return run, task
 
 
-def _execute_leased_stage_task(session: Session, task: TaskUnit) -> tuple[EvaluationRun, TaskUnit]:
+def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: str) -> tuple[EvaluationRun, TaskUnit]:
     """Run non-inference worker stages through their own durable task interface.
 
     Dataset, benchmark, judge, and cleanup workers can share a process in the MVP,
@@ -175,6 +177,18 @@ def _execute_leased_stage_task(session: Session, task: TaskUnit) -> tuple[Evalua
     task.attempt_count += 1
     session.commit()
     payload = task.payload if isinstance(task.payload, dict) else {}
+    if task.task_type == TaskType.DATASET_PREPARATION.value:
+        try:
+            for descriptor in payload.get("datasets", []):
+                if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+                    continue
+                query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
+                if isinstance(descriptor.get("version"), str): query = query.where(DatasetVersion.version == descriptor["version"])
+                dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+                if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                if dataset.status != "ready": download_dataset(session, dataset, data_root)
+        except DatasetError as error:
+            task.status = TaskStatus.RETRY_SCHEDULED.value; task.payload = {**payload, "dataset_error": str(error)}; clear_lease(task); session.commit(); raise RunExecutionError(str(error)) from error
     task.payload = {**payload, "worker_interface": task.task_type, "stage_completed_at": datetime.now(timezone.utc).isoformat()}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)

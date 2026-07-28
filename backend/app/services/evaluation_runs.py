@@ -132,7 +132,7 @@ def create_benchmark_run(
         benchmark_id=benchmark_id,
         benchmark_version=benchmark_version,
         configuration_snapshot=snapshot,
-        status=RunStatus.QUEUED.value,
+        status=RunStatus.WAITING_FOR_DATASET.value if isinstance(plugin.manifest.get("datasets"), list) and plugin.manifest.get("datasets") else RunStatus.QUEUED.value,
         total_samples=len(samples),
     )
     session.add(run)
@@ -142,10 +142,10 @@ def create_benchmark_run(
         run_id=run.id,
         task_type=TaskType.DATASET_PREPARATION.value,
         payload={
-            "dataset_manifest": plugin.manifest.get("dataset_manifest", {}),
-            "prepared_inline": True,
+            "datasets": plugin.manifest.get("datasets", []),
+            "prepared_inline": not bool(plugin.manifest.get("datasets")),
         },
-        status=TaskStatus.SUCCEEDED.value,
+        status=TaskStatus.PENDING.value if plugin.manifest.get("datasets") else TaskStatus.SUCCEEDED.value,
     )
     session.add(dataset_task)
     session.flush()
@@ -154,7 +154,7 @@ def create_benchmark_run(
         parent_task_id=dataset_task.id,
         task_type=TaskType.BENCHMARK.value,
         payload={"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
-        status=TaskStatus.SUCCEEDED.value,
+        status=TaskStatus.PENDING.value if plugin.manifest.get("datasets") else TaskStatus.SUCCEEDED.value,
     )
     session.add(benchmark_task)
     session.flush()
