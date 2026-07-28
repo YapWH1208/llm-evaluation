@@ -166,6 +166,35 @@ def test_builtin_benchmark_packs_are_registered_and_preserve_multimodal_samples(
         assert attempt["input_snapshot"]["messages"][0]["content"][1]["source"]["embedded_media"]["redacted"] is True
 
 
+def test_benchmark_samples_are_split_into_independent_shards_before_scoring(tmp_path: Path, monkeypatch) -> None:
+    plugin = SimpleNamespace(
+        manifest={
+            "benchmark_id": "text-quick-check", "version": "1.0.0", "required_capabilities": ["text_input"],
+            "scoring": {"type": "exact_match"}, "datasets": [], "shard_size": 2,
+        },
+        samples=lambda _limit: tuple(TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)),
+    )
+    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 5}).json()
+        with app.state.database.get_session() as session:
+            shards = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard").order_by(TaskUnit.created_at)))
+            assert [task.payload["sample_ids"] for task in shards] == [["shard-0", "shard-1"], ["shard-2", "shard-3"], ["shard-4"]]
+            assert [task.payload["shard_index"] for task in shards] == [1, 2, 3]
+            assert {task.payload["shard_count"] for task in shards} == {3}
+        completed = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "completed"
+        assert completed.json()["completed_samples"] == 5
+
+
 def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
     app = create_app(
         Settings(

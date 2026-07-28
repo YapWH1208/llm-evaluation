@@ -554,6 +554,29 @@ def _finalize_task_and_run(session: Session, run: EvaluationRun, task: TaskUnit)
         task.payload = {key: value for key, value in task.payload.items() if key != "retry_sample_ids"}
     clear_lease(task)
     _update_run_progress(session, run, [])
+    incomplete_shards = session.scalar(
+        select(TaskUnit.id)
+        .where(
+            TaskUnit.run_id == run.id,
+            TaskUnit.task_type == TaskType.EVALUATION_SHARD.value,
+            TaskUnit.id != task.id,
+            TaskUnit.status.in_(
+                [
+                    TaskStatus.PENDING.value,
+                    TaskStatus.LEASED.value,
+                    TaskStatus.RUNNING.value,
+                    TaskStatus.RETRY_SCHEDULED.value,
+                ]
+            ),
+        )
+        .limit(1)
+    )
+    if incomplete_shards is not None:
+        # Other independently leased shards are still producing evidence; the
+        # scoring stage is a fan-in barrier and must not start early.
+        run.status = RunStatus.RUNNING.value
+        session.commit()
+        return
     run.status = RunStatus.SCORING.value
     run.completed_at = None
     _enqueue_stage_task(session, run, parent_task=task, task_type=TaskType.SCORING.value)

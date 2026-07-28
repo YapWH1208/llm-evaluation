@@ -280,38 +280,41 @@ def create_benchmark_run(
     )
     session.add(benchmark_task)
     session.flush()
-    task = TaskUnit(
-        run_id=run.id,
-        parent_task_id=benchmark_task.id,
-        task_type=TaskType.EVALUATION_SHARD.value,
-        payload={
-            "sample_ids": [sample.sample_id for sample in samples],
-            "estimated_request_count": len(samples),
-            "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in samples),
-            "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
-        },
-        status=TaskStatus.PENDING.value,
-    )
-    session.add(task)
-    session.flush()
-
-    session.add_all(
-        [
-            SampleAttempt(
-                run_id=run.id,
-                task_id=task.id,
-                sample_id=sample.sample_id,
-                input_snapshot={
-                    "messages": _build_sample_messages(sample, prompt_package),
-                    "modality": _sample_modality(sample),
-                    "metadata": dict(sample.metadata),
-                    "request_body_evidence": request_body_evidence,
-                },
-                reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
-            )
-            for sample in samples
-        ]
-    )
+    shards = _split_samples_into_shards(samples, plugin.manifest)
+    for shard_index, shard_samples in enumerate(shards, start=1):
+        task = TaskUnit(
+            run_id=run.id,
+            parent_task_id=benchmark_task.id,
+            task_type=TaskType.EVALUATION_SHARD.value,
+            payload={
+                "sample_ids": [sample.sample_id for sample in shard_samples],
+                "estimated_request_count": len(shard_samples),
+                "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                "shard_index": shard_index,
+                "shard_count": len(shards),
+                "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+            },
+            status=TaskStatus.PENDING.value,
+        )
+        session.add(task)
+        session.flush()
+        session.add_all(
+            [
+                SampleAttempt(
+                    run_id=run.id,
+                    task_id=task.id,
+                    sample_id=sample.sample_id,
+                    input_snapshot={
+                        "messages": _build_sample_messages(sample, prompt_package),
+                        "modality": _sample_modality(sample),
+                        "metadata": dict(sample.metadata),
+                        "request_body_evidence": request_body_evidence,
+                    },
+                    reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                )
+                for sample in shard_samples
+            ]
+        )
     session.commit()
     session.refresh(run)
     return run
@@ -511,6 +514,21 @@ def _estimate_sample_tokens(sample: object) -> int:
         if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
     )
     return estimate + (media_parts * 256)
+
+
+def _split_samples_into_shards(
+    samples: tuple[object, ...],
+    manifest: dict[str, object],
+) -> tuple[tuple[object, ...], ...]:
+    """Create independently leaseable shard tasks from manifest or modality guidance."""
+
+    requested_size = manifest.get("shard_size")
+    if isinstance(requested_size, int) and not isinstance(requested_size, bool) and requested_size > 0:
+        shard_size = min(requested_size, 1_000)
+    else:
+        modalities = {str(item) for item in manifest.get("modalities", []) if isinstance(item, str)}
+        shard_size = 5 if "video" in modalities else 20 if "audio" in modalities else 25 if "image" in modalities else 50
+    return tuple(tuple(samples[index : index + shard_size]) for index in range(0, len(samples), shard_size))
 
 
 def _capability_compatibility(

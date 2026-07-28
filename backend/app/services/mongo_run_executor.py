@@ -18,6 +18,7 @@ from app.services.evaluation_runs import (
     _build_sample_messages,
     _estimate_sample_tokens,
     _sample_modality as _benchmark_sample_modality,
+    _split_samples_into_shards,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction
@@ -249,56 +250,60 @@ def create_mongo_benchmark_run(
             "updated_at": now,
         },
     )
-    task = store.insert_document(
-        "task_units",
-        {
-            "run_id": run["id"],
-            "parent_task_id": benchmark_task["id"],
-            "task_type": "evaluation_shard",
-            "payload": {
-                "sample_ids": [sample.sample_id for sample in samples],
-                "estimated_request_count": len(samples),
-                "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in samples),
-                "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
-            },
-            "status": "pending",
-            "priority": 0,
-            "attempt_count": 0,
-            "leased_by": None,
-            "lease_token": None,
-            "lease_expires_at": None,
-            "next_retry_at": None,
-            "heartbeat_at": None,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    for sample in samples:
-        store.insert_document(
-            "sample_attempts",
+    shards = _split_samples_into_shards(samples, plugin.manifest)
+    for shard_index, shard_samples in enumerate(shards, start=1):
+        task = store.insert_document(
+            "task_units",
             {
                 "run_id": run["id"],
-                "task_id": task["id"],
-                "sample_id": sample.sample_id,
-                "attempt_number": 1,
-                "input_snapshot": {"messages": _build_sample_messages(sample, prompt_proxy), "modality": _benchmark_sample_modality(sample), "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
-                "request_snapshot": None,
-                "raw_response": None,
-                "parsed_prediction": None,
-                "score": None,
-                "latency_ms": None,
-                "input_tokens": None,
-                "output_tokens": None,
-                "estimated_cost": None,
-                "error_type": None,
-                "error_message": None,
+                "parent_task_id": benchmark_task["id"],
+                "task_type": "evaluation_shard",
+                "payload": {
+                    "sample_ids": [sample.sample_id for sample in shard_samples],
+                    "estimated_request_count": len(shard_samples),
+                    "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                    "shard_index": shard_index,
+                    "shard_count": len(shards),
+                    "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+                },
                 "status": "pending",
+                "priority": 0,
+                "attempt_count": 0,
+                "leased_by": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "next_retry_at": None,
+                "heartbeat_at": None,
                 "created_at": now,
-                "started_at": None,
-                "completed_at": None,
+                "updated_at": now,
             },
         )
+        for sample in shard_samples:
+            store.insert_document(
+                "sample_attempts",
+                {
+                    "run_id": run["id"],
+                    "task_id": task["id"],
+                    "sample_id": sample.sample_id,
+                    "attempt_number": 1,
+                    "input_snapshot": {"messages": _build_sample_messages(sample, prompt_proxy), "modality": _benchmark_sample_modality(sample), "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
+                    "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    "request_snapshot": None,
+                    "raw_response": None,
+                    "parsed_prediction": None,
+                    "score": None,
+                    "latency_ms": None,
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "estimated_cost": None,
+                    "error_type": None,
+                    "error_message": None,
+                    "status": "pending",
+                    "created_at": now,
+                    "started_at": None,
+                    "completed_at": None,
+                },
+            )
     return run
 
 
@@ -676,8 +681,18 @@ def execute_mongo_leased_task(
         task_id,
         {"status": "succeeded", "next_retry_at": None, **_lease_values()},
     )
+    assert task is not None
+    incomplete_shards = [
+        candidate
+        for candidate in store.list_documents("task_units", query={"run_id": run["id"], "task_type": "evaluation_shard"})
+        if candidate["id"] != task_id and candidate.get("status") in {"pending", "leased", "running", "retry_scheduled"}
+    ]
+    if incomplete_shards:
+        run = store.update_document("evaluation_runs", run["id"], {"status": "running", "completed_at": None})
+        assert run is not None
+        return run, task
     run = store.update_document("evaluation_runs", run["id"], {"status": "scoring", "completed_at": None})
-    assert task is not None and run is not None
+    assert run is not None
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="scoring")
     return run, task
 

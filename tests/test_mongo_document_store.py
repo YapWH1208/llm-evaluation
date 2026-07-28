@@ -391,6 +391,31 @@ def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> Non
         assert rerun.json()["configuration_snapshot"]["rerun_of"] == {"run_id": source["id"], "kind": "benchmark"}
 
 
+def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypatch) -> None:
+    class ExactExecutor:
+        def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
+
+    plugin = SimpleNamespace(
+        manifest={"benchmark_id": "text-quick-check", "version": "1.0.0", "required_capabilities": ["text_input"], "scoring": {"type": "exact_match"}, "datasets": [], "shard_size": 2},
+        samples=lambda _limit: tuple(TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)),
+    )
+    monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 5}).json()
+        tasks = [task for task in api.get("/api/v1/tasks", params={"run_id": run["id"]}).json() if task["task_type"] == "evaluation_shard"]
+        assert [task["payload"]["sample_ids"] for task in tasks] == [["shard-0", "shard-1"], ["shard-2", "shard-3"], ["shard-4"]]
+        completed = api.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "completed"
+        assert completed.json()["completed_samples"] == 5
+
+
 def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Path) -> None:
     class ExactExecutor:
         def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
