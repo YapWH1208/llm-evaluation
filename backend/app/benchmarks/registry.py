@@ -275,6 +275,44 @@ BUILTIN_PLUGINS: tuple[BenchmarkPlugin, ...] = (
     SAFETY_PLUGIN,
 )
 
+_MANIFEST_PLUGINS: dict[tuple[str, str], StaticBenchmarkPlugin] = {}
+
+
+def validate_manifest_plugin(manifest: dict[str, object]) -> tuple[BenchmarkSample | TextSample, ...] | None:
+    """Validate and normalize optional inline pack samples without mutating the registry."""
+
+    benchmark_id = manifest.get("benchmark_id")
+    version = manifest.get("version")
+    raw_samples = manifest.get("samples")
+    if not isinstance(benchmark_id, str) or not benchmark_id or not isinstance(version, str) or not version:
+        raise ValueError("Benchmark manifests require non-empty benchmark_id and version.")
+    if not isinstance(raw_samples, list):
+        return None
+    prototype = StaticBenchmarkPlugin(dict(manifest), ())
+    samples = tuple(prototype.convert_sample(item) for item in raw_samples)
+    if not samples:
+        raise ValueError("Runnable benchmark manifests require at least one inline sample.")
+    return samples
+
+
+def register_manifest_plugin(manifest: dict[str, object]) -> bool:
+    """Register a data-only custom pack when it includes runnable inline samples."""
+
+    samples = validate_manifest_plugin(manifest)
+    if samples is None:
+        return False
+    benchmark_id = str(manifest["benchmark_id"])
+    version = str(manifest["version"])
+    _MANIFEST_PLUGINS[(benchmark_id, version)] = StaticBenchmarkPlugin(dict(manifest), samples)
+    return True
+
+
+def unregister_manifest_plugin(benchmark_id: str, version: str) -> None:
+    _MANIFEST_PLUGINS.pop((benchmark_id, version), None)
+
 
 def get_installed_plugin(benchmark_id: str, version: str) -> BenchmarkPlugin | None:
+    manifest_plugin = _MANIFEST_PLUGINS.get((benchmark_id, version))
+    if manifest_plugin is not None:
+        return manifest_plugin
     return next((plugin for plugin in BUILTIN_PLUGINS if plugin.manifest["benchmark_id"] == benchmark_id and plugin.manifest["version"] == version), None)

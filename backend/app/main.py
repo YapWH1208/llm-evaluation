@@ -304,3 +304,9 @@ def _ensure_mongo_builtin_benchmarks(document_store: MongoDocumentStore) -> None
                 "created_at": datetime.now(timezone.utc),
             },
         )
+    from app.benchmarks import register_manifest_plugin
+
+    for definition in document_store.list_documents("benchmark_definitions"):
+        manifest = definition.get("manifest")
+        if isinstance(manifest, dict):
+            register_manifest_plugin(manifest)

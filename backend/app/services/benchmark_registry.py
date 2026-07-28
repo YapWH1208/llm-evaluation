@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.benchmarks import BUILTIN_PLUGINS
+from app.benchmarks import BUILTIN_PLUGINS, register_manifest_plugin
 from app.db.models import BenchmarkDefinition
 
 
@@ -30,3 +30,5 @@ def ensure_builtin_benchmark_definitions(session: Session) -> None:
                 )
             )
     session.commit()
+    for definition in session.scalars(select(BenchmarkDefinition)):
+        register_manifest_plugin(definition.manifest)

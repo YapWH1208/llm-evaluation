@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import BenchmarkDefinition, DatasetVersion
 from app.db.mongo import MongoDocumentStore
+from app.benchmarks import register_manifest_plugin, validate_manifest_plugin
 
 
 router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])
@@ -61,6 +62,22 @@ def get_document_store(request: Request) -> MongoDocumentStore | None:
     return getattr(request.app.state, "document_store", None)
 
 
+def _canonical_manifest(benchmark: BenchmarkCreate) -> dict[str, Any]:
+    """Make the stored manifest self-contained and validate inline executable samples."""
+
+    manifest = dict(benchmark.manifest)
+    for field, expected in (("benchmark_id", benchmark.benchmark_id), ("version", benchmark.version), ("display_name", benchmark.display_name)):
+        value = manifest.get(field)
+        if value is not None and value != expected:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Manifest {field} must match the benchmark definition")
+        manifest[field] = expected
+    try:
+        validate_manifest_plugin(manifest)
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return manifest
+
+
 @router.get("", response_model=list[BenchmarkResponse])
 def list_benchmarks(request: Request, session: SessionDependency) -> list[BenchmarkDefinition | dict[str, Any]]:
     store = get_document_store(request)
@@ -76,14 +93,17 @@ def install_benchmark_pack(payload: BenchmarkPackInstall, request: Request, sess
 
     store = get_document_store(request)
     installed: list[BenchmarkDefinition | dict[str, Any]] = []
+    manifests: list[dict[str, Any]] = []
     for benchmark in payload.benchmarks:
+        manifest = _canonical_manifest(benchmark)
+        manifests.append(manifest)
         if store is not None:
             if store.list_documents("benchmark_definitions", query={"benchmark_id": benchmark.benchmark_id, "version": benchmark.version}):
                 raise HTTPException(status.HTTP_409_CONFLICT, f"Benchmark {benchmark.benchmark_id}@{benchmark.version} already exists")
-            installed.append(store.insert_document("benchmark_definitions", {**benchmark.model_dump(), "status": "registered", "source": f"pack:{payload.pack_name}", "created_at": datetime.now()}))
+            installed.append(store.insert_document("benchmark_definitions", {"benchmark_id": benchmark.benchmark_id, "version": benchmark.version, "display_name": benchmark.display_name, "manifest": manifest, "status": "registered", "source": f"pack:{payload.pack_name}", "created_at": datetime.now()}))
             continue
         assert session is not None
-        installed.append(BenchmarkDefinition(**benchmark.model_dump(), status="registered", source=f"pack:{payload.pack_name}"))
+        installed.append(BenchmarkDefinition(benchmark_id=benchmark.benchmark_id, version=benchmark.version, display_name=benchmark.display_name, manifest=manifest, status="registered", source=f"pack:{payload.pack_name}"))
     if store is None:
         assert session is not None
         session.add_all(installed)
@@ -94,22 +114,30 @@ def install_benchmark_pack(payload: BenchmarkPackInstall, request: Request, sess
             raise HTTPException(status.HTTP_409_CONFLICT, "One or more benchmark versions already exist") from error
         for item in installed:
             session.refresh(item)
+    for manifest in manifests:
+        register_manifest_plugin(manifest)
     return installed
 
 
 @router.post("", response_model=BenchmarkResponse, status_code=status.HTTP_201_CREATED)
 def register_benchmark(payload: BenchmarkCreate, request: Request, session: SessionDependency) -> BenchmarkDefinition | dict[str, Any]:
     store = get_document_store(request)
+    manifest = _canonical_manifest(payload)
     if store is not None:
         if store.list_documents("benchmark_definitions", query={"benchmark_id": payload.benchmark_id, "version": payload.version}):
             raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist")
-        return store.insert_document(
+        created = store.insert_document(
             "benchmark_definitions",
-            {**payload.model_dump(), "status": "registered", "source": "user", "created_at": datetime.now()},
+            {"benchmark_id": payload.benchmark_id, "version": payload.version, "display_name": payload.display_name, "manifest": manifest, "status": "registered", "source": "user", "created_at": datetime.now()},
         )
+        register_manifest_plugin(manifest)
+        return created
     assert session is not None
     definition = BenchmarkDefinition(
-        **payload.model_dump(),
+        benchmark_id=payload.benchmark_id,
+        version=payload.version,
+        display_name=payload.display_name,
+        manifest=manifest,
         status="registered",
         source="user",
     )
@@ -120,6 +148,7 @@ def register_benchmark(payload: BenchmarkCreate, request: Request, session: Sess
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist") from error
     session.refresh(definition)
+    register_manifest_plugin(manifest)
     return definition
 
 
@@ -184,17 +213,28 @@ def update_benchmark(
     values = payload.model_dump(exclude_unset=True)
     store = get_document_store(request)
     if store is not None:
-        if store.get_document("benchmark_definitions", benchmark_definition_id) is None:
+        existing = store.get_document("benchmark_definitions", benchmark_definition_id)
+        if existing is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+        if "manifest" in values:
+            replacement = BenchmarkCreate(benchmark_id=str(existing["benchmark_id"]), version=str(existing["version"]), display_name=str(values.get("display_name") or existing["display_name"]), manifest=values["manifest"])
+            values["manifest"] = _canonical_manifest(replacement)
         updated = store.update_document("benchmark_definitions", benchmark_definition_id, values)
         assert updated is not None
+        if "manifest" in values:
+            register_manifest_plugin(values["manifest"])
         return updated
     assert session is not None
     item = session.get(BenchmarkDefinition, benchmark_definition_id)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+    if "manifest" in values:
+        replacement = BenchmarkCreate(benchmark_id=item.benchmark_id, version=item.version, display_name=str(values.get("display_name") or item.display_name), manifest=values["manifest"])
+        values["manifest"] = _canonical_manifest(replacement)
     for field, value in values.items():
         setattr(item, field, value)
     session.commit()
     session.refresh(item)
+    if "manifest" in values:
+        register_manifest_plugin(item.manifest)
     return item
