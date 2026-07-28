@@ -40,6 +40,20 @@ export type EvaluationRun = {
   archived_at: string | null;
 };
 
+export type RunPreflight = {
+  can_queue: boolean;
+  issues: string[];
+  sample_count: number;
+  estimated_requests: number;
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+  estimated_cost: number | null;
+  currency: string | null;
+  compatibility: { required: string[]; unsupported: string[]; unverified: string[] };
+  datasets: Array<Record<string, unknown>>;
+  request_body_evidence: Record<string, unknown> | null;
+};
+
 export type SampleAttempt = {
   id: string;
   sample_id: string;
@@ -190,6 +204,7 @@ export const api = {
   testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
   createRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
+  validateRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<RunPreflight>("/evaluation-runs/validate", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
   createCustomMultimodalRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/custom-multimodal", { method: "POST", body: JSON.stringify(body) }),
   executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
   pauseRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/pause`, { method: "POST" }),

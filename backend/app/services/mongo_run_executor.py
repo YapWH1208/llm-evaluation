@@ -32,6 +32,72 @@ class MongoRunExecutionError(ValueError):
     """Raised when a document-backed run cannot be created or executed safely."""
 
 
+def preflight_mongo_benchmark_run(
+    store: MongoDocumentStore,
+    *,
+    model_endpoint_id: str,
+    sample_limit: int | None,
+    prompt_package_id: str | None,
+    benchmark_id: str,
+    benchmark_version: str,
+    request_body_override: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Return queue-readiness and estimates without writing Mongo documents."""
+
+    endpoint = store.get_document("model_endpoints", model_endpoint_id)
+    issues: list[str] = []
+    if endpoint is None:
+        return {"can_queue": False, "issues": ["Model endpoint not found."], "sample_count": 0, "estimated_requests": 0, "estimated_input_tokens": 0, "estimated_output_tokens": 0, "estimated_cost": None, "currency": None, "compatibility": {"required": [], "unsupported": [], "unverified": []}, "datasets": [], "request_body_evidence": None}
+    if endpoint.get("status") != "available":
+        issues.append("Model endpoint must pass a connection test before scheduling a run.")
+    definitions = store.list_documents("benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version})
+    if definitions and definitions[0].get("status") in {"disabled", "deprecated", "broken"}:
+        issues.append(f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled.")
+    plugin = get_installed_plugin(benchmark_id, benchmark_version)
+    if plugin is None:
+        return {"can_queue": False, "issues": [*issues, "Benchmark plugin is not installed for the requested version."], "sample_count": 0, "estimated_requests": 0, "estimated_input_tokens": 0, "estimated_output_tokens": 0, "estimated_cost": None, "currency": endpoint.get("currency"), "compatibility": {"required": [], "unsupported": [], "unverified": []}, "datasets": [], "request_body_evidence": None}
+    samples = plugin.samples(sample_limit)
+    if not samples:
+        issues.append("At least one benchmark sample is required.")
+    compatibility = _capability_compatibility(store, model_endpoint_id, plugin.manifest)
+    if compatibility["unsupported"]:
+        issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
+    if prompt_package_id and store.get_document("prompt_packages", prompt_package_id) is None:
+        issues.append("Prompt package not found.")
+    datasets: list[dict[str, object]] = []
+    for descriptor in plugin.manifest.get("datasets", []):
+        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+            continue
+        query: dict[str, Any] = {"dataset_id": descriptor["dataset_id"]}
+        if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
+        if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+        matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
+        if not matches:
+            issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
+            datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
+        else:
+            dataset = matches[0]
+            datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "status": dataset["status"], "will_prepare": dataset["status"] != "ready"})
+    estimated_input_tokens = sum(_estimate_request_tokens(sample.prompt) for sample in samples)
+    estimated_output_tokens = len(samples) * 64
+    input_cost = endpoint.get("input_cost_per_million")
+    output_cost = endpoint.get("output_cost_per_million")
+    estimated_cost = ((estimated_input_tokens * float(input_cost) + estimated_output_tokens * float(output_cost)) / 1_000_000) if input_cost is not None and output_cost is not None else None
+    return {
+        "can_queue": not issues,
+        "issues": issues,
+        "sample_count": len(samples),
+        "estimated_requests": len(samples),
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost": estimated_cost,
+        "currency": endpoint.get("currency"),
+        "compatibility": compatibility,
+        "datasets": datasets,
+        "request_body_evidence": resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None, run_override=request_body_override),
+    }
+
+
 def create_mongo_benchmark_run(
     store: MongoDocumentStore,
     *,

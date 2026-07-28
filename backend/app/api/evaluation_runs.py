@@ -16,7 +16,7 @@ from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
 from app.db.models import HumanReview, JudgeAssessment
 from app.db.mongo import MongoDocumentStore
-from app.services.evaluation_runs import RunCreationError, create_benchmark_run
+from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
@@ -28,6 +28,7 @@ from app.services.mongo_run_executor import (
     clone_mongo_run,
     create_mongo_custom_multimodal_run,
     create_mongo_benchmark_run,
+    preflight_mongo_benchmark_run,
     execute_mongo_queued_run,
     retry_failed_mongo_samples,
 )
@@ -74,6 +75,20 @@ class EvaluationRunResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     archived_at: datetime | None = None
+
+
+class EvaluationRunPreflightResponse(BaseModel):
+    can_queue: bool
+    issues: list[str]
+    sample_count: int
+    estimated_requests: int
+    estimated_input_tokens: int
+    estimated_output_tokens: int
+    estimated_cost: float | None
+    currency: str | None
+    compatibility: dict[str, list[str]]
+    datasets: list[dict[str, Any]]
+    request_body_evidence: dict[str, Any] | None
 
 
 class SampleAttemptResponse(BaseModel):
@@ -173,6 +188,37 @@ def create_evaluation_run(
             else status.HTTP_409_CONFLICT
         )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/validate", response_model=EvaluationRunPreflightResponse)
+def validate_evaluation_run(
+    payload: EvaluationRunCreate,
+    request: Request,
+    session: SessionDependency,
+) -> dict[str, object]:
+    """Preview schedule compatibility and cost without persisting a run or task."""
+
+    store = get_document_store(request)
+    if store is not None:
+        return preflight_mongo_benchmark_run(
+            store,
+            model_endpoint_id=payload.model_endpoint_id,
+            sample_limit=payload.sample_limit,
+            prompt_package_id=payload.prompt_package_id,
+            benchmark_id=payload.benchmark_id,
+            benchmark_version=payload.benchmark_version,
+            request_body_override=payload.request_body_override,
+        )
+    assert session is not None
+    return preflight_benchmark_run(
+        session,
+        model_endpoint_id=payload.model_endpoint_id,
+        sample_limit=payload.sample_limit,
+        prompt_package_id=payload.prompt_package_id,
+        benchmark_id=payload.benchmark_id,
+        benchmark_version=payload.benchmark_version,
+        request_body_override=payload.request_body_override,
+    )
 
 
 @router.post("/custom-multimodal", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)

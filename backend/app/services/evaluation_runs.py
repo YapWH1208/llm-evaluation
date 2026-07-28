@@ -15,7 +15,7 @@ from app.db import (
     TaskType,
     TaskUnit,
 )
-from app.db.models import ModelCapability
+from app.db.models import DatasetVersion, ModelCapability
 from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
 from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
@@ -40,6 +40,110 @@ def create_text_quick_check_run(
         benchmark_id="text-quick-check",
         benchmark_version="1.0.0",
     )
+
+
+def preflight_benchmark_run(
+    session: Session,
+    *,
+    model_endpoint_id: str,
+    sample_limit: int | None,
+    prompt_package_id: str | None,
+    benchmark_id: str,
+    benchmark_version: str,
+    request_body_override: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Validate scheduling inputs and estimate work without creating a run."""
+
+    endpoint = session.get(ModelEndpoint, model_endpoint_id)
+    issues: list[str] = []
+    if endpoint is None:
+        return {
+            "can_queue": False,
+            "issues": ["Model endpoint not found."],
+            "sample_count": 0,
+            "estimated_requests": 0,
+            "estimated_input_tokens": 0,
+            "estimated_output_tokens": 0,
+            "estimated_cost": None,
+            "currency": None,
+            "compatibility": {"required": [], "unsupported": [], "unverified": []},
+            "datasets": [],
+            "request_body_evidence": None,
+        }
+    if endpoint.status != EndpointStatus.AVAILABLE.value:
+        issues.append("Model endpoint must pass a connection test before scheduling a run.")
+    definition = session.scalar(
+        select(BenchmarkDefinition).where(
+            BenchmarkDefinition.benchmark_id == benchmark_id,
+            BenchmarkDefinition.version == benchmark_version,
+        )
+    )
+    if definition is not None and definition.status in {"disabled", "deprecated", "broken"}:
+        issues.append(f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled.")
+    plugin = get_installed_plugin(benchmark_id, benchmark_version)
+    if plugin is None:
+        return {
+            "can_queue": False,
+            "issues": [*issues, "Benchmark plugin is not installed for the requested version."],
+            "sample_count": 0,
+            "estimated_requests": 0,
+            "estimated_input_tokens": 0,
+            "estimated_output_tokens": 0,
+            "estimated_cost": None,
+            "currency": endpoint.currency,
+            "compatibility": {"required": [], "unsupported": [], "unverified": []},
+            "datasets": [],
+            "request_body_evidence": None,
+        }
+    samples = plugin.samples(sample_limit)
+    if not samples:
+        issues.append("At least one benchmark sample is required.")
+    compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
+    if compatibility["unsupported"]:
+        issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
+    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
+        issues.append("Prompt package not found.")
+    datasets: list[dict[str, object]] = []
+    for descriptor in plugin.manifest.get("datasets", []):
+        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+            continue
+        query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
+        if isinstance(descriptor.get("version"), str):
+            query = query.where(DatasetVersion.version == descriptor["version"])
+        if isinstance(descriptor.get("revision"), str):
+            query = query.where(DatasetVersion.revision == descriptor["revision"])
+        dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+        if dataset is None:
+            issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
+            datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
+        else:
+            datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": dataset.status != "ready"})
+    estimated_input_tokens = sum(_estimate_request_tokens(sample.prompt) for sample in samples)
+    estimated_output_tokens = len(samples) * 64
+    estimated_cost = (
+        ((estimated_input_tokens * endpoint.input_cost_per_million) + (estimated_output_tokens * endpoint.output_cost_per_million)) / 1_000_000
+        if endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
+        else None
+    )
+    return {
+        "can_queue": not issues,
+        "issues": issues,
+        "sample_count": len(samples),
+        "estimated_requests": len(samples),
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost": estimated_cost,
+        "currency": endpoint.currency,
+        "compatibility": compatibility,
+        "datasets": datasets,
+        "request_body_evidence": _request_body_evidence(
+            endpoint=endpoint,
+            benchmark_manifest=plugin.manifest,
+            suite_snapshot=None,
+            request_body_override=request_body_override,
+        ),
+    }
 
 
 def create_benchmark_run(

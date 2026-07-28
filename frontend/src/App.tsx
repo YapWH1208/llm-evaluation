@@ -312,6 +312,15 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function preflightRun(endpointId: string) {
+    setBusy(`preflight-${endpointId}`);
+    try {
+      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency));
+      const cost = preflight.estimated_cost === null ? "cost not configured" : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
+      setNotice(preflight.can_queue ? `Preflight ready: ${preflight.sample_count} samples, ${preflight.estimated_requests} requests, ${preflight.estimated_input_tokens + preflight.estimated_output_tokens} estimated tokens, ${cost}.` : `Preflight blocked: ${preflight.issues.join(" ")}`);
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function createRun(endpointId: string) {
     setBusy(`run-${endpointId}`);
     try {
@@ -654,6 +663,7 @@ export default function App() {
       </>}
 
       {view === "runs" && <>
+        <section className="panel"><div className="section-title"><h2>Run preflight</h2><span>Validate compatibility and estimate work without creating a queue entry.</span></div><div className="actions">{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button className="secondary" key={endpoint.id} disabled={busy === `preflight-${endpoint.id}`} onClick={() => void preflightRun(endpoint.id)}>{busy === `preflight-${endpoint.id}` ? "Checking…" : `Preflight ${endpoint.display_name}`}</button>)}</div></section>
         <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")}>Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
         {selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
       </>}

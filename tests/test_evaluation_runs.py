@@ -299,6 +299,23 @@ def test_report_generation_failure_preserves_completed_evaluation_results(tmp_pa
             assert report_task.status == "failed"
 
 
+def test_run_preflight_estimates_work_without_creating_a_run(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model", "input_cost_per_million": 2, "output_cost_per_million": 4}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        preflight = client.post("/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "sample_limit": 2})
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is True
+        assert preflight.json()["sample_count"] == 2
+        assert preflight.json()["estimated_requests"] == 2
+        assert preflight.json()["estimated_cost"] is not None
+        assert client.get("/api/v1/evaluation-runs").json() == []
+
+
 def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tmp_path: Path) -> None:
     app = create_app(
         Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
