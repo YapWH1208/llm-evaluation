@@ -327,6 +327,7 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         if attempt_ids:
             store.delete_documents("human_reviews", {"sample_attempt_id": {"$in": attempt_ids}})
             store.delete_documents("judge_assessments", {"sample_attempt_id": {"$in": attempt_ids}})
+            store.delete_documents("judge_assessments", {"comparison_sample_attempt_id": {"$in": attempt_ids}})
         if report_ids:
             store.delete_documents("report_shares", {"report_id": {"$in": report_ids}})
         store.delete_documents("task_units", {"run_id": run_id})

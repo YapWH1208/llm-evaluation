@@ -313,7 +313,13 @@ class JudgeAssessment(Base):
     judge_endpoint_id: Mapped[str] = mapped_column(
         ForeignKey("model_endpoints.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    comparison_sample_attempt_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sample_attempts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     rubric: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    answer_order: Mapped[list[object]] = mapped_column(JSON, nullable=False, default=list)
+    swap_test_group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    selected_answer: Mapped[str | None] = mapped_column(String(16), nullable=True)
     score: Mapped[float | None] = mapped_column(nullable=True)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -123,6 +123,13 @@ def _upgrade_v18_task_hierarchy_and_aggregate_metrics(connection: Connection) ->
     _add_column_if_missing(connection, "task_units", "parent_task_id", "parent_task_id VARCHAR(36)")
 
 
+def _upgrade_v19_pairwise_judge_evidence(connection: Connection) -> None:
+    _add_column_if_missing(connection, "judge_assessments", "comparison_sample_attempt_id", "comparison_sample_attempt_id VARCHAR(36)")
+    _add_column_if_missing(connection, "judge_assessments", "answer_order", "answer_order JSON NOT NULL DEFAULT '[]'")
+    _add_column_if_missing(connection, "judge_assessments", "swap_test_group_id", "swap_test_group_id VARCHAR(36)")
+    _add_column_if_missing(connection, "judge_assessments", "selected_answer", "selected_answer VARCHAR(16)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -225,6 +232,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260728_add_task_hierarchy_and_aggregate_metrics",
         description="Add parent task lineage and durable versioned aggregate metric records.",
         upgrade=_upgrade_v18_task_hierarchy_and_aggregate_metrics,
+    ),
+    Migration(
+        version=19,
+        migration_id="20260728_add_pairwise_judge_evidence",
+        description="Add blinded pairwise judge answer order, swap-test grouping, and selected-answer evidence.",
+        upgrade=_upgrade_v19_pairwise_judge_evidence,
     ),
 )
 
