@@ -14,9 +14,10 @@ from urllib.request import url2pathname
 from uuid import uuid4
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import DatasetStatus, DatasetVersion
+from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
 
 
 class DatasetError(ValueError):
@@ -350,6 +351,7 @@ def dataset_disk_usage(data_root: str) -> dict[str, int | str]:
 
 
 def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
+    _ensure_dataset_is_not_referenced(session, dataset.id)
     if dataset.local_path:
         root = (Path(data_root).resolve() / "datasets").resolve()
         target = Path(dataset.local_path).resolve()
@@ -364,6 +366,17 @@ def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: st
     dataset.error_message = None
     session.commit(); session.refresh(dataset)
     return dataset
+
+
+def _ensure_dataset_is_not_referenced(session: Session, dataset_version_id: str) -> None:
+    for run in session.scalars(select(EvaluationRun)):
+        snapshot = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
+        datasets = snapshot.get("datasets") if isinstance(snapshot, dict) else None
+        if isinstance(datasets, list) and any(
+            isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_version_id
+            for descriptor in datasets
+        ):
+            raise DatasetError("Dataset cache cannot be cleared while an evaluation run references this revision.")
 
 
 def store_uploaded_dataset(

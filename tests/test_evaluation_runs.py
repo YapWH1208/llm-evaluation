@@ -377,6 +377,7 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
         assert run.status_code == 201
         assert run.json()["status"] == "waiting_for_dataset"
         assert run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"] == dataset.json()["id"]
+        assert client.delete(f"/api/v1/datasets/{dataset.json()['id']}/cache").status_code == 409
 
         preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
         assert preparation["task_type"] == "dataset_preparation"

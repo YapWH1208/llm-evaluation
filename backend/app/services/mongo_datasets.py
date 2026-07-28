@@ -115,6 +115,11 @@ def download_mongo_dataset(
 
 def clear_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_root: str) -> dict[str, Any]:
     dataset = _get_dataset(store, dataset_id)
+    for run in store.list_documents("evaluation_runs"):
+        snapshot = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
+        descriptors = snapshot.get("datasets") if isinstance(snapshot, dict) else None
+        if isinstance(descriptors, list) and any(isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_id for descriptor in descriptors):
+            raise DatasetError("Dataset cache cannot be cleared while an evaluation run references this revision.")
     local_path = dataset.get("local_path")
     if isinstance(local_path, str) and local_path:
         root = (Path(data_root).resolve() / "datasets").resolve()
