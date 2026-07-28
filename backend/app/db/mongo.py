@@ -444,12 +444,15 @@ class MongoDocumentStore:
         return int(version) if isinstance(version, int | float) else 0
 
 
-def _return_document_after() -> Any:
-    try:
-        from pymongo import ReturnDocument
-    except ImportError:
-        return "after"
-    return ReturnDocument.AFTER
+def _return_document_after() -> bool:
+    """Request the post-update document without importing PyMongo's client package.
+
+    PyMongo defines ``ReturnDocument.AFTER`` as the boolean ``True``.  Using the
+    documented value directly keeps the document-store adapter usable when an
+    optional TLS integration prevents importing the top-level PyMongo package.
+    """
+
+    return True
 
 
 def _utc_now() -> datetime:
