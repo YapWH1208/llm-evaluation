@@ -296,6 +296,8 @@ class HumanReview(Base):
     score: Mapped[float|None]=mapped_column(nullable=True)
     labels: Mapped[list[object]]=mapped_column(JSON,nullable=False,default=list)
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
+    review_stage: Mapped[str]=mapped_column(String(32),nullable=False,default="primary")
+    adjudicates_review_ids: Mapped[list[object]]=mapped_column(JSON,nullable=False,default=list)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
 
 

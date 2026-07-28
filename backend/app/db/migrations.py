@@ -114,6 +114,11 @@ def _upgrade_v16_run_archiving(connection: Connection) -> None:
     _add_column_if_missing(connection, "evaluation_runs", "archived_at", "archived_at DATETIME")
 
 
+def _upgrade_v17_structured_human_review(connection: Connection) -> None:
+    _add_column_if_missing(connection, "human_reviews", "review_stage", "review_stage VARCHAR(32) NOT NULL DEFAULT 'primary'")
+    _add_column_if_missing(connection, "human_reviews", "adjudicates_review_ids", "adjudicates_review_ids JSON NOT NULL DEFAULT '[]'")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -204,6 +209,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_run_archiving",
         description="Add a durable archive marker before terminal evaluation runs may be deleted.",
         upgrade=_upgrade_v16_run_archiving,
+    ),
+    Migration(
+        version=17,
+        migration_id="20260726_add_structured_human_review",
+        description="Add independent review stages and adjudication evidence for human review workflows.",
+        upgrade=_upgrade_v17_structured_human_review,
     ),
 )
 

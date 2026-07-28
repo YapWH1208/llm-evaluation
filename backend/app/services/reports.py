@@ -105,6 +105,8 @@ def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any
                 "score": review.score,
                 "labels": review.labels,
                 "notes": review.notes,
+                "review_stage": review.review_stage,
+                "adjudicates_review_ids": review.adjudicates_review_ids,
                 "created_at": review.created_at.isoformat() if review.created_at else None,
             }
         )

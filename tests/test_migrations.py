@@ -37,7 +37,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     database.initialize()
     database.initialize()
 
@@ -45,7 +45,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     assert "prompt_package_id" in columns
     assert "archived_at" in columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 16
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 17
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -91,5 +91,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         archive_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 16))
         assert archive_migration is not None
         assert archive_migration.migration_id == "20260726_add_run_archiving"
+        review_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 17))
+        assert review_migration is not None
+        assert review_migration.migration_id == "20260726_add_structured_human_review"
     assert database.migration_preview() == ()
     database.dispose()

@@ -126,7 +126,8 @@ export type Comparison = {
   differences: { accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; p95_latency_ms: number | null; estimated_cost: number | null; output_tokens: number };
 };
 
-export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: unknown[]; notes: string | null; created_at: string };
+export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: string[]; notes: string | null; review_stage: "primary" | "secondary" | "adjudication"; adjudicates_review_ids: string[]; created_at: string };
+export type ReviewAgreement = { sample_attempt_id: string; review_count: number; distinct_reviewer_count: number; review_stage_counts: { primary: number; secondary: number; adjudication: number }; numeric_score: { count: number; mean: number | null; standard_deviation: number | null; range: number | null }; label_agreement: number | null; status: string; adjudication_review_id: string | null };
 export type JudgeAssessment = { id: string; sample_attempt_id: string; judge_endpoint_id: string; rubric: Record<string, unknown>; score: number | null; label: string | null; rationale: string | null; raw_response: string | null; status: string; error_message: string | null; created_at: string };
 export type Asset = { id: string; original_filename: string; media_kind: "image" | "audio" | "video" | "file"; mime_type: string; size_bytes: number; sha256: string; created_at: string };
 export type Task = { id: string; run_id: string; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
@@ -206,6 +207,7 @@ export const api = {
   declareCapability: (endpointId: string, capabilityKey: string, userDeclaredStatus: "supported" | "unsupported" | "unknown") => request<Capability>(`/model-endpoints/${endpointId}/capabilities`, { method: "PUT", body: JSON.stringify({ capability_key: capabilityKey, user_declared_status: userDeclaredStatus }) }),
   createReview: (body: Record<string, unknown>) => request<Review>("/reviews", { method: "POST", body: JSON.stringify(body) }),
   listReviews: (attemptId: string) => request<Review[]>(`/reviews/sample/${attemptId}`),
+  getReviewAgreement: (attemptId: string) => request<ReviewAgreement>(`/reviews/sample/${attemptId}/agreement`),
   createJudgeAssessment: (body: Record<string, unknown>) => request<JudgeAssessment>("/judge-assessments", { method: "POST", body: JSON.stringify(body) }),
   listJudgeAssessments: (attemptId: string) => request<JudgeAssessment[]>(`/judge-assessments/sample/${attemptId}`),
   uploadAsset: (body: { filename: string; mime_type: string; base64_data: string }) => request<Asset>("/assets", { method: "POST", body: JSON.stringify(body) }),

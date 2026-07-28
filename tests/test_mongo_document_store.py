@@ -455,4 +455,16 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         assert assessment.status_code == 201
         assert assessment.json()["score"] == 0.75
         assert api.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0]["label"] == "good"
+        primary_review = api.post(
+            "/api/v1/reviews",
+            json={"sample_attempt_id": attempt["id"], "reviewer_id": "reviewer-a", "score": 0.9, "labels": ["correct"], "review_stage": "primary"},
+        )
+        secondary_review = api.post(
+            "/api/v1/reviews",
+            json={"sample_attempt_id": attempt["id"], "reviewer_id": "reviewer-b", "score": 0.1, "labels": ["incorrect"], "review_stage": "secondary"},
+        )
+        assert primary_review.status_code == 201
+        assert secondary_review.status_code == 201
+        agreement = api.get(f"/api/v1/reviews/sample/{attempt['id']}/agreement")
+        assert agreement.json()["status"] == "needs_adjudication"
         assert api.get("/api/v1/audit-events").status_code == 200
