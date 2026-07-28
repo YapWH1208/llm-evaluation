@@ -191,7 +191,7 @@ export const api = {
   retryFailedRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/retry-failed`, { method: "POST" }),
   archiveRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/archive`, { method: "POST" }),
   deleteRun: (runId: string) => request<void>(`/evaluation-runs/${runId}`, { method: "DELETE" }),
-  listAttempts: (runId: string) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts`),
+  listAttempts: (runId: string, offset = 0, limit = 200) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts?offset=${offset}&limit=${limit}`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
   workerEventsUrl: () => `${apiBase}/workers/events`,
