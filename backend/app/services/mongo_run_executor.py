@@ -25,6 +25,7 @@ from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.services.request_body import resolve_request_body
 from app.services.prompt_templates import standardization_flags
+from app.services.mongo_datasets import download_mongo_dataset
 
 
 class MongoRunExecutionError(ValueError):
@@ -121,7 +122,7 @@ def create_mongo_benchmark_run(
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
             "configuration_snapshot": snapshot,
-            "status": "queued",
+            "status": "waiting_for_dataset" if plugin.manifest.get("datasets") else "queued",
             "total_samples": len(samples),
             "completed_samples": 0,
             "successful_samples": 0,
@@ -137,8 +138,8 @@ def create_mongo_benchmark_run(
             "run_id": run["id"],
             "parent_task_id": None,
             "task_type": "dataset_preparation",
-            "payload": {"dataset_manifest": plugin.manifest.get("dataset_manifest", {}), "prepared_inline": True},
-            "status": "succeeded",
+            "payload": {"datasets": plugin.manifest.get("datasets", []), "prepared_inline": not bool(plugin.manifest.get("datasets"))},
+            "status": "pending" if plugin.manifest.get("datasets") else "succeeded",
             "priority": 0,
             "attempt_count": 0,
             "leased_by": None,
@@ -157,7 +158,7 @@ def create_mongo_benchmark_run(
             "parent_task_id": dataset_task["id"],
             "task_type": "benchmark",
             "payload": {"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
-            "status": "succeeded",
+            "status": "pending" if plugin.manifest.get("datasets") else "succeeded",
             "priority": 0,
             "attempt_count": 0,
             "leased_by": None,
@@ -525,6 +526,19 @@ def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any]) -
         raise MongoRunExecutionError("Evaluation run not found.")
     now = _utc_now()
     payload = _task_payload(task)
+    if task["task_type"] == "dataset_preparation":
+        try:
+            for descriptor in payload.get("datasets", []):
+                if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str): continue
+                query = {"dataset_id": descriptor["dataset_id"]}
+                if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
+                matches = store.list_documents("dataset_versions", query=query)
+                if not matches: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                if matches[0].get("status") != "ready": download_mongo_dataset(store, str(matches[0]["id"]), "data")
+        except Exception as error:
+            failed = store.update_document("task_units", str(task["id"]), {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()})
+            assert failed is not None
+            raise MongoRunExecutionError(str(error)) from error
     updated_task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "attempt_count": int(task.get("attempt_count", 0)) + 1, "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()}, **_lease_values()})
     if task["task_type"] == "dataset_preparation" and run.get("status") == "waiting_for_dataset":
         run = store.update_document("evaluation_runs", str(run["id"]), {"status": "queued"})
