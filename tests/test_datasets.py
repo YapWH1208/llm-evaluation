@@ -53,6 +53,16 @@ def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp
         assert body["checksum"] == checksum
         assert body["size_bytes"] == len(content)
         assert Path(body["local_path"]).read_bytes() == content
+        validated = client.post(f"/api/v1/datasets/{body['id']}/validate")
+        assert validated.status_code == 200
+        assert validated.json()["status"] == "ready"
+        credentials = client.put(f"/api/v1/datasets/{body['id']}/credential-reference", json={"credential_env_var": "DATASET_TOKEN"})
+        assert credentials.status_code == 200
+        assert credentials.json()["credential_env_var"] == "DATASET_TOKEN"
+        usage = client.get("/api/v1/datasets/disk-usage")
+        assert usage.status_code == 200
+        assert usage.json()["cache_bytes"] >= len(content)
+        assert usage.json()["available_bytes"] > 0
         mismatch = client.post("/api/v1/datasets", json={"dataset_id":"mismatch","version":"1","checksum":"0" * 64}).json()
         rejected = client.post(f"/api/v1/datasets/{mismatch['id']}/upload", json={"filename":"examples.jsonl","base64_data":base64.b64encode(content).decode("ascii")})
         assert rejected.status_code == 409

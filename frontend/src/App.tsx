@@ -429,6 +429,19 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function validateDataset(dataset: Dataset) {
+    setBusy(`dataset-validate-${dataset.id}`);
+    try { await api.validateDataset(dataset.id); setNotice("Dataset cache checksum and size were verified."); await refresh(); }
+    catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
+  async function clearDatasetCache(dataset: Dataset) {
+    if (!window.confirm(`Remove the cached data for ${dataset.dataset_id} v${dataset.version}? The registered version will remain.`)) return;
+    setBusy(`dataset-clear-${dataset.id}`);
+    try { await api.clearDatasetCache(dataset.id); setNotice("Dataset cache removed. You can download or upload it again."); await refresh(); }
+    catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
   async function compareRuns(event: FormEvent) {
     event.preventDefault();
     if (!comparisonRunA || !comparisonRunB || comparisonRunA === comparisonRunB) {
@@ -556,7 +569,7 @@ export default function App() {
 
       {view === "benchmarks" && <section className="panel"><div className="section-title"><h2>Benchmarks</h2><span>{benchmarks.length} registered versions</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th><th>Modalities</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td>{benchmark.display_name}</td><td>{benchmark.version}</td><td>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td><td>{Array.isArray(benchmark.manifest.modalities) ? benchmark.manifest.modalities.join(", ") : "--"}</td></tr>)}</tbody></table></div></section>}
 
-      {view === "datasets" && <DatasetCatalog datasets={datasets} busy={busy} onPrepare={prepareDataset} onUpload={uploadDataset} />}
+      {view === "datasets" && <DatasetCatalog datasets={datasets} busy={busy} onPrepare={prepareDataset} onUpload={uploadDataset} onValidate={validateDataset} onClear={clearDatasetCache} />}
 
       {view === "suites" && <section className="panel"><div className="section-title"><h2>Evaluation suites</h2><span>{suites.length} versioned suites</span></div>{suites.length === 0 ? <p className="empty">Create a suite from the Workspace catalog.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3>{suite.name} v{suite.version}</h3><p className="muted">{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on {endpoint.display_name}</button>)}</article>)}</div>}</section>}
 
@@ -607,8 +620,10 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
   return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
-function DatasetCatalog({ datasets, busy, onPrepare, onUpload }: { datasets: Dataset[]; busy: string | null; onPrepare: (dataset: Dataset) => Promise<void>; onUpload: (dataset: Dataset, event: ChangeEvent<HTMLInputElement>) => Promise<void> }) {
-  return <section className="panel"><div className="section-title"><h2>Dataset catalog</h2><span>{datasets.length} versioned sources</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset source from the Workspace catalog.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div className="section-title"><h3>{dataset.dataset_id} v{dataset.version}</h3><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span></div><p className="muted">Revision {dataset.revision} · {dataset.source_url ? "source configured" : "upload a local file"}</p><p className="muted">{dataset.size_bytes === null ? "Not cached" : `${display(dataset.size_bytes)} bytes`} · {dataset.checksum ? `SHA-256 ${dataset.checksum.slice(0, 12)}…` : "Checksum generated on import"}</p>{dataset.error_message && <p className="error">{dataset.error_message}</p>}<div className="actions">{dataset.status !== "ready" && <button disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPrepare(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : "Download and verify"}</button>}<label className="file-picker">Upload local revision<input aria-label={`Upload local revision for ${dataset.dataset_id}`} type="file" accept=".json,.jsonl,.csv,.tsv,.txt,.zip,.parquet" disabled={busy === `dataset-upload-${dataset.id}`} onChange={(event) => void onUpload(dataset, event)} /></label></div></article>)}</div>}</section>;
+function DatasetCatalog({ datasets, busy, onPrepare, onUpload, onValidate, onClear }: { datasets: Dataset[]; busy: string | null; onPrepare: (dataset: Dataset) => Promise<void>; onUpload: (dataset: Dataset, event: ChangeEvent<HTMLInputElement>) => Promise<void>; onValidate: (dataset: Dataset) => Promise<void>; onClear: (dataset: Dataset) => Promise<void> }) {
+  const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
+  useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [datasets]);
+  return <section className="panel"><div className="section-title"><div><h2>Dataset catalog</h2><span>{datasets.length} versioned sources</span></div><span>{usage ? `${display(usage.cache_bytes)} cached · ${display(usage.available_bytes)} free` : "Loading disk usage…"}</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset source from the Workspace catalog.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div className="section-title"><h3>{dataset.dataset_id} v{dataset.version}</h3><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span></div><p className="muted">Revision {dataset.revision} · {dataset.source_url ? "source configured" : "upload a local file"}</p><p className="muted">{dataset.size_bytes === null ? "Not cached" : `${display(dataset.size_bytes)} bytes`} · {dataset.checksum ? `SHA-256 ${dataset.checksum.slice(0, 12)}…` : "Checksum generated on import"}</p>{dataset.credential_env_var && <p className="muted">Server credential reference: {dataset.credential_env_var}</p>}{dataset.error_message && <p className="error">{dataset.error_message}</p>}<div className="actions">{dataset.status !== "ready" && <button disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPrepare(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : dataset.status === "waiting" || dataset.status === "failed" ? "Retry download" : "Download and verify"}</button>}{dataset.local_path && <><button className="secondary" disabled={busy === `dataset-validate-${dataset.id}`} onClick={() => void onValidate(dataset)}>Validate cache</button><button className="secondary" disabled={busy === `dataset-clear-${dataset.id}`} onClick={() => void onClear(dataset)}>Clear cache</button></>}<label className="file-picker">Upload local revision<input aria-label={`Upload local revision for ${dataset.dataset_id}`} type="file" accept=".json,.jsonl,.csv,.tsv,.txt,.zip,.parquet" disabled={busy === `dataset-upload-${dataset.id}`} onChange={(event) => void onUpload(dataset, event)} /></label></div></article>)}</div>}</section>;
 }
 
 function SampleEvidenceBrowser({ attempts, onReview }: { attempts: SampleAttempt[]; onReview: (attempt: SampleAttempt) => void }) {

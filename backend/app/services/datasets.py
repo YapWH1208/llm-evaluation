@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 from pathlib import Path
+from collections.abc import Callable
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import url2pathname
 
@@ -13,6 +15,10 @@ from app.db.models import DatasetStatus, DatasetVersion
 
 
 class DatasetError(ValueError):
+    pass
+
+
+class DatasetDownloadPaused(DatasetError):
     pass
 
 
@@ -47,7 +53,7 @@ def resolve_dataset_source(
     raise DatasetError("Dataset source must be HTTP(S), hf://owner/repository/path, file://, or a local file path.")
 
 
-def write_dataset_source(source: Path | str, target: Path, headers: dict[str, str]) -> str:
+def write_dataset_source(source: Path | str, target: Path, headers: dict[str, str], on_chunk: Callable[[], None] | None = None) -> str:
     """Stream a configured source to a temporary file and return its SHA-256 digest."""
 
     digest = hashlib.sha256()
@@ -58,6 +64,8 @@ def write_dataset_source(source: Path | str, target: Path, headers: dict[str, st
             for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
                 output_file.write(chunk)
                 digest.update(chunk)
+                if on_chunk:
+                    on_chunk()
         return digest.hexdigest()
     with httpx.stream("GET", source, headers=headers, timeout=60, follow_redirects=True) as response:
         response.raise_for_status()
@@ -65,6 +73,8 @@ def write_dataset_source(source: Path | str, target: Path, headers: dict[str, st
             for chunk in response.iter_bytes():
                 output_file.write(chunk)
                 digest.update(chunk)
+                if on_chunk:
+                    on_chunk()
     return digest.hexdigest()
 
 
@@ -89,13 +99,23 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
     dataset.status = DatasetStatus.DOWNLOADING.value; dataset.error_message = None; session.commit()
     try:
         source, headers = resolve_dataset_source(dataset.source_url, dataset.revision, dataset.credential_env_var)
-        actual_checksum = write_dataset_source(source, temporary, headers)
+        def ensure_not_paused() -> None:
+            session.refresh(dataset)
+            if dataset.status == DatasetStatus.WAITING.value:
+                raise DatasetDownloadPaused("Dataset download was paused and can be retried.")
+
+        actual_checksum = write_dataset_source(source, temporary, headers, ensure_not_paused)
         dataset.status = DatasetStatus.VERIFYING.value; session.commit()
         if dataset.checksum and dataset.checksum.lower() != actual_checksum:
             temporary.unlink(missing_ok=True)
             raise DatasetError("Dataset checksum verification failed.")
         temporary.replace(target)
         dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.size_bytes = target.stat().st_size; dataset.status = DatasetStatus.READY.value
+    except DatasetDownloadPaused as error:
+        dataset.status = DatasetStatus.WAITING.value
+        dataset.error_message = None
+        session.commit()
+        raise DatasetError(str(error)) from error
     except (httpx.HTTPStatusError, DatasetError) as error:
         dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_env_var and ("environment variable" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
         session.commit()
@@ -106,6 +126,55 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
         raise DatasetError(str(error)) from error
     session.commit(); session.refresh(dataset)
     return dataset
+
+
+def pause_dataset_download(session: Session, dataset: DatasetVersion) -> DatasetVersion:
+    if dataset.status not in {DatasetStatus.DOWNLOADING.value, DatasetStatus.VERIFYING.value, DatasetStatus.PREPARING.value}:
+        raise DatasetError("Only an active dataset download can be paused.")
+    dataset.status = DatasetStatus.WAITING.value
+    dataset.error_message = None
+    session.commit()
+    session.refresh(dataset)
+    return dataset
+
+
+def validate_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
+    if not dataset.local_path:
+        raise DatasetError("Dataset has no cached file to validate.")
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    target = Path(dataset.local_path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        dataset.status = DatasetStatus.CORRUPTED.value
+        dataset.error_message = "Dataset cache file is missing or outside the configured dataset root."
+        session.commit()
+        raise DatasetError(dataset.error_message)
+    dataset.status = DatasetStatus.VERIFYING.value
+    session.commit()
+    digest = hashlib.sha256()
+    with target.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    checksum = digest.hexdigest()
+    if dataset.checksum and checksum != dataset.checksum.lower():
+        dataset.status = DatasetStatus.CORRUPTED.value
+        dataset.error_message = "Dataset cache checksum verification failed."
+        session.commit()
+        raise DatasetError(dataset.error_message)
+    dataset.checksum = checksum
+    dataset.size_bytes = target.stat().st_size
+    dataset.status = DatasetStatus.READY.value
+    dataset.error_message = None
+    session.commit()
+    session.refresh(dataset)
+    return dataset
+
+
+def dataset_disk_usage(data_root: str) -> dict[str, int | str]:
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    used = sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+    disk = shutil.disk_usage(root)
+    return {"root": str(root), "cache_bytes": used, "available_bytes": disk.free, "total_bytes": disk.total}
 
 
 def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:

@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, resolve_dataset_source, write_dataset_source
+from app.services.datasets import DatasetDownloadPaused, DatasetError, dataset_disk_usage, resolve_dataset_source, write_dataset_source
 
 
 def accept_mongo_dataset_license(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
@@ -79,7 +79,12 @@ def download_mongo_dataset(
     store.update_document("dataset_versions", dataset_id, {"status": "downloading", "error_message": None})
     try:
         source, headers = resolve_dataset_source(source_url, str(dataset["revision"]), dataset.get("credential_env_var") if isinstance(dataset.get("credential_env_var"), str) else None)
-        actual_checksum = write_dataset_source(source, temporary, headers)
+        def ensure_not_paused() -> None:
+            current = _get_dataset(store, dataset_id)
+            if current.get("status") == "waiting":
+                raise DatasetDownloadPaused("Dataset download was paused and can be retried.")
+
+        actual_checksum = write_dataset_source(source, temporary, headers, ensure_not_paused)
         store.update_document("dataset_versions", dataset_id, {"status": "verifying"})
         expected_checksum = dataset.get("checksum")
         if isinstance(expected_checksum, str) and expected_checksum.lower() != actual_checksum:
@@ -89,6 +94,9 @@ def download_mongo_dataset(
         updated = store.update_document("dataset_versions", dataset_id, {"checksum": actual_checksum, "size_bytes": target.stat().st_size, "local_path": str(target), "status": "ready", "error_message": None})
         assert updated is not None
         return updated
+    except DatasetDownloadPaused as error:
+        store.update_document("dataset_versions", dataset_id, {"status": "waiting", "error_message": None})
+        raise DatasetError(str(error)) from error
     except (DatasetError, httpx.HTTPStatusError) as error:
         status_code = getattr(getattr(error, "response", None), "status_code", 0)
         credential_required = dataset.get("credential_env_var") and ("environment variable" in str(error) or status_code in {401, 403})
@@ -112,6 +120,42 @@ def clear_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_r
     updated = store.update_document("dataset_versions", dataset_id, {"local_path": None, "size_bytes": None, "status": status, "error_message": None})
     assert updated is not None
     return updated
+
+
+def pause_mongo_dataset_download(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
+    dataset = _get_dataset(store, dataset_id)
+    if dataset.get("status") not in {"downloading", "verifying", "preparing"}:
+        raise DatasetError("Only an active dataset download can be paused.")
+    updated = store.update_document("dataset_versions", dataset_id, {"status": "waiting", "error_message": None})
+    assert updated is not None
+    return updated
+
+
+def validate_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_root: str) -> dict[str, Any]:
+    dataset = _get_dataset(store, dataset_id)
+    local_path = dataset.get("local_path")
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    target = Path(str(local_path)).resolve() if local_path else None
+    if target is None or not target.is_relative_to(root) or not target.is_file():
+        store.update_document("dataset_versions", dataset_id, {"status": "corrupted", "error_message": "Dataset cache file is missing or outside the configured dataset root."})
+        raise DatasetError("Dataset cache file is missing or outside the configured dataset root.")
+    store.update_document("dataset_versions", dataset_id, {"status": "verifying", "error_message": None})
+    import hashlib
+    digest = hashlib.sha256()
+    with target.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    checksum = digest.hexdigest()
+    if dataset.get("checksum") and str(dataset["checksum"]).lower() != checksum:
+        store.update_document("dataset_versions", dataset_id, {"status": "corrupted", "error_message": "Dataset cache checksum verification failed."})
+        raise DatasetError("Dataset cache checksum verification failed.")
+    updated = store.update_document("dataset_versions", dataset_id, {"checksum": checksum, "size_bytes": target.stat().st_size, "status": "ready", "error_message": None})
+    assert updated is not None
+    return updated
+
+
+def mongo_dataset_disk_usage(data_root: str) -> dict[str, int | str]:
+    return dataset_disk_usage(data_root)
 
 
 def _get_dataset(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:

@@ -396,6 +396,9 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         assert uploaded.status_code == 200
         assert uploaded.json()["status"] == "ready"
         assert uploaded.json()["size_bytes"] == len(b'{"question":"2 + 2"}\n')
+        assert api.post(f"/api/v1/datasets/{dataset.json()['id']}/validate").json()["status"] == "ready"
+        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_env_var": "MONGO_DATASET_TOKEN"}).json()["credential_env_var"] == "MONGO_DATASET_TOKEN"
+        assert api.get("/api/v1/datasets/disk-usage").json()["cache_bytes"] >= len(b'{"question":"2 + 2"}\n')
 
 
 def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
