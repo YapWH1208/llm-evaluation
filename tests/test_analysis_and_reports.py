@@ -83,6 +83,13 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert body["cost"]["estimated"] == 0.00008
         assert body["cost"]["currency"] == "USD"
 
+        evidence = client.get(f"/api/v1/evaluation-runs/{run_a}/attempts", params={"capability": "reasoning", "language": "en", "difficulty": "basic", "modality": "text", "correct": True})
+        assert evidence.status_code == 200
+        assert len(evidence.json()) == 1
+        assert evidence.json()[0]["sample_metadata"] == {"capability": "reasoning", "language": "en", "difficulty": "basic"}
+        assert evidence.json()[0]["human_review_status"] == "unreviewed"
+        assert evidence.json()[0]["judge_disagreement"] is False
+
         metrics = client.get(f"/api/v1/analytics/runs/{run_a}/metrics")
         assert metrics.status_code == 200
         metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}

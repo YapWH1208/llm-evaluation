@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
+from app.db.models import HumanReview, JudgeAssessment
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
@@ -97,6 +98,9 @@ class SampleAttemptResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+    sample_metadata: dict[str, str] = Field(default_factory=dict)
+    judge_disagreement: bool = False
+    human_review_status: str = "unreviewed"
 
 
 def get_session(request: Request) -> Generator[Session | None, None, None]:
@@ -418,6 +422,16 @@ def list_sample_attempts(
     error_type: str | None = None,
     correct: bool | None = None,
     min_latency_ms: Annotated[float | None, Query(ge=0)] = None,
+    min_tokens: Annotated[int | None, Query(ge=0)] = None,
+    min_cost: Annotated[float | None, Query(ge=0)] = None,
+    capability: str | None = None,
+    modality: str | None = None,
+    language: str | None = None,
+    difficulty: str | None = None,
+    api_error: bool | None = None,
+    parser_error: bool | None = None,
+    judge_disagreement: bool | None = None,
+    human_review_status: str | None = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> list[SampleAttempt | dict[str, Any]]:
@@ -436,7 +450,12 @@ def list_sample_attempts(
             attempts = [item for item in attempts if item.get("score") != 1]
         if min_latency_ms is not None:
             attempts = [item for item in attempts if (item.get("latency_ms") or 0) >= min_latency_ms]
-        return attempts[offset : offset + limit]
+        decorated = _decorate_attempts(
+            attempts,
+            store.list_documents("human_reviews"),
+            store.list_documents("judge_assessments"),
+        )
+        return _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)[offset : offset + limit]
     assert session is not None
     run = session.get(EvaluationRun, run_id)
     if run is None:
@@ -452,7 +471,67 @@ def list_sample_attempts(
         query = query.where(SampleAttempt.score != 1)
     if min_latency_ms is not None:
         query = query.where(SampleAttempt.latency_ms >= min_latency_ms)
-    return list(session.scalars(query.order_by(SampleAttempt.created_at).offset(offset).limit(limit)))
+    attempts = list(session.scalars(query.order_by(SampleAttempt.created_at)))
+    attempt_ids = [attempt.id for attempt in attempts]
+    reviews = list(session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
+    assessments = list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
+    decorated = _decorate_attempts(attempts, reviews, assessments)
+    return _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)[offset : offset + limit]
+
+
+def _decorate_attempts(attempts: list[Any], reviews: list[Any], assessments: list[Any]) -> list[dict[str, Any]]:
+    reviews_by_attempt: dict[str, list[Any]] = {}
+    judges_by_attempt: dict[str, list[Any]] = {}
+    for review in reviews:
+        reviews_by_attempt.setdefault(str(_attempt_value(review, "sample_attempt_id")), []).append(review)
+    for assessment in assessments:
+        judges_by_attempt.setdefault(str(_attempt_value(assessment, "sample_attempt_id")), []).append(assessment)
+    items: list[dict[str, Any]] = []
+    for attempt in attempts:
+        payload = dict(attempt) if isinstance(attempt, dict) else SampleAttemptResponse.model_validate(attempt).model_dump()
+        attempt_id = str(payload["id"])
+        snapshot = payload.get("input_snapshot") if isinstance(payload.get("input_snapshot"), dict) else {}
+        metadata = snapshot.get("metadata") if isinstance(snapshot.get("metadata"), dict) else {}
+        attempt_reviews = reviews_by_attempt.get(attempt_id, [])
+        attempt_judges = [item for item in judges_by_attempt.get(attempt_id, []) if _attempt_value(item, "status") == "succeeded"]
+        labels = {str(_attempt_value(item, "label")) for item in attempt_judges if _attempt_value(item, "label")}
+        scores = [float(value) for item in attempt_judges if (value := _attempt_value(item, "score")) is not None]
+        payload["sample_metadata"] = {str(key): str(value) for key, value in metadata.items() if isinstance(value, (str, int, float, bool))}
+        payload["human_review_status"] = "adjudicated" if any(_attempt_value(item, "review_stage") == "adjudication" for item in attempt_reviews) else "reviewed" if attempt_reviews else "unreviewed"
+        payload["judge_disagreement"] = len(labels) > 1 or (len(scores) > 1 and max(scores) - min(scores) > 0.1)
+        items.append(payload)
+    return items
+
+
+def _filter_evidence(
+    attempts: list[dict[str, Any]],
+    *,
+    capability: str | None, modality: str | None, language: str | None, difficulty: str | None,
+    api_error: bool | None, parser_error: bool | None, judge_disagreement: bool | None,
+    human_review_status: str | None, min_tokens: int | None, min_cost: float | None,
+) -> list[dict[str, Any]]:
+    def matches(item: dict[str, Any]) -> bool:
+        metadata = item.get("sample_metadata") if isinstance(item.get("sample_metadata"), dict) else {}
+        error_type = str(item.get("error_type") or "")
+        api = error_type.startswith("http_") or error_type in {"timeout", "connection_error"}
+        tokens = int(item.get("input_tokens") or 0) + int(item.get("output_tokens") or 0)
+        return (
+            (capability is None or metadata.get("capability") == capability)
+            and (modality is None or (item.get("input_snapshot") or {}).get("modality") == modality)
+            and (language is None or metadata.get("language") == language)
+            and (difficulty is None or metadata.get("difficulty") == difficulty)
+            and (api_error is None or api == api_error)
+            and (parser_error is None or (error_type == "response_parse_error") == parser_error)
+            and (judge_disagreement is None or bool(item.get("judge_disagreement")) == judge_disagreement)
+            and (human_review_status is None or item.get("human_review_status") == human_review_status)
+            and (min_tokens is None or tokens >= min_tokens)
+            and (min_cost is None or float(item.get("estimated_cost") or 0) >= min_cost)
+        )
+    return [item for item in attempts if matches(item)]
+
+
+def _attempt_value(item: Any, field: str) -> Any:
+    return item.get(field) if isinstance(item, dict) else getattr(item, field, None)
 
 
 @router.get("/{run_id}/summary")

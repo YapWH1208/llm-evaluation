@@ -59,6 +59,9 @@ export type SampleAttempt = {
   status: string;
   created_at: string;
   completed_at: string | null;
+  sample_metadata: Record<string, string>;
+  judge_disagreement: boolean;
+  human_review_status: "unreviewed" | "reviewed" | "adjudicated";
 };
 
 export type RunSummary = {
