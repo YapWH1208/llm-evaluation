@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from cryptography.fernet import Fernet
@@ -16,6 +17,7 @@ from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.benchmarks.text_quick_check import TextSample
 
 
 class FakeAdmin:
@@ -337,6 +339,42 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
+
+
+def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "manifest-samples.jsonl"
+    source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    plugin = SimpleNamespace(
+        manifest={
+            "benchmark_id": "text-quick-check",
+            "version": "1.0.0",
+            "required_capabilities": ["text_input"],
+            "scoring": {"type": "exact_match"},
+            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+        },
+        samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
+    )
+    monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        preflight = api.post("/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is True
+        assert preflight.json()["datasets"][0]["status"] == "will_register"
+
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert run.status_code == 201
+        dataset_id = run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"]
+        assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id]["status"] == "not_downloaded"
+
+        preparation = api.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
+        assert preparation["task_type"] == "dataset_preparation"
+        assert api.post(f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]}).json()["status"] == "succeeded"
+        assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id]["status"] == "ready"
 
 
 def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Path) -> None:

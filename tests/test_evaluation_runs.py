@@ -397,6 +397,46 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
         assert client.post(f"/api/v1/workers/tasks/{execution['id']}/execute", json={"lease_token": execution["lease_token"]}).json()["status"] == "succeeded"
 
 
+def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "manifest-samples.jsonl"
+    source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    plugin = SimpleNamespace(
+        manifest={
+            "benchmark_id": "text-quick-check",
+            "version": "1.0.0",
+            "required_capabilities": ["text_input"],
+            "scoring": {"type": "exact_match"},
+            "datasets": [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+        },
+        samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
+    )
+    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        preflight = client.post("/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is True
+        assert preflight.json()["datasets"] == [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "status": "will_register", "will_prepare": True}]
+
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert run.status_code == 201
+        assert run.json()["status"] == "waiting_for_dataset"
+        dataset_id = run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"]
+        datasets = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
+        assert datasets[dataset_id]["source_url"] == source.as_uri()
+        assert datasets[dataset_id]["status"] == "not_downloaded"
+
+        preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
+        assert preparation["task_type"] == "dataset_preparation"
+        assert client.post(f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]}).json()["status"] == "succeeded"
+        assert {item["id"]: item for item in client.get("/api/v1/datasets").json()}[dataset_id]["status"] == "ready"
+
+
 def test_non_inference_worker_interfaces_are_independently_leased_and_audited(tmp_path: Path) -> None:
     app = create_app(
         Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),

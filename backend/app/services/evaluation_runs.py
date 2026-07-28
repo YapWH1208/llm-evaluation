@@ -115,8 +115,19 @@ def preflight_benchmark_run(
             query = query.where(DatasetVersion.revision == descriptor["revision"])
         dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
         if dataset is None:
-            issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
-            datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
+            if isinstance(descriptor.get("source_url"), str) and descriptor["source_url"].strip():
+                datasets.append(
+                    {
+                        "dataset_id": descriptor["dataset_id"],
+                        "version": descriptor.get("version", "default"),
+                        "revision": descriptor.get("revision", "default"),
+                        "status": "will_register",
+                        "will_prepare": True,
+                    }
+                )
+            else:
+                issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
         else:
             datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": dataset.status != "ready"})
     estimated_input_tokens = sum(_estimate_request_tokens(sample.prompt) for sample in samples)
@@ -330,7 +341,7 @@ def _freeze_declared_datasets(
                 query = query.where(DatasetVersion.revision == descriptor["revision"])
             dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
             if dataset is None:
-                raise RunCreationError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                dataset = _register_declared_dataset(session, descriptor)
         frozen.append(
             {
                 **descriptor,
@@ -342,6 +353,42 @@ def _freeze_declared_datasets(
             }
         )
     return frozen
+
+
+def _register_declared_dataset(session: Session, descriptor: dict[str, object]) -> DatasetVersion:
+    """Register a manifest-owned remote revision before its preparation task runs.
+
+    Benchmark manifests are the authoritative source for reproducible public
+    datasets.  Capturing the descriptor at scheduling time lets the normal
+    licence, credential, checksum, download, and preparation workflow run
+    without a separate, error-prone administrator registration step.
+    """
+
+    source_url = descriptor.get("source_url")
+    if not isinstance(source_url, str) or not source_url.strip():
+        raise RunCreationError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+    version = descriptor.get("version")
+    revision = descriptor.get("revision")
+    license_text = descriptor.get("license_text")
+    credential_env_var = descriptor.get("credential_env_var")
+    checksum = descriptor.get("checksum")
+    dataset = DatasetVersion(
+        dataset_id=str(descriptor["dataset_id"]),
+        version=version.strip() if isinstance(version, str) and version.strip() else "default",
+        revision=revision.strip() if isinstance(revision, str) and revision.strip() else "default",
+        source_url=source_url.strip(),
+        checksum=checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
+        license_text=license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
+        credential_env_var=(
+            credential_env_var.strip()
+            if isinstance(credential_env_var, str) and credential_env_var.strip()
+            else None
+        ),
+        status=("license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded"),
+    )
+    session.add(dataset)
+    session.flush()
+    return dataset
 
 
 def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:

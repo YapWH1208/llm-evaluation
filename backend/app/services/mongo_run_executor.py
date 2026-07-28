@@ -73,8 +73,11 @@ def preflight_mongo_benchmark_run(
         if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
         matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
         if not matches:
-            issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
-            datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
+            if isinstance(descriptor.get("source_url"), str) and descriptor["source_url"].strip():
+                datasets.append({"dataset_id": descriptor["dataset_id"], "version": descriptor.get("version", "default"), "revision": descriptor.get("revision", "default"), "status": "will_register", "will_prepare": True})
+            else:
+                issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
         else:
             dataset = matches[0]
             datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "status": dataset["status"], "will_prepare": dataset["status"] != "ready"})
@@ -316,10 +319,46 @@ def _freeze_mongo_declared_datasets(
             if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
             matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
             if not matches:
-                raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-            dataset = matches[0]
+                dataset = _register_mongo_declared_dataset(store, descriptor)
+            else:
+                dataset = matches[0]
         frozen.append({**descriptor, "dataset_version_id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "checksum": dataset.get("checksum")})
     return frozen
+
+
+def _register_mongo_declared_dataset(
+    store: MongoDocumentStore,
+    descriptor: dict[str, object],
+) -> dict[str, Any]:
+    """Create a frozen manifest-owned revision for the document-store path."""
+
+    source_url = descriptor.get("source_url")
+    if not isinstance(source_url, str) or not source_url.strip():
+        raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+    version = descriptor.get("version")
+    revision = descriptor.get("revision")
+    license_text = descriptor.get("license_text")
+    credential_env_var = descriptor.get("credential_env_var")
+    checksum = descriptor.get("checksum")
+    return store.insert_document(
+        "dataset_versions",
+        {
+            "dataset_id": str(descriptor["dataset_id"]),
+            "version": version.strip() if isinstance(version, str) and version.strip() else "default",
+            "revision": revision.strip() if isinstance(revision, str) and revision.strip() else "default",
+            "source_url": source_url.strip(),
+            "checksum": checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
+            "license_text": license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
+            "credential_env_var": credential_env_var.strip() if isinstance(credential_env_var, str) and credential_env_var.strip() else None,
+            "local_path": None,
+            "prepared_path": None,
+            "size_bytes": None,
+            "license_accepted_at": None,
+            "status": "license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded",
+            "error_message": None,
+            "created_at": _utc_now(),
+        },
+    )
 
 
 def _mongo_effective_scoring_rule(manifest: dict[str, object], prompt_package: dict[str, Any] | None) -> dict[str, object]:
