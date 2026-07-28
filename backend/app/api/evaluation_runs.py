@@ -21,7 +21,7 @@ from app.services.custom_runs import CustomRunError, create_custom_multimodal_ru
 from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
-from app.services.run_operations import RunOperationError, clone_run, retry_failed_samples
+from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
 from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
@@ -29,6 +29,7 @@ from app.services.mongo_run_executor import (
     create_mongo_custom_multimodal_run,
     create_mongo_benchmark_run,
     preflight_mongo_benchmark_run,
+    rerun_mongo_benchmark,
     execute_mongo_queued_run,
     retry_failed_mongo_samples,
 )
@@ -89,6 +90,12 @@ class EvaluationRunPreflightResponse(BaseModel):
     compatibility: dict[str, list[str]]
     datasets: list[dict[str, Any]]
     request_body_evidence: dict[str, Any] | None
+
+
+class RunSchedulingUpdate(BaseModel):
+    """Operational controls are mutable without changing a run's frozen inputs."""
+
+    max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
 
 
 class SampleAttemptResponse(BaseModel):
@@ -407,6 +414,57 @@ def clone_evaluation_run(run_id: str, request: Request, session: SessionDependen
     except (RunOperationError, MongoRunExecutionError) as error:
         status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
         raise HTTPException(status_code, str(error)) from error
+
+
+@router.post("/{run_id}/rerun-benchmark", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
+def rerun_evaluation_benchmark(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
+    """Create a new benchmark pass without mutating completed or historical evidence."""
+
+    store = get_document_store(request)
+    try:
+        if store is not None:
+            return rerun_mongo_benchmark(store, run_id)
+        assert session is not None
+        return rerun_benchmark(session, run_id)
+    except (RunOperationError, MongoRunExecutionError) as error:
+        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code, str(error)) from error
+
+
+@router.patch("/{run_id}/scheduling", response_model=EvaluationRunResponse)
+def update_run_scheduling(
+    run_id: str,
+    payload: RunSchedulingUpdate,
+    request: Request,
+    session: SessionDependency,
+) -> EvaluationRun | dict[str, Any]:
+    """Update the live concurrency ceiling while retaining the immutable run snapshot."""
+
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Specify a scheduling value to update")
+    terminal = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+    store = get_document_store(request)
+    if store is not None:
+        run = store.get_document("evaluation_runs", run_id)
+        if run is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+        if run.get("status") in terminal:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
+        updated = store.update_document("evaluation_runs", run_id, values)
+        assert updated is not None
+        return updated
+    assert session is not None
+    run = session.get(EvaluationRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+    if run.status in terminal:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
+    for field, value in values.items():
+        setattr(run, field, value)
+    session.commit()
+    session.refresh(run)
+    return run
 
 
 @router.post("/{run_id}/retry-failed", response_model=EvaluationRunResponse)

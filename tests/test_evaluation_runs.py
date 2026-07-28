@@ -346,6 +346,26 @@ def test_run_preflight_estimates_work_without_creating_a_run(tmp_path: Path) -> 
         assert client.get("/api/v1/evaluation-runs").json() == []
 
 
+def test_run_scheduling_controls_and_benchmark_rerun_preserve_source_evidence(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        source = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        assert client.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 2}).json()["max_concurrency"] == 2
+        assert client.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": None}).json()["max_concurrency"] is None
+        assert client.post(f"/api/v1/evaluation-runs/{source['id']}/execute").json()["status"] == "completed"
+        assert client.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 1}).status_code == 409
+        rerun = client.post(f"/api/v1/evaluation-runs/{source['id']}/rerun-benchmark")
+        assert rerun.status_code == 201
+        assert rerun.json()["id"] != source["id"]
+        assert rerun.json()["configuration_snapshot"]["rerun_of"] == {"run_id": source["id"], "kind": "benchmark"}
+
+
 def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tmp_path: Path) -> None:
     app = create_app(
         Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),

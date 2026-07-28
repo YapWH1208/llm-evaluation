@@ -377,6 +377,20 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
         assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id]["status"] == "ready"
 
 
+def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> None:
+    client = FakeClient()
+    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        source = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        assert api.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 2}).json()["max_concurrency"] == 2
+        rerun = api.post(f"/api/v1/evaluation-runs/{source['id']}/rerun-benchmark")
+        assert rerun.status_code == 201
+        assert rerun.json()["configuration_snapshot"]["rerun_of"] == {"run_id": source["id"], "kind": "benchmark"}
+
+
 def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Path) -> None:
     class ExactExecutor:
         def execute(self, endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:

@@ -33,6 +33,21 @@ def clone_run(session: Session, run_id: str) -> EvaluationRun:
         raise RunOperationError(str(error)) from error
 
 
+def rerun_benchmark(session: Session, run_id: str) -> EvaluationRun:
+    """Queue a fresh benchmark pass while preserving the source run and evidence."""
+
+    source = session.get(EvaluationRun, run_id)
+    if source is None:
+        raise RunOperationError("Evaluation run not found.")
+    run = clone_run(session, run_id)
+    snapshot = dict(run.configuration_snapshot)
+    snapshot["rerun_of"] = {"run_id": source.id, "kind": "benchmark"}
+    run.configuration_snapshot = snapshot
+    session.commit()
+    session.refresh(run)
+    return run
+
+
 def retry_failed_samples(session: Session, run_id: str) -> EvaluationRun:
     run = session.get(EvaluationRun, run_id)
     if run is None:

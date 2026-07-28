@@ -474,6 +474,23 @@ def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
     )
 
 
+def rerun_mongo_benchmark(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
+    """Queue an immutable fresh benchmark pass from an existing Mongo run."""
+
+    source = store.get_document("evaluation_runs", run_id)
+    if source is None:
+        raise MongoRunExecutionError("Evaluation run not found.")
+    run = clone_mongo_run(store, run_id)
+    snapshot = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
+    updated = store.update_document(
+        "evaluation_runs",
+        str(run["id"]),
+        {"configuration_snapshot": {**snapshot, "rerun_of": {"run_id": source["id"], "kind": "benchmark"}}},
+    )
+    assert updated is not None
+    return updated
+
+
 def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
     run = store.get_document("evaluation_runs", run_id)
     if run is None:

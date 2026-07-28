@@ -194,6 +194,7 @@ export default function App() {
   const [selectedBenchmark, setSelectedBenchmark] = useState("text-quick-check@1.0.0");
   const [runRequestBody, setRunRequestBody] = useState("{}");
   const [runMaxConcurrency, setRunMaxConcurrency] = useState("");
+  const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [reportType, setReportType] = useState<ReportType>("single_model");
   const [relatedReportRunId, setRelatedReportRunId] = useState("");
   const [shareForm, setShareForm] = useState(initialShare);
@@ -335,7 +336,7 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function changeRun(run: EvaluationRun, action: "execute" | "pause" | "resume" | "cancel" | "clone" | "retry" | "archive") {
+  async function changeRun(run: EvaluationRun, action: "execute" | "pause" | "resume" | "cancel" | "clone" | "rerun" | "retry" | "archive") {
     setBusy(`${action}-${run.id}`);
     try {
       const result = action === "execute" ? await api.executeRun(run.id)
@@ -343,10 +344,22 @@ export default function App() {
           : action === "resume" ? await api.resumeRun(run.id)
             : action === "cancel" ? await api.cancelRun(run.id)
               : action === "clone" ? await api.cloneRun(run.id)
-                : action === "retry" ? await api.retryFailedRun(run.id)
-                  : await api.archiveRun(run.id);
-      setNotice(action === "clone" ? "Run cloned with a new immutable configuration snapshot." : action === "retry" ? "Failed samples were queued as new attempts." : action === "archive" ? "Run archived. Its evidence remains available through the API until deleted." : `Run ${action === "execute" ? "executed" : action + "d"}.`);
+                : action === "rerun" ? await api.rerunBenchmark(run.id)
+                  : action === "retry" ? await api.retryFailedRun(run.id)
+                    : await api.archiveRun(run.id);
+      setNotice(action === "clone" ? "Run cloned with a new immutable configuration snapshot." : action === "rerun" ? "Benchmark rerun queued with a link to its source run." : action === "retry" ? "Failed samples were queued as new attempts." : action === "archive" ? "Run archived. Its evidence remains available through the API until deleted." : `Run ${action === "execute" ? "executed" : action + "d"}.`);
       await selectRun(result.id);
+      await refresh();
+    } catch (error) { showError(error); } finally { setBusy(null); }
+  }
+
+  async function updateRunConcurrency(run: EvaluationRun) {
+    setBusy(`run-cap-${run.id}`);
+    try {
+      const value = runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "");
+      const updated = await api.updateRunConcurrency(run.id, optionalNumber(value));
+      setRunConcurrencyEdits((current) => ({ ...current, [run.id]: updated.max_concurrency?.toString() ?? "" }));
+      setNotice("Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -668,7 +681,7 @@ export default function App() {
 
       {view === "runs" && <>
         <section className="panel"><div className="section-title"><h2>Run preflight</h2><span>Validate compatibility and estimate work without creating a queue entry.</span></div><div className="actions">{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button className="secondary" key={endpoint.id} disabled={busy === `preflight-${endpoint.id}`} onClick={() => void preflightRun(endpoint.id)}>{busy === `preflight-${endpoint.id}` ? "Checking…" : `Preflight ${endpoint.display_name}`}</button>)}</div></section>
-        <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")}>Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
+        <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong>{run.benchmark_id} v{run.benchmark_version}</strong><span>{run.status} · {run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)}>Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")}>Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")}>Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
         {selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
       </>}
 
