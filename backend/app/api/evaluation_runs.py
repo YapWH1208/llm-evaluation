@@ -496,11 +496,48 @@ def _decorate_attempts(attempts: list[Any], reviews: list[Any], assessments: lis
         attempt_judges = [item for item in judges_by_attempt.get(attempt_id, []) if _attempt_value(item, "status") == "succeeded"]
         labels = {str(_attempt_value(item, "label")) for item in attempt_judges if _attempt_value(item, "label")}
         scores = [float(value) for item in attempt_judges if (value := _attempt_value(item, "score")) is not None]
+        payload["input_snapshot"] = _safe_evidence_snapshot(snapshot)
         payload["sample_metadata"] = {str(key): str(value) for key, value in metadata.items() if isinstance(value, (str, int, float, bool))}
         payload["human_review_status"] = "adjudicated" if any(_attempt_value(item, "review_stage") == "adjudication" for item in attempt_reviews) else "reviewed" if attempt_reviews else "unreviewed"
         payload["judge_disagreement"] = len(labels) > 1 or (len(scores) > 1 and max(scores) - min(scores) > 0.1)
         items.append(payload)
     return items
+
+
+def _safe_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Exclude embedded media bytes from list responses while retaining asset references.
+
+    Workers retain their immutable base64 request snapshot for reliable retries. The
+    evidence API instead returns the content shape, MIME type, and stored asset ID,
+    so the browser can fetch only the one media item a reviewer chooses to preview.
+    """
+
+    visible = dict(snapshot)
+    messages = snapshot.get("messages")
+    if not isinstance(messages, list):
+        return visible
+    visible_messages: list[Any] = []
+    for message in messages:
+        if not isinstance(message, dict) or not isinstance(message.get("content"), list):
+            visible_messages.append(message)
+            continue
+        visible_parts: list[Any] = []
+        for part in message["content"]:
+            if not isinstance(part, dict) or not isinstance(part.get("source"), dict):
+                visible_parts.append(part)
+                continue
+            copy_part = dict(part)
+            source = dict(part["source"])
+            embedded = source.pop("base64_data", None)
+            if isinstance(embedded, str):
+                source["embedded_media"] = {"redacted": True, "approximate_bytes": (len(embedded) * 3) // 4}
+            copy_part["source"] = source
+            visible_parts.append(copy_part)
+        copy_message = dict(message)
+        copy_message["content"] = visible_parts
+        visible_messages.append(copy_message)
+    visible["messages"] = visible_messages
+    return visible
 
 
 def _filter_evidence(

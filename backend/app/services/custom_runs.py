@@ -163,7 +163,11 @@ def _resolve_asset_source(
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     except MediaAssetError as error:
         raise CustomRunError(str(error)) from error
-    return {"type": part["type"], "source": {"base64_data": encoded}, "mime_type": asset.mime_type}
+    return {
+        "type": part["type"],
+        "source": {"asset_id": asset.id, "base64_data": encoded},
+        "mime_type": asset.mime_type,
+    }
 
 
 def _sample_modality(messages: list[dict[str, object]]) -> str:

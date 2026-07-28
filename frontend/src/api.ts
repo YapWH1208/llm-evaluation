@@ -169,6 +169,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestObjectUrl(path: string): Promise<string> {
+  const response = await fetch(`${apiBase}${path}`, {
+    headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : undefined,
+  });
+  if (!response.ok) throw new ApiError("Media preview is unavailable.", response.status);
+  return URL.createObjectURL(await response.blob());
+}
+
 async function systemRequest<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBase.replace(/\/api\/v1$/, "")}${path}`);
   if (!response.ok) throw new ApiError("System request failed.", response.status);
@@ -227,6 +235,7 @@ export const api = {
   listJudgeAssessments: (attemptId: string) => request<JudgeAssessment[]>(`/judge-assessments/sample/${attemptId}`),
   getJudgeAgreement: (attemptId: string) => request<JudgeAgreement>(`/judge-assessments/sample/${attemptId}/agreement`),
   uploadAsset: (body: { filename: string; mime_type: string; base64_data: string }) => request<Asset>("/assets", { method: "POST", body: JSON.stringify(body) }),
+  assetPreviewObjectUrl: (assetId: string) => requestObjectUrl(`/assets/${assetId}/download`),
   listTasks: () => request<Task[]>("/tasks"),
   updateTaskPriority: (taskId: string, priority: number) => request<Task>(`/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ priority }) }),
   analyticsMatrix: (baselineRunId?: string) => request<AnalyticsMatrix>(`/analytics/matrix${baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : ""}`),

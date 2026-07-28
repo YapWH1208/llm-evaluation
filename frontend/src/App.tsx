@@ -26,6 +26,7 @@ import {
   Task,
   User,
 } from "./api";
+import "./evidence.css";
 
 type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
@@ -90,6 +91,65 @@ function parseJsonArray(value: string, label: string): unknown[] {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) throw new Error(`${label} must be a JSON array.`);
   return parsed;
+}
+
+type EvidenceMedia = { assetId: string; kind: "image" | "audio" | "video" | "file"; mimeType: string };
+
+function evidenceMedia(attempt: SampleAttempt): EvidenceMedia[] {
+  const messages = attempt.input_snapshot.messages;
+  if (!Array.isArray(messages)) return [];
+  const previews: EvidenceMedia[] = [];
+  for (const message of messages) {
+    if (!message || typeof message !== "object" || !Array.isArray((message as Record<string, unknown>).content)) continue;
+    for (const part of (message as { content: unknown[] }).content) {
+      if (!part || typeof part !== "object") continue;
+      const record = part as Record<string, unknown>;
+      const source = record.source;
+      const assetId = source && typeof source === "object" ? (source as Record<string, unknown>).asset_id : null;
+      const kind = record.type;
+      const mimeType = record.mime_type;
+      if (typeof assetId === "string" && ["image", "audio", "video", "file"].includes(String(kind)) && typeof mimeType === "string") {
+        previews.push({ assetId, kind: kind as EvidenceMedia["kind"], mimeType });
+      }
+    }
+  }
+  return previews;
+}
+
+function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
+  const media = useMemo(() => evidenceMedia(attempt), [attempt]);
+  const mediaKey = media.map((item) => item.assetId).join(",");
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let disposed = false;
+    const objectUrls: string[] = [];
+    void Promise.all(media.map(async (item) => {
+      try {
+        const url = await api.assetPreviewObjectUrl(item.assetId);
+        if (disposed) {
+          URL.revokeObjectURL(url);
+          return null;
+        }
+        objectUrls.push(url);
+        return [item.assetId, url] as const;
+      } catch {
+        return null;
+      }
+    })).then((resolved) => {
+      if (disposed) return;
+      setUrls(Object.fromEntries(resolved.filter((item): item is readonly [string, string] => item !== null)));
+    });
+    return () => { disposed = true; objectUrls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, [mediaKey]);
+  if (media.length === 0) return null;
+  return <section className="panel"><div className="section-title"><h2>Media preview</h2><span>Fetched only after this sample is selected.</span></div><div className="media-preview">{media.map((item) => {
+    const url = urls[item.assetId];
+    if (!url) return <p className="muted" key={item.assetId}>Loading {item.kind} evidence…</p>;
+    if (item.kind === "image") return <img key={item.assetId} src={url} alt={`Evidence asset ${item.assetId}`} />;
+    if (item.kind === "audio") return <audio key={item.assetId} controls src={url}>Audio preview unavailable.</audio>;
+    if (item.kind === "video") return <video key={item.assetId} controls src={url}>Video preview unavailable.</video>;
+    return <a key={item.assetId} href={url} download={`evidence.${item.mimeType.split("/")[1] ?? "file"}`}>Download attached file</a>;
+  })}</div></section>;
 }
 
 export default function App() {
@@ -669,6 +729,7 @@ function RunDetail({ run, summary, attempts, reports, selectedAttempt, reviews, 
     {summary && <section className="grid two"><article className="panel"><h2>Capability evidence</h2>{summary.insights.capabilities.length === 0 ? <p className="empty">No scored capability evidence yet.</p> : <div className="table-wrap"><table><thead><tr><th>Capability</th><th>Score</th><th>Samples</th></tr></thead><tbody>{summary.insights.capabilities.map((item) => <tr key={item.capability}><td>{item.capability}</td><td>{percent(item.score)}</td><td>{item.sample_count}</td></tr>)}</tbody></table></div>}<p className="muted">Strongest: {summary.insights.strongest_capability?.capability ?? "--"} · weakest: {summary.insights.weakest_capability?.capability ?? "--"}</p></article><article className="panel"><h2>Run signals</h2>{summary.insights.significant_anomalies.length === 0 && summary.insights.major_regressions.length === 0 ? <p className="empty">No significant anomalies or regressions detected.</p> : <>{summary.insights.significant_anomalies.map((item) => <p key={item.kind}><strong>{item.kind}</strong> {percent(item.value)} (threshold {percent(item.threshold)})</p>)}{summary.insights.major_regressions.map((item) => <p key={item.metric}><strong>{item.metric} regression</strong> {percent(item.delta)} versus baseline {percent(item.baseline)}</p>)}</>}</article></section>}
     <SampleEvidenceBrowser attempts={attempts} onReview={onReview} onLoadMore={onLoadMoreAttempts} loadingMore={busy === "attempts-more"} />
     <div className="actions"><button className="secondary" disabled={busy === "attempts-more"} onClick={() => void onLoadMoreAttempts()}>{busy === "attempts-more" ? "Loading next page…" : "Load next evidence page"}</button></div>
+    {selectedAttempt && <EvidenceMediaPreview attempt={selectedAttempt} />}
     {selectedAttempt && <JudgeWorkflow selectedAttempt={selectedAttempt} attempts={attempts} endpoints={endpoints} form={judgeForm} assessments={judgeAssessments} agreement={judgeAgreement} busy={busy} onForm={onJudgeForm} onSubmit={onCreateJudgeAssessment} />}
     {selectedAttempt && <><section className="grid two"><article className="panel"><h2>Human review: {selectedAttempt.sample_id}</h2><form className="form" onSubmit={onCreateReview}><label>Reviewer ID<input required value={reviewForm.reviewer_id} onChange={(event) => onReviewForm({ ...reviewForm, reviewer_id: event.target.value })} /></label><label>Review stage<select value={reviewForm.review_stage} onChange={(event) => onReviewForm({ ...reviewForm, review_stage: event.target.value as typeof reviewForm.review_stage })}><option value="primary">Primary review</option><option value="secondary">Secondary review</option><option value="adjudication">Adjudication</option></select></label><label>Rubric (JSON)<textarea value={reviewForm.rubric} onChange={(event) => onReviewForm({ ...reviewForm, rubric: event.target.value })} spellCheck={false} placeholder='{"quality":"high"}' /></label><label>Score<input type="number" min="0" max="1" step="0.01" value={reviewForm.score} onChange={(event) => onReviewForm({ ...reviewForm, score: event.target.value })} /></label><label>Labels (comma-separated)<input value={reviewForm.labels} onChange={(event) => onReviewForm({ ...reviewForm, labels: event.target.value })} /></label><label>Notes<textarea value={reviewForm.notes} onChange={(event) => onReviewForm({ ...reviewForm, notes: event.target.value })} /></label>{reviewForm.review_stage === "adjudication" && <p className="muted">This records a final decision over all saved primary and secondary reviews.</p>}<button disabled={busy === "review-submit"}>Save review</button></form></article><article className="panel"><h2>Review agreement</h2>{reviewAgreement ? <><p><strong>{reviewAgreement.status.replaceAll("_", " ")}</strong> · {reviewAgreement.distinct_reviewer_count} reviewer(s)</p><p className="muted">Score mean {display(reviewAgreement.numeric_score.mean)} · spread {display(reviewAgreement.numeric_score.range)} · label agreement {percent(reviewAgreement.label_agreement)}</p><p className="muted">Primary {reviewAgreement.review_stage_counts.primary} · secondary {reviewAgreement.review_stage_counts.secondary} · adjudication {reviewAgreement.review_stage_counts.adjudication}</p></> : <p className="empty">Open a sample to load review agreement.</p>}<h3>Saved reviews</h3>{reviews.length === 0 ? <p className="empty">No human review has been saved for this attempt.</p> : <div className="review-list">{reviews.map((review) => <article className="review" key={review.id}><strong>{review.review_stage} · {review.reviewer_id} · {review.score ?? "no score"}</strong><p>{review.notes || "No notes"}</p><small>{review.labels.join(", ") || "No labels"} · {formatDate(review.created_at)}</small></article>)}</div>}</article></section><section className="grid two"><article className="panel"><h2>LLM-as-judge</h2><form className="form" onSubmit={onCreateJudgeAssessment}><label>Independent judge endpoint<select required value={judgeForm.endpoint_id} onChange={(event) => onJudgeForm({ ...judgeForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available" && endpoint.id !== run.model_endpoint_id).map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Rubric (JSON)<textarea value={judgeForm.rubric} onChange={(event) => onJudgeForm({ ...judgeForm, rubric: event.target.value })} spellCheck={false} placeholder='{"criterion":"answer quality"}' /></label><button disabled={busy === "judge-submit"}>Request judge assessment</button></form></article><article className="panel"><h2>Judge evidence</h2>{judgeAssessments.length === 0 ? <p className="empty">No independent judge assessment has been recorded.</p> : <div className="review-list">{judgeAssessments.map((assessment) => <article className="review" key={assessment.id}><strong>{assessment.label || assessment.status} · {assessment.score ?? "--"}</strong><p>{assessment.rationale || assessment.error_message || "No rationale returned."}</p><small>{formatDate(assessment.created_at)}</small></article>)}</div>}</article></section></>}
     <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "pdf")}>PDF</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button><button className="secondary" onClick={() => onGenerateReport(run.id, "parquet")}>Parquet</button></div></div><ReportsTable reports={reports} /></section>

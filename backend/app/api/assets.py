@@ -24,6 +24,12 @@ from app.services.media_assets import (
 
 router = APIRouter(prefix="/api/v1/assets", tags=["media assets"])
 
+PREVIEW_RESPONSE_HEADERS = {
+    "Cache-Control": "private, no-store",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+    "X-Content-Type-Options": "nosniff",
+}
+
 
 class AssetCreate(BaseModel):
     filename: str = Field(min_length=1, max_length=1024)
@@ -126,11 +132,11 @@ def download_asset(asset_id: str, request: Request, session: SessionDependency) 
         if asset is None: raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
         try: path = safe_asset_path(request.app.state.settings.data_root, str(asset["storage_path"]))
         except MediaAssetError as error: raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        return FileResponse(path, media_type=str(asset["mime_type"]), filename=str(asset["original_filename"]))
+        return FileResponse(path, media_type=str(asset["mime_type"]), filename=str(asset["original_filename"]), headers=PREVIEW_RESPONSE_HEADERS)
     assert session is not None
     asset = get_asset_or_404(session, asset_id)
     try:
         path = safe_asset_path(request.app.state.settings.data_root, asset.storage_path)
     except MediaAssetError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-    return FileResponse(path, media_type=asset.mime_type, filename=asset.original_filename)
+    return FileResponse(path, media_type=asset.mime_type, filename=asset.original_filename, headers=PREVIEW_RESPONSE_HEADERS)

@@ -27,6 +27,9 @@ def test_media_asset_store_validates_content_and_returns_a_normalized_content_pa
         assert content_part.json() == {"type": "image", "source": {"asset_id": asset["id"]}, "mime_type": "image/png"}
         downloaded = client.get(f"/api/v1/assets/{asset['id']}/download")
         assert downloaded.content == png
+        assert downloaded.headers["x-content-type-options"] == "nosniff"
+        assert downloaded.headers["cache-control"] == "private, no-store"
+        assert downloaded.headers["content-security-policy"] == "sandbox; default-src 'none'"
 
 
 def test_media_asset_store_rejects_declared_mime_mismatches(tmp_path: Path) -> None:

@@ -860,7 +860,7 @@ def _resolve_mongo_asset(store: MongoDocumentStore, data_root: str, part: dict[s
     if asset is None: raise MongoRunExecutionError("Referenced media asset was not found.")
     try: encoded = base64.b64encode(safe_asset_path(data_root,str(asset["storage_path"])).read_bytes()).decode("ascii")
     except MediaAssetError as error: raise MongoRunExecutionError(str(error)) from error
-    return {"type":part["type"],"source":{"base64_data":encoded},"mime_type":str(asset["mime_type"])}
+    return {"type":part["type"],"source":{"asset_id":asset_id,"base64_data":encoded},"mime_type":str(asset["mime_type"])}
 
 
 def _sample_modality(messages: list[dict[str, object]]) -> str:

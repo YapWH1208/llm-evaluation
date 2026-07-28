@@ -59,3 +59,7 @@ def test_custom_multimodal_run_resolves_uploaded_assets_and_uses_normal_executio
         attempt = client.get(f"/api/v1/evaluation-runs/{created.json()['id']}/attempts").json()[0]
         assert attempt["status"] == "succeeded"
         assert attempt["input_snapshot"]["modality"] == "image+text"
+        source = attempt["input_snapshot"]["messages"][0]["content"][1]["source"]
+        assert source["asset_id"] == asset["id"]
+        assert "base64_data" not in source
+        assert source["embedded_media"]["redacted"] is True
