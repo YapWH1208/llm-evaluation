@@ -1,3 +1,4 @@
+import base64
 import hashlib
 from pathlib import Path
 from fastapi.testclient import TestClient
@@ -36,3 +37,24 @@ def test_dataset_supports_local_sources_and_explicit_credential_gates(tmp_path: 
         assert "credential environment variable" in response.json()["detail"]
         items = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
         assert items[protected.json()["id"]]["status"] == "credential_required"
+
+
+def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp_path: Path) -> None:
+    content = b'{"question":"what is 2 + 2?","answer":"4"}\n'
+    checksum = hashlib.sha256(content).hexdigest()
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id":"uploaded","version":"1","checksum":checksum})
+        assert created.status_code == 201
+        uploaded = client.post(f"/api/v1/datasets/{created.json()['id']}/upload", json={"filename":"examples.jsonl","base64_data":base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        body = uploaded.json()
+        assert body["status"] == "ready"
+        assert body["checksum"] == checksum
+        assert body["size_bytes"] == len(content)
+        assert Path(body["local_path"]).read_bytes() == content
+        mismatch = client.post("/api/v1/datasets", json={"dataset_id":"mismatch","version":"1","checksum":"0" * 64}).json()
+        rejected = client.post(f"/api/v1/datasets/{mismatch['id']}/upload", json={"filename":"examples.jsonl","base64_data":base64.b64encode(content).decode("ascii")})
+        assert rejected.status_code == 409
+        items = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
+        assert items[mismatch["id"]]["status"] == "corrupted"

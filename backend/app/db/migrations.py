@@ -130,6 +130,10 @@ def _upgrade_v19_pairwise_judge_evidence(connection: Connection) -> None:
     _add_column_if_missing(connection, "judge_assessments", "selected_answer", "selected_answer VARCHAR(16)")
 
 
+def _upgrade_v20_dataset_uploads(connection: Connection) -> None:
+    _add_column_if_missing(connection, "dataset_versions", "size_bytes", "size_bytes BIGINT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -238,6 +242,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260728_add_pairwise_judge_evidence",
         description="Add blinded pairwise judge answer order, swap-test grouping, and selected-answer evidence.",
         upgrade=_upgrade_v19_pairwise_judge_evidence,
+    ),
+    Migration(
+        version=20,
+        migration_id="20260728_add_dataset_upload_size",
+        description="Add durable size evidence for uploaded and downloaded dataset revisions.",
+        upgrade=_upgrade_v20_dataset_uploads,
     ),
 )
 

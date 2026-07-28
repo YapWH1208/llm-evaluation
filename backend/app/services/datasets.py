@@ -95,7 +95,7 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
             temporary.unlink(missing_ok=True)
             raise DatasetError("Dataset checksum verification failed.")
         temporary.replace(target)
-        dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.status = DatasetStatus.READY.value
+        dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.size_bytes = target.stat().st_size; dataset.status = DatasetStatus.READY.value
     except (httpx.HTTPStatusError, DatasetError) as error:
         dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_env_var and ("environment variable" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
         session.commit()
@@ -116,7 +116,55 @@ def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: st
             raise DatasetError("Dataset cache path is outside the configured dataset root.")
         target.unlink(missing_ok=True)
     dataset.local_path = None
+    dataset.size_bytes = None
     dataset.status = DatasetStatus.LICENSE_REQUIRED.value if dataset.license_text and dataset.license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
     dataset.error_message = None
     session.commit(); session.refresh(dataset)
+    return dataset
+
+
+def store_uploaded_dataset(
+    session: Session,
+    dataset: DatasetVersion,
+    *,
+    filename: str,
+    content: bytes,
+    data_root: str,
+) -> DatasetVersion:
+    """Atomically persist a user-uploaded dataset outside the primary database."""
+
+    if not content:
+        raise DatasetError("Uploaded dataset is empty.")
+    if len(content) > 64 * 1024 * 1024:
+        raise DatasetError("Uploaded dataset exceeds the 64 MiB upload limit.")
+    safe_name = Path(filename).name
+    if not safe_name or safe_name in {".", ".."}:
+        raise DatasetError("Uploaded dataset filename is invalid.")
+    if dataset.license_text and dataset.license_accepted_at is None:
+        dataset.status = DatasetStatus.LICENSE_REQUIRED.value
+        session.commit()
+        raise DatasetError("Dataset license must be accepted before upload.")
+    destination = (Path(data_root).resolve() / "datasets" / "uploads" / dataset.id).resolve()
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    if not destination.is_relative_to(root):
+        raise DatasetError("Dataset upload path is outside the configured dataset root.")
+    destination.mkdir(parents=True, exist_ok=True)
+    target = destination / safe_name
+    temporary = destination / f".{safe_name}.part"
+    checksum = hashlib.sha256(content).hexdigest()
+    if dataset.checksum and dataset.checksum.lower() != checksum:
+        dataset.status = DatasetStatus.CORRUPTED.value
+        dataset.error_message = "Uploaded dataset checksum verification failed."
+        session.commit()
+        raise DatasetError(dataset.error_message)
+    temporary.write_bytes(content)
+    temporary.replace(target)
+    dataset.source_url = target.as_uri()
+    dataset.checksum = checksum
+    dataset.size_bytes = len(content)
+    dataset.local_path = str(target)
+    dataset.status = DatasetStatus.READY.value
+    dataset.error_message = None
+    session.commit()
+    session.refresh(dataset)
     return dataset

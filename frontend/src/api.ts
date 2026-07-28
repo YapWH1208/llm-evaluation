@@ -100,6 +100,9 @@ export type Dataset = {
   revision: string;
   source_url: string | null;
   credential_env_var: string | null;
+  checksum: string | null;
+  local_path: string | null;
+  size_bytes: number | null;
   license_text: string | null;
   license_accepted_at: string | null;
   status: string;
@@ -203,6 +206,7 @@ export const api = {
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
+  uploadDataset: (datasetId: string, body: { filename: string; base64_data: string }) => request<Dataset>(`/datasets/${datasetId}/upload`, { method: "POST", body: JSON.stringify(body) }),
   listCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities`),
   detectCapabilities: (endpointId: string) => request<Capability[]>(`/model-endpoints/${endpointId}/capabilities/detect`, { method: "POST" }),
   declareCapability: (endpointId: string, capabilityKey: string, userDeclaredStatus: "supported" | "unsupported" | "unknown") => request<Capability>(`/model-endpoints/${endpointId}/capabilities`, { method: "PUT", body: JSON.stringify({ capability_key: capabilityKey, user_declared_status: userDeclaredStatus }) }),

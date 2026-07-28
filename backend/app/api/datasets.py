@@ -1,4 +1,6 @@
 from __future__ import annotations
+import base64
+import binascii
 from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated
@@ -9,8 +11,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, download_dataset
-from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, download_dataset, store_uploaded_dataset
+from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, store_mongo_uploaded_dataset
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
@@ -19,7 +21,12 @@ class DatasetCreate(BaseModel):
     credential_env_var: str | None = Field(default=None, pattern=r"^[A-Z_][A-Z0-9_]{0,127}$")
 class DatasetResponse(DatasetCreate):
     model_config = ConfigDict(from_attributes=True)
-    id: str; local_path: str | None; license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
+    id: str; local_path: str | None; size_bytes: int | None = None; license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
+
+
+class DatasetUpload(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    base64_data: str = Field(min_length=1, max_length=89_478_488)
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state,"document_store",None) is not None:
         yield None
@@ -38,7 +45,7 @@ def create_dataset(payload: DatasetCreate,request:Request,session:SessionDepende
     store=get_document_store(request)
     if store is not None:
         if store.list_documents("dataset_versions",query={"dataset_id":payload.dataset_id,"version":payload.version,"revision":payload.revision}):raise HTTPException(409,"Dataset revision already exists")
-        return store.insert_document("dataset_versions",{**payload.model_dump(),"local_path":None,"license_accepted_at":None,"status":DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value,"error_message":None,"created_at":datetime.now()})
+        return store.insert_document("dataset_versions",{**payload.model_dump(),"local_path":None,"size_bytes":None,"license_accepted_at":None,"status":DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value,"error_message":None,"created_at":datetime.now()})
     assert session is not None
     item=DatasetVersion(**payload.model_dump(),status=DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value);session.add(item)
     try: session.commit()
@@ -67,6 +74,19 @@ def download_dataset_version(dataset_version_id:str,request:Request,session:Sess
         return download_dataset(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
     except DatasetError as error: raise HTTPException(409,str(error)) from error
 
+
+@router.post("/{dataset_version_id}/upload", response_model=DatasetResponse)
+def upload_dataset_version(dataset_version_id: str, payload: DatasetUpload, request: Request, session: SessionDependency) -> DatasetVersion | dict:
+    try:
+        content = _decode_upload(payload.base64_data)
+        store = get_document_store(request)
+        if store is not None:
+            return store_mongo_uploaded_dataset(store, dataset_version_id, filename=payload.filename, content=content, data_root=request.app.state.settings.data_root)
+        assert session is not None
+        return store_uploaded_dataset(session, get_dataset_or_404(session, dataset_version_id), filename=payload.filename, content=content, data_root=request.app.state.settings.data_root)
+    except DatasetError as error:
+        raise HTTPException(409, str(error)) from error
+
 @router.delete("/{dataset_version_id}/cache",response_model=DatasetResponse)
 def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:SessionDependency)->DatasetVersion|dict:
     store=get_document_store(request)
@@ -75,3 +95,11 @@ def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:S
         assert session is not None
         return clear_dataset_cache(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
     except DatasetError as error: raise HTTPException(409,str(error)) from error
+
+
+def _decode_upload(value: str) -> bytes:
+    encoded = value.split(",", 1)[1] if value.startswith("data:") and "," in value else value
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise DatasetError("Uploaded dataset must be valid base64 data.") from error

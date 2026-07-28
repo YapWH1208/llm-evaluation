@@ -20,6 +20,46 @@ def accept_mongo_dataset_license(store: MongoDocumentStore, dataset_id: str) -> 
     return updated
 
 
+def store_mongo_uploaded_dataset(
+    store: MongoDocumentStore,
+    dataset_id: str,
+    *,
+    filename: str,
+    content: bytes,
+    data_root: str,
+) -> dict[str, Any]:
+    dataset = _get_dataset(store, dataset_id)
+    if not content:
+        raise DatasetError("Uploaded dataset is empty.")
+    if len(content) > 64 * 1024 * 1024:
+        raise DatasetError("Uploaded dataset exceeds the 64 MiB upload limit.")
+    safe_name = Path(filename).name
+    if not safe_name or safe_name in {".", ".."}:
+        raise DatasetError("Uploaded dataset filename is invalid.")
+    if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
+        store.update_document("dataset_versions", dataset_id, {"status": "license_required"})
+        raise DatasetError("Dataset license must be accepted before upload.")
+    destination = (Path(data_root).resolve() / "datasets" / "uploads" / dataset_id).resolve()
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    if not destination.is_relative_to(root):
+        raise DatasetError("Dataset upload path is outside the configured dataset root.")
+    destination.mkdir(parents=True, exist_ok=True)
+    target = destination / safe_name
+    temporary = destination / f".{safe_name}.part"
+    import hashlib
+
+    checksum = hashlib.sha256(content).hexdigest()
+    expected_checksum = dataset.get("checksum")
+    if isinstance(expected_checksum, str) and expected_checksum.lower() != checksum:
+        store.update_document("dataset_versions", dataset_id, {"status": "corrupted", "error_message": "Uploaded dataset checksum verification failed."})
+        raise DatasetError("Uploaded dataset checksum verification failed.")
+    temporary.write_bytes(content)
+    temporary.replace(target)
+    updated = store.update_document("dataset_versions", dataset_id, {"source_url": target.as_uri(), "checksum": checksum, "size_bytes": len(content), "local_path": str(target), "status": "ready", "error_message": None})
+    assert updated is not None
+    return updated
+
+
 def download_mongo_dataset(
     store: MongoDocumentStore,
     dataset_id: str,
@@ -46,7 +86,7 @@ def download_mongo_dataset(
             temporary.unlink(missing_ok=True)
             raise DatasetError("Dataset checksum verification failed.")
         temporary.replace(target)
-        updated = store.update_document("dataset_versions", dataset_id, {"checksum": actual_checksum, "local_path": str(target), "status": "ready", "error_message": None})
+        updated = store.update_document("dataset_versions", dataset_id, {"checksum": actual_checksum, "size_bytes": target.stat().st_size, "local_path": str(target), "status": "ready", "error_message": None})
         assert updated is not None
         return updated
     except (DatasetError, httpx.HTTPStatusError) as error:
@@ -69,7 +109,7 @@ def clear_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_r
             raise DatasetError("Dataset cache path is outside the configured dataset root.")
         target.unlink(missing_ok=True)
     status = "license_required" if dataset.get("license_text") and dataset.get("license_accepted_at") is None else "not_downloaded"
-    updated = store.update_document("dataset_versions", dataset_id, {"local_path": None, "status": status, "error_message": None})
+    updated = store.update_document("dataset_versions", dataset_id, {"local_path": None, "size_bytes": None, "status": status, "error_message": None})
     assert updated is not None
     return updated
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -374,9 +375,9 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
 
 
-def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses() -> None:
+def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         benchmarks = api.get("/api/v1/benchmarks")
@@ -391,6 +392,10 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         accepted = api.post(f"/api/v1/datasets/{dataset.json()['id']}/accept-license")
         assert accepted.status_code == 200
         assert accepted.json()["status"] == "not_downloaded"
+        uploaded = api.post(f"/api/v1/datasets/{dataset.json()['id']}/upload", json={"filename": "examples.jsonl", "base64_data": base64.b64encode(b'{"question":"2 + 2"}\n').decode("ascii")})
+        assert uploaded.status_code == 200
+        assert uploaded.json()["status"] == "ready"
+        assert uploaded.json()["size_bytes"] == len(b'{"question":"2 + 2"}\n')
 
 
 def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:

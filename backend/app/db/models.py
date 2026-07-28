@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -227,7 +227,7 @@ class PromptPackage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 class DatasetStatus(StrEnum):
-    NOT_DOWNLOADED="not_downloaded"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; LICENSE_REQUIRED="license_required"; CREDENTIAL_REQUIRED="credential_required"; FAILED="failed"
+    NOT_DOWNLOADED="not_downloaded"; WAITING="waiting"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; UPDATE_AVAILABLE="update_available"; LICENSE_REQUIRED="license_required"; CREDENTIAL_REQUIRED="credential_required"; CORRUPTED="corrupted"; FAILED="failed"; REMOVING="removing"
 
 class DatasetVersion(Base):
     __tablename__ = "dataset_versions"
@@ -239,6 +239,7 @@ class DatasetVersion(Base):
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     credential_env_var: Mapped[str | None] = mapped_column(String(128), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     local_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     license_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     license_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -37,7 +37,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     database.initialize()
     database.initialize()
 
@@ -49,8 +49,10 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     assert "aggregate_metrics" in inspect(database.engine).get_table_names()
     judge_columns = {column["name"] for column in inspect(database.engine).get_columns("judge_assessments")}
     assert {"comparison_sample_attempt_id", "answer_order", "swap_test_group_id", "selected_answer"} <= judge_columns
+    dataset_columns = {column["name"] for column in inspect(database.engine).get_columns("dataset_versions")}
+    assert "size_bytes" in dataset_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 19
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 20
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
