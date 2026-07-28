@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
@@ -16,6 +17,15 @@ DEFAULT_CAPABILITY_KEYS = (
     "image_input",
     "audio_input",
     "video_input",
+    "multiple_images",
+    "multiple_audio_files",
+    "multiple_videos",
+    "mixed_media_input",
+    "text_output",
+    "image_output",
+    "audio_output",
+    "video_output",
+    "file_output",
     "system_message",
     "multi_turn_conversation",
     "tool_calling",
@@ -27,9 +37,14 @@ DEFAULT_CAPABILITY_KEYS = (
     "seed",
     "logprobs",
     "usage_reporting",
+    "maximum_context_length",
+    "maximum_output_length",
+    "supported_mime_types",
+    "supported_languages",
 )
 _ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLdfQAAAABJRU5ErkJggg=="
 _SILENT_WAV = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+_MINIMAL_VIDEO = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE="
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +92,7 @@ class OpenAIChatCompletionsCapabilityDetector:
                 self._evidence("not_run", reason="This adapter has no safe probe for the requested capability."),
             )
 
-        messages: list[dict[str, object]] = [{"role": "user", "content": "Reply with OK."}]
+        messages = _probe_messages(capability_key)
         if capability_key == "system_message":
             messages.insert(0, {"role": "system", "content": "Reply with the single token OK."})
         if capability_key == "multi_turn_conversation":
@@ -86,12 +101,9 @@ class OpenAIChatCompletionsCapabilityDetector:
                 {"role": "assistant", "content": "OK"},
                 {"role": "user", "content": "Reply with the remembered word."},
             ]
-        if capability_key == "image_input":
-            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "image", "source": {"base64_data": _ONE_PIXEL_PNG}, "mime_type": "image/png"}]}]
-        if capability_key == "audio_input":
-            messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "audio", "source": {"base64_data": _SILENT_WAV}, "mime_type": "audio/wav"}]}]
-
         try:
+            request_body = self._request_body(endpoint, messages, capability_key)
+            request_summary = _safe_request_summary(capability_key, messages, request_body)
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
@@ -100,19 +112,19 @@ class OpenAIChatCompletionsCapabilityDetector:
                 response = client.post(
                     _endpoint_url(endpoint),
                     headers=provider_headers(endpoint, api_key),
-                    json=self._request_body(endpoint, messages, capability_key),
+                    json=request_body,
                 )
         except httpx.TimeoutException:
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.INCONCLUSIVE,
-                self._evidence("timeout", reason="Provider request timed out."),
+                self._evidence("timeout", reason="Provider request timed out.", request_summary=request_summary),
             )
         except httpx.RequestError:
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.INCONCLUSIVE,
-                self._evidence("connection_error", reason="Could not connect to the provider."),
+                self._evidence("connection_error", reason="Could not connect to the provider.", request_summary=request_summary),
             )
 
         if response.is_error:
@@ -124,7 +136,14 @@ class OpenAIChatCompletionsCapabilityDetector:
             return CapabilityDetectionResult(
                 capability_key,
                 status,
-                self._evidence("http_error", provider_status_code=response.status_code),
+                self._evidence("http_error", provider_status_code=response.status_code, request_summary=request_summary, response_summary=f"HTTP {response.status_code}"),
+            )
+
+        if capability_key == "streaming" and response.headers.get("content-type", "").lower().startswith("text/event-stream"):
+            return CapabilityDetectionResult(
+                capability_key,
+                CapabilityDetection.PASSED,
+                self._evidence("passed", provider_status_code=response.status_code, response_mode="sse", request_summary=request_summary, response_summary="SSE response accepted"),
             )
 
         try:
@@ -133,25 +152,25 @@ class OpenAIChatCompletionsCapabilityDetector:
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("invalid_json", provider_status_code=response.status_code),
+                self._evidence("invalid_json", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Non-JSON response"),
             )
 
         if not isinstance(payload, dict) or not _has_expected_response_shape(endpoint, payload):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("unexpected_response", provider_status_code=response.status_code),
+                self._evidence("unexpected_response", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Unexpected provider response shape"),
             )
         if capability_key == "usage_reporting" and _extract_usage(payload) == (None, None):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("usage_missing", provider_status_code=response.status_code),
+                self._evidence("usage_missing", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Usage fields absent"),
             )
         return CapabilityDetectionResult(
             capability_key,
             CapabilityDetection.PASSED,
-            self._evidence("passed", provider_status_code=response.status_code),
+            self._evidence("passed", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Expected provider response shape"),
         )
 
     @classmethod
@@ -171,10 +190,10 @@ class OpenAIChatCompletionsCapabilityDetector:
             options["max_output_tokens"] = 8
         else:
             options["max_tokens"] = 8
-        request = OpenAIChatCompletionsExecutor._build_request(
+        request = deepcopy(OpenAIChatCompletionsExecutor._build_request(
             endpoint,
             {"messages": messages, "request_body_evidence": {"effective_request_body": options}},
-        )
+        ))
         request.update(_probe_controls(capability_key))
         return request
 
@@ -190,18 +209,65 @@ def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, obj
         return False
 
 
+def _probe_messages(capability_key: str) -> list[dict[str, object]]:
+    """Return a minimum-size, provider-neutral request for a single probe."""
+
+    text_part: dict[str, object] = {"type": "text", "text": "Reply with OK."}
+    image_part: dict[str, object] = {"type": "image", "source": {"base64_data": _ONE_PIXEL_PNG}, "mime_type": "image/png"}
+    audio_part: dict[str, object] = {"type": "audio", "source": {"base64_data": _SILENT_WAV}, "mime_type": "audio/wav"}
+    video_part: dict[str, object] = {"type": "video", "source": {"base64_data": _MINIMAL_VIDEO}, "mime_type": "video/mp4"}
+    parts_by_capability: dict[str, list[dict[str, object]]] = {
+        "image_input": [text_part, image_part],
+        "multiple_images": [text_part, image_part, dict(image_part)],
+        "audio_input": [text_part, audio_part],
+        "multiple_audio_files": [text_part, audio_part, dict(audio_part)],
+        "video_input": [text_part, video_part],
+        "multiple_videos": [text_part, video_part, dict(video_part)],
+        "mixed_media_input": [text_part, image_part, audio_part, video_part],
+    }
+    parts = parts_by_capability.get(capability_key)
+    if parts is None:
+        return [{"role": "user", "content": "Reply with OK."}]
+    return [{"role": "user", "content": parts}]
+
+
+def _safe_request_summary(capability_key: str, messages: list[dict[str, object]], request: dict[str, object]) -> dict[str, object]:
+    """Persist reproducibility metadata without retaining prompt text, media, or credentials."""
+
+    content_types: list[str] = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            content_types.extend(str(part.get("type", "unknown")) for part in content if isinstance(part, dict))
+        elif isinstance(content, str):
+            content_types.append("text")
+    return {
+        "capability": capability_key,
+        "message_count": len(messages),
+        "content_types": content_types,
+        "request_fields": sorted(str(key) for key in request if key not in {"messages", "input", "contents"}),
+    }
+
+
 def _supported_probe_capabilities(endpoint: ModelEndpoint) -> set[str]:
     profile = _protocol_profile(endpoint)
+    common_text = {
+        "text_input", "text_output", "system_message", "multi_turn_conversation", "usage_reporting",
+    }
+    multimedia = {
+        "image_input", "audio_input", "video_input", "multiple_images", "multiple_audio_files", "multiple_videos", "mixed_media_input",
+    }
+    advanced = {"tool_calling", "parallel_tool_calling", "structured_output", "json_mode", "json_schema", "streaming", "seed", "logprobs"}
     if profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
-        return set(DEFAULT_CAPABILITY_KEYS) - {"video_input"}
+        return common_text | advanced | (multimedia - {"video_input", "multiple_videos", "mixed_media_input"})
     if profile == "openai_responses":
-        return {"text_input", "image_input", "audio_input", "video_input", "system_message", "multi_turn_conversation", "usage_reporting"}
+        return common_text | multimedia
     if profile in {"anthropic_messages", "gemini_generate_content"}:
-        return {"text_input", "image_input", "system_message", "usage_reporting"}
+        return common_text | {"image_input", "multiple_images"}
     if profile == "ollama_chat":
-        return {"text_input", "image_input", "system_message", "usage_reporting"}
+        return common_text | {"image_input", "multiple_images"}
     if profile == "custom_http_json":
-        return {"text_input"}
+        return {"text_input", "text_output"}
     return set()
 
 

@@ -311,6 +311,7 @@ export default function App() {
   }
 
   async function probeCapabilities(endpointId: string) {
+    if (!window.confirm("Capability probing sends small requests to this provider and may incur API charges. Continue?")) return;
     setBusy(`capabilities-${endpointId}`);
     try {
       const detected = await api.detectCapabilities(endpointId);

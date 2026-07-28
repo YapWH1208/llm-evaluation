@@ -8,7 +8,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
-from app.services.capability_detector import OpenAIChatCompletionsCapabilityDetector
+from app.services.capability_detector import DEFAULT_CAPABILITY_KEYS, OpenAIChatCompletionsCapabilityDetector
 from app.db.models import ModelEndpoint
 
 def test_capabilities_keep_user_declaration_separate(tmp_path: Path) -> None:
@@ -65,6 +65,33 @@ def test_openai_detector_probes_image_and_audio_and_marks_video_adapter_unsuppor
     assert by_key["video_input"].status == CapabilityDetection.UNSUPPORTED_BY_ADAPTER
     assert observed[0]["messages"][0]["content"][1]["type"] == "image_url"
     assert observed[1]["messages"][0]["content"][1]["type"] == "input_audio"
+
+
+def test_capability_catalog_includes_all_declared_modalities_outputs_and_context_fields() -> None:
+    assert {
+        "multiple_images", "multiple_audio_files", "multiple_videos", "mixed_media_input",
+        "text_output", "image_output", "audio_output", "video_output", "file_output",
+        "maximum_context_length", "maximum_output_length", "supported_mime_types", "supported_languages",
+    }.issubset(DEFAULT_CAPABILITY_KEYS)
+
+
+def test_openai_detector_uses_minimal_multi_image_probe_and_accepts_sse_streaming() -> None:
+    observed: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        observed.append(body)
+        if body.get("stream"):
+            return httpx.Response(200, content="data: {\"choices\": []}\n\n", headers={"content-type": "text/event-stream"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
+    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["multiple_images", "streaming"])
+    assert {item.capability_key for item in results if item.status == CapabilityDetection.PASSED} == {"multiple_images", "streaming"}
+    assert [part["type"] for part in observed[0]["messages"][0]["content"]] == ["text", "image_url", "image_url"]
+    evidence = {item.capability_key: item.evidence for item in results}
+    assert evidence["multiple_images"]["request_summary"] == {"capability": "multiple_images", "message_count": 1, "content_types": ["text", "image", "image"], "request_fields": ["max_tokens", "model", "stream", "temperature"]}
+    assert "base64" not in json.dumps(evidence)
 
 
 def test_openai_detector_uses_platform_owned_advanced_capability_probes() -> None:
