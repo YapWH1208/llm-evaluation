@@ -12,6 +12,7 @@ from app.db import (
     RunStatus,
     SampleAttempt,
     TaskStatus,
+    TaskType,
     TaskUnit,
 )
 from app.db.models import ModelCapability
@@ -137,9 +138,30 @@ def create_benchmark_run(
     session.add(run)
     session.flush()
 
+    dataset_task = TaskUnit(
+        run_id=run.id,
+        task_type=TaskType.DATASET_PREPARATION.value,
+        payload={
+            "dataset_manifest": plugin.manifest.get("dataset_manifest", {}),
+            "prepared_inline": True,
+        },
+        status=TaskStatus.SUCCEEDED.value,
+    )
+    session.add(dataset_task)
+    session.flush()
+    benchmark_task = TaskUnit(
+        run_id=run.id,
+        parent_task_id=dataset_task.id,
+        task_type=TaskType.BENCHMARK.value,
+        payload={"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
+        status=TaskStatus.SUCCEEDED.value,
+    )
+    session.add(benchmark_task)
+    session.flush()
     task = TaskUnit(
         run_id=run.id,
-        task_type="evaluation_shard",
+        parent_task_id=benchmark_task.id,
+        task_type=TaskType.EVALUATION_SHARD.value,
         payload={
             "sample_ids": [sample.sample_id for sample in samples],
             "estimated_request_count": len(samples),

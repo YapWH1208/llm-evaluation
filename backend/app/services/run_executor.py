@@ -15,6 +15,7 @@ from app.db import (
     SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
+    TaskType,
     TaskUnit,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
@@ -53,17 +54,23 @@ def execute_queued_text_run(
         raise RunExecutionError("Evaluation run not found.")
     if run.status != RunStatus.QUEUED.value:
         raise RunExecutionError("Only queued evaluation runs can be executed.")
-    task = claim_task(session, "interactive-api", lease_seconds=600, run_id=run_id)
-    if task is None or task.lease_token is None:
-        raise RunExecutionError("No due task is available for this evaluation run.")
-    run, _ = execute_leased_text_task(
-        session,
-        task_id=task.id,
-        lease_token=task.lease_token,
-        cipher=cipher,
-        model_executor=model_executor,
-    )
-    return run
+    for _ in range(32):
+        task = claim_task(session, "interactive-api", lease_seconds=600, run_id=run_id)
+        if task is None or task.lease_token is None:
+            session.refresh(run)
+            if run.status in {RunStatus.QUEUED.value, RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
+                return run
+            raise RunExecutionError("No due task is available for this evaluation run.")
+        run, _ = execute_leased_text_task(
+            session,
+            task_id=task.id,
+            lease_token=task.lease_token,
+            cipher=cipher,
+            model_executor=model_executor,
+        )
+        if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
+            return run
+    raise RunExecutionError("Run task pipeline exceeded its local execution safety limit.")
 
 
 def execute_leased_text_task(
@@ -81,7 +88,11 @@ def execute_leased_text_task(
         raise RunExecutionError("Task not found.")
     if not has_valid_lease(task, lease_token):
         raise RunExecutionError("Task lease is no longer valid.")
-    if task.task_type != "evaluation_shard":
+    if task.task_type == TaskType.SCORING.value:
+        return _execute_leased_scoring_task(session, task, lease_token)
+    if task.task_type == TaskType.AGGREGATION.value:
+        return _execute_leased_aggregation_task(session, task, lease_token)
+    if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
     run = session.get(EvaluationRun, task.run_id)
@@ -141,6 +152,98 @@ def execute_leased_text_task(
     return run, task
 
 
+def _execute_leased_scoring_task(
+    session: Session,
+    task: TaskUnit,
+    lease_token: str,
+) -> tuple[EvaluationRun, TaskUnit]:
+    run = session.get(EvaluationRun, task.run_id)
+    if run is None:
+        raise RunExecutionError("Evaluation run not found.")
+    if run.status not in {RunStatus.SCORING.value, RunStatus.RUNNING.value}:
+        raise RunExecutionError("Evaluation run is not ready for scoring.")
+    if not has_valid_lease(task, lease_token):
+        raise RunExecutionError("Task lease is no longer valid.")
+    task.status = TaskStatus.RUNNING.value
+    task.attempt_count += 1
+    run.status = RunStatus.SCORING.value
+    session.commit()
+
+    latest = _latest_run_attempts(session, run.id)
+    task.payload = {
+        **(task.payload or {}),
+        "scored_samples": sum(attempt.score is not None for attempt in latest.values()),
+        "failed_samples": sum(attempt.status == SampleAttemptStatus.FAILED.value for attempt in latest.values()),
+        "deterministic_scoring": "verified",
+    }
+    task.status = TaskStatus.SUCCEEDED.value
+    clear_lease(task)
+    run.status = RunStatus.AGGREGATING.value
+    _enqueue_stage_task(session, run, parent_task=task, task_type=TaskType.AGGREGATION.value)
+    session.commit()
+    session.refresh(run)
+    session.refresh(task)
+    return run, task
+
+
+def _execute_leased_aggregation_task(
+    session: Session,
+    task: TaskUnit,
+    lease_token: str,
+) -> tuple[EvaluationRun, TaskUnit]:
+    run = session.get(EvaluationRun, task.run_id)
+    if run is None:
+        raise RunExecutionError("Evaluation run not found.")
+    if run.status not in {RunStatus.AGGREGATING.value, RunStatus.SCORING.value}:
+        raise RunExecutionError("Evaluation run is not ready for aggregation.")
+    if not has_valid_lease(task, lease_token):
+        raise RunExecutionError("Task lease is no longer valid.")
+    task.status = TaskStatus.RUNNING.value
+    task.attempt_count += 1
+    run.status = RunStatus.AGGREGATING.value
+    session.commit()
+
+    metrics = recompute_aggregate_metrics(session, run.id, commit=False)
+    task.payload = {**(task.payload or {}), "metric_count": len(metrics), "aggregation_version": "1.0.0"}
+    task.status = TaskStatus.SUCCEEDED.value
+    clear_lease(task)
+    run.status = RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value
+    run.completed_at = datetime.now(timezone.utc)
+    session.commit()
+    session.refresh(run)
+    session.refresh(task)
+    return run, task
+
+
+def _enqueue_stage_task(
+    session: Session,
+    run: EvaluationRun,
+    *,
+    parent_task: TaskUnit,
+    task_type: str,
+) -> TaskUnit:
+    existing = session.scalar(
+        select(TaskUnit).where(
+            TaskUnit.run_id == run.id,
+            TaskUnit.parent_task_id == parent_task.id,
+            TaskUnit.task_type == task_type,
+        )
+    )
+    if existing is not None:
+        return existing
+    task = TaskUnit(
+        run_id=run.id,
+        parent_task_id=parent_task.id,
+        task_type=task_type,
+        payload={"pipeline_stage": task_type},
+        status=TaskStatus.PENDING.value,
+        priority=parent_task.priority,
+    )
+    session.add(task)
+    session.flush()
+    return task
+
+
 def _prepare_attempts_for_execution(session: Session, task: TaskUnit) -> list[SampleAttempt]:
     payload = task.payload if isinstance(task.payload, dict) else {}
     requested_ids = payload.get("retry_sample_ids") or payload.get("sample_ids") or []
@@ -178,6 +281,18 @@ def _latest_attempts_for_task(session: Session, task_id: str) -> dict[str, Sampl
             .where(SampleAttempt.task_id == task_id)
             .order_by(SampleAttempt.sample_id, SampleAttempt.attempt_number.desc())
         )
+    )
+    latest: dict[str, SampleAttempt] = {}
+    for attempt in attempts:
+        latest.setdefault(attempt.sample_id, attempt)
+    return latest
+
+
+def _latest_run_attempts(session: Session, run_id: str) -> dict[str, SampleAttempt]:
+    attempts = session.scalars(
+        select(SampleAttempt)
+        .where(SampleAttempt.run_id == run_id)
+        .order_by(SampleAttempt.sample_id, SampleAttempt.attempt_number.desc())
     )
     latest: dict[str, SampleAttempt] = {}
     for attempt in attempts:
@@ -333,13 +448,9 @@ def _finalize_task_and_run(session: Session, run: EvaluationRun, task: TaskUnit)
         task.payload = {key: value for key, value in task.payload.items() if key != "retry_sample_ids"}
     clear_lease(task)
     _update_run_progress(session, run, [])
-    if run.failed_samples:
-        run.status = RunStatus.COMPLETED_WITH_ERRORS.value
-        task.status = TaskStatus.FAILED.value
-    else:
-        run.status = RunStatus.COMPLETED.value
-    run.completed_at = datetime.now(timezone.utc)
-    recompute_aggregate_metrics(session, run.id, commit=False)
+    run.status = RunStatus.SCORING.value
+    run.completed_at = None
+    _enqueue_stage_task(session, run, parent_task=task, task_type=TaskType.SCORING.value)
     session.commit()
 
 

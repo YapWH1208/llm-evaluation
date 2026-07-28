@@ -121,12 +121,17 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
                 )
             )
 
-        assert len(tasks) == 1
-        assert tasks[0].status == "pending"
+        assert [task.task_type for task in tasks] == ["dataset_preparation", "benchmark", "evaluation_shard"]
+        dataset_task, benchmark_task, evaluation_task = tasks
+        assert dataset_task.status == "succeeded"
+        assert benchmark_task.status == "succeeded"
+        assert benchmark_task.parent_task_id == dataset_task.id
+        assert evaluation_task.status == "pending"
+        assert evaluation_task.parent_task_id == benchmark_task.id
         assert len(attempts) == 2
         assert {attempt.status for attempt in attempts} == {"pending"}
         assert {attempt.attempt_number for attempt in attempts} == {1}
-        assert all(attempt.task_id == tasks[0].id for attempt in attempts)
+        assert all(attempt.task_id == evaluation_task.id for attempt in attempts)
 
 
 def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
@@ -234,7 +239,7 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).json()
         with app.state.database.get_session() as session:
-            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"]))
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard"))
             assert task is not None
             task.payload = {**task.payload, "retry_policy":{"max_attempts":2,"base_delay_seconds":0,"max_delay_seconds":0}}
             session.commit()
@@ -247,6 +252,12 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         second_execution = client.post(f"/api/v1/workers/tasks/{second_claim['id']}/execute", json={"lease_token":second_claim["lease_token"]})
         assert second_execution.status_code == 200
         assert second_execution.json()["status"] == "succeeded"
+        scoring_claim = client.post("/api/v1/workers/claim", json={"worker_id":"worker-c"}).json()
+        assert scoring_claim["task_type"] == "scoring"
+        assert client.post(f"/api/v1/workers/tasks/{scoring_claim['id']}/execute", json={"lease_token":scoring_claim["lease_token"]}).json()["status"] == "succeeded"
+        aggregation_claim = client.post("/api/v1/workers/claim", json={"worker_id":"worker-d"}).json()
+        assert aggregation_claim["task_type"] == "aggregation"
+        assert client.post(f"/api/v1/workers/tasks/{aggregation_claim['id']}/execute", json={"lease_token":aggregation_claim["lease_token"]}).json()["status"] == "succeeded"
         final_run = client.get(f"/api/v1/evaluation-runs/{run['id']}").json()
         assert final_run["status"] == "completed"
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
@@ -264,7 +275,7 @@ def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_pat
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         with app.state.database.get_session() as session:
-            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"]))
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard"))
             assert task is not None
             task.payload = {
                 **task.payload,
@@ -282,7 +293,7 @@ def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_pat
         assert execution.status_code == 200
         assert execution.json()["status"] == "completed_with_errors"
         with app.state.database.get_session() as session:
-            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"]))
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard"))
             assert task is not None
             assert task.payload["retry_exhausted_reason"] == "max_total_wait_seconds"
             assert task.payload["retry_total_wait_seconds"] == 0

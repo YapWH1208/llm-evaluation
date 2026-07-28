@@ -13,6 +13,7 @@ from app.db.models import (
     RunStatus,
     SampleAttempt,
     TaskStatus,
+    TaskType,
     TaskUnit,
 )
 from app.services.content_ir import ContentValidationError, normalize_content_parts
@@ -68,9 +69,27 @@ def create_custom_multimodal_run(
     )
     session.add(run)
     session.flush()
+    dataset_task = TaskUnit(
+        run_id=run.id,
+        task_type=TaskType.DATASET_PREPARATION.value,
+        payload={"source": "user", "prepared_inline": True},
+        status=TaskStatus.SUCCEEDED.value,
+    )
+    session.add(dataset_task)
+    session.flush()
+    benchmark_task = TaskUnit(
+        run_id=run.id,
+        parent_task_id=dataset_task.id,
+        task_type=TaskType.BENCHMARK.value,
+        payload={"benchmark_id": "custom-multimodal", "benchmark_version": "1.0.0", "planned_samples": 1},
+        status=TaskStatus.SUCCEEDED.value,
+    )
+    session.add(benchmark_task)
+    session.flush()
     task = TaskUnit(
         run_id=run.id,
-        task_type="evaluation_shard",
+        parent_task_id=benchmark_task.id,
+        task_type=TaskType.EVALUATION_SHARD.value,
         payload={
             "sample_ids": [sample_id],
             "estimated_request_count": 1,

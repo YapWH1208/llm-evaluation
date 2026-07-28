@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import EvaluationRun, RunStatus, SampleAttempt, SampleAttemptStatus, TaskStatus, TaskUnit
+from app.db.models import EvaluationRun, RunStatus, SampleAttempt, SampleAttemptStatus, TaskStatus, TaskType, TaskUnit
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run
 from app.services.run_analysis import latest_attempts
 
@@ -48,15 +48,22 @@ def retry_failed_samples(session: Session, run_id: str) -> EvaluationRun:
 
     latest_task = session.scalar(
         select(TaskUnit)
-        .where(TaskUnit.run_id == run.id)
+        .where(TaskUnit.run_id == run.id, TaskUnit.task_type == TaskType.EVALUATION_SHARD.value)
         .order_by(TaskUnit.created_at.desc())
         .limit(1)
     )
     source_policy = latest_task.payload.get("retry_policy") if latest_task and isinstance(latest_task.payload, dict) else None
     retry_policy = source_policy if isinstance(source_policy, dict) else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    benchmark_task = session.scalar(
+        select(TaskUnit)
+        .where(TaskUnit.run_id == run.id, TaskUnit.task_type == TaskType.BENCHMARK.value)
+        .order_by(TaskUnit.created_at.desc())
+        .limit(1)
+    )
     task = TaskUnit(
         run_id=run.id,
-        task_type="evaluation_shard",
+        parent_task_id=benchmark_task.id if benchmark_task is not None else None,
+        task_type=TaskType.EVALUATION_SHARD.value,
         payload={
             "sample_ids": [attempt.sample_id for attempt in failed_attempts],
             "estimated_request_count": len(failed_attempts),

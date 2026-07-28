@@ -360,6 +360,12 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe() -> None:
         execution = api.post(f"/api/v1/workers/tasks/{task['id']}/execute", json={"lease_token": task["lease_token"]})
         assert execution.status_code == 200
         assert execution.json()["status"] == "succeeded"
+        scoring = api.post("/api/v1/workers/claim", json={"worker_id": "worker-b"}).json()
+        assert scoring["task_type"] == "scoring"
+        assert api.post(f"/api/v1/workers/tasks/{scoring['id']}/execute", json={"lease_token": scoring["lease_token"]}).json()["status"] == "succeeded"
+        aggregation = api.post("/api/v1/workers/claim", json={"worker_id": "worker-c"}).json()
+        assert aggregation["task_type"] == "aggregation"
+        assert api.post(f"/api/v1/workers/tasks/{aggregation['id']}/execute", json={"lease_token": aggregation["lease_token"]}).json()["status"] == "succeeded"
         assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
 
 

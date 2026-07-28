@@ -78,6 +78,10 @@ def claim_task(
         task = session.get(TaskUnit, task_id)
         if task is None:
             continue
+        if task.parent_task_id:
+            parent = session.get(TaskUnit, task.parent_task_id)
+            if parent is None or parent.status != TaskStatus.SUCCEEDED.value:
+                continue
         endpoint = session.scalar(
             select(ModelEndpoint)
             .join(EvaluationRun, EvaluationRun.model_endpoint_id == ModelEndpoint.id)

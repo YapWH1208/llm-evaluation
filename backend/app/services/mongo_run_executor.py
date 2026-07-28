@@ -130,10 +130,49 @@ def create_mongo_benchmark_run(
             "completed_at": None,
         },
     )
+    dataset_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": None,
+            "task_type": "dataset_preparation",
+            "payload": {"dataset_manifest": plugin.manifest.get("dataset_manifest", {}), "prepared_inline": True},
+            "status": "succeeded",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    benchmark_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": dataset_task["id"],
+            "task_type": "benchmark",
+            "payload": {"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
+            "status": "succeeded",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
     task = store.insert_document(
         "task_units",
         {
             "run_id": run["id"],
+            "parent_task_id": benchmark_task["id"],
             "task_type": "evaluation_shard",
             "payload": {
                 "sample_ids": [sample.sample_id for sample in samples],
@@ -231,7 +270,9 @@ def create_mongo_custom_multimodal_run(
     request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
     run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
-    task = store.insert_document("task_units", {"run_id":run["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
+    dataset_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":None,"task_type":"dataset_preparation","payload":{"source":"user","prepared_inline":True},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
+    benchmark_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":dataset_task["id"],"task_type":"benchmark","payload":{"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","planned_samples":1},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
+    task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":benchmark_task["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized),"request_body_evidence":request_body_evidence},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
     return run
 
@@ -248,17 +289,23 @@ def execute_mongo_queued_run(
         raise MongoRunExecutionError("Evaluation run not found.")
     if run["status"] != "queued":
         raise MongoRunExecutionError("Only queued evaluation runs can be executed.")
-    task = store.claim_task(worker_id="interactive-api", lease_seconds=600, run_id=run_id)
-    if task is None or not task.get("lease_token"):
-        raise MongoRunExecutionError("No due task is available for this evaluation run.")
-    run, _ = execute_mongo_leased_task(
-        store,
-        task_id=str(task["id"]),
-        lease_token=str(task["lease_token"]),
-        cipher=cipher,
-        model_executor=model_executor,
-    )
-    return run
+    for _ in range(32):
+        task = store.claim_task(worker_id="interactive-api", lease_seconds=600, run_id=run_id)
+        if task is None or not task.get("lease_token"):
+            current = store.get_document("evaluation_runs", run_id)
+            if current is not None and current.get("status") in {"queued", "completed", "completed_with_errors"}:
+                return current
+            raise MongoRunExecutionError("No due task is available for this evaluation run.")
+        run, _ = execute_mongo_leased_task(
+            store,
+            task_id=str(task["id"]),
+            lease_token=str(task["lease_token"]),
+            cipher=cipher,
+            model_executor=model_executor,
+        )
+        if run.get("status") in {"completed", "completed_with_errors"}:
+            return run
+    raise MongoRunExecutionError("Run task pipeline exceeded its local execution safety limit.")
 
 
 def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
@@ -293,14 +340,24 @@ def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[s
     failed = [attempt for attempt in latest.values() if attempt.get("status") == "failed"]
     if not failed:
         raise MongoRunExecutionError("This run has no failed samples to retry.")
-    source_tasks = store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
+    source_tasks = [
+        task
+        for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
+        if task.get("task_type") == "evaluation_shard"
+    ]
     source_payload = _task_payload(source_tasks[0]) if source_tasks else {}
     retry_policy = source_payload.get("retry_policy") if isinstance(source_payload.get("retry_policy"), dict) else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    benchmark_tasks = [
+        task
+        for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
+        if task.get("task_type") == "benchmark"
+    ]
     now = _utc_now()
     task = store.insert_document(
         "task_units",
         {
             "run_id": run_id,
+            "parent_task_id": benchmark_tasks[0]["id"] if benchmark_tasks else None,
             "task_type": "evaluation_shard",
             "payload": {
                 "sample_ids": [attempt["sample_id"] for attempt in failed],
@@ -365,6 +422,10 @@ def execute_mongo_leased_task(
         raise MongoRunExecutionError("Task not found.")
     if not _has_valid_lease(task, lease_token):
         raise MongoRunExecutionError("Task lease is no longer valid.")
+    if task["task_type"] == "scoring":
+        return _execute_mongo_scoring_task(store, task, lease_token)
+    if task["task_type"] == "aggregation":
+        return _execute_mongo_aggregation_task(store, task, lease_token)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
@@ -435,17 +496,110 @@ def execute_mongo_leased_task(
         assert task is not None
 
     run = _update_run_progress(store, run["id"])
-    terminal_status = "completed_with_errors" if int(run["failed_samples"]) else "completed"
-    task_status = "failed" if int(run["failed_samples"]) else "succeeded"
     task = store.update_document(
         "task_units",
         task_id,
-        {"status": task_status, "next_retry_at": None, **_lease_values()},
+        {"status": "succeeded", "next_retry_at": None, **_lease_values()},
     )
-    run = store.update_document("evaluation_runs", run["id"], {"status": terminal_status, "completed_at": _utc_now()})
+    run = store.update_document("evaluation_runs", run["id"], {"status": "scoring", "completed_at": None})
     assert task is not None and run is not None
-    recompute_mongo_aggregate_metrics(store, str(run["id"]))
+    _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="scoring")
     return run, task
+
+
+def _execute_mongo_scoring_task(
+    store: MongoDocumentStore,
+    task: dict[str, Any],
+    lease_token: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    run = store.get_document("evaluation_runs", str(task["run_id"]))
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run not found.")
+    if run.get("status") not in {"scoring", "running"} or not _has_valid_lease(task, lease_token):
+        raise MongoRunExecutionError("Evaluation run is not ready for scoring.")
+    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "scoring"})
+    assert task is not None and run is not None
+    attempts = _latest_run_attempts(store, str(run["id"]))
+    task = store.update_document(
+        "task_units",
+        str(task["id"]),
+        {
+            "payload": {
+                **_task_payload(task),
+                "scored_samples": sum(item.get("score") is not None for item in attempts.values()),
+                "failed_samples": sum(item.get("status") == "failed" for item in attempts.values()),
+                "deterministic_scoring": "verified",
+            },
+            "status": "succeeded",
+            **_lease_values(),
+        },
+    )
+    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "aggregating"})
+    assert task is not None and run is not None
+    _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="aggregation")
+    return run, task
+
+
+def _execute_mongo_aggregation_task(
+    store: MongoDocumentStore,
+    task: dict[str, Any],
+    lease_token: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    run = store.get_document("evaluation_runs", str(task["run_id"]))
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run not found.")
+    if run.get("status") not in {"aggregating", "scoring"} or not _has_valid_lease(task, lease_token):
+        raise MongoRunExecutionError("Evaluation run is not ready for aggregation.")
+    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "aggregating"})
+    assert task is not None and run is not None
+    metrics = recompute_mongo_aggregate_metrics(store, str(run["id"]))
+    task = store.update_document(
+        "task_units",
+        str(task["id"]),
+        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": "1.0.0"}, "status": "succeeded", **_lease_values()},
+    )
+    final_status = "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"
+    run = store.update_document("evaluation_runs", str(run["id"]), {"status": final_status, "completed_at": _utc_now()})
+    assert task is not None and run is not None
+    return run, task
+
+
+def _enqueue_mongo_stage_task(
+    store: MongoDocumentStore,
+    run: dict[str, Any],
+    *,
+    parent_task: dict[str, Any],
+    task_type: str,
+) -> dict[str, Any]:
+    existing = [
+        task
+        for task in store.list_documents("task_units", query={"run_id": run["id"]})
+        if task.get("parent_task_id") == parent_task["id"] and task.get("task_type") == task_type
+    ]
+    if existing:
+        return existing[0]
+    now = _utc_now()
+    return store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": parent_task["id"],
+            "task_type": task_type,
+            "payload": {"pipeline_stage": task_type},
+            "status": "pending",
+            "priority": int(parent_task.get("priority", 0)),
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
 
 
 def build_mongo_run_summary(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
@@ -512,6 +666,16 @@ def _prepare_attempts(store: MongoDocumentStore, task: dict[str, Any]) -> list[d
 def _latest_attempts(store: MongoDocumentStore, task_id: str) -> dict[str, dict[str, Any]]:
     attempts = store.list_documents(
         "sample_attempts", query={"task_id": task_id}, sort=[("sample_id", 1), ("attempt_number", -1)]
+    )
+    latest: dict[str, dict[str, Any]] = {}
+    for attempt in attempts:
+        latest.setdefault(str(attempt["sample_id"]), attempt)
+    return latest
+
+
+def _latest_run_attempts(store: MongoDocumentStore, run_id: str) -> dict[str, dict[str, Any]]:
+    attempts = store.list_documents(
+        "sample_attempts", query={"run_id": run_id}, sort=[("sample_id", 1), ("attempt_number", -1)]
     )
     latest: dict[str, dict[str, Any]] = {}
     for attempt in attempts:

@@ -206,6 +206,11 @@ class MongoDocumentStore:
             query["run_id"] = run_id
         candidates = self.list_documents("task_units", query=query, sort=[("priority", -1), ("created_at", 1)])[:20]
         for task in candidates:
+            parent_task_id = task.get("parent_task_id")
+            if parent_task_id:
+                parent = self.get_document("task_units", str(parent_task_id))
+                if parent is None or parent.get("status") != "succeeded":
+                    continue
             if not task.get("run_id"):
                 document = self.database["task_units"].find_one_and_update(
                     {"_id": task["id"], **query},

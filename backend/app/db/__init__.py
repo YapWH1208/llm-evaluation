@@ -12,6 +12,7 @@ from app.db.models import (
     SampleAttemptStatus,
     SchemaVersion,
     TaskStatus,
+    TaskType,
     TaskUnit,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "SampleAttemptStatus",
     "SchemaVersion",
     "TaskStatus",
+    "TaskType",
     "TaskUnit",
 ]

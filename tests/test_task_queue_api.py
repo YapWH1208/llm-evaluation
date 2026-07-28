@@ -26,9 +26,10 @@ def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> Non
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         tasks = client.get("/api/v1/tasks", params={"run_id": run["id"]}).json()
-        assert len(tasks) == 1
-        assert tasks[0]["priority"] == 0
-        updated = client.patch(f"/api/v1/tasks/{tasks[0]['id']}", json={"priority": 25})
+        assert [task["task_type"] for task in tasks] == ["dataset_preparation", "benchmark", "evaluation_shard"]
+        evaluation_task = next(task for task in tasks if task["task_type"] == "evaluation_shard")
+        assert evaluation_task["priority"] == 0
+        updated = client.patch(f"/api/v1/tasks/{evaluation_task['id']}", json={"priority": 25})
         assert updated.status_code == 200
         assert updated.json()["priority"] == 25
 
