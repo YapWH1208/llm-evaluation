@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import datetime, timezone
 import hashlib
+import ipaddress
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
@@ -59,6 +60,16 @@ class EndpointBase(BaseModel):
             raise ValueError("base_url must be an absolute HTTP or HTTPS URL")
         if parsed.username or parsed.password:
             raise ValueError("base_url must not include credentials")
+        hostname = parsed.hostname
+        if hostname in {"localhost", "localhost.localdomain"}:
+            raise ValueError("base_url must not target localhost")
+        if hostname:
+            try:
+                address = ipaddress.ip_address(hostname)
+            except ValueError:
+                address = None
+            if address and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified):
+                raise ValueError("base_url must not target a private or restricted network address")
         return value.rstrip("/")
 
     @field_validator("default_request_body")
