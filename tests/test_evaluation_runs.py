@@ -285,6 +285,12 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
         assert {attempt["output_tokens"] for attempt in attempts.json()} == {5}
         assert {attempt["estimated_cost"] for attempt in attempts.json()} == {0.00004}
 
+        logs = client.get(f"/api/v1/evaluation-runs/{run_id}/logs")
+        assert logs.status_code == 200
+        assert {entry["event"] for entry in logs.json()} == {"task.lifecycle", "sample.lifecycle"}
+        assert any(entry["details"].get("status") == "succeeded" for entry in logs.json())
+        assert "choices" not in str(logs.json())
+
         assert client.post(f"/api/v1/evaluation-runs/{run_id}/execute").status_code == 409
 
 

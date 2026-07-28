@@ -125,6 +125,16 @@ class SampleAttemptResponse(BaseModel):
     human_review_status: str = "unreviewed"
 
 
+class RunLogEntry(BaseModel):
+    timestamp: datetime
+    level: str
+    event: str
+    message: str
+    task_id: str | None = None
+    sample_attempt_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state, "document_store", None) is not None:
         yield None
@@ -717,6 +727,90 @@ def get_run_summary(run_id: str, request: Request, session: SessionDependency) -
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
     return build_run_summary(session, run)
+
+
+@router.get("/{run_id}/logs", response_model=list[RunLogEntry])
+def get_run_logs(
+    run_id: str,
+    request: Request,
+    session: SessionDependency,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1_000)] = 200,
+) -> list[dict[str, Any]]:
+    """Return durable, secret-safe task and sample lifecycle log entries."""
+
+    store = get_document_store(request)
+    if store is not None:
+        if store.get_document("evaluation_runs", run_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+        tasks: list[Any] = store.list_documents("task_units", query={"run_id": run_id})
+        attempts: list[Any] = store.list_documents("sample_attempts", query={"run_id": run_id})
+    else:
+        assert session is not None
+        if session.get(EvaluationRun, run_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+        tasks = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run_id)))
+        attempts = list(session.scalars(select(SampleAttempt).where(SampleAttempt.run_id == run_id)))
+    entries = [*_task_log_entries(tasks), *_attempt_log_entries(attempts)]
+    entries.sort(key=lambda entry: _as_log_timestamp(entry["timestamp"]))
+    return entries[offset : offset + limit]
+
+
+def _task_log_entries(tasks: list[Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for task in tasks:
+        payload = _attempt_value(task, "payload")
+        safe_payload = payload if isinstance(payload, dict) else {}
+        status_value = str(_attempt_value(task, "status") or "unknown")
+        task_type = str(_attempt_value(task, "task_type") or "task")
+        error = safe_payload.get("dataset_error") or safe_payload.get("report_error")
+        entries.append(
+            {
+                "timestamp": _attempt_value(task, "updated_at") or _attempt_value(task, "created_at"),
+                "level": "error" if status_value == TaskStatus.FAILED.value or error else "info",
+                "event": "task.lifecycle",
+                "message": str(error) if error else f"{task_type} task is {status_value}.",
+                "task_id": str(_attempt_value(task, "id")),
+                "sample_attempt_id": None,
+                "details": {
+                    "task_type": task_type,
+                    "status": status_value,
+                    "attempt_count": int(_attempt_value(task, "attempt_count") or 0),
+                    "worker_id": _attempt_value(task, "leased_by"),
+                },
+            }
+        )
+    return entries
+
+
+def _attempt_log_entries(attempts: list[Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for attempt in attempts:
+        status_value = str(_attempt_value(attempt, "status") or "unknown")
+        error_type = _attempt_value(attempt, "error_type")
+        error_message = _attempt_value(attempt, "error_message")
+        entries.append(
+            {
+                "timestamp": _attempt_value(attempt, "completed_at") or _attempt_value(attempt, "started_at") or _attempt_value(attempt, "created_at"),
+                "level": "error" if status_value == SampleAttemptStatus.FAILED.value else "info",
+                "event": "sample.lifecycle",
+                "message": f"{error_type}: {error_message}" if error_type else f"Sample {_attempt_value(attempt, 'sample_id')} is {status_value}.",
+                "task_id": str(_attempt_value(attempt, "task_id")) if _attempt_value(attempt, "task_id") else None,
+                "sample_attempt_id": str(_attempt_value(attempt, "id")),
+                "details": {
+                    "sample_id": _attempt_value(attempt, "sample_id"),
+                    "attempt_number": int(_attempt_value(attempt, "attempt_number") or 1),
+                    "status": status_value,
+                },
+            }
+        )
+    return entries
+
+
+def _as_log_timestamp(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 @router.get("/{run_id}/events")
