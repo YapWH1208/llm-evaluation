@@ -296,6 +296,11 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
         assert detected.status_code == 200
         assert detected.json()[0]["effective_status"] == "verified_by_both"
         assert detected.json()[0]["detection_evidence"]["adapter_version"] == "test/1"
+        assert api.put(
+            f"/api/v1/model-endpoints/{endpoint['id']}/capabilities",
+            json={"capability_key": "text_input", "user_declared_status": "unsupported"},
+        ).json()["effective_status"] == "detected_user_unsupported"
+        assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}/capabilities/conflicts").json()[0]["resolution_options"] == ["keep_disabled", "force_enable", "redetect"]
 
 
 def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
@@ -339,6 +344,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
+        assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
 
 
 def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:

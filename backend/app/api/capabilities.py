@@ -32,6 +32,10 @@ class CapabilityResponse(BaseModel):
     id: str; capability_key: str; user_declared_status: str; auto_detection_status: str; effective_status: str
     detection_evidence: dict[str, Any] | None; detector_version: str | None; last_detected_at: datetime | None
 
+
+class CapabilityConflictResponse(CapabilityResponse):
+    resolution_options: list[str]
+
 def session_for_request(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state, "document_store", None) is not None:
         yield None
@@ -98,6 +102,48 @@ def list_capabilities(
     assert session is not None
     if session.get(ModelEndpoint, endpoint_id) is None: raise HTTPException(404, "Model endpoint not found")
     return list(session.scalars(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id).order_by(ModelCapability.capability_key)))
+
+
+@router.get("/conflicts", response_model=list[CapabilityConflictResponse])
+def list_capability_conflicts(
+    endpoint_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> list[dict[str, Any]]:
+    """Return actionable conflicts without overwriting either source of truth."""
+
+    store = get_document_store(request)
+    if store is not None:
+        get_document_endpoint_or_404(store, endpoint_id)
+        capabilities: list[ModelCapability | dict[str, Any]] = store.list_documents("model_capabilities", query={"model_endpoint_id": endpoint_id})
+    else:
+        assert session is not None
+        if session.get(ModelEndpoint, endpoint_id) is None:
+            raise HTTPException(404, "Model endpoint not found")
+        capabilities = list(session.scalars(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id)))
+    conflicts: list[dict[str, Any]] = []
+    for capability in capabilities:
+        values = _capability_values(capability)
+        if values["effective_status"] not in {"user_declared_detection_failed", "detected_user_unsupported"}:
+            continue
+        conflicts.append({**values, "resolution_options": ["keep_disabled", "force_enable", "redetect"]})
+    return conflicts
+
+
+def _capability_values(capability: ModelCapability | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(capability, dict):
+        return {
+            "id": str(capability["id"]), "capability_key": str(capability["capability_key"]),
+            "user_declared_status": str(capability["user_declared_status"]), "auto_detection_status": str(capability["auto_detection_status"]),
+            "effective_status": str(capability["effective_status"]), "detection_evidence": capability.get("detection_evidence"),
+            "detector_version": capability.get("detector_version"), "last_detected_at": capability.get("last_detected_at"),
+        }
+    return {
+        "id": capability.id, "capability_key": capability.capability_key,
+        "user_declared_status": capability.user_declared_status, "auto_detection_status": capability.auto_detection_status,
+        "effective_status": capability.effective_status, "detection_evidence": capability.detection_evidence,
+        "detector_version": capability.detector_version, "last_detected_at": capability.last_detected_at,
+    }
 
 @router.put("", response_model=CapabilityResponse)
 def declare_capability(

@@ -291,6 +291,11 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
         assert any(entry["details"].get("status") == "succeeded" for entry in logs.json())
         assert "choices" not in str(logs.json())
 
+        progress = client.get(f"/api/v1/evaluation-runs/{run_id}/progress")
+        assert progress.status_code == 200
+        assert progress.json()["completion_rate"] == 1
+        assert progress.json()["successful_samples"] == 2
+
         assert client.post(f"/api/v1/evaluation-runs/{run_id}/execute").status_code == 409
 
 

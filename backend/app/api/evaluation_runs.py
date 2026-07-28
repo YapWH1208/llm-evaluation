@@ -135,6 +135,16 @@ class RunLogEntry(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class EvaluationRunProgress(BaseModel):
+    run_id: str
+    status: str
+    total_samples: int
+    completed_samples: int
+    successful_samples: int
+    failed_samples: int
+    completion_rate: float | None
+
+
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state, "document_store", None) is not None:
         yield None
@@ -727,6 +737,32 @@ def get_run_summary(run_id: str, request: Request, session: SessionDependency) -
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
     return build_run_summary(session, run)
+
+
+@router.get("/{run_id}/progress", response_model=EvaluationRunProgress)
+def get_run_progress(run_id: str, request: Request, session: SessionDependency) -> dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        run = store.get_document("evaluation_runs", run_id)
+        if run is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+        return _run_progress_values(run)
+    assert session is not None
+    run = session.get(EvaluationRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
+    return _run_progress_values(run)
+
+
+def _run_progress_values(run: EvaluationRun | dict[str, Any]) -> dict[str, Any]:
+    value = lambda key: run.get(key) if isinstance(run, dict) else getattr(run, key)
+    total = int(value("total_samples") or 0)
+    completed = int(value("completed_samples") or 0)
+    return {
+        "run_id": str(value("id")), "status": str(value("status")), "total_samples": total,
+        "completed_samples": completed, "successful_samples": int(value("successful_samples") or 0),
+        "failed_samples": int(value("failed_samples") or 0), "completion_rate": completed / total if total else None,
+    }
 
 
 @router.get("/{run_id}/logs", response_model=list[RunLogEntry])
