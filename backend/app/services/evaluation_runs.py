@@ -182,6 +182,7 @@ def create_benchmark_run(
                 input_snapshot={
                     "messages": _build_messages(sample.prompt, prompt_package),
                     "modality": "text",
+                    "metadata": dict(sample.metadata),
                     "request_body_evidence": request_body_evidence,
                 },
                 reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},

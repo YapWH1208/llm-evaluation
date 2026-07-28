@@ -103,6 +103,18 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert matrix.status_code == 200
         assert len(matrix.json()["heatmap"]) == 2
         assert matrix.json()["capability_matrix"][0]["capability"] == "text_input"
+        detailed_matrix = client.get("/api/v1/analytics/matrix", params={"baseline_run_id": run_a})
+        assert detailed_matrix.status_code == 200
+        heatmaps = detailed_matrix.json()["heatmaps"]
+        assert set(heatmaps) == {"model_benchmark", "model_capability", "model_language", "model_difficulty", "prompt_benchmark", "model_modality"}
+        reasoning_cell = next(cell for cell in heatmaps["model_capability"] if cell["x_label"] == "model-a" and cell["y_key"] == "reasoning")
+        assert reasoning_cell["sample_count"] == 1
+        assert reasoning_cell["confidence_interval"]["method"] == "normal_95"
+        assert reasoning_cell["baseline_score"] == 1.0
+        assert reasoning_cell["delta"] == 0.0
+        assert heatmaps["model_language"][0]["y_key"] == "en"
+        assert heatmaps["model_difficulty"][0]["y_key"] == "basic"
+        assert heatmaps["model_modality"][0]["y_key"] == "text"
 
         comparison = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_b})
         assert comparison.status_code == 200
