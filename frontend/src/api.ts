@@ -87,6 +87,16 @@ export type RunSummary = {
   insights: { capabilities: Array<{ capability: string; score: number | null; sample_count: number }>; strongest_capability: { capability: string; score: number; sample_count: number } | null; weakest_capability: { capability: string; score: number; sample_count: number } | null; significant_anomalies: Array<{ kind: string; value: number; threshold: number }>; major_regressions: Array<{ metric: string; delta: number; baseline: number; current: number }> };
 };
 
+export type RunLogEntry = {
+  timestamp: string;
+  level: string;
+  event: string;
+  message: string;
+  task_id: string | null;
+  sample_attempt_id: string | null;
+  details: Record<string, unknown>;
+};
+
 export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generator_version: string; generated_at: string };
 export type ReportType = "single_model" | "multi_model_comparison" | "regression" | "prompt_comparison" | "benchmark" | "reliability" | "cost" | "human_review";
 export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
@@ -218,6 +228,7 @@ export const api = {
   deleteRun: (runId: string) => request<void>(`/evaluation-runs/${runId}`, { method: "DELETE" }),
   listAttempts: (runId: string, offset = 0, limit = 200) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts?offset=${offset}&limit=${limit}`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
+  listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
   runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
   workerEventsUrl: () => `${apiBase}/workers/events`,
   createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
@@ -227,6 +238,7 @@ export const api = {
   dashboard: () => request<Dashboard>("/dashboard"),
   compare: (runA: string, runB: string) => request<Comparison>(`/comparisons?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`),
   listBenchmarks: () => request<Benchmark[]>("/benchmarks"),
+  updateBenchmark: (benchmarkId: string, body: Record<string, unknown>) => request<Benchmark>(`/benchmarks/${benchmarkId}`, { method: "PATCH", body: JSON.stringify(body) }),
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
   createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
   listDatasets: () => request<Dataset[]>("/datasets"),
@@ -237,6 +249,7 @@ export const api = {
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
   retryDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/retry`, { method: "POST" }),
+  pauseDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/pause`, { method: "POST" }),
   validateDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/validate`, { method: "POST" }),
   clearDatasetCache: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/cache`, { method: "DELETE" }),
   datasetDiskUsage: () => request<{ root: string; cache_bytes: number; available_bytes: number; total_bytes: number }>("/datasets/disk-usage"),
