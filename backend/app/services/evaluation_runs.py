@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -130,7 +131,7 @@ def preflight_benchmark_run(
                 datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
         else:
             datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": dataset.status != "ready"})
-    estimated_input_tokens = sum(_estimate_request_tokens(sample.prompt) for sample in samples)
+    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     estimated_cost = (
         ((estimated_input_tokens * endpoint.input_cost_per_million) + (estimated_output_tokens * endpoint.output_cost_per_million)) / 1_000_000
@@ -286,7 +287,7 @@ def create_benchmark_run(
         payload={
             "sample_ids": [sample.sample_id for sample in samples],
             "estimated_request_count": len(samples),
-            "estimated_token_count": sum(_estimate_request_tokens(sample.prompt) for sample in samples),
+            "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in samples),
             "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
         },
         status=TaskStatus.PENDING.value,
@@ -301,8 +302,8 @@ def create_benchmark_run(
                 task_id=task.id,
                 sample_id=sample.sample_id,
                 input_snapshot={
-                    "messages": _build_messages(sample.prompt, prompt_package),
-                    "modality": "text",
+                    "messages": _build_sample_messages(sample, prompt_package),
+                    "modality": _sample_modality(sample),
                     "metadata": dict(sample.metadata),
                     "request_body_evidence": request_body_evidence,
                 },
@@ -458,10 +459,58 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
     return messages
 
 
+def _build_sample_messages(sample: object, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
+    """Preserve unified multimodal sample content while applying prompt packages to text samples."""
+
+    raw_messages = getattr(sample, "messages", ())
+    if isinstance(raw_messages, tuple) and raw_messages:
+        messages = deepcopy(list(raw_messages))
+        if prompt_package is None:
+            return messages
+        # Keep the immutable media message intact and prepend package-level system
+        # and few-shot context. The sample itself remains the final user request.
+        return _build_messages(str(getattr(sample, "prompt", "")), prompt_package)[:-1] + messages
+    return _build_messages(str(getattr(sample, "prompt", "")), prompt_package)
+
+
+def _sample_modality(sample: object) -> str:
+    raw_messages = getattr(sample, "messages", ())
+    if not isinstance(raw_messages, tuple) or not raw_messages:
+        return "text"
+    modalities: set[str] = set()
+    for message in raw_messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and isinstance(part.get("type"), str) and part["type"] != "text":
+                modalities.add(part["type"])
+    if not modalities:
+        return "text"
+    return next(iter(modalities)) if len(modalities) == 1 else "multimodal"
+
+
 def _estimate_request_tokens(prompt: str) -> int:
     """Conservative dependency-free estimate used only for TPM admission control."""
 
     return max(1, (len(prompt) + 3) // 4) + 32
+
+
+def _estimate_sample_tokens(sample: object) -> int:
+    """Estimate text plus a conservative token budget for each media part."""
+
+    estimate = _estimate_request_tokens(str(getattr(sample, "prompt", "")))
+    raw_messages = getattr(sample, "messages", ())
+    if not isinstance(raw_messages, tuple):
+        return estimate
+    media_parts = sum(
+        1
+        for message in raw_messages
+        if isinstance(message, dict) and isinstance(message.get("content"), list)
+        for part in message["content"]
+        if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
+    )
+    return estimate + (media_parts * 256)
 
 
 def _capability_compatibility(

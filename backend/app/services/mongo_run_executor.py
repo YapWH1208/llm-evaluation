@@ -14,7 +14,11 @@ from typing import Any
 from app.benchmarks import get_installed_plugin
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.services.evaluation_runs import _build_messages, _estimate_request_tokens
+from app.services.evaluation_runs import (
+    _build_sample_messages,
+    _estimate_sample_tokens,
+    _sample_modality as _benchmark_sample_modality,
+)
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction
 from app.services.aggregation import recompute_mongo_aggregate_metrics
@@ -81,7 +85,7 @@ def preflight_mongo_benchmark_run(
         else:
             dataset = matches[0]
             datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "status": dataset["status"], "will_prepare": dataset["status"] != "ready"})
-    estimated_input_tokens = sum(_estimate_request_tokens(sample.prompt) for sample in samples)
+    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     input_cost = endpoint.get("input_cost_per_million")
     output_cost = endpoint.get("output_cost_per_million")
@@ -254,7 +258,7 @@ def create_mongo_benchmark_run(
             "payload": {
                 "sample_ids": [sample.sample_id for sample in samples],
                 "estimated_request_count": len(samples),
-                "estimated_token_count": sum(_estimate_request_tokens(sample.prompt) for sample in samples),
+                "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in samples),
                 "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
             },
             "status": "pending",
@@ -277,7 +281,7 @@ def create_mongo_benchmark_run(
                 "task_id": task["id"],
                 "sample_id": sample.sample_id,
                 "attempt_number": 1,
-                "input_snapshot": {"messages": _build_messages(sample.prompt, prompt_proxy), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
+                "input_snapshot": {"messages": _build_sample_messages(sample, prompt_proxy), "modality": _benchmark_sample_modality(sample), "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
                 "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
                 "request_snapshot": None,
                 "raw_response": None,

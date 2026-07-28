@@ -136,6 +136,36 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
         assert all(attempt.task_id == evaluation_task.id for attempt in attempts)
 
 
+def test_builtin_benchmark_packs_are_registered_and_preserve_multimodal_samples(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    expected_packs = {
+        "text-quick-check", "text-full-evaluation", "vision-quick-check", "vision-full-evaluation",
+        "audio-evaluation", "video-evaluation", "multimodal-complete", "coding-evaluation",
+        "instruction-following", "safety-evaluation",
+    }
+    with TestClient(app) as client:
+        registered = {item["benchmark_id"]: item for item in client.get("/api/v1/benchmarks").json()}
+        assert expected_packs <= set(registered)
+        assert registered["multimodal-complete"]["manifest"]["input_modalities"] == ["text", "image", "audio", "video"]
+        assert registered["vision-quick-check"]["manifest"]["shard_size"] == 20
+
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        preflight = client.post("/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "benchmark_id": "vision-quick-check", "benchmark_version": "1.0.0"})
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is True
+        assert preflight.json()["estimated_input_tokens"] > 500
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "benchmark_id": "vision-quick-check", "benchmark_version": "1.0.0"})
+        assert run.status_code == 201
+        attempt = client.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()[0]
+        assert attempt["input_snapshot"]["modality"] == "image"
+        assert attempt["input_snapshot"]["messages"][0]["content"][1]["type"] == "image"
+        assert attempt["input_snapshot"]["messages"][0]["content"][1]["source"]["embedded_media"]["redacted"] is True
+
+
 def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
     app = create_app(
         Settings(

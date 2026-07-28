@@ -38,7 +38,7 @@ router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
 
 class EvaluationRunCreate(BaseModel):
     model_endpoint_id: str
-    sample_limit: Annotated[int | None, Field(ge=1, le=3)] = None
+    sample_limit: Annotated[int | None, Field(ge=1, le=10_000)] = None
     prompt_package_id: str | None = None
     benchmark_id: str = "text-quick-check"
     benchmark_version: str = "1.0.0"

@@ -191,6 +191,7 @@ export default function App() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [userForm, setUserForm] = useState(initialUser);
   const [selectedPromptId, setSelectedPromptId] = useState("");
+  const [selectedBenchmark, setSelectedBenchmark] = useState("text-quick-check@1.0.0");
   const [runRequestBody, setRunRequestBody] = useState("{}");
   const [runMaxConcurrency, setRunMaxConcurrency] = useState("");
   const [reportType, setReportType] = useState<ReportType>("single_model");
@@ -315,7 +316,8 @@ export default function App() {
   async function preflightRun(endpointId: string) {
     setBusy(`preflight-${endpointId}`);
     try {
-      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency));
+      const [benchmarkId, benchmarkVersion] = selectedBenchmark.split("@", 2);
+      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
       const cost = preflight.estimated_cost === null ? "cost not configured" : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
       setNotice(preflight.can_queue ? `Preflight ready: ${preflight.sample_count} samples, ${preflight.estimated_requests} requests, ${preflight.estimated_input_tokens + preflight.estimated_output_tokens} estimated tokens, ${cost}.` : `Preflight blocked: ${preflight.issues.join(" ")}`);
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -324,10 +326,11 @@ export default function App() {
   async function createRun(endpointId: string) {
     setBusy(`run-${endpointId}`);
     try {
-      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency));
+      const [benchmarkId, benchmarkVersion] = selectedBenchmark.split("@", 2);
+      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
       await selectRun(run.id);
       setView("runs");
-      setNotice("Text Quick Check queued with an immutable configuration snapshot.");
+      setNotice(`${benchmarkId}@${benchmarkVersion} queued with an immutable configuration snapshot.`);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -627,6 +630,7 @@ export default function App() {
           </article>
           <article className="panel">
             <h2>Run configuration</h2>
+            <label className="select-label">Benchmark pack<select value={selectedBenchmark} onChange={(event) => setSelectedBenchmark(event.target.value)}>{benchmarks.filter((benchmark) => !["disabled", "deprecated", "broken"].includes(benchmark.status)).map((benchmark) => <option key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name} v{benchmark.version}</option>)}</select></label>
             <label className="select-label">Prompt package for a new run<select value={selectedPromptId} onChange={(event) => setSelectedPromptId(event.target.value)}><option value="">Built-in benchmark prompt</option>{prompts.map((prompt) => <option key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
             <label>Run Request Body override (JSON)<textarea value={runRequestBody} onChange={(event) => setRunRequestBody(event.target.value)} spellCheck={false} placeholder='{"temperature":0}' /></label>
             <label>Run concurrency cap<input type="number" min="1" max="1000" value={runMaxConcurrency} onChange={(event) => setRunMaxConcurrency(event.target.value)} placeholder="Use endpoint capacity" /></label>
@@ -637,7 +641,7 @@ export default function App() {
           {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : <div className="cards">{endpoints.map((endpoint) => <article className="card" key={endpoint.id}>
             <div><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p><p className="muted">{endpoint.base_url}</p></div>
             <div className="split"><span className={`badge ${endpoint.status}`}>{endpoint.status}</span><span className="muted">{endpoint.max_concurrency} endpoint / {endpoint.api_key_max_concurrency ?? "∞"} shared-key concurrent · {money(endpoint.input_cost_per_million, endpoint.currency)} in / 1M</span></div>
-            <div className="actions"><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue Quick Check</button></div>
+            <div className="actions"><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue selected benchmark</button></div>
             {capabilities[endpoint.id] && <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}>{item.capability_key}<select value={item.user_declared_status} disabled={busy === `declare-${endpoint.id}-${item.capability_key}`} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div>}
           </article>)}</div>}
         </section>
