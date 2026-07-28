@@ -16,11 +16,14 @@ def test_health_initializes_the_configured_sqlite_database(tmp_path: Path) -> No
     with TestClient(app) as client:
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {
-            "status": "ok",
-            "database": "sqlite",
-            "schema_version": LATEST_SCHEMA_VERSION,
-        }
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["database"] == "sqlite"
+        assert body["schema_version"] == LATEST_SCHEMA_VERSION
+        assert body["database_connected"] is True
+        assert body["disk"]["available_bytes"] > 0
+        assert body["queue"] == {"pending": 0, "active": 0}
+        assert response.headers["X-Request-ID"]
 
         tables = inspect(app.state.database.engine).get_table_names()
         assert "schema_versions" in tables

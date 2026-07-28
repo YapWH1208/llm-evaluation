@@ -143,7 +143,7 @@ export type AnalyticsMatrix = { baseline_run_id: string | null; heatmap: Array<{
 export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
 export type User = { id: string; email: string; display_name: string; role: string; status: string; max_concurrency: number | null; created_at: string };
 export type AuditEvent = { id: string; actor_id: string | null; action: string; entity_type: string; entity_id: string | null; details: Record<string, unknown> | null; created_at: string };
-export type SystemHealth = { status: string; database: string; schema_version: number };
+export type SystemHealth = { status: string; database: string; schema_version: number; database_connected: boolean; disk: { available_bytes: number; total_bytes: number }; queue: { pending: number; active: number } };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 let bearerToken = window.sessionStorage.getItem("lle-api-token") ?? "";

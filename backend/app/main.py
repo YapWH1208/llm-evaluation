@@ -4,6 +4,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import json
+import logging
+import shutil
+from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,13 +41,19 @@ from app.services.capability_detector import CapabilityDetector, OpenAIChatCompl
 from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
 from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
 from app.db.models import AuditEvent, User, UserRole
-from sqlalchemy import select
+from sqlalchemy import select, text
+
+
+request_logger = logging.getLogger("lle.request")
 
 
 class HealthResponse(BaseModel):
     status: str
     database: str
     schema_version: int
+    database_connected: bool
+    disk: dict[str, int]
+    queue: dict[str, int]
 
 
 def create_app(
@@ -115,14 +126,28 @@ def create_app(
     app.include_router(suites_router)
 
     @app.middleware("http")
+    async def request_context(request, call_next):
+        request_id = request.headers.get("X-Request-ID", "").strip()
+        request.state.request_id = request_id[:128] if request_id else str(uuid4())
+        started_at = datetime.now(timezone.utc)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request.state.request_id
+        request_logger.info(json.dumps({"event": "http_request", "request_id": request.state.request_id, "method": request.method, "path": request.url.path, "status_code": response.status_code, "duration_ms": round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 3)}, separators=(",", ":")))
+        return response
+
+    @app.middleware("http")
     async def require_configured_api_token(request, call_next):
         if not request.url.path.startswith("/api/v1"):
             return await call_next(request)
         role, actor_id = _authenticate_request(request, settings, database, document_store)
         if role is None:
-            return JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
+            response = JSONResponse({"detail": "Valid bearer token required."}, status_code=401)
+            response.headers["X-Request-ID"] = getattr(request.state, "request_id", "")
+            return response
         if role not in _allowed_roles(request.url.path, request.method):
-            return JSONResponse({"detail": "Your role is not permitted to perform this action."}, status_code=403)
+            response = JSONResponse({"detail": "Your role is not permitted to perform this action."}, status_code=403)
+            response.headers["X-Request-ID"] = getattr(request.state, "request_id", "")
+            return response
         request.state.actor_id = actor_id
         request.state.actor_role = role
         response = await call_next(request)
@@ -133,10 +158,30 @@ def create_app(
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
+        database_connected = True
+        queue = {"pending": 0, "active": 0}
+        try:
+            if document_store is not None:
+                tasks = document_store.list_documents("task_units")
+                queue = {"pending": sum(task.get("status") in {"pending", "retry_scheduled"} for task in tasks), "active": sum(task.get("status") in {"leased", "running"} for task in tasks)}
+            else:
+                assert database is not None
+                from app.db.models import TaskUnit
+
+                with database.get_session() as session:
+                    session.execute(text("SELECT 1"))
+                    tasks = list(session.scalars(select(TaskUnit.status)))
+                    queue = {"pending": sum(item in {"pending", "retry_scheduled"} for item in tasks), "active": sum(item in {"leased", "running"} for item in tasks)}
+        except Exception:
+            database_connected = False
+        disk = shutil.disk_usage(Path(settings.data_root).resolve())
         return HealthResponse(
-            status="ok",
+            status="ok" if database_connected else "degraded",
             database=settings.database_kind,
             schema_version=Database.CURRENT_SCHEMA_VERSION,
+            database_connected=database_connected,
+            disk={"available_bytes": disk.free, "total_bytes": disk.total},
+            queue=queue,
         )
 
     return app
@@ -212,7 +257,7 @@ def _record_mutation_audit(
                     "action": f"api.{request.method.lower()}",
                     "entity_type": entity_type,
                     "entity_id": entity_id,
-                    "details": {"path": request.url.path, "status_code": status_code},
+                    "details": {"path": request.url.path, "status_code": status_code, "request_id": getattr(request.state, "request_id", None)},
                     "created_at": datetime.now(timezone.utc),
                 },
             )
@@ -225,7 +270,7 @@ def _record_mutation_audit(
                     action=f"api.{request.method.lower()}",
                     entity_type=entity_type,
                     entity_id=entity_id,
-                    details={"path": request.url.path, "status_code": status_code},
+                    details={"path": request.url.path, "status_code": status_code, "request_id": getattr(request.state, "request_id", None)},
                 )
             )
             session.commit()
