@@ -16,3 +16,41 @@
 .media-preview audio {
   width: min(100%, 32rem);
 }
+
+.virtual-table-viewport {
+  max-height: 31rem;
+  overflow: auto;
+}
+
+.virtual-table-viewport thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #121a2d;
+}
+
+.virtual-spacer {
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+.chart-scroll {
+  overflow: auto;
+}
+
+.capability-chart {
+  display: block;
+  min-width: 720px;
+  width: 100%;
+  font-size: 12px;
+}
+
+.chart-axis { stroke: #4a5b7d; stroke-width: 1; }
+.chart-track { fill: #1f2a42; }
+.chart-value { fill: #14b8a6; }
+.chart-bar { cursor: pointer; outline: none; }
+.chart-bar.selected .chart-value, .chart-bar:focus .chart-value { fill: #f59e0b; }
+.chart-bar:focus .chart-track { stroke: #e5e7eb; stroke-width: 2; }
+:root[data-theme="light"] .virtual-table-viewport thead { background: #fff; }
+:root[data-theme="light"] .chart-track { fill: #dfe7f0; }
+:root[data-theme="light"] .chart-axis { stroke: #94a3b8; }
