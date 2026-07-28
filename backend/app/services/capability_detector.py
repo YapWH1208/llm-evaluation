@@ -17,6 +17,15 @@ DEFAULT_CAPABILITY_KEYS = (
     "audio_input",
     "video_input",
     "system_message",
+    "multi_turn_conversation",
+    "tool_calling",
+    "parallel_tool_calling",
+    "structured_output",
+    "json_mode",
+    "json_schema",
+    "streaming",
+    "seed",
+    "logprobs",
     "usage_reporting",
 )
 _ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLdfQAAAABJRU5ErkJggg=="
@@ -71,6 +80,12 @@ class OpenAIChatCompletionsCapabilityDetector:
         messages: list[dict[str, object]] = [{"role": "user", "content": "Reply with OK."}]
         if capability_key == "system_message":
             messages.insert(0, {"role": "system", "content": "Reply with the single token OK."})
+        if capability_key == "multi_turn_conversation":
+            messages = [
+                {"role": "user", "content": "Remember the word OK."},
+                {"role": "assistant", "content": "OK"},
+                {"role": "user", "content": "Reply with the remembered word."},
+            ]
         if capability_key == "image_input":
             messages = [{"role": "user", "content": [{"type": "text", "text": "Reply with OK."}, {"type": "image", "source": {"base64_data": _ONE_PIXEL_PNG}, "mime_type": "image/png"}]}]
         if capability_key == "audio_input":
@@ -85,7 +100,7 @@ class OpenAIChatCompletionsCapabilityDetector:
                 response = client.post(
                     _endpoint_url(endpoint),
                     headers=provider_headers(endpoint, api_key),
-                    json=self._request_body(endpoint, messages),
+                    json=self._request_body(endpoint, messages, capability_key),
                 )
         except httpx.TimeoutException:
             return CapabilityDetectionResult(
@@ -149,17 +164,19 @@ class OpenAIChatCompletionsCapabilityDetector:
         }
 
     @staticmethod
-    def _request_body(endpoint: ModelEndpoint, messages: list[dict[str, object]]) -> dict[str, Any]:
+    def _request_body(endpoint: ModelEndpoint, messages: list[dict[str, object]], capability_key: str) -> dict[str, Any]:
         profile = _protocol_profile(endpoint)
         options: dict[str, object] = {"temperature": 0}
         if profile == "openai_responses":
             options["max_output_tokens"] = 8
         else:
             options["max_tokens"] = 8
-        return OpenAIChatCompletionsExecutor._build_request(
+        request = OpenAIChatCompletionsExecutor._build_request(
             endpoint,
             {"messages": messages, "request_body_evidence": {"effective_request_body": options}},
         )
+        request.update(_probe_controls(capability_key))
+        return request
 
 
 def _protocol_profile(endpoint: ModelEndpoint) -> str:
@@ -175,8 +192,10 @@ def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, obj
 
 def _supported_probe_capabilities(endpoint: ModelEndpoint) -> set[str]:
     profile = _protocol_profile(endpoint)
-    if profile in {"openai_chat_completions", "openai_responses", "azure_openai_chat_completions"}:
+    if profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
         return set(DEFAULT_CAPABILITY_KEYS) - {"video_input"}
+    if profile == "openai_responses":
+        return {"text_input", "image_input", "audio_input", "video_input", "system_message", "multi_turn_conversation", "usage_reporting"}
     if profile in {"anthropic_messages", "gemini_generate_content"}:
         return {"text_input", "image_input", "system_message", "usage_reporting"}
     if profile == "ollama_chat":
@@ -184,3 +203,35 @@ def _supported_probe_capabilities(endpoint: ModelEndpoint) -> set[str]:
     if profile == "custom_http_json":
         return {"text_input"}
     return set()
+
+
+def _probe_controls(capability_key: str) -> dict[str, object]:
+    """Platform-owned probe fields; never accepted from normal run overrides."""
+
+    if capability_key == "tool_calling":
+        return {
+            "tools": [{"type": "function", "function": {"name": "probe", "description": "Capability probe", "parameters": {"type": "object", "properties": {}}}}],
+            "tool_choice": "none",
+        }
+    if capability_key == "parallel_tool_calling":
+        return {
+            "tools": [{"type": "function", "function": {"name": "probe", "description": "Capability probe", "parameters": {"type": "object", "properties": {}}}}],
+            "tool_choice": "none",
+            "parallel_tool_calls": True,
+        }
+    if capability_key in {"structured_output", "json_schema"}:
+        return {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "probe", "strict": True, "schema": {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "additionalProperties": False}},
+            }
+        }
+    if capability_key == "json_mode":
+        return {"response_format": {"type": "json_object"}}
+    if capability_key == "streaming":
+        return {"stream": True}
+    if capability_key == "seed":
+        return {"seed": 42}
+    if capability_key == "logprobs":
+        return {"logprobs": True, "top_logprobs": 1}
+    return {}

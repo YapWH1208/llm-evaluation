@@ -67,6 +67,27 @@ def test_openai_detector_probes_image_and_audio_and_marks_video_adapter_unsuppor
     assert observed[1]["messages"][0]["content"][1]["type"] == "input_audio"
 
 
+def test_openai_detector_uses_platform_owned_advanced_capability_probes() -> None:
+    observed: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
+    keys = ["tool_calling", "parallel_tool_calling", "structured_output", "json_mode", "multi_turn_conversation", "streaming", "seed", "logprobs"]
+    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", keys)
+    assert {result.capability_key for result in results if result.status == CapabilityDetection.PASSED} == set(keys)
+    assert observed[0]["tools"][0]["function"]["name"] == "probe"
+    assert observed[1]["parallel_tool_calls"] is True
+    assert observed[2]["response_format"]["type"] == "json_schema"
+    assert observed[3]["response_format"] == {"type": "json_object"}
+    assert len(observed[4]["messages"]) == 3
+    assert observed[5]["stream"] is True
+    assert observed[6]["seed"] == 42
+    assert observed[7]["logprobs"] is True
+
+
 def test_gemini_detector_uses_native_probe_and_usage_shape() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url == "https://models.example.test/v1beta/models/gemini-test:generateContent"
