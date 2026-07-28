@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import shutil
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
+from socket import getaddrinfo
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import url2pathname
 
@@ -20,6 +22,19 @@ class DatasetError(ValueError):
 
 class DatasetDownloadPaused(DatasetError):
     pass
+
+
+DatasetDownloader = Callable[[str, str, dict[str, str]], tuple[Path | str, dict[str, str]]]
+DATASET_DOWNLOADER_PLUGINS: dict[str, DatasetDownloader] = {}
+
+
+def register_dataset_downloader(scheme: str, downloader: DatasetDownloader) -> None:
+    """Register a source resolver without coupling dataset storage to a provider."""
+
+    normalized = scheme.lower().strip().removesuffix(":")
+    if not normalized or normalized in {"http", "https", "file", "hf"}:
+        raise DatasetError("Custom downloader schemes must be non-empty and cannot replace built-in sources.")
+    DATASET_DOWNLOADER_PLUGINS[normalized] = downloader
 
 
 def resolve_dataset_source(
@@ -43,14 +58,38 @@ def resolve_dataset_source(
             raise DatasetError("Hugging Face sources must use hf://owner/repository/path/to/file.")
         repository = f"{repository}/{path_parts[0]}"
         relative_path = "/".join(path_parts[1:])
-        return f"https://huggingface.co/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}", headers
+        resolved = f"https://huggingface.co/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
+        _validate_remote_dataset_url(resolved)
+        return resolved, headers
     if parsed.scheme in {"http", "https"} and parsed.netloc:
+        _validate_remote_dataset_url(source_url)
         return source_url, headers
     if parsed.scheme == "file":
         return Path(url2pathname(unquote(parsed.path))).resolve(), headers
     if not parsed.scheme:
         return Path(source_url).expanduser().resolve(), headers
-    raise DatasetError("Dataset source must be HTTP(S), hf://owner/repository/path, file://, or a local file path.")
+    plugin = DATASET_DOWNLOADER_PLUGINS.get(parsed.scheme.lower())
+    if plugin is not None:
+        return plugin(source_url, revision, headers)
+    raise DatasetError("Dataset source must be HTTP(S), hf://owner/repository/path, file://, a local file path, or a registered downloader plugin.")
+
+
+def _validate_remote_dataset_url(source_url: str) -> None:
+    parsed = urlparse(source_url)
+    host = parsed.hostname
+    if not host:
+        raise DatasetError("Dataset URL must include a hostname.")
+    allowed_hosts = {item.strip().lower() for item in os.getenv("LLE_DATASET_ALLOWED_HOSTS", "").split(",") if item.strip()}
+    if allowed_hosts and not any(host.lower() == item or host.lower().endswith(f".{item}") for item in allowed_hosts):
+        raise DatasetError("Dataset URL host is not allowed by the configured network policy.")
+    try:
+        addresses = {item[4][0] for item in getaddrinfo(host, None)}
+    except OSError as error:
+        raise DatasetError("Dataset URL hostname could not be resolved.") from error
+    for address in addresses:
+        parsed_address = ipaddress.ip_address(address)
+        if parsed_address.is_private or parsed_address.is_loopback or parsed_address.is_link_local or parsed_address.is_multicast or parsed_address.is_reserved or parsed_address.is_unspecified:
+            raise DatasetError("Dataset URL resolves to a private or restricted network address.")
 
 
 def write_dataset_source(source: Path | str, target: Path, headers: dict[str, str], on_chunk: Callable[[], None] | None = None) -> str:
@@ -67,7 +106,7 @@ def write_dataset_source(source: Path | str, target: Path, headers: dict[str, st
                 if on_chunk:
                     on_chunk()
         return digest.hexdigest()
-    with httpx.stream("GET", source, headers=headers, timeout=60, follow_redirects=True) as response:
+    with httpx.stream("GET", source, headers=headers, timeout=60, follow_redirects=False) as response:
         response.raise_for_status()
         with target.open("wb") as output_file:
             for chunk in response.iter_bytes():
@@ -209,6 +248,8 @@ def store_uploaded_dataset(
     safe_name = Path(filename).name
     if not safe_name or safe_name in {".", ".."}:
         raise DatasetError("Uploaded dataset filename is invalid.")
+    if Path(safe_name).suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"}:
+        raise DatasetError("Uploaded dataset file type is not supported.")
     if dataset.license_text and dataset.license_accepted_at is None:
         dataset.status = DatasetStatus.LICENSE_REQUIRED.value
         session.commit()

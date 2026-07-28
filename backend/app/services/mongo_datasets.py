@@ -36,6 +36,8 @@ def store_mongo_uploaded_dataset(
     safe_name = Path(filename).name
     if not safe_name or safe_name in {".", ".."}:
         raise DatasetError("Uploaded dataset filename is invalid.")
+    if Path(safe_name).suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"}:
+        raise DatasetError("Uploaded dataset file type is not supported.")
     if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
         store.update_document("dataset_versions", dataset_id, {"status": "license_required"})
         raise DatasetError("Dataset license must be accepted before upload.")

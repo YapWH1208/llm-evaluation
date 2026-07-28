@@ -1,9 +1,11 @@
 import base64
 import hashlib
 from pathlib import Path
+import pytest
 from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.main import create_app
+from app.services.datasets import DATASET_DOWNLOADER_PLUGINS, DatasetError, register_dataset_downloader, resolve_dataset_source
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
     app=create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
@@ -63,8 +65,25 @@ def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp
         assert usage.status_code == 200
         assert usage.json()["cache_bytes"] >= len(content)
         assert usage.json()["available_bytes"] > 0
+        unsupported = client.post(f"/api/v1/datasets/{body['id']}/upload", json={"filename":"examples.exe","base64_data":base64.b64encode(content).decode("ascii")})
+        assert unsupported.status_code == 409
+        assert "file type" in unsupported.json()["detail"]
         mismatch = client.post("/api/v1/datasets", json={"dataset_id":"mismatch","version":"1","checksum":"0" * 64}).json()
         rejected = client.post(f"/api/v1/datasets/{mismatch['id']}/upload", json={"filename":"examples.jsonl","base64_data":base64.b64encode(content).decode("ascii")})
         assert rejected.status_code == 409
         items = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
         assert items[mismatch["id"]]["status"] == "corrupted"
+
+
+def test_dataset_source_blocks_private_networks_and_supports_registered_downloaders(tmp_path: Path) -> None:
+    with pytest.raises(DatasetError, match="private or restricted"):
+        resolve_dataset_source("http://127.0.0.1/private.jsonl", "main", None)
+    source = tmp_path / "plugin.jsonl"
+    source.write_text('{"question":"plugin"}\n', encoding="utf-8")
+    register_dataset_downloader("fixture", lambda _url, _revision, headers: (source, headers))
+    try:
+        resolved, headers = resolve_dataset_source("fixture://test/example", "main", None)
+        assert resolved == source
+        assert headers == {}
+    finally:
+        DATASET_DOWNLOADER_PLUGINS.pop("fixture", None)
