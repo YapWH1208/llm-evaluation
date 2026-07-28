@@ -157,6 +157,7 @@ def create_benchmark_run(
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
     request_body_override: dict[str, object] | None = None,
+    declared_datasets: list[dict[str, object]] | None = None,
     created_by: str | None = None,
     max_concurrency: int | None = None,
 ) -> EvaluationRun:
@@ -190,6 +191,10 @@ def create_benchmark_run(
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise RunCreationError("Prompt package not found.")
+    frozen_datasets = _freeze_declared_datasets(
+        session,
+        declared_datasets if declared_datasets is not None else plugin.manifest.get("datasets"),
+    )
 
     request_body_evidence = _request_body_evidence(
         endpoint=endpoint,
@@ -213,6 +218,7 @@ def create_benchmark_run(
             "default_request_body": endpoint.default_request_body,
         },
         "sample_ids": [sample.sample_id for sample in samples],
+        "datasets": frozen_datasets,
         "capability_compatibility": compatibility,
         "prompt_package": (
             {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
@@ -236,7 +242,7 @@ def create_benchmark_run(
         benchmark_id=benchmark_id,
         benchmark_version=benchmark_version,
         configuration_snapshot=snapshot,
-        status=RunStatus.WAITING_FOR_DATASET.value if isinstance(plugin.manifest.get("datasets"), list) and plugin.manifest.get("datasets") else RunStatus.QUEUED.value,
+        status=RunStatus.WAITING_FOR_DATASET.value if frozen_datasets else RunStatus.QUEUED.value,
         total_samples=len(samples),
     )
     session.add(run)
@@ -246,10 +252,10 @@ def create_benchmark_run(
         run_id=run.id,
         task_type=TaskType.DATASET_PREPARATION.value,
         payload={
-            "datasets": plugin.manifest.get("datasets", []),
-            "prepared_inline": not bool(plugin.manifest.get("datasets")),
+            "datasets": frozen_datasets,
+            "prepared_inline": not bool(frozen_datasets),
         },
-        status=TaskStatus.PENDING.value if plugin.manifest.get("datasets") else TaskStatus.SUCCEEDED.value,
+        status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
     )
     session.add(dataset_task)
     session.flush()
@@ -258,7 +264,7 @@ def create_benchmark_run(
         parent_task_id=dataset_task.id,
         task_type=TaskType.BENCHMARK.value,
         payload={"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
-        status=TaskStatus.PENDING.value if plugin.manifest.get("datasets") else TaskStatus.SUCCEEDED.value,
+        status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
     )
     session.add(benchmark_task)
     session.flush()
@@ -297,6 +303,45 @@ def create_benchmark_run(
     session.commit()
     session.refresh(run)
     return run
+
+
+def _freeze_declared_datasets(
+    session: Session,
+    descriptors: object,
+) -> list[dict[str, object]]:
+    """Resolve manifest descriptors to immutable registered dataset revisions."""
+
+    if not isinstance(descriptors, list):
+        return []
+    frozen: list[dict[str, object]] = []
+    for descriptor in descriptors:
+        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+            raise RunCreationError("Benchmark dataset descriptors require a dataset_id.")
+        existing_id = descriptor.get("dataset_version_id")
+        if isinstance(existing_id, str):
+            dataset = session.get(DatasetVersion, existing_id)
+            if dataset is None:
+                raise RunCreationError(f"Declared dataset revision {existing_id} is not registered.")
+        else:
+            query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
+            if isinstance(descriptor.get("version"), str):
+                query = query.where(DatasetVersion.version == descriptor["version"])
+            if isinstance(descriptor.get("revision"), str):
+                query = query.where(DatasetVersion.revision == descriptor["revision"])
+            dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+            if dataset is None:
+                raise RunCreationError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+        frozen.append(
+            {
+                **descriptor,
+                "dataset_version_id": dataset.id,
+                "dataset_id": dataset.dataset_id,
+                "version": dataset.version,
+                "revision": dataset.revision,
+                "checksum": dataset.checksum,
+            }
+        )
+    return frozen
 
 
 def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:

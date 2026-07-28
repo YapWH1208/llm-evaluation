@@ -182,9 +182,14 @@ def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: s
             for descriptor in payload.get("datasets", []):
                 if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
                     continue
-                query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
-                if isinstance(descriptor.get("version"), str): query = query.where(DatasetVersion.version == descriptor["version"])
-                dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+                frozen_id = descriptor.get("dataset_version_id")
+                if isinstance(frozen_id, str):
+                    dataset = session.get(DatasetVersion, frozen_id)
+                else:
+                    query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
+                    if isinstance(descriptor.get("version"), str): query = query.where(DatasetVersion.version == descriptor["version"])
+                    if isinstance(descriptor.get("revision"), str): query = query.where(DatasetVersion.revision == descriptor["revision"])
+                    dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
                 if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
                 if dataset.status != "ready": download_dataset(session, dataset, data_root)
         except DatasetError as error:

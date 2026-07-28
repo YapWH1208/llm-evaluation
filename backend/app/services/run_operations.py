@@ -16,6 +16,7 @@ def clone_run(session: Session, run_id: str) -> EvaluationRun:
     source = session.get(EvaluationRun, run_id)
     if source is None:
         raise RunOperationError("Evaluation run not found.")
+    snapshot_datasets = source.configuration_snapshot.get("datasets") if isinstance(source.configuration_snapshot, dict) else None
     try:
         return create_benchmark_run(
             session,
@@ -24,6 +25,7 @@ def clone_run(session: Session, run_id: str) -> EvaluationRun:
             prompt_package_id=source.prompt_package_id,
             benchmark_id=source.benchmark_id,
             benchmark_version=source.benchmark_version,
+            declared_datasets=snapshot_datasets if isinstance(snapshot_datasets, list) else None,
             created_by=source.created_by,
             max_concurrency=source.max_concurrency,
         )

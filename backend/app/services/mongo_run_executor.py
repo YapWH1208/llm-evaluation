@@ -109,6 +109,7 @@ def create_mongo_benchmark_run(
     suite_id: str | None = None,
     suite_snapshot: dict[str, object] | None = None,
     request_body_override: dict[str, object] | None = None,
+    declared_datasets: list[dict[str, object]] | None = None,
     created_by: str | None = None,
     max_concurrency: int | None = None,
 ) -> dict[str, Any]:
@@ -135,6 +136,10 @@ def create_mongo_benchmark_run(
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise MongoRunExecutionError("Prompt package not found.")
+    frozen_datasets = _freeze_mongo_declared_datasets(
+        store,
+        declared_datasets if declared_datasets is not None else plugin.manifest.get("datasets"),
+    )
 
     request_body_evidence = _mongo_request_body_evidence(
         endpoint=endpoint,
@@ -156,6 +161,7 @@ def create_mongo_benchmark_run(
             "default_request_body": endpoint.get("default_request_body", {}),
         },
         "sample_ids": [sample.sample_id for sample in samples],
+        "datasets": frozen_datasets,
         "capability_compatibility": compatibility,
         "prompt_package": (
             {
@@ -188,7 +194,7 @@ def create_mongo_benchmark_run(
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
             "configuration_snapshot": snapshot,
-            "status": "waiting_for_dataset" if plugin.manifest.get("datasets") else "queued",
+            "status": "waiting_for_dataset" if frozen_datasets else "queued",
             "total_samples": len(samples),
             "completed_samples": 0,
             "successful_samples": 0,
@@ -204,8 +210,8 @@ def create_mongo_benchmark_run(
             "run_id": run["id"],
             "parent_task_id": None,
             "task_type": "dataset_preparation",
-            "payload": {"datasets": plugin.manifest.get("datasets", []), "prepared_inline": not bool(plugin.manifest.get("datasets"))},
-            "status": "pending" if plugin.manifest.get("datasets") else "succeeded",
+            "payload": {"datasets": frozen_datasets, "prepared_inline": not bool(frozen_datasets)},
+            "status": "pending" if frozen_datasets else "succeeded",
             "priority": 0,
             "attempt_count": 0,
             "leased_by": None,
@@ -224,7 +230,7 @@ def create_mongo_benchmark_run(
             "parent_task_id": dataset_task["id"],
             "task_type": "benchmark",
             "payload": {"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
-            "status": "pending" if plugin.manifest.get("datasets") else "succeeded",
+            "status": "pending" if frozen_datasets else "succeeded",
             "priority": 0,
             "attempt_count": 0,
             "leased_by": None,
@@ -287,6 +293,33 @@ def create_mongo_benchmark_run(
             },
         )
     return run
+
+
+def _freeze_mongo_declared_datasets(
+    store: MongoDocumentStore,
+    descriptors: object,
+) -> list[dict[str, object]]:
+    if not isinstance(descriptors, list):
+        return []
+    frozen: list[dict[str, object]] = []
+    for descriptor in descriptors:
+        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+            raise MongoRunExecutionError("Benchmark dataset descriptors require a dataset_id.")
+        existing_id = descriptor.get("dataset_version_id")
+        if isinstance(existing_id, str):
+            dataset = store.get_document("dataset_versions", existing_id)
+            if dataset is None:
+                raise MongoRunExecutionError(f"Declared dataset revision {existing_id} is not registered.")
+        else:
+            query: dict[str, Any] = {"dataset_id": descriptor["dataset_id"]}
+            if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
+            if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+            matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
+            if not matches:
+                raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+            dataset = matches[0]
+        frozen.append({**descriptor, "dataset_version_id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "checksum": dataset.get("checksum")})
+    return frozen
 
 
 def _mongo_effective_scoring_rule(manifest: dict[str, object], prompt_package: dict[str, Any] | None) -> dict[str, object]:
@@ -382,6 +415,8 @@ def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
     source = store.get_document("evaluation_runs", run_id)
     if source is None:
         raise MongoRunExecutionError("Evaluation run not found.")
+    snapshot = source.get("configuration_snapshot") if isinstance(source.get("configuration_snapshot"), dict) else {}
+    snapshot_datasets = snapshot.get("datasets") if isinstance(snapshot, dict) else None
     return create_mongo_benchmark_run(
         store,
         model_endpoint_id=str(source["model_endpoint_id"]),
@@ -389,6 +424,7 @@ def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
         prompt_package_id=source.get("prompt_package_id"),
         benchmark_id=str(source["benchmark_id"]),
         benchmark_version=str(source["benchmark_version"]),
+        declared_datasets=snapshot_datasets if isinstance(snapshot_datasets, list) else None,
         suite_id=source.get("suite_id"),
         created_by=source.get("created_by"),
         max_concurrency=source.get("max_concurrency"),
@@ -596,11 +632,17 @@ def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *
         try:
             for descriptor in payload.get("datasets", []):
                 if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str): continue
-                query = {"dataset_id": descriptor["dataset_id"]}
-                if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
-                matches = store.list_documents("dataset_versions", query=query)
-                if not matches: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if matches[0].get("status") != "ready": download_mongo_dataset(store, str(matches[0]["id"]), data_root)
+                frozen_id = descriptor.get("dataset_version_id")
+                if isinstance(frozen_id, str):
+                    dataset = store.get_document("dataset_versions", frozen_id)
+                else:
+                    query = {"dataset_id": descriptor["dataset_id"]}
+                    if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
+                    if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+                    matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
+                    dataset = matches[0] if matches else None
+                if dataset is None: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root)
         except Exception as error:
             failed = store.update_document("task_units", str(task["id"]), {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()})
             assert failed is not None

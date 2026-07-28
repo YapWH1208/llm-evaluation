@@ -376,9 +376,11 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         assert run.status_code == 201
         assert run.json()["status"] == "waiting_for_dataset"
+        assert run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"] == dataset.json()["id"]
 
         preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
         assert preparation["task_type"] == "dataset_preparation"
+        assert preparation["payload"]["datasets"][0]["dataset_version_id"] == dataset.json()["id"]
         prepared = client.post(f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]})
         assert prepared.status_code == 200
         assert prepared.json()["status"] == "succeeded"
