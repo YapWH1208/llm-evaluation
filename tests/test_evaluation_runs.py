@@ -297,6 +297,32 @@ def test_report_generation_failure_preserves_completed_evaluation_results(tmp_pa
             assert report_task.status == "failed"
 
 
+def test_non_inference_worker_interfaces_are_independently_leased_and_audited(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        with app.state.database.get_session() as session:
+            for priority, task_type in enumerate(("dataset_preparation", "benchmark", "judge", "cleanup"), start=10):
+                session.add(TaskUnit(run_id=run["id"], task_type=task_type, payload={"stage": task_type}, priority=priority))
+            session.commit()
+        completed = []
+        for _ in range(4):
+            claim = client.post("/api/v1/workers/claim", json={"worker_id": "stage-worker"}).json()
+            assert claim is not None
+            completed.append(claim["task_type"])
+            result = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+            assert result.status_code == 200
+            assert result.json()["status"] == "succeeded"
+            assert result.json()["payload"]["worker_interface"] == claim["task_type"]
+        assert set(completed) == {"dataset_preparation", "benchmark", "judge", "cleanup"}
+
+
 def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_path: Path) -> None:
     app = create_app(
         Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),

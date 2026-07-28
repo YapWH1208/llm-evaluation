@@ -98,6 +98,8 @@ def execute_leased_text_task(
         return _execute_leased_aggregation_task(session, task, lease_token)
     if task.task_type == TaskType.REPORT_GENERATION.value:
         return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
+    if task.task_type in {TaskType.DATASET_PREPARATION.value, TaskType.BENCHMARK.value, TaskType.JUDGE.value, TaskType.CLEANUP.value}:
+        return _execute_leased_stage_task(session, task)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
@@ -156,6 +158,31 @@ def execute_leased_text_task(
         _finalize_task_and_run(session, run, task)
     session.refresh(run)
     session.refresh(task)
+    return run, task
+
+
+def _execute_leased_stage_task(session: Session, task: TaskUnit) -> tuple[EvaluationRun, TaskUnit]:
+    """Run non-inference worker stages through their own durable task interface.
+
+    Dataset, benchmark, judge, and cleanup workers can share a process in the MVP,
+    but must retain a separately leased, auditable lifecycle from evaluation shards.
+    """
+
+    run = session.get(EvaluationRun, task.run_id)
+    if run is None:
+        raise RunExecutionError("Evaluation run not found.")
+    task.status = TaskStatus.RUNNING.value
+    task.attempt_count += 1
+    session.commit()
+    payload = task.payload if isinstance(task.payload, dict) else {}
+    task.payload = {**payload, "worker_interface": task.task_type, "stage_completed_at": datetime.now(timezone.utc).isoformat()}
+    task.status = TaskStatus.SUCCEEDED.value
+    clear_lease(task)
+    if task.task_type == TaskType.DATASET_PREPARATION.value and run.status == RunStatus.WAITING_FOR_DATASET.value:
+        run.status = RunStatus.QUEUED.value
+    session.commit()
+    session.refresh(task)
+    session.refresh(run)
     return run, task
 
 

@@ -432,6 +432,8 @@ def execute_mongo_leased_task(
         return _execute_mongo_aggregation_task(store, task, lease_token)
     if task["task_type"] == "report_generation":
         return _execute_mongo_report_task(store, task, lease_token, data_root=data_root)
+    if task["task_type"] in {"dataset_preparation", "benchmark", "judge", "cleanup"}:
+        return _execute_mongo_stage_task(store, task)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
@@ -515,6 +517,19 @@ def execute_mongo_leased_task(
     assert task is not None and run is not None
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="scoring")
     return run, task
+
+
+def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    run = store.get_document("evaluation_runs", str(task["run_id"]))
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run not found.")
+    now = _utc_now()
+    payload = _task_payload(task)
+    updated_task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "attempt_count": int(task.get("attempt_count", 0)) + 1, "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()}, **_lease_values()})
+    if task["task_type"] == "dataset_preparation" and run.get("status") == "waiting_for_dataset":
+        run = store.update_document("evaluation_runs", str(run["id"]), {"status": "queued"})
+    assert updated_task is not None and run is not None
+    return run, updated_task
 
 
 def _execute_mongo_scoring_task(
