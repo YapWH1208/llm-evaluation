@@ -116,6 +116,17 @@ def test_model_endpoint_accepts_all_built_in_provider_protocol_profiles(tmp_path
         assert local.json()["api_key_mask"] == "\u2022\u2022\u2022\u2022"
 
 
+def test_model_endpoint_rejects_loopback_for_non_local_protocols(tmp_path: Path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as client:
+        rejected = client.post("/api/v1/model-endpoints", json={"base_url": "http://127.0.0.1:8080", "api_key": "secret", "model_name": "model"})
+        assert rejected.status_code == 422
+        assert "Loopback" in rejected.json()["detail"][0]["msg"]
+        remote = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        patched = client.patch(f"/api/v1/model-endpoints/{remote['id']}", json={"base_url": "http://localhost:8080"})
+        assert patched.status_code == 422
+
+
 def test_model_endpoint_persists_safe_custom_headers_and_metadata(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:

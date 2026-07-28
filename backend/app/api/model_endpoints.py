@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,18 @@ ProtocolProfile = Literal[
     "ollama_chat",
     "custom_http_json",
 ]
+
+
+def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
+    hostname = urlparse(base_url).hostname
+    if hostname is None:
+        return
+    try:
+        is_loopback = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        is_loopback = hostname.lower() == "localhost"
+    if is_loopback and protocol_profile != "ollama_chat":
+        raise ValueError("Loopback model endpoints are allowed only for the local Ollama adapter.")
 
 
 class EndpointBase(BaseModel):
@@ -85,6 +97,11 @@ class EndpointBase(BaseModel):
     @classmethod
     def validate_custom_headers(cls, value: dict[str, str]) -> dict[str, str]:
         return validate_custom_headers(value)
+
+    @model_validator(mode="after")
+    def restrict_loopback_to_local_ollama(self) -> "EndpointBase":
+        _validate_loopback_profile(self.base_url, self.protocol_profile)
+        return self
 
 
 class ModelEndpointCreate(EndpointBase):
@@ -417,9 +434,16 @@ def update_model_endpoint(
 ) -> ModelEndpoint | dict[str, Any]:
     store = get_document_store(request)
     if store is not None:
-        get_document_endpoint_or_404(store, endpoint_id)
+        existing = get_document_endpoint_or_404(store, endpoint_id)
         update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
         update_values = {key: value for key, value in update_values.items() if value is not None}
+        try:
+            _validate_loopback_profile(
+                str(update_values.get("base_url", existing["base_url"])),
+                str(update_values.get("protocol_profile", existing.get("protocol_profile", "openai_chat_completions"))),
+            )
+        except ValueError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
         if "currency" in update_values:
             update_values["currency"] = str(update_values["currency"]).upper()
         if "api_key" in payload.model_fields_set and payload.api_key is not None:
@@ -433,6 +457,13 @@ def update_model_endpoint(
     assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
     update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
+    try:
+        _validate_loopback_profile(
+            str(update_values.get("base_url", endpoint.base_url)),
+            str(update_values.get("protocol_profile", endpoint.protocol_profile)),
+        )
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
 
     for field, value in update_values.items():
         if value is not None:
