@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from app.db import EvaluationRun, SampleAttempt, TaskUnit
 from app.db import ModelEndpoint
 from app.db.models import BenchmarkDefinition, EndpointRateWindow, EndpointSecondRateWindow, User
 from app.main import create_app
+from app.benchmarks.text_quick_check import TextSample
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.services.run_executor import _retry_delay_seconds
@@ -295,6 +297,56 @@ def test_report_generation_failure_preserves_completed_evaluation_results(tmp_pa
             report_task = session.get(TaskUnit, claim["id"])
             assert report_task is not None
             assert report_task.status == "failed"
+
+
+def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "declared-samples.jsonl"
+    source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    plugin = SimpleNamespace(
+        manifest={
+            "benchmark_id": "text-quick-check",
+            "version": "1.0.0",
+            "required_capabilities": ["text_input"],
+            "scoring": {"type": "exact_match"},
+            "datasets": [{"dataset_id": "declared-samples", "version": "2026.07"}],
+        },
+        samples=lambda _limit: (
+            TextSample("declared-001", "Reply with only the number: what is 2 + 2?", "4"),
+        ),
+    )
+    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        dataset = client.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "declared-samples", "version": "2026.07", "source_url": source.as_uri()},
+        )
+        assert dataset.status_code == 201
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        assert run.status_code == 201
+        assert run.json()["status"] == "waiting_for_dataset"
+
+        preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
+        assert preparation["task_type"] == "dataset_preparation"
+        prepared = client.post(f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]})
+        assert prepared.status_code == 200
+        assert prepared.json()["status"] == "succeeded"
+        datasets = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
+        assert datasets[dataset.json()["id"]]["status"] == "ready"
+        assert client.get(f"/api/v1/evaluation-runs/{run.json()['id']}").json()["status"] == "queued"
+
+        benchmark = client.post("/api/v1/workers/claim", json={"worker_id": "benchmark-worker"}).json()
+        assert benchmark["task_type"] == "benchmark"
+        assert client.post(f"/api/v1/workers/tasks/{benchmark['id']}/execute", json={"lease_token": benchmark["lease_token"]}).json()["status"] == "succeeded"
+        execution = client.post("/api/v1/workers/claim", json={"worker_id": "evaluation-worker"}).json()
+        assert execution["task_type"] == "evaluation_shard"
+        assert client.post(f"/api/v1/workers/tasks/{execution['id']}/execute", json={"lease_token": execution["lease_token"]}).json()["status"] == "succeeded"
 
 
 def test_non_inference_worker_interfaces_are_independently_leased_and_audited(tmp_path: Path) -> None:
