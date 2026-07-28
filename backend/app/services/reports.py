@@ -119,10 +119,15 @@ def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any
         judges_by_attempt[assessment.sample_attempt_id].append(
             {
                 "judge_endpoint_id": assessment.judge_endpoint_id,
+                "comparison_sample_attempt_id": assessment.comparison_sample_attempt_id,
                 "rubric": assessment.rubric,
+                "answer_order": assessment.answer_order,
+                "swap_test_group_id": assessment.swap_test_group_id,
+                "selected_answer": assessment.selected_answer,
                 "score": assessment.score,
                 "label": assessment.label,
                 "rationale": assessment.rationale,
+                "raw_response": assessment.raw_response,
                 "status": assessment.status,
                 "error_message": assessment.error_message,
                 "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
