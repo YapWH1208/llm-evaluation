@@ -377,10 +377,16 @@ class MongoDocumentStore:
         *,
         query: dict[str, Any] | None = None,
         sort: list[tuple[str, int]] | None = None,
+        offset: int | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         cursor = self.database[collection_name].find(query or {})
         if sort:
             cursor = cursor.sort(sort)
+        if offset:
+            cursor = cursor.skip(offset) if hasattr(cursor, "skip") else cursor[offset:]
+        if limit is not None:
+            cursor = cursor.limit(limit) if hasattr(cursor, "limit") else cursor[:limit]
         return [_public_document(document) for document in cursor]
 
     def update_document(

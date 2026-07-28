@@ -435,11 +435,36 @@ def list_sample_attempts(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> list[SampleAttempt | dict[str, Any]]:
+    needs_post_filter = any(
+        value is not None
+        for value in (
+            attempt_status,
+            error_type,
+            correct,
+            min_latency_ms,
+            min_tokens,
+            min_cost,
+            capability,
+            modality,
+            language,
+            difficulty,
+            api_error,
+            parser_error,
+            judge_disagreement,
+            human_review_status,
+        )
+    )
     store = get_document_store(request)
     if store is not None:
         if store.get_document("evaluation_runs", run_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-        attempts = store.list_documents("sample_attempts", query={"run_id": run_id}, sort=[("created_at", 1)])
+        attempts = store.list_documents(
+            "sample_attempts",
+            query={"run_id": run_id},
+            sort=[("created_at", 1)],
+            offset=offset if not needs_post_filter else None,
+            limit=limit if not needs_post_filter else None,
+        )
         if attempt_status:
             attempts = [item for item in attempts if item.get("status") == attempt_status]
         if error_type:
@@ -455,7 +480,8 @@ def list_sample_attempts(
             store.list_documents("human_reviews"),
             store.list_documents("judge_assessments"),
         )
-        return _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)[offset : offset + limit]
+        filtered = _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)
+        return filtered[offset : offset + limit] if needs_post_filter else filtered
     assert session is not None
     run = session.get(EvaluationRun, run_id)
     if run is None:
@@ -471,12 +497,15 @@ def list_sample_attempts(
         query = query.where(SampleAttempt.score != 1)
     if min_latency_ms is not None:
         query = query.where(SampleAttempt.latency_ms >= min_latency_ms)
+    if not needs_post_filter:
+        query = query.offset(offset).limit(limit)
     attempts = list(session.scalars(query.order_by(SampleAttempt.created_at)))
     attempt_ids = [attempt.id for attempt in attempts]
     reviews = list(session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
     assessments = list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
     decorated = _decorate_attempts(attempts, reviews, assessments)
-    return _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)[offset : offset + limit]
+    filtered = _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)
+    return filtered[offset : offset + limit] if needs_post_filter else filtered
 
 
 def _decorate_attempts(attempts: list[Any], reviews: list[Any], assessments: list[Any]) -> list[dict[str, Any]]:

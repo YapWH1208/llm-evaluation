@@ -299,6 +299,34 @@ def test_report_generation_failure_preserves_completed_evaluation_results(tmp_pa
             assert report_task.status == "failed"
 
 
+def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        with app.state.database.get_session() as session:
+            task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard"))
+            assert task is not None
+            session.add_all(
+                SampleAttempt(
+                    run_id=run["id"], task_id=task.id, sample_id=f"bulk-{index:03d}",
+                    input_snapshot={"messages": [{"role": "user", "content": "small evidence"}]},
+                    reference_snapshot={"type": "exact_match", "answer": "ok"},
+                )
+                for index in range(205)
+            )
+            session.commit()
+        first = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts?offset=0&limit=200")
+        second = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts?offset=200&limit=200")
+        assert len(first.json()) == 200
+        assert len(second.json()) == 6
+        assert {item["sample_id"] for item in first.json()}.isdisjoint({item["sample_id"] for item in second.json()})
+
+
 def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "declared-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
