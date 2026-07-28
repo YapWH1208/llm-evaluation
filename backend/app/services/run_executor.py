@@ -125,6 +125,7 @@ def execute_leased_text_task(
     provider_retry_after_seconds: float | None = None
     policy = _retry_policy(task.payload)
     for attempt in attempts:
+        _mark_attempt_leased(session, attempt)
         _mark_attempt_running(session, attempt)
         result = model_executor.execute(endpoint, api_key, attempt.input_snapshot)
         _record_result(attempt, result, endpoint)
@@ -302,7 +303,7 @@ def _prepare_attempts_for_execution(session: Session, task: TaskUnit) -> list[Sa
     if task.attempt_count > 1:
         for sample_id in sample_ids:
             previous = latest.get(sample_id)
-            if previous is None or previous.status != SampleAttemptStatus.FAILED.value:
+            if previous is None or previous.status not in {SampleAttemptStatus.FAILED.value, SampleAttemptStatus.RETRY_SCHEDULED.value}:
                 continue
             replacement = SampleAttempt(
                 run_id=previous.run_id,
@@ -353,6 +354,12 @@ def _latest_run_attempts(session: Session, run_id: str) -> dict[str, SampleAttem
 def _mark_attempt_running(session: Session, attempt: SampleAttempt) -> None:
     attempt.status = SampleAttemptStatus.RUNNING.value
     attempt.started_at = datetime.now(timezone.utc)
+    attempt.completed_at = None
+    session.commit()
+
+
+def _mark_attempt_leased(session: Session, attempt: SampleAttempt) -> None:
+    attempt.status = SampleAttemptStatus.LEASED.value
     attempt.completed_at = None
     session.commit()
 
@@ -459,6 +466,9 @@ def _schedule_retry(
     task.status = TaskStatus.RETRY_SCHEDULED.value
     task.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
     clear_lease(task)
+    for attempt in _latest_attempts_for_task(session, task.id).values():
+        if attempt.sample_id in retry_sample_ids and attempt.status == SampleAttemptStatus.FAILED.value:
+            attempt.status = SampleAttemptStatus.RETRY_SCHEDULED.value
     _update_run_progress(session, run, retry_sample_ids)
     run.status = RunStatus.QUEUED.value
     session.commit()

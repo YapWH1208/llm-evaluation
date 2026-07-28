@@ -265,7 +265,7 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         assert final_run["status"] == "completed"
         assert len(client.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
-        assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "failed"), (2, "succeeded")]
+        assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "retry_scheduled"), (2, "succeeded")]
 
 
 def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_path: Path) -> None:

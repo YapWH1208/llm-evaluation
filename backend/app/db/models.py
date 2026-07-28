@@ -396,9 +396,12 @@ class TaskType(StrEnum):
 
 class SampleAttemptStatus(StrEnum):
     PENDING = "pending"
+    LEASED = "leased"
     RUNNING = "running"
+    RETRY_SCHEDULED = "retry_scheduled"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    SKIPPED = "skipped"
     CANCELLED = "cancelled"
 
 

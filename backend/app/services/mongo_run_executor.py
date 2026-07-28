@@ -459,6 +459,7 @@ def execute_mongo_leased_task(
     provider_retry_after_seconds: float | None = None
     for attempt in attempts:
         started_at = _utc_now()
+        store.update_document("sample_attempts", str(attempt["id"]), {"status": "leased", "completed_at": None})
         store.update_document("sample_attempts", str(attempt["id"]), {"status": "running", "started_at": started_at, "completed_at": None})
         result = model_executor.execute(_proxy(endpoint), api_key, attempt["input_snapshot"])
         stored = _record_result(store, attempt, result, endpoint)
@@ -493,6 +494,9 @@ def execute_mongo_leased_task(
                 },
             )
             assert task is not None
+            for attempt in _latest_attempts(store, str(task["id"])).values():
+                if str(attempt["sample_id"]) in retry_sample_ids and attempt.get("status") == "failed":
+                    store.update_document("sample_attempts", str(attempt["id"]), {"status": "retry_scheduled"})
             run = _update_run_progress(store, run["id"])
             run = store.update_document("evaluation_runs", run["id"], {"status": "queued"})
             assert run is not None
@@ -670,7 +674,7 @@ def _prepare_attempts(store: MongoDocumentStore, task: dict[str, Any]) -> list[d
     if int(task["attempt_count"]) > 1:
         for sample_id in sample_ids:
             previous = latest.get(sample_id)
-            if previous is None or previous.get("status") != "failed":
+            if previous is None or previous.get("status") not in {"failed", "retry_scheduled"}:
                 continue
             created_at = _utc_now()
             store.insert_document(
