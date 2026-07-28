@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import BenchmarkDefinition, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.benchmarks import register_manifest_plugin, validate_manifest_plugin
+from app.benchmarks import register_manifest_plugin, unregister_manifest_plugin, validate_manifest_plugin
 
 
 router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])
@@ -222,6 +222,7 @@ def update_benchmark(
         updated = store.update_document("benchmark_definitions", benchmark_definition_id, values)
         assert updated is not None
         if "manifest" in values:
+            unregister_manifest_plugin(str(existing["benchmark_id"]), str(existing["version"]))
             register_manifest_plugin(values["manifest"])
         return updated
     assert session is not None
@@ -236,5 +237,6 @@ def update_benchmark(
     session.commit()
     session.refresh(item)
     if "manifest" in values:
+        unregister_manifest_plugin(item.benchmark_id, item.version)
         register_manifest_plugin(item.manifest)
     return item

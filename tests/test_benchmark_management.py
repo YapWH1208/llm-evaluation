@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
+from app.benchmarks import get_installed_plugin, unregister_manifest_plugin
 from tests.test_mongo_document_store import FakeClient
 
 
@@ -38,3 +39,27 @@ def test_mongodb_benchmark_definition_can_be_updated(tmp_path) -> None:
         updated = api.patch(f"/api/v1/benchmarks/{created['id']}", json={"status": "enabled"})
         assert updated.status_code == 200
         assert updated.json()["status"] == "enabled"
+
+
+def test_updating_a_custom_manifest_removes_its_previous_runtime_plugin(tmp_path) -> None:
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    benchmark_key = ("runtime-update-smoke", "1")
+    try:
+        with TestClient(app) as api:
+            created = api.post("/api/v1/benchmarks", json={
+                "benchmark_id": benchmark_key[0],
+                "version": benchmark_key[1],
+                "display_name": "Runtime update smoke",
+                "manifest": {
+                    "modalities": ["text"],
+                    "samples": [{"sample_id": "one", "prompt": "Say hi", "reference_answer": "hi"}],
+                },
+            })
+            assert created.status_code == 201
+            assert get_installed_plugin(*benchmark_key) is not None
+
+            updated = api.patch(f"/api/v1/benchmarks/{created.json()['id']}", json={"manifest": {"modalities": ["text"]}})
+            assert updated.status_code == 200
+            assert get_installed_plugin(*benchmark_key) is None
+    finally:
+        unregister_manifest_plugin(*benchmark_key)
