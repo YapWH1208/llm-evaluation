@@ -439,6 +439,11 @@ class TaskUnit(Base):
         nullable=False,
         index=True,
     )
+    parent_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("task_units.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     task_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=TaskStatus.PENDING.value)
@@ -512,3 +517,35 @@ class SampleAttempt(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AggregateMetric(Base):
+    """A versioned aggregate retained independently from per-sample evidence."""
+
+    __tablename__ = "aggregate_metrics"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "metric_name",
+            "aggregation_version",
+            name="uq_aggregate_metric_run_name_version",
+        ),
+        Index("ix_aggregate_metrics_run_metric", "run_id", "metric_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    benchmark_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    model_endpoint_id: Mapped[str] = mapped_column(
+        ForeignKey("model_endpoints.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    metric_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    metric_value: Mapped[float | None] = mapped_column(nullable=True)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence_interval: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    aggregation_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

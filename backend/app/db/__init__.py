@@ -1,6 +1,7 @@
 from app.db.database import Database
 from app.db.models import (
     Base,
+    AggregateMetric,
     EndpointStatus,
     EndpointRateWindow,
     EvaluationRun,
@@ -16,6 +17,7 @@ from app.db.models import (
 
 __all__ = [
     "Base",
+    "AggregateMetric",
     "Database",
     "EndpointStatus",
     "EndpointRateWindow",

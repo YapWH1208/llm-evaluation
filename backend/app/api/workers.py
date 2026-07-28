@@ -22,7 +22,7 @@ class HeartbeatRequest(BaseModel): lease_token:str;lease_seconds:int=Field(defau
 class ExecuteRequest(BaseModel): lease_token:str=Field(min_length=1)
 class TaskResponse(BaseModel):
     model_config=ConfigDict(from_attributes=True)
-    id:str;run_id:str;task_type:str;payload:dict[str,Any];status:str;priority:int;attempt_count:int;leased_by:str|None;lease_token:str|None;lease_expires_at:datetime|None;next_retry_at:datetime|None;heartbeat_at:datetime|None
+    id:str;run_id:str;parent_task_id:str|None=None;task_type:str;payload:dict[str,Any];status:str;priority:int;attempt_count:int;leased_by:str|None;lease_token:str|None;lease_expires_at:datetime|None;next_retry_at:datetime|None;heartbeat_at:datetime|None
 def get_session(request:Request)->Generator[Session|None,None,None]:
     if getattr(request.app.state,"document_store",None) is not None:
         yield None

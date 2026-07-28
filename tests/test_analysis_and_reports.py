@@ -83,6 +83,17 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert body["cost"]["estimated"] == 0.00008
         assert body["cost"]["currency"] == "USD"
 
+        metrics = client.get(f"/api/v1/analytics/runs/{run_a}/metrics")
+        assert metrics.status_code == 200
+        metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}
+        assert metrics_by_name["accuracy"]["metric_value"] == 1.0
+        assert metrics_by_name["accuracy"]["sample_count"] == 2
+        assert metrics_by_name["accuracy"]["confidence_interval"]["method"] == "normal_95"
+        assert metrics_by_name["p95_latency_ms"]["metric_value"] == 75.0
+        recomputed = client.post(f"/api/v1/analytics/runs/{run_a}/metrics/recompute")
+        assert recomputed.status_code == 200
+        assert len(recomputed.json()) == len(metrics_by_name)
+
         dashboard = client.get("/api/v1/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["api"]["estimated_cost_by_currency"] == {"USD": 0.00016}

@@ -52,6 +52,7 @@ _COLLECTIONS = (
     "evaluation_runs",
     "task_units",
     "sample_attempts",
+    "aggregate_metrics",
     "reports",
     "report_shares",
     "human_reviews",
@@ -103,6 +104,9 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
     ),
     "task_units": (
         ((("status", 1), ("next_retry_at", 1), ("priority", -1), ("created_at", 1)), {}),
+    ),
+    "aggregate_metrics": (
+        ((("run_id", 1), ("metric_name", 1), ("aggregation_version", 1)), {"unique": True}),
     ),
 }
 
@@ -394,8 +398,13 @@ class MongoDocumentStore:
     def delete_documents(self, collection_name: str, query: dict[str, Any]) -> int:
         """Delete scoped documents for a completed cascading operation."""
 
-        result = self.database[collection_name].delete_many(query)
-        return int(getattr(result, "deleted_count", 0))
+        collection = self.database[collection_name]
+        delete_many = getattr(collection, "delete_many", None)
+        if callable(delete_many):
+            result = delete_many(query)
+            return int(getattr(result, "deleted_count", 0))
+        document_ids = [str(item["id"]) for item in self.list_documents(collection_name, query=query)]
+        return sum(self.delete_document(collection_name, document_id) for document_id in document_ids)
 
     def reclaim_expired_leases(self) -> int:
         now = _utc_now()

@@ -443,6 +443,9 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         second = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[1], "sample_limit": 1}).json()
         assert api.post(f"/api/v1/evaluation-runs/{first['id']}/execute").status_code == 200
         assert api.post(f"/api/v1/evaluation-runs/{second['id']}/execute").status_code == 200
+        metrics = api.get(f"/api/v1/analytics/runs/{first['id']}/metrics")
+        assert metrics.status_code == 200
+        assert {metric["metric_name"] for metric in metrics.json()} >= {"accuracy", "success_rate", "estimated_cost"}
         comparison = api.get("/api/v1/comparisons", params={"run_a": first["id"], "run_b": second["id"]})
         assert comparison.status_code == 200
         assert comparison.json()["shared_samples"] == 1

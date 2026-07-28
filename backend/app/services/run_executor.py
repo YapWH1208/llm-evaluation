@@ -18,6 +18,7 @@ from app.db import (
     TaskUnit,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
+from app.services.aggregation import recompute_aggregate_metrics
 from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease, has_valid_lease
 
@@ -338,6 +339,7 @@ def _finalize_task_and_run(session: Session, run: EvaluationRun, task: TaskUnit)
     else:
         run.status = RunStatus.COMPLETED.value
     run.completed_at = datetime.now(timezone.utc)
+    recompute_aggregate_metrics(session, run.id, commit=False)
     session.commit()
 
 

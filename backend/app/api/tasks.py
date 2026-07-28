@@ -21,6 +21,7 @@ class TaskResponse(BaseModel):
 
     id: str
     run_id: str
+    parent_task_id: str | None = None
     task_type: str
     payload: dict[str, Any]
     status: str

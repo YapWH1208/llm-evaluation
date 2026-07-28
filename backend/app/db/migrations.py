@@ -119,6 +119,10 @@ def _upgrade_v17_structured_human_review(connection: Connection) -> None:
     _add_column_if_missing(connection, "human_reviews", "adjudicates_review_ids", "adjudicates_review_ids JSON NOT NULL DEFAULT '[]'")
 
 
+def _upgrade_v18_task_hierarchy_and_aggregate_metrics(connection: Connection) -> None:
+    _add_column_if_missing(connection, "task_units", "parent_task_id", "parent_task_id VARCHAR(36)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -215,6 +219,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260726_add_structured_human_review",
         description="Add independent review stages and adjudication evidence for human review workflows.",
         upgrade=_upgrade_v17_structured_human_review,
+    ),
+    Migration(
+        version=18,
+        migration_id="20260728_add_task_hierarchy_and_aggregate_metrics",
+        description="Add parent task lineage and durable versioned aggregate metric records.",
+        upgrade=_upgrade_v18_task_hierarchy_and_aggregate_metrics,
     ),
 )
 

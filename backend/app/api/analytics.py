@@ -2,14 +2,23 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Generator
+from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import BenchmarkDefinition, EvaluationRun, ModelEndpoint
+from app.db.models import AggregateMetric, BenchmarkDefinition, EvaluationRun, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
+from app.services.aggregation import (
+    AggregationError,
+    list_aggregate_metrics,
+    list_mongo_aggregate_metrics,
+    recompute_aggregate_metrics,
+    recompute_mongo_aggregate_metrics,
+)
 from app.services.run_analysis import build_run_summary
 from app.services.mongo_run_executor import build_mongo_run_summary
 
@@ -28,6 +37,54 @@ def get_session(request: Request) -> Generator[Session | None, None, None]:
 
 
 SessionDependency = Annotated[Session | None, Depends(get_session)]
+
+
+class AggregateMetricResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    run_id: str
+    benchmark_id: str
+    model_endpoint_id: str
+    metric_name: str
+    metric_value: float | None
+    sample_count: int
+    confidence_interval: dict[str, object] | None
+    aggregation_version: str
+    created_at: datetime
+
+
+@router.get("/runs/{run_id}/metrics", response_model=list[AggregateMetricResponse])
+def run_aggregate_metrics(
+    run_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> list[AggregateMetric | dict[str, Any]]:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        if store.get_document("evaluation_runs", run_id) is None:
+            raise HTTPException(404, "Evaluation run not found")
+        return list_mongo_aggregate_metrics(store, run_id)
+    assert session is not None
+    if session.get(EvaluationRun, run_id) is None:
+        raise HTTPException(404, "Evaluation run not found")
+    return list_aggregate_metrics(session, run_id)
+
+
+@router.post("/runs/{run_id}/metrics/recompute", response_model=list[AggregateMetricResponse])
+def recompute_run_aggregate_metrics(
+    run_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> list[AggregateMetric | dict[str, Any]]:
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    try:
+        if store is not None:
+            return recompute_mongo_aggregate_metrics(store, run_id)
+        assert session is not None
+        return recompute_aggregate_metrics(session, run_id)
+    except AggregationError as error:
+        raise HTTPException(404, str(error)) from error
 
 
 @router.get("/matrix")

@@ -17,6 +17,7 @@ from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import _build_messages, _estimate_request_tokens
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction
+from app.services.aggregation import recompute_mongo_aggregate_metrics
 from app.services.run_analysis import summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
@@ -443,6 +444,7 @@ def execute_mongo_leased_task(
     )
     run = store.update_document("evaluation_runs", run["id"], {"status": terminal_status, "completed_at": _utc_now()})
     assert task is not None and run is not None
+    recompute_mongo_aggregate_metrics(store, str(run["id"]))
     return run, task
 
 
