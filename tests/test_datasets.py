@@ -1,11 +1,13 @@
 import base64
 import hashlib
+import json
 from pathlib import Path
+import zipfile
 import pytest
 from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.main import create_app
-from app.services.datasets import DATASET_DOWNLOADER_PLUGINS, DatasetError, register_dataset_downloader, resolve_dataset_source
+from app.services.datasets import DATASET_DOWNLOADER_PLUGINS, DatasetError, prepare_dataset_cache, register_dataset_downloader, resolve_dataset_source
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
     app=create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
@@ -31,6 +33,9 @@ def test_dataset_supports_local_sources_and_explicit_credential_gates(tmp_path: 
         assert downloaded.status_code == 200
         assert downloaded.json()["status"] == "ready"
         assert Path(downloaded.json()["local_path"]).read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+        prepared_manifest = Path(downloaded.json()["prepared_path"])
+        assert prepared_manifest.is_file()
+        assert json.loads(prepared_manifest.read_text(encoding="utf-8"))["record_count"] == 1
 
         protected = client.post("/api/v1/datasets", json={"dataset_id":"private","version":"1","source_url":"https://datasets.example.test/private.jsonl","credential_env_var":"LLE_TEST_PRIVATE_DATASET_TOKEN"})
         assert protected.status_code == 201
@@ -55,6 +60,7 @@ def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp
         assert body["checksum"] == checksum
         assert body["size_bytes"] == len(content)
         assert Path(body["local_path"]).read_bytes() == content
+        assert Path(body["prepared_path"]).is_file()
         validated = client.post(f"/api/v1/datasets/{body['id']}/validate")
         assert validated.status_code == 200
         assert validated.json()["status"] == "ready"
@@ -87,3 +93,11 @@ def test_dataset_source_blocks_private_networks_and_supports_registered_download
         assert headers == {}
     finally:
         DATASET_DOWNLOADER_PLUGINS.pop("fixture", None)
+
+
+def test_dataset_preparation_rejects_archive_path_traversal(tmp_path: Path) -> None:
+    archive = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("../outside.jsonl", '{"question":"unsafe"}\n')
+    with pytest.raises(DatasetError, match="unsafe file path"):
+        prepare_dataset_cache(archive)

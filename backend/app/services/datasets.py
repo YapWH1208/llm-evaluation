@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import json
 import os
 import shutil
-from collections.abc import Callable
+import zipfile
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from socket import getaddrinfo
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import url2pathname
+from uuid import uuid4
 
 import httpx
 from sqlalchemy.orm import Session
@@ -26,6 +29,8 @@ class DatasetDownloadPaused(DatasetError):
 
 DatasetDownloader = Callable[[str, str, dict[str, str]], tuple[Path | str, dict[str, str]]]
 DATASET_DOWNLOADER_PLUGINS: dict[str, DatasetDownloader] = {}
+MAX_PREPARED_ARCHIVE_FILES = 10_000
+MAX_PREPARED_ARCHIVE_BYTES = 512 * 1024 * 1024
 
 
 def register_dataset_downloader(scheme: str, downloader: DatasetDownloader) -> None:
@@ -92,6 +97,11 @@ def _validate_remote_dataset_url(source_url: str) -> None:
             raise DatasetError("Dataset URL resolves to a private or restricted network address.")
 
 
+def dataset_source_suffix(source_url: str) -> str:
+    suffix = Path(urlparse(source_url).path).suffix.lower()
+    return suffix if suffix in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"} else ".bin"
+
+
 def write_dataset_source(source: Path | str, target: Path, headers: dict[str, str], on_chunk: Callable[[], None] | None = None) -> str:
     """Stream a configured source to a temporary file and return its SHA-256 digest."""
 
@@ -117,6 +127,122 @@ def write_dataset_source(source: Path | str, target: Path, headers: dict[str, st
     return digest.hexdigest()
 
 
+def prepare_dataset_cache(target: Path) -> Path:
+    """Build an atomic, database-neutral sample index for a verified cache file."""
+
+    if not target.is_file():
+        raise DatasetError("Dataset cache file is unavailable for preparation.")
+    destination = target.parent / "prepared"
+    temporary = target.parent / f".prepared-{uuid4().hex}"
+    previous: Path | None = None
+    temporary.mkdir(parents=True, exist_ok=False)
+    try:
+        source_root = temporary / "source"
+        source_root.mkdir()
+        source_files = _materialize_dataset_sources(target, source_root)
+        index_path = temporary / "sample-index.jsonl"
+        record_count = 0
+        with index_path.open("w", encoding="utf-8", newline="\n") as index_file:
+            for source_file in source_files:
+                relative = source_file.relative_to(source_root).as_posix()
+                for record_number in _indexable_record_numbers(source_file):
+                    index_file.write(json.dumps({"source": relative, "record_number": record_number}, separators=(",", ":")) + "\n")
+                    record_count += 1
+        manifest_path = temporary / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "format": "lle.sample-index/v1",
+                    "source_files": [path.relative_to(source_root).as_posix() for path in source_files],
+                    "record_count": record_count,
+                    "index_path": "sample-index.jsonl",
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        previous = target.parent / f".prepared-previous-{uuid4().hex}"
+        if destination.exists():
+            destination.replace(previous)
+        try:
+            temporary.replace(destination)
+        except Exception:
+            if previous.exists() and not destination.exists():
+                previous.replace(destination)
+            raise
+        if previous is not None and previous.exists():
+            shutil.rmtree(previous)
+        return destination / "manifest.json"
+    except Exception:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        if previous is not None and previous.exists() and not destination.exists():
+            previous.replace(destination)
+        raise
+
+
+def clear_prepared_dataset_cache(prepared_path: str | None, data_root: str) -> None:
+    if not prepared_path:
+        return
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    manifest = Path(prepared_path).resolve()
+    prepared = manifest.parent
+    if prepared.name != "prepared" or not prepared.is_relative_to(root):
+        raise DatasetError("Prepared dataset cache path is outside the configured dataset root.")
+    if prepared.exists():
+        shutil.rmtree(prepared)
+
+
+def validate_prepared_dataset_cache(prepared_path: str | None, data_root: str) -> bool:
+    if not prepared_path:
+        return False
+    root = (Path(data_root).resolve() / "datasets").resolve()
+    manifest = Path(prepared_path).resolve()
+    return manifest.is_relative_to(root) and manifest.name == "manifest.json" and manifest.parent.name == "prepared" and manifest.is_file()
+
+
+def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
+    if zipfile.is_zipfile(target):
+        source_files: list[Path] = []
+        total_size = 0
+        with zipfile.ZipFile(target) as archive:
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            if len(entries) > MAX_PREPARED_ARCHIVE_FILES:
+                raise DatasetError("Dataset archive contains too many files to prepare safely.")
+            for entry in entries:
+                total_size += entry.file_size
+                if total_size > MAX_PREPARED_ARCHIVE_BYTES:
+                    raise DatasetError("Dataset archive exceeds the safe preparation size limit.")
+                output = (source_root / entry.filename).resolve()
+                if not output.is_relative_to(source_root.resolve()):
+                    raise DatasetError("Dataset archive contains an unsafe file path.")
+                output.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(entry) as source, output.open("wb") as destination:
+                    shutil.copyfileobj(source, destination, length=1024 * 1024)
+                source_files.append(output)
+        return source_files
+    output = source_root / f"dataset{target.suffix.lower() or '.bin'}"
+    shutil.copyfile(target, output)
+    return [output]
+
+
+def _indexable_record_numbers(path: Path) -> Iterator[int]:
+    if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
+        yield 1
+        return
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as source:
+            found = False
+            for number, line in enumerate(source, start=1):
+                if line.strip():
+                    found = True
+                    yield number
+    except OSError as error:
+        raise DatasetError("Dataset source could not be read during preparation.") from error
+    if not found:
+        yield 1
+
+
 def accept_license(session: Session, dataset: DatasetVersion) -> DatasetVersion:
     from datetime import datetime, timezone
     dataset.license_accepted_at = datetime.now(timezone.utc)
@@ -134,7 +260,7 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
         raise DatasetError("Dataset license must be accepted before download.")
     destination = Path(data_root).resolve() / "datasets" / dataset.dataset_id / dataset.version / dataset.revision
     destination.mkdir(parents=True, exist_ok=True)
-    target = destination / "dataset.bin"; temporary = destination / "dataset.part"
+    target = destination / f"dataset{dataset_source_suffix(dataset.source_url)}"; temporary = destination / "dataset.part"
     dataset.status = DatasetStatus.DOWNLOADING.value; dataset.error_message = None; session.commit()
     try:
         source, headers = resolve_dataset_source(dataset.source_url, dataset.revision, dataset.credential_env_var)
@@ -149,7 +275,10 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
             temporary.unlink(missing_ok=True)
             raise DatasetError("Dataset checksum verification failed.")
         temporary.replace(target)
-        dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.size_bytes = target.stat().st_size; dataset.status = DatasetStatus.READY.value
+        dataset.status = DatasetStatus.PREPARING.value
+        session.commit()
+        prepared_path = prepare_dataset_cache(target)
+        dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.prepared_path = str(prepared_path); dataset.size_bytes = target.stat().st_size; dataset.status = DatasetStatus.READY.value
     except DatasetDownloadPaused as error:
         dataset.status = DatasetStatus.WAITING.value
         dataset.error_message = None
@@ -199,6 +328,10 @@ def validate_dataset_cache(session: Session, dataset: DatasetVersion, data_root:
         dataset.error_message = "Dataset cache checksum verification failed."
         session.commit()
         raise DatasetError(dataset.error_message)
+    if not validate_prepared_dataset_cache(dataset.prepared_path, data_root):
+        dataset.status = DatasetStatus.PREPARING.value
+        session.commit()
+        dataset.prepared_path = str(prepare_dataset_cache(target))
     dataset.checksum = checksum
     dataset.size_bytes = target.stat().st_size
     dataset.status = DatasetStatus.READY.value
@@ -223,7 +356,9 @@ def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: st
         if not target.is_relative_to(root):
             raise DatasetError("Dataset cache path is outside the configured dataset root.")
         target.unlink(missing_ok=True)
+    clear_prepared_dataset_cache(dataset.prepared_path, data_root)
     dataset.local_path = None
+    dataset.prepared_path = None
     dataset.size_bytes = None
     dataset.status = DatasetStatus.LICENSE_REQUIRED.value if dataset.license_text and dataset.license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
     dataset.error_message = None
@@ -269,10 +404,14 @@ def store_uploaded_dataset(
         raise DatasetError(dataset.error_message)
     temporary.write_bytes(content)
     temporary.replace(target)
+    dataset.status = DatasetStatus.PREPARING.value
+    session.commit()
+    prepared_path = prepare_dataset_cache(target)
     dataset.source_url = target.as_uri()
     dataset.checksum = checksum
     dataset.size_bytes = len(content)
     dataset.local_path = str(target)
+    dataset.prepared_path = str(prepared_path)
     dataset.status = DatasetStatus.READY.value
     dataset.error_message = None
     session.commit()

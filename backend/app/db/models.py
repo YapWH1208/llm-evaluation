@@ -241,6 +241,7 @@ class DatasetVersion(Base):
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     local_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    prepared_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     license_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     license_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=DatasetStatus.NOT_DOWNLOADED.value)

@@ -134,6 +134,10 @@ def _upgrade_v20_dataset_uploads(connection: Connection) -> None:
     _add_column_if_missing(connection, "dataset_versions", "size_bytes", "size_bytes BIGINT")
 
 
+def _upgrade_v21_dataset_preparation(connection: Connection) -> None:
+    _add_column_if_missing(connection, "dataset_versions", "prepared_path", "prepared_path VARCHAR(2048)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -248,6 +252,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260728_add_dataset_upload_size",
         description="Add durable size evidence for uploaded and downloaded dataset revisions.",
         upgrade=_upgrade_v20_dataset_uploads,
+    ),
+    Migration(
+        version=21,
+        migration_id="20260728_add_dataset_preparation_index",
+        description="Record atomically prepared dataset sample-index artifacts.",
+        upgrade=_upgrade_v21_dataset_preparation,
     ),
 )
 

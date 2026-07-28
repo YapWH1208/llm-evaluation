@@ -21,7 +21,7 @@ class DatasetCreate(BaseModel):
     credential_env_var: str | None = Field(default=None, pattern=r"^[A-Z_][A-Z0-9_]{0,127}$")
 class DatasetResponse(DatasetCreate):
     model_config = ConfigDict(from_attributes=True)
-    id: str; local_path: str | None; size_bytes: int | None = None; license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
+    id: str; local_path: str | None; prepared_path: str | None = None; size_bytes: int | None = None; license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
 
 
 class DatasetUpload(BaseModel):
@@ -56,7 +56,7 @@ def create_dataset(payload: DatasetCreate,request:Request,session:SessionDepende
     store=get_document_store(request)
     if store is not None:
         if store.list_documents("dataset_versions",query={"dataset_id":payload.dataset_id,"version":payload.version,"revision":payload.revision}):raise HTTPException(409,"Dataset revision already exists")
-        return store.insert_document("dataset_versions",{**payload.model_dump(),"local_path":None,"size_bytes":None,"license_accepted_at":None,"status":DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value,"error_message":None,"created_at":datetime.now()})
+        return store.insert_document("dataset_versions",{**payload.model_dump(),"local_path":None,"prepared_path":None,"size_bytes":None,"license_accepted_at":None,"status":DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value,"error_message":None,"created_at":datetime.now()})
     assert session is not None
     item=DatasetVersion(**payload.model_dump(),status=DatasetStatus.LICENSE_REQUIRED.value if payload.license_text else DatasetStatus.NOT_DOWNLOADED.value);session.add(item)
     try: session.commit()
