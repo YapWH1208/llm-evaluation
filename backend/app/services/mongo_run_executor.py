@@ -19,7 +19,7 @@ from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction
 from app.services.aggregation import recompute_mongo_aggregate_metrics
 from app.services.reports import ReportError
-from app.services.run_analysis import summarize_attempts
+from app.services.run_analysis import add_summary_insights, summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
@@ -660,11 +660,12 @@ def build_mongo_run_summary(store: MongoDocumentStore, run_id: str) -> dict[str,
     latest: dict[str, dict[str, Any]] = {}
     for attempt in attempts:
         latest.setdefault(str(attempt["sample_id"]), attempt)
-    return summarize_attempts(
-        [_proxy(attempt) for attempt in latest.values()],
+    attempts = [_proxy(attempt) for attempt in latest.values()]
+    return add_summary_insights(summarize_attempts(
+        attempts,
         total_samples=int(run["total_samples"]),
         currency=str(endpoint["currency"]) if endpoint else None,
-    )
+    ), attempts)
 
 
 def _prepare_attempts(store: MongoDocumentStore, task: dict[str, Any]) -> list[dict[str, Any]]:

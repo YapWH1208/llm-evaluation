@@ -82,6 +82,10 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert body["tokens"] == {"measured_samples": 2, "input": 20, "output": 10, "total": 30}
         assert body["cost"]["estimated"] == 0.00008
         assert body["cost"]["currency"] == "USD"
+        assert body["insights"]["strongest_capability"]["score"] == 1.0
+        assert body["insights"]["weakest_capability"]["score"] == 1.0
+        assert {item["capability"] for item in body["insights"]["capabilities"]} == {"reasoning", "instruction_following"}
+        assert body["insights"]["significant_anomalies"] == []
 
         evidence = client.get(f"/api/v1/evaluation-runs/{run_a}/attempts", params={"capability": "reasoning", "language": "en", "difficulty": "basic", "modality": "text", "correct": True})
         assert evidence.status_code == 200

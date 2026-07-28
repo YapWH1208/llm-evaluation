@@ -70,6 +70,7 @@ export type RunSummary = {
   latency_ms: { measured_samples: number; average: number | null; p50: number | null; p95: number | null; p99: number | null };
   tokens: { measured_samples: number; input: number; output: number; total: number };
   cost: { measured_samples: number; estimated: number | null; actual: number | null; currency: string | null };
+  insights: { capabilities: Array<{ capability: string; score: number | null; sample_count: number }>; strongest_capability: { capability: string; score: number; sample_count: number } | null; weakest_capability: { capability: string; score: number; sample_count: number } | null; significant_anomalies: Array<{ kind: string; value: number; threshold: number }>; major_regressions: Array<{ metric: string; delta: number; baseline: number; current: number }> };
 };
 
 export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generator_version: string; generated_at: string };
