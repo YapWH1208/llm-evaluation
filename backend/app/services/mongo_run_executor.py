@@ -603,7 +603,7 @@ def _execute_mongo_report_task(
         )
     except ReportError as error:
         task = store.update_document("task_units", str(task["id"]), {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()})
-        run = store.update_document("evaluation_runs", str(run["id"]), {"status": "failed", "completed_at": _utc_now()})
+        run = store.update_document("evaluation_runs", str(run["id"]), {"status": str(payload.get("terminal_status", "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed")), "completed_at": _utc_now()})
         assert task is not None and run is not None
         raise MongoRunExecutionError(str(error)) from error
     task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]}, **_lease_values()})
@@ -634,7 +634,7 @@ def _enqueue_mongo_stage_task(
             "run_id": run["id"],
             "parent_task_id": parent_task["id"],
             "task_type": task_type,
-            "payload": {"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model"} if task_type == "report_generation" else {})},
+            "payload": {"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model", "terminal_status": "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"} if task_type == "report_generation" else {})},
             "status": "pending",
             "priority": int(parent_task.get("priority", 0)),
             "attempt_count": 0,

@@ -268,6 +268,35 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
         assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [(1, "retry_scheduled"), (2, "succeeded")]
 
 
+def test_report_generation_failure_preserves_completed_evaluation_results(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        for worker_id, task_type in (("worker-evaluation", "evaluation_shard"), ("worker-scoring", "scoring"), ("worker-aggregation", "aggregation")):
+            claim = client.post("/api/v1/workers/claim", json={"worker_id": worker_id}).json()
+            assert claim["task_type"] == task_type
+            assert client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]}).status_code == 200
+        with app.state.database.get_session() as session:
+            report_task = session.scalar(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "report_generation"))
+            assert report_task is not None
+            report_task.payload = {**report_task.payload, "format": "unsupported"}
+            session.commit()
+        claim = client.post("/api/v1/workers/claim", json={"worker_id": "worker-report"}).json()
+        assert claim["task_type"] == "report_generation"
+        assert client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]}).status_code == 409
+        assert client.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
+        with app.state.database.get_session() as session:
+            report_task = session.get(TaskUnit, claim["id"])
+            assert report_task is not None
+            assert report_task.status == "failed"
+
+
 def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_path: Path) -> None:
     app = create_app(
         Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),

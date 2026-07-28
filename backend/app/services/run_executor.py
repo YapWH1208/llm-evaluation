@@ -251,7 +251,7 @@ def _execute_leased_report_task(
         task.status = TaskStatus.FAILED.value
         task.payload = {**payload, "report_error": str(error)}
         clear_lease(task)
-        run.status = RunStatus.FAILED.value
+        run.status = str(payload.get("terminal_status", RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value))
         run.completed_at = datetime.now(timezone.utc)
         session.commit()
         raise RunExecutionError(str(error)) from error
@@ -286,7 +286,7 @@ def _enqueue_stage_task(
         run_id=run.id,
         parent_task_id=parent_task.id,
         task_type=task_type,
-        payload={"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model"} if task_type == TaskType.REPORT_GENERATION.value else {})},
+        payload={"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model", "terminal_status": RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value} if task_type == TaskType.REPORT_GENERATION.value else {})},
         status=TaskStatus.PENDING.value,
         priority=parent_task.priority,
     )
