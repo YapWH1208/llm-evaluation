@@ -434,7 +434,7 @@ def execute_mongo_leased_task(
     if task["task_type"] == "report_generation":
         return _execute_mongo_report_task(store, task, lease_token, data_root=data_root)
     if task["task_type"] in {"dataset_preparation", "benchmark", "judge", "cleanup"}:
-        return _execute_mongo_stage_task(store, task)
+        return _execute_mongo_stage_task(store, task, data_root=data_root)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
@@ -520,7 +520,7 @@ def execute_mongo_leased_task(
     return run, task
 
 
-def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *, data_root: str) -> tuple[dict[str, Any], dict[str, Any]]:
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
@@ -534,7 +534,7 @@ def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any]) -
                 if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
                 matches = store.list_documents("dataset_versions", query=query)
                 if not matches: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if matches[0].get("status") != "ready": download_mongo_dataset(store, str(matches[0]["id"]), "data")
+                if matches[0].get("status") != "ready": download_mongo_dataset(store, str(matches[0]["id"]), data_root)
         except Exception as error:
             failed = store.update_document("task_units", str(task["id"]), {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()})
             assert failed is not None
