@@ -15,7 +15,7 @@ from app.benchmarks.text_quick_check import TextSample
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.services.run_executor import _retry_delay_seconds
-from app.services.task_queue import claim_task
+from app.services.task_queue import claim_task, reclaim_expired_leases
 
 
 def _configure_dataset_download(monkeypatch, content: bytes) -> None:
@@ -748,6 +748,113 @@ def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
+
+
+def test_low_rps_runs_split_requests_and_continue_when_the_next_window_opens(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rps-continuation.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model","requests_per_second":1},
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"]}).json()
+        with app.state.database.get_session() as session:
+            shards = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard")))
+            assert len(shards) == run["total_samples"]
+            assert all(task.payload["estimated_request_count"] == 1 for task in shards)
+
+        first_window = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert first_window.status_code == 200
+        assert first_window.json()["status"] == "running"
+        for _ in range(run["total_samples"] - 1):
+            with app.state.database.get_session() as session:
+                rate_window = session.scalar(select(EndpointSecondRateWindow))
+                assert rate_window is not None
+                # Simulate the next fixed one-second provider window.
+                rate_window.request_count = 0
+                session.commit()
+            resumed = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+            assert resumed.status_code == 200
+
+        assert resumed.json()["status"] == "completed"
+
+
+def test_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> None:
+    class LeaseLosingExecutor:
+        def execute(self, _endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            with app.state.database.get_session() as session:
+                task = session.scalar(select(TaskUnit).where(TaskUnit.task_type == "evaluation_shard", TaskUnit.status == "running"))
+                assert task is not None
+                task.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+                session.commit()
+                assert reclaim_expired_leases(session) == 1
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'late-result.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=LeaseLosingExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = client.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        assert claim is not None
+        late = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_queued_run_uses_frozen_endpoint_configuration_and_rotated_secret(tmp_path: Path) -> None:
+    captured: list[tuple[str, str, int, dict[str, object], str]] = []
+
+    class SnapshotExecutor:
+        def execute(self, endpoint, api_key: str, input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            captured.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key))
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'snapshot.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=SnapshotExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "initial-secret",
+                "model_name": "frozen-model",
+                "timeout_seconds": 42,
+                "custom_headers": {"X-Run-Mode": "frozen"},
+                "default_request_body": {"temperature": 0.1},
+            },
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        changed = client.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={
+                "base_url": "https://changed.models.example.test/v1",
+                "api_key": "rotated-secret",
+                "model_name": "changed-model",
+                "timeout_seconds": 5,
+                "custom_headers": {"X-Run-Mode": "changed"},
+                "default_request_body": {"temperature": 0.9},
+            },
+        )
+        assert changed.status_code == 200
+        assert client.post(f"/api/v1/evaluation-runs/{run['id']}/execute").json()["status"] == "completed"
+
+    assert captured == [("https://models.example.test/v1", "frozen-model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 
 def test_worker_claim_honors_run_and_shared_api_key_concurrency_limits(tmp_path: Path) -> None:

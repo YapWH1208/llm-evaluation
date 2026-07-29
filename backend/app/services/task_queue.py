@@ -15,6 +15,7 @@ from app.db.models import (
     SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
+    TaskType,
     TaskUnit,
     User,
 )
@@ -346,6 +347,10 @@ def _reserve_endpoint_budget(
     task: TaskUnit,
     now: datetime,
 ) -> bool:
+    # Only evaluation shards call the configured model endpoint. Pipeline
+    # bookkeeping must not consume the provider's inference budget.
+    if task.task_type != TaskType.EVALUATION_SHARD.value:
+        return True
     request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens = _task_budget(task)
     if all(
         limit is None

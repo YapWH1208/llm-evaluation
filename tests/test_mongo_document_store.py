@@ -350,10 +350,13 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
 
 
 def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
+    captured: list[tuple[str, str, int, dict[str, Any], str]] = []
+
     class ExactExecutor:
         def execute(self, endpoint: Any, api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            captured.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key))
             assert endpoint.model_name == "model"
-            assert api_key == "secret"
+            assert api_key == "rotated-secret"
             assert input_snapshot["messages"]
             return SampleExecutionResult(
                 True,
@@ -379,11 +382,16 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
     with TestClient(app) as api:
         endpoint = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "timeout_seconds": 42, "custom_headers": {"X-Run-Mode": "frozen"}},
         ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         assert run.status_code == 201
+        changed = api.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"base_url": "https://changed.models.example.test/v1", "api_key": "rotated-secret", "model_name": "changed", "timeout_seconds": 5, "custom_headers": {"X-Run-Mode": "changed"}},
+        )
+        assert changed.status_code == 200
         completed = api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute")
         assert completed.status_code == 200
         assert completed.json()["status"] == "completed"
@@ -391,6 +399,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
         assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
+        assert captured == [("https://models.example.test/v1", "model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 
 def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
@@ -503,6 +512,36 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         assert api.post(f"/api/v1/workers/tasks/{report['id']}/execute", json={"lease_token": report["lease_token"]}).json()["status"] == "succeeded"
         assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
         assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
+
+
+def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+
+    class LeaseLosingExecutor:
+        def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            running = store.list_documents("task_units", query={"task_type": "evaluation_shard", "status": "running"})
+            assert len(running) == 1
+            assert store.update_document("task_units", running[0]["id"], {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)})
+            assert store.reclaim_expired_leases() == 1
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=LeaseLosingExecutor(), document_store=store)
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
+        late = api.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        attempt = api.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
 
 
 def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses(tmp_path: Path) -> None:

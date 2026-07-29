@@ -228,6 +228,10 @@ def create_benchmark_run(
             "model_name": endpoint.model_name,
             "protocol_profile": endpoint.protocol_profile,
             "default_request_body": endpoint.default_request_body,
+            "timeout_seconds": endpoint.timeout_seconds,
+            "custom_headers": endpoint.custom_headers,
+            "input_cost_per_million": endpoint.input_cost_per_million,
+            "output_cost_per_million": endpoint.output_cost_per_million,
         },
         "sample_ids": [sample.sample_id for sample in samples],
         "datasets": frozen_datasets,
@@ -281,6 +285,8 @@ def create_benchmark_run(
     session.add(benchmark_task)
     session.flush()
     shards = _split_samples_into_shards(samples, plugin.manifest)
+    if endpoint.requests_per_second is not None and any(len(shard) > endpoint.requests_per_second for shard in shards):
+        shards = [(sample,) for sample in samples]
     for shard_index, shard_samples in enumerate(shards, start=1):
         task = TaskUnit(
             run_id=run.id,

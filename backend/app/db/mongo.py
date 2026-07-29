@@ -351,6 +351,8 @@ class MongoDocumentStore:
         return sum(item is not None and item.get("model_endpoint_id") == endpoint["id"] for item in active_runs) < endpoint_limit
 
     def _reserve_endpoint_budget(self, *, endpoint: dict[str, Any], task: dict[str, Any], now: datetime) -> bool:
+        if task.get("task_type") != "evaluation_shard":
+            return True
         limits = ("requests_per_second", "requests_per_minute", "tokens_per_minute", "input_tokens_per_minute", "output_tokens_per_minute")
         if not any(_positive_limit(endpoint.get(name)) is not None for name in limits):
             return True
