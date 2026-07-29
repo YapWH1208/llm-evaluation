@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
-from app.db.models import HumanReview, JudgeAssessment
+from app.db.models import HumanReview, JudgeAssessment, Report
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
@@ -22,6 +22,7 @@ from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.services.reports import delete_report_artifact
 from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
@@ -400,13 +401,17 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         if run.get("archived_at") is None:
             raise HTTPException(409, "Archive the evaluation run before deleting it")
         attempt_ids = [str(item["id"]) for item in store.list_documents("sample_attempts", query={"run_id": run_id})]
-        report_ids = [str(item["id"]) for item in store.list_documents("reports", query={"run_id": run_id})]
+        reports = store.list_documents("reports", query={"run_id": run_id})
+        report_ids = [str(item["id"]) for item in reports]
         if attempt_ids:
             store.delete_documents("human_reviews", {"sample_attempt_id": {"$in": attempt_ids}})
             store.delete_documents("judge_assessments", {"sample_attempt_id": {"$in": attempt_ids}})
             store.delete_documents("judge_assessments", {"comparison_sample_attempt_id": {"$in": attempt_ids}})
         if report_ids:
             store.delete_documents("report_shares", {"report_id": {"$in": report_ids}})
+        for report in reports:
+            if isinstance(report.get("artifact_path"), str):
+                delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
         store.delete_documents("task_units", {"run_id": run_id})
         store.delete_documents("sample_attempts", {"run_id": run_id})
         store.delete_documents("reports", {"run_id": run_id})
@@ -418,6 +423,8 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         raise HTTPException(404, "Evaluation run not found")
     if run.archived_at is None:
         raise HTTPException(409, "Archive the evaluation run before deleting it")
+    for report in session.scalars(select(Report).where(Report.run_id == run.id)):
+        delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
     session.delete(run)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

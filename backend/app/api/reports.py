@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import base64
 import secrets
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,9 @@ from app.services.mongo_reports import generate_mongo_report
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 public_router = APIRouter(prefix="/shared-reports", tags=["shared reports"])
+_PASSWORD_ATTEMPTS: dict[str, list[datetime]] = {}
+_PASSWORD_WINDOW = timedelta(minutes=5)
+_PASSWORD_ATTEMPT_LIMIT = 5
 
 
 class ReportCreate(BaseModel):
@@ -104,7 +108,7 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
         now = datetime.now(timezone.utc); expires_at = payload.expires_at or now + timedelta(days=7)
         if _as_utc(expires_at) <= now: raise HTTPException(422, "Share expiration must be in the future.")
         token = secrets.token_urlsafe(32); password = payload.password.get_secret_value() if payload.password is not None else None
-        share = store.insert_document("report_shares", {"report_id": report_id, "token_hash": _hash_value(token), "password_hash": _hash_value(password) if password else None, "expires_at": expires_at, "allow_download": payload.allow_download, "revoked_at": None, "created_at": now})
+        share = store.insert_document("report_shares", {"report_id": report_id, "token_hash": _hash_value(token), "password_hash": _hash_password(password) if password else None, "expires_at": expires_at, "allow_download": payload.allow_download, "revoked_at": None, "created_at": now})
         return _share_document_response(share, request, token)
     assert session is not None
     report = _get_report(report_id, session)
@@ -119,7 +123,7 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
     share = ReportShare(
         report_id=report.id,
         token_hash=_hash_value(token),
-        password_hash=_hash_value(password) if password else None,
+        password_hash=_hash_password(password) if password else None,
         expires_at=expires_at,
         allow_download=payload.allow_download,
     )
@@ -177,7 +181,7 @@ def open_shared_report(token: str, request: Request, session: SessionDependency)
         matches=store.list_documents("report_shares",query={"token_hash":_hash_value(token)})
         share=matches[0] if matches else None; now=datetime.now(timezone.utc)
         if share is None or share.get("revoked_at") is not None or _as_utc(share["expires_at"]) <= now: raise HTTPException(404,"Shared report not found or expired")
-        if share.get("password_hash") is not None and not hmac.compare_digest(_hash_value(request.headers.get("X-Report-Password", "")),str(share["password_hash"])): raise HTTPException(401,"Valid report-share password required")
+        if share.get("password_hash") is not None and not _verify_share_password(str(share["id"]), request.headers.get("X-Report-Password", ""), str(share["password_hash"]), now): raise HTTPException(401,"Shared report access was denied")
         report=store.get_document("reports",str(share["report_id"]))
         if report is None: raise HTTPException(404,"Report not found")
         return _report_file_response(type("Report",(),report)(),download=bool(share["allow_download"]))
@@ -188,8 +192,8 @@ def open_shared_report(token: str, request: Request, session: SessionDependency)
         raise HTTPException(404, "Shared report not found or expired")
     if share.password_hash is not None:
         supplied = request.headers.get("X-Report-Password", "")
-        if not hmac.compare_digest(_hash_value(supplied), share.password_hash):
-            raise HTTPException(401, "Valid report-share password required")
+        if not _verify_share_password(share.id, supplied, share.password_hash, now):
+            raise HTTPException(401, "Shared report access was denied")
     report = _get_report(share.report_id, session)
     return _report_file_response(report, download=share.allow_download)
 
@@ -229,6 +233,35 @@ def _share_document_response(share: dict, request: Request, token: str | None = 
 
 def _hash_value(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _hash_password(value: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(value.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return "scrypt$16384$8$1$" + base64.b64encode(salt).decode("ascii") + "$" + base64.b64encode(digest).decode("ascii")
+
+
+def _verify_share_password(share_id: str, supplied: str, encoded: str, now: datetime) -> bool:
+    attempts = [attempt for attempt in _PASSWORD_ATTEMPTS.get(share_id, []) if now - attempt < _PASSWORD_WINDOW]
+    if len(attempts) >= _PASSWORD_ATTEMPT_LIMIT:
+        _PASSWORD_ATTEMPTS[share_id] = attempts
+        return False
+    valid = False
+    if encoded.startswith("scrypt$"):
+        try:
+            _, n, r, p, salt, digest = encoded.split("$", 5)
+            computed = hashlib.scrypt(supplied.encode("utf-8"), salt=base64.b64decode(salt), n=int(n), r=int(r), p=int(p), dklen=len(base64.b64decode(digest)))
+            valid = hmac.compare_digest(computed, base64.b64decode(digest))
+        except (ValueError, TypeError):
+            valid = False
+    else:
+        valid = hmac.compare_digest(_hash_value(supplied), encoded)
+    if valid:
+        _PASSWORD_ATTEMPTS.pop(share_id, None)
+    else:
+        attempts.append(now)
+        _PASSWORD_ATTEMPTS[share_id] = attempts
+    return valid
 
 
 def _as_utc(value: datetime) -> datetime:
