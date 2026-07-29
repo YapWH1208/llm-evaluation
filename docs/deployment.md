@@ -69,6 +69,8 @@ This delivery validates the Compose configuration statically and does not run Do
 
 `auto_migrate` is the default startup mode. Production services can set `LLE_DATABASE_INIT_MODE=validate` and perform migrations through CI or the CLI. SQLite backups can be enabled with `LLE_DATABASE_BACKUP_BEFORE_MIGRATE=true`; the backup uses SQLite's online backup API and writes to `<data-root>/backups`.
 
+Validation checks migration records, tables, columns, indexes, unique constraints, foreign keys, and Mongo collection validators. Very early SQLite databases retain their original `evaluation_runs` table without three later foreign-key declarations; this compatibility exception is reported in source and avoids a destructive table rebuild, while newly created and all other persisted structures remain checked.
+
 Before upgrades, run `python -m app.cli database preview`. After upgrades, run `python -m app.cli database validate` and check `/health` for the expected schema version.
 
 ## Operational checks

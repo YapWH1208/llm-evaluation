@@ -15,6 +15,11 @@ from app.db.models import Base, SchemaMigration, SchemaVersion
 
 
 INITIALIZATION_MODES = frozenset({"auto_migrate", "validate", "preview"})
+_LEGACY_UNENFORCEABLE_FOREIGN_KEYS = frozenset({
+    ("evaluation_runs", "model_endpoint_id"),
+    ("evaluation_runs", "prompt_package_id"),
+    ("evaluation_runs", "suite_id"),
+})
 
 
 class DatabaseConfigurationError(ValueError):
@@ -156,6 +161,8 @@ class Database:
                         constraint.referred_table.name if constraint.referred_table is not None else "",
                         tuple(element.column.name for element in constraint.elements),
                     )
+                    if (table.name, ",".join(expected[0])) in _LEGACY_UNENFORCEABLE_FOREIGN_KEYS:
+                        continue
                     if expected not in actual_foreign_keys:
                         missing_foreign_keys.append(f"{table.name}.{','.join(expected[0])}")
             current_version = 0
