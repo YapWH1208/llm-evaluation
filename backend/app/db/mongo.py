@@ -30,10 +30,17 @@ class MongoValidation:
     current_version: int
     expected_version: int
     missing_collections: tuple[str, ...]
+    missing_indexes: tuple[str, ...] = ()
+    missing_migrations: tuple[str, ...] = ()
 
     @property
     def is_valid(self) -> bool:
-        return self.current_version == self.expected_version and not self.missing_collections
+        return (
+            self.current_version == self.expected_version
+            and not self.missing_collections
+            and not self.missing_indexes
+            and not self.missing_migrations
+        )
 
 
 _COLLECTIONS = (
@@ -139,11 +146,31 @@ class MongoDocumentStore:
     def validate_schema(self) -> MongoValidation:
         collection_names = set(self.database.list_collection_names())
         missing_collections = tuple(sorted(set(_COLLECTIONS) - collection_names))
+        missing_indexes: list[str] = []
+        for collection_name, definitions in _INDEXES.items():
+            if collection_name not in collection_names:
+                continue
+            existing_indexes = _existing_index_signatures(self.database[collection_name])
+            for keys, _options in definitions:
+                if _index_signature(keys) not in existing_indexes:
+                    missing_indexes.append(f"{collection_name}.{_index_name(keys)}")
+        applied = {
+            int(document.get("version", 0)): str(document.get("migration_id", ""))
+            for document in self.database["schema_migrations"].find({})
+            if isinstance(document, dict)
+        } if "schema_migrations" in collection_names else {}
+        missing_migrations = [
+            migration.migration_id
+            for migration in MIGRATIONS
+            if applied.get(migration.version) != migration.migration_id
+        ]
         return MongoValidation(
             database_kind="mongodb",
             current_version=self._current_version(),
             expected_version=self.CURRENT_SCHEMA_VERSION,
             missing_collections=missing_collections,
+            missing_indexes=tuple(sorted(missing_indexes)),
+            missing_migrations=tuple(sorted(missing_migrations)),
         )
 
     def initialize(self, mode: str = "auto_migrate") -> MongoValidation | tuple[Migration, ...]:
@@ -157,7 +184,9 @@ class MongoDocumentStore:
             if not validation.is_valid:
                 raise MongoValidationError(
                     f"MongoDB validation failed: version {validation.current_version}/{validation.expected_version}; "
-                    f"missing collections: {', '.join(validation.missing_collections) or 'none'}."
+                    f"missing collections: {', '.join(validation.missing_collections) or 'none'}; "
+                    f"missing indexes: {', '.join(validation.missing_indexes) or 'none'}; "
+                    f"missing migrations: {', '.join(validation.missing_migrations) or 'none'}."
                 )
             return validation
 
@@ -462,6 +491,28 @@ class MongoDocumentStore:
         document = self.database["schema_versions"].find_one(sort=[("version", -1)])
         version = document.get("version", 0) if isinstance(document, dict) else 0
         return int(version) if isinstance(version, int | float) else 0
+
+
+def _index_signature(keys: Any) -> tuple[tuple[str, int], ...]:
+    return tuple((str(key), int(direction)) for key, direction in keys)
+
+
+def _index_name(keys: Any) -> str:
+    return "_".join(f"{key}_{direction}" for key, direction in _index_signature(keys))
+
+
+def _existing_index_signatures(collection: Any) -> set[tuple[tuple[str, int], ...]]:
+    list_indexes = getattr(collection, "list_indexes", None)
+    if callable(list_indexes):
+        return {
+            tuple((str(key), int(direction)) for key, direction in dict(index.get("key", {})).items())
+            for index in list_indexes()
+            if isinstance(index, dict)
+        }
+    return {
+        _index_signature(keys)
+        for keys, _options in getattr(collection, "indexes", ())
+    }
 
 
 def _return_document_after() -> bool:

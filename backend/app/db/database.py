@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event, select
+from sqlalchemy import Engine, UniqueConstraint, create_engine, event, inspect, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -31,10 +31,21 @@ class DatabaseValidation:
     current_version: int
     expected_version: int
     missing_tables: tuple[str, ...]
+    missing_columns: tuple[str, ...] = ()
+    missing_indexes: tuple[str, ...] = ()
+    missing_constraints: tuple[str, ...] = ()
+    missing_migrations: tuple[str, ...] = ()
 
     @property
     def is_valid(self) -> bool:
-        return self.current_version == self.expected_version and not self.missing_tables
+        return (
+            self.current_version == self.expected_version
+            and not self.missing_tables
+            and not self.missing_columns
+            and not self.missing_indexes
+            and not self.missing_constraints
+            and not self.missing_migrations
+        )
 
 
 class Database:
@@ -97,18 +108,64 @@ class Database:
         """Validate tables and schema version without creating or changing anything."""
 
         with self.engine.connect() as connection:
-            table_names = set(connection.dialect.get_table_names(connection))
+            inspector = inspect(connection)
+            table_names = set(inspector.get_table_names())
             missing_tables = tuple(sorted(set(Base.metadata.tables) - table_names))
+            missing_columns: list[str] = []
+            missing_indexes: list[str] = []
+            missing_constraints: list[str] = []
+            for table in Base.metadata.sorted_tables:
+                if table.name not in table_names:
+                    continue
+                actual_columns = {column["name"] for column in inspector.get_columns(table.name)}
+                missing_columns.extend(
+                    f"{table.name}.{column.name}"
+                    for column in table.columns
+                    if column.name not in actual_columns
+                )
+                actual_indexes = {index.get("name") for index in inspector.get_indexes(table.name)}
+                missing_indexes.extend(
+                    f"{table.name}.{index.name}"
+                    for index in table.indexes
+                    if index.name and index.name not in actual_indexes
+                )
+                actual_constraints = {constraint.get("name") for constraint in inspector.get_unique_constraints(table.name)}
+                missing_constraints.extend(
+                    f"{table.name}.{constraint.name}"
+                    for constraint in table.constraints
+                    if isinstance(constraint, UniqueConstraint)
+                    and constraint.name
+                    and constraint.name not in actual_constraints
+                )
             current_version = 0
+            missing_migrations: list[str] = []
             if "schema_versions" in table_names:
                 current_version = connection.scalar(
                     select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)
                 ) or 0
+            if "schema_migrations" not in table_names:
+                missing_migrations = [migration.migration_id for migration in MIGRATIONS]
+            else:
+                applied = {
+                    int(version): str(migration_id)
+                    for version, migration_id in connection.execute(
+                        select(SchemaMigration.version, SchemaMigration.migration_id)
+                    )
+                }
+                missing_migrations = [
+                    migration.migration_id
+                    for migration in MIGRATIONS
+                    if applied.get(migration.version) != migration.migration_id
+                ]
         return DatabaseValidation(
             database_kind=self.settings.database_kind,
             current_version=current_version,
             expected_version=self.CURRENT_SCHEMA_VERSION,
             missing_tables=missing_tables,
+            missing_columns=tuple(sorted(missing_columns)),
+            missing_indexes=tuple(sorted(missing_indexes)),
+            missing_constraints=tuple(sorted(missing_constraints)),
+            missing_migrations=tuple(sorted(missing_migrations)),
         )
 
     def initialize(self, mode: str | None = None) -> DatabaseValidation | tuple[Migration, ...]:
@@ -125,7 +182,11 @@ class Database:
             if not validation.is_valid:
                 raise DatabaseValidationError(
                     f"Database validation failed: version {validation.current_version}/{validation.expected_version}; "
-                    f"missing tables: {', '.join(validation.missing_tables) or 'none'}."
+                    f"missing tables: {', '.join(validation.missing_tables) or 'none'}; "
+                    f"missing columns: {', '.join(validation.missing_columns) or 'none'}; "
+                    f"missing indexes: {', '.join(validation.missing_indexes) or 'none'}; "
+                    f"missing constraints: {', '.join(validation.missing_constraints) or 'none'}; "
+                    f"missing migrations: {', '.join(validation.missing_migrations) or 'none'}."
                 )
             return validation
 
@@ -154,7 +215,14 @@ class Database:
                 current_version = migration.version
         validation = self.validate_schema()
         if not validation.is_valid:
-            raise DatabaseValidationError("Database initialization completed but schema validation did not pass.")
+            raise DatabaseValidationError(
+                "Database initialization completed but schema validation did not pass: "
+                f"tables={', '.join(validation.missing_tables) or 'none'}; "
+                f"columns={', '.join(validation.missing_columns) or 'none'}; "
+                f"indexes={', '.join(validation.missing_indexes) or 'none'}; "
+                f"constraints={', '.join(validation.missing_constraints) or 'none'}; "
+                f"migrations={', '.join(validation.missing_migrations) or 'none'}."
+            )
         return validation
 
     def backup_before_migration(self) -> Path | None:

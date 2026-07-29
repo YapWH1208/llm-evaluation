@@ -37,7 +37,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 23))
     database.initialize()
     database.initialize()
 
@@ -50,9 +50,11 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     judge_columns = {column["name"] for column in inspect(database.engine).get_columns("judge_assessments")}
     assert {"comparison_sample_attempt_id", "answer_order", "swap_test_group_id", "selected_answer"} <= judge_columns
     dataset_columns = {column["name"] for column in inspect(database.engine).get_columns("dataset_versions")}
-    assert {"size_bytes", "prepared_path"} <= dataset_columns
+    assert {"size_bytes", "prepared_path", "credential_binding_id"} <= dataset_columns
+    report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
+    assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 21
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 22
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -104,5 +106,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         aggregate_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 18))
         assert aggregate_migration is not None
         assert aggregate_migration.migration_id == "20260728_add_task_hierarchy_and_aggregate_metrics"
+        remediation_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 22))
+        assert remediation_migration is not None
+        assert remediation_migration.migration_id == "20260729_add_remediation_persistence_contracts"
     assert database.migration_preview() == ()
     database.dispose()

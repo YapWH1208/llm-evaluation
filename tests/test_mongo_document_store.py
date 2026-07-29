@@ -8,9 +8,10 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+import pytest
 
 from app.core.config import Settings
-from app.db.mongo import MongoDocumentStore, MongoValidation
+from app.db.mongo import MongoDocumentStore, MongoValidation, MongoValidationError
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
 from app.db.models import CapabilityDetection
@@ -149,6 +150,22 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert len(client["platform"]["schema_migrations"].documents) == len(MIGRATIONS)
     assert len(client["platform"]["task_units"].indexes) == 1
     assert len(client["platform"]["users"].indexes) == 2
+
+
+def test_mongo_validation_detects_missing_index_and_migration() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    client["platform"]["task_units"].indexes.clear()
+    client["platform"]["schema_migrations"].documents = [
+        document for document in client["platform"]["schema_migrations"].documents if document["version"] != 22
+    ]
+
+    validation = store.validate_schema()
+    assert "task_units.status_1_next_retry_at_1_priority_-1_created_at_1" in validation.missing_indexes
+    assert "20260729_add_remediation_persistence_contracts" in validation.missing_migrations
+    with pytest.raises(MongoValidationError):
+        store.initialize("validate")
 
 
 def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
