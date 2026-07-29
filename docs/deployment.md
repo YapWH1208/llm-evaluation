@@ -20,7 +20,7 @@ python -m app.cli database initialize
 python -m app.cli database validate
 ```
 
-The task lease protocol uses conditional state updates and lease tokens. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
+The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
 
 Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; administrators can set a user ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
 
