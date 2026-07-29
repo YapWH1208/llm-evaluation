@@ -4,6 +4,16 @@ An API-hosted model evaluation workspace with encrypted endpoint credentials, re
 
 ## Quick start (SQLite)
 
+For a one-command local launch, run the platform-specific script from the repository root:
+
+- Windows: double-click `quick-launch.bat`.
+- macOS: run `chmod +x quick-launch.command && ./quick-launch.command`.
+- Linux: run `chmod +x quick-launch.sh && ./quick-launch.sh`.
+
+The launchers install missing development dependencies, start the API and web app, and create `data/.lle-secret-key` on first run. That key is ignored by Git and keeps encrypted endpoint credentials available across restarts. Set `LLE_SECRET_ENCRYPTION_KEY` yourself to use a different stable key.
+
+To start the services manually instead:
+
 ```powershell
 python -m pip install -e ".[dev]"
 $env:LLE_SECRET_ENCRYPTION_KEY = (python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
