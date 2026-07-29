@@ -13,7 +13,7 @@ def _payload() -> dict[str, object]:
 
 
 def test_benchmark_definition_can_be_read_updated_and_disabled(tmp_path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as api:
         created = api.post("/api/v1/benchmarks", json=_payload())
         assert created.status_code == 201
@@ -32,7 +32,7 @@ def test_benchmark_definition_can_be_read_updated_and_disabled(tmp_path) -> None
 
 def test_mongodb_benchmark_definition_can_be_updated(tmp_path) -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         created = api.post("/api/v1/benchmarks", json=_payload()).json()
@@ -42,7 +42,7 @@ def test_mongodb_benchmark_definition_can_be_updated(tmp_path) -> None:
 
 
 def test_updating_a_custom_manifest_removes_its_previous_runtime_plugin(tmp_path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     benchmark_key = ("runtime-update-smoke", "1")
     try:
         with TestClient(app) as api:

@@ -15,7 +15,7 @@ class SuccessfulTester:
 
 def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -35,7 +35,7 @@ def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> Non
 
 
 def test_worker_events_expose_queue_worker_and_error_snapshots(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
     with TestClient(app) as client:
         stream = client.get("/api/v1/workers/events?once=true")
         assert stream.status_code == 200

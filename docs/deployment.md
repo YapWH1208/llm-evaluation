@@ -6,6 +6,8 @@ Use the default `sqlite:///./data/llm_evaluation.db` URL for a single-host works
 
 Set `LLE_SECRET_ENCRYPTION_KEY` before adding an endpoint. Use a stable Fernet key in the platform secret store; changing it prevents decryption of existing endpoint credentials.
 
+Set `LLE_ADMIN_TOKEN` before serving shared or remote traffic. The API refuses to start without it unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development. The local launcher sets that opt-in only when no administrator token is supplied and binds both services to `127.0.0.1`.
+
 ## PostgreSQL team mode
 
 Install the PostgreSQL dependency extra, set `LLE_DATABASE_URL` to a `postgresql+psycopg://` URL, and run the database CLI before serving traffic:
@@ -46,10 +48,11 @@ Dataset versions accept HTTP(S) and Git-release URLs, `hf://owner/repository/pat
 
 ## Docker Compose
 
-1. Generate a Fernet key.
-2. Replace `LLE_SECRET_ENCRYPTION_KEY` and the PostgreSQL password in `docker-compose.yml` before use.
-3. Run `docker compose up --build`.
-4. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote.
+1. Generate a Fernet key and choose a strong administrator token.
+2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
+3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote.
+
+This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
 
 ## Migration and backup policy
 

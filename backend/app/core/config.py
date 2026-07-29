@@ -15,6 +15,7 @@ class Settings:
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     data_root: str = "./data"
     admin_token: str | None = None
+    allow_insecure_local_auth: bool = False
     database_init_mode: str = "auto_migrate"
     database_backup_before_migrate: bool = False
     mongodb_database: str | None = None
@@ -32,11 +33,25 @@ class Settings:
             cors_origins=tuple(configured_origins.split(",")) if configured_origins else DEFAULT_CORS_ORIGINS,
             data_root=getenv("LLE_DATA_ROOT", "./data"),
             admin_token=getenv("LLE_ADMIN_TOKEN"),
+            allow_insecure_local_auth=_environment_bool("LLE_ALLOW_INSECURE_LOCAL_AUTH"),
             database_init_mode=getenv("LLE_DATABASE_INIT_MODE", "auto_migrate"),
             database_backup_before_migrate=getenv("LLE_DATABASE_BACKUP_BEFORE_MIGRATE", "false").lower() in {"1", "true", "yes"},
             mongodb_database=getenv("LLE_MONGODB_DATABASE"),
             system_max_concurrency=_optional_positive_int(getenv("LLE_SYSTEM_MAX_CONCURRENCY")),
             worker_max_concurrency=_optional_positive_int(getenv("LLE_WORKER_MAX_CONCURRENCY")),
+        )
+
+    @classmethod
+    def local_development(cls, **kwargs: object) -> "Settings":
+        """Create an explicitly unauthenticated configuration for local tools and tests."""
+
+        return cls(allow_insecure_local_auth=True, **kwargs)
+
+    def validate_authentication(self) -> None:
+        if self.admin_token or self.allow_insecure_local_auth:
+            return
+        raise ValueError(
+            "LLE_ADMIN_TOKEN is required unless LLE_ALLOW_INSECURE_LOCAL_AUTH=true is explicitly set for local development."
         )
 
     @property
@@ -75,3 +90,15 @@ def _optional_positive_int(value: str | None) -> int | None:
     if parsed < 1:
         raise ValueError("Concurrency environment settings must be positive integers.")
     return parsed
+
+
+def _environment_bool(name: str) -> bool:
+    value = getenv(name)
+    if value is None or not value.strip():
+        return False
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes"}:
+        return True
+    if normalized in {"0", "false", "no"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value.")

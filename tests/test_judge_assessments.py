@@ -39,7 +39,7 @@ class JsonJudgeExecutor:
 
 def test_llm_judge_saves_independent_assessment_evidence(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         model_executor=JsonJudgeExecutor(),
     )
     with TestClient(app) as client:
@@ -63,7 +63,7 @@ def test_llm_judge_saves_independent_assessment_evidence(tmp_path: Path) -> None
 
 
 def test_target_model_cannot_judge_its_own_attempt(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:
         target = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"target-key","model_name":"target-model"}).json()
         with app.state.database.get_session() as session:
@@ -81,7 +81,7 @@ def test_target_model_cannot_judge_its_own_attempt(tmp_path: Path) -> None:
 def test_pairwise_judge_blinds_answers_runs_swap_test_and_detects_order_bias(tmp_path: Path) -> None:
     executor = JsonJudgeExecutor()
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         model_executor=executor,
     )
     with TestClient(app) as client:

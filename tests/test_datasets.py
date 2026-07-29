@@ -10,7 +10,7 @@ from app.main import create_app
 from app.services.datasets import DATASET_DOWNLOADER_PLUGINS, DatasetError, prepare_dataset_cache, register_dataset_downloader, resolve_dataset_source
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
-    app=create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
+    app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
     with TestClient(app) as client:
         created=client.post("/api/v1/datasets",json={"dataset_id":"demo","version":"1","license_text":"terms"})
         assert created.status_code==201
@@ -25,7 +25,7 @@ def test_dataset_supports_local_sources_and_explicit_credential_gates(tmp_path: 
     source = tmp_path / "source.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:
         local = client.post("/api/v1/datasets", json={"dataset_id":"local","version":"1","source_url":source.as_uri(),"checksum":checksum})
         assert local.status_code == 201
@@ -49,7 +49,7 @@ def test_dataset_supports_local_sources_and_explicit_credential_gates(tmp_path: 
 def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp_path: Path) -> None:
     content = b'{"question":"what is 2 + 2?","answer":"4"}\n'
     checksum = hashlib.sha256(content).hexdigest()
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:
         created = client.post("/api/v1/datasets", json={"dataset_id":"uploaded","version":"1","checksum":checksum})
         assert created.status_code == 201

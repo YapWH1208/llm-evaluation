@@ -9,7 +9,7 @@ from app.benchmarks import unregister_manifest_plugin
 
 
 def test_builtin_benchmark_manifest_is_registered_and_selectable(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:
         benchmarks = client.get("/api/v1/benchmarks")
         assert benchmarks.status_code == 200
@@ -36,7 +36,7 @@ def test_builtin_benchmark_manifest_is_registered_and_selectable(tmp_path: Path)
 
 
 def test_inline_custom_pack_is_runnable_and_reloaded_from_storage(tmp_path: Path) -> None:
-    settings = Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode())
     pack = {
         "pack_name": "custom-smoke",
         "benchmarks": [{

@@ -137,7 +137,7 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
 
 def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
 
     assert store.settings.mongodb_database_name == "platform"
     assert store.migration_preview() == MIGRATIONS
@@ -153,7 +153,7 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
 
 def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform", mongodb_database="override"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform", mongodb_database="override"), client=client)
     store.initialize()
     now = datetime.now(timezone.utc)
     tasks = client["override"]["task_units"]
@@ -176,7 +176,7 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
 
 def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
     store.initialize()
     now = datetime.now(timezone.utc)
     first_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
@@ -211,7 +211,7 @@ def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, c
         def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(cli.Settings, "from_environment", lambda: Settings(database_url="mongodb://mongo.test/platform"))
+    monkeypatch.setattr(cli.Settings, "from_environment", lambda: Settings.local_development(database_url="mongodb://mongo.test/platform"))
     monkeypatch.setattr(cli, "MongoDocumentStore", FakeMongoStore)
 
     assert cli.main(["database", "initialize"]) == 0
@@ -226,7 +226,7 @@ class SuccessfulTester:
 
 def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -270,7 +270,7 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
             ]
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -320,7 +320,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
             )
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -362,7 +362,7 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
     )
     monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -385,7 +385,7 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
 
 def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -408,7 +408,7 @@ def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypa
     )
     monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -428,7 +428,7 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(
         settings,
         connection_tester=SuccessfulTester(),
@@ -460,7 +460,7 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
 
 def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         benchmarks = api.get("/api/v1/benchmarks")
@@ -491,7 +491,7 @@ def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "ok")
 
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
@@ -516,7 +516,7 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         data_root=str(tmp_path),
         secret_encryption_key=Fernet.generate_key().decode(),

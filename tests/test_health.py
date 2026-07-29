@@ -11,7 +11,7 @@ from app.main import create_app
 
 def test_health_initializes_the_configured_sqlite_database(tmp_path: Path) -> None:
     database_path = tmp_path / "platform.db"
-    app = create_app(Settings(database_url=f"sqlite:///{database_path}"))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{database_path}"))
 
     with TestClient(app) as client:
         response = client.get("/health")

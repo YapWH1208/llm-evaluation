@@ -55,6 +55,10 @@ if not defined LLE_SECRET_ENCRYPTION_KEY (
     for /f "usebackq delims=" %%K in ("data\.lle-secret-key") do set "LLE_SECRET_ENCRYPTION_KEY=%%K"
 )
 
+if not defined LLE_ADMIN_TOKEN (
+    if not defined LLE_ALLOW_INSECURE_LOCAL_AUTH set "LLE_ALLOW_INSECURE_LOCAL_AUTH=true"
+)
+
 if not defined LLE_SECRET_ENCRYPTION_KEY (
     echo LLE_SECRET_ENCRYPTION_KEY is empty.
     exit /b 1

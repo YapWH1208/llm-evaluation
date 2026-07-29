@@ -10,7 +10,7 @@ from app.db.migrations import MIGRATIONS
 def test_database_preview_validation_and_sqlite_backup(tmp_path: Path) -> None:
     database_path = tmp_path / "platform.db"
     database = Database(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{database_path}",
             data_root=str(tmp_path / "data"),
         )
@@ -34,5 +34,5 @@ def test_database_preview_validation_and_sqlite_backup(tmp_path: Path) -> None:
 
 
 def test_database_kind_recognizes_postgresql_and_mongodb_urls() -> None:
-    assert Settings(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "postgresql"
-    assert Settings(database_url="mongodb://host/db").database_kind == "mongodb"
+    assert Settings.local_development(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "postgresql"
+    assert Settings.local_development(database_url="mongodb://host/db").database_kind == "mongodb"

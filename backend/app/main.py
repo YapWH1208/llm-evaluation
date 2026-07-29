@@ -73,6 +73,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        settings.validate_authentication()
         if document_store is not None:
             document_store.initialize()
             _ensure_mongo_builtin_benchmarks(document_store)
@@ -100,7 +101,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
     app.state.settings = settings
@@ -137,6 +138,8 @@ def create_app(
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if not request.url.path.startswith("/api/v1"):
             return await call_next(request)
         role, actor_id = _authenticate_request(request, settings, database, document_store)
@@ -197,7 +200,9 @@ def _authenticate_request(
     document_store: MongoDocumentStore | None,
 ) -> tuple[str | None, str | None]:
     if not settings.admin_token:
-        return UserRole.ADMIN.value, None
+        if settings.allow_insecure_local_auth:
+            return UserRole.ADMIN.value, None
+        return None, None
     supplied = request.headers.get("Authorization", "")
     expected = f"Bearer {settings.admin_token}"
     if hmac.compare_digest(supplied, expected):

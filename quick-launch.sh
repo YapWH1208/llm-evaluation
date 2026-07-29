@@ -42,6 +42,10 @@ if [[ -z "$LLE_SECRET_ENCRYPTION_KEY" ]]; then
     exit 1
 fi
 
+if [[ -z "${LLE_ADMIN_TOKEN:-}" && -z "${LLE_ALLOW_INSECURE_LOCAL_AUTH:-}" ]]; then
+    export LLE_ALLOW_INSECURE_LOCAL_AUTH=true
+fi
+
 if [[ "${1:-}" == "--check" ]]; then
     echo "Quick launch checks passed."
     exit 0

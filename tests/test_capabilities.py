@@ -12,7 +12,7 @@ from app.services.capability_detector import DEFAULT_CAPABILITY_KEYS, OpenAIChat
 from app.db.models import ModelEndpoint
 
 def test_capabilities_keep_user_declaration_separate(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"m"}).json()
         response = client.put(f"/api/v1/model-endpoints/{endpoint['id']}/capabilities", json={"capability_key":"text_input","user_declared_status":"supported"})
@@ -34,7 +34,7 @@ def test_capability_detection_records_safe_evidence_without_overwriting_user_dec
             ]
 
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()),
         capability_detector=Detector(),
     )
     with TestClient(app) as client:
@@ -55,7 +55,7 @@ def test_capability_conflicts_are_directly_queryable_with_resolution_options(tmp
         def detect(self, endpoint, api_key: str, capability_keys: list[str]):
             return [CapabilityDetectionResult(key, CapabilityDetection.FAILED, {"adapter_version": "test/1", "outcome": "failed"}) for key in capability_keys]
 
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()), capability_detector=Detector())
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()), capability_detector=Detector())
     with TestClient(app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "m"}).json()
         client.put(f"/api/v1/model-endpoints/{endpoint['id']}/capabilities", json={"capability_key": "text_input", "user_declared_status": "supported"})

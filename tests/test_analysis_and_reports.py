@@ -52,7 +52,7 @@ def _create_completed_run(client: TestClient, model_name: str) -> str:
 
 def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             data_root=str(tmp_path / "data"),
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),

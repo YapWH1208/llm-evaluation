@@ -28,7 +28,7 @@ def test_openai_connection_probe_uses_a_small_protected_request() -> None:
         base_url="https://models.example.test/v1",
         model_name="test-model",
         encrypted_api_key="not-used-by-the-tester",
-        api_key_mask="••••key",
+        api_key_mask="鈥⑩€⑩€⑩€ey",
         default_request_body={"temperature": 0.8, "model": "must-not-be-used"},
     )
 
@@ -92,7 +92,7 @@ def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
             return ConnectionTestResult(True, "Connection succeeded.", 200)
 
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
         ),

@@ -36,7 +36,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         )
     legacy_engine.dispose()
 
-    database = Database(Settings(database_url=f"sqlite:///{database_path}"))
+    database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
     assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
     database.initialize()
     database.initialize()
