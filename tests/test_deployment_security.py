@@ -17,6 +17,15 @@ def test_insecure_local_auth_requires_an_explicit_environment_flag(monkeypatch: 
         Settings.from_environment()
 
 
+def test_public_web_url_is_a_clean_absolute_http_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLE_PUBLIC_WEB_URL", "https://evaluation.example.test/")
+    assert Settings.from_environment().public_web_url == "https://evaluation.example.test"
+
+    monkeypatch.setenv("LLE_PUBLIC_WEB_URL", "https://evaluation.example.test/?token=secret")
+    with pytest.raises(ValueError, match="LLE_PUBLIC_WEB_URL"):
+        Settings.from_environment()
+
+
 def test_compose_requires_runtime_secrets_and_binds_api_to_loopback() -> None:
     compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
 

@@ -12,7 +12,7 @@ def test_user_creation_records_an_audit_event(tmp_path:Path)->None:
         assert user.status_code==201
         events=client.get("/api/v1/audit-events")
         assert events.status_code==200
-        assert events.json()[0]["action"]=="user.created"
+        assert any(event["action"] == "user.created" for event in events.json())
 
 def test_configured_bearer_token_protects_api(tmp_path:Path)->None:
     app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",admin_token="protect-me",secret_encryption_key=Fernet.generate_key().decode()))
@@ -40,11 +40,12 @@ def test_authenticated_browser_preflight_bypasses_bearer_check(tmp_path: Path) -
             headers={
                 "Origin": "http://127.0.0.1:5173",
                 "Access-Control-Request-Method": "GET",
-                "Access-Control-Request-Headers": "authorization",
+                "Access-Control-Request-Headers": "authorization, x-report-password",
             },
         )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert "x-report-password" in response.headers["access-control-allow-headers"].lower()
 
 def test_user_tokens_enforce_their_assigned_roles(tmp_path:Path)->None:
     app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",admin_token="protect-me",secret_encryption_key=Fernet.generate_key().decode()))

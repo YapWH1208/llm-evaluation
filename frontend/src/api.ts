@@ -171,6 +171,7 @@ export type AuditEvent = { id: string; actor_id: string | null; action: string; 
 export type SystemHealth = { status: string; database: string; schema_version: number; database_connected: boolean; disk: { available_bytes: number; total_bytes: number }; queue: { pending: number; active: number } };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+const publicApiBase = import.meta.env.VITE_PUBLIC_API_BASE_URL ?? apiBase.replace(/\/api\/v1$/, "");
 let bearerToken = window.sessionStorage.getItem("lle-api-token") ?? "";
 
 export class ApiError extends Error {
@@ -201,6 +202,46 @@ async function requestObjectUrl(path: string): Promise<string> {
   return URL.createObjectURL(await response.blob());
 }
 
+async function downloadObjectUrl(path: string): Promise<string> {
+  const response = await fetch(apiBase + path, {
+    headers: bearerToken ? { Authorization: "Bearer " + bearerToken } : undefined,
+  });
+  if (!response.ok) throw new ApiError("Download is unavailable.", response.status);
+  return URL.createObjectURL(await response.blob());
+}
+
+async function openSharedReportObjectUrl(token: string, password: string): Promise<string> {
+  const response = await fetch(`${publicApiBase}/shared-reports/${encodeURIComponent(token)}`, {
+    headers: password ? { "X-Report-Password": password } : undefined,
+  });
+  if (!response.ok) throw new ApiError("The shared report could not be opened.", response.status);
+  return URL.createObjectURL(await response.blob());
+}
+
+function subscribeToEvents(path: string, eventName: string, onEvent: () => void): () => void {
+  const controller = new AbortController();
+  void fetch(apiBase + path, {
+    headers: { Accept: "text/event-stream", ...(bearerToken ? { Authorization: "Bearer " + bearerToken } : {}) },
+    signal: controller.signal,
+  }).then(async (response) => {
+    if (!response.ok || !response.body) throw new ApiError("Event stream is unavailable.", response.status);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (!controller.signal.aborted) {
+      const next = await reader.read();
+      if (next.done) break;
+      buffer += decoder.decode(next.value, { stream: true });
+      const messages = buffer.split("\n\n");
+      buffer = messages.pop() ?? "";
+      for (const message of messages) {
+        if (message.split("\n").some((line) => line === "event: " + eventName)) onEvent();
+      }
+    }
+  }).catch(() => undefined);
+  return () => controller.abort();
+}
+
 async function systemRequest<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBase.replace(/\/api\/v1$/, "")}${path}`);
   if (!response.ok) throw new ApiError("System request failed.", response.status);
@@ -229,12 +270,13 @@ export const api = {
   listAttempts: (runId: string, offset = 0, limit = 200) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts?offset=${offset}&limit=${limit}`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
-  runEventsUrl: (runId: string) => `${apiBase}/evaluation-runs/${runId}/events`,
-  workerEventsUrl: () => `${apiBase}/workers/events`,
+  subscribeToRunEvents: (runId: string, onEvent: () => void) => subscribeToEvents("/evaluation-runs/" + runId + "/events", "run", onEvent),
+  subscribeToWorkerEvents: (onEvent: () => void) => subscribeToEvents("/workers/events", "worker", onEvent),
   createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
-  reportDownloadUrl: (reportId: string) => `${apiBase}/reports/${reportId}/download`,
+  downloadReport: (reportId: string) => downloadObjectUrl("/reports/" + reportId + "/download"),
+  openSharedReport: (token: string, password = "") => openSharedReportObjectUrl(token, password),
   dashboard: () => request<Dashboard>("/dashboard"),
   compare: (runA: string, runB: string) => request<Comparison>(`/comparisons?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`),
   listBenchmarks: () => request<Benchmark[]>("/benchmarks"),

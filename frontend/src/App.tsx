@@ -245,21 +245,17 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRun || !selectedRunInfo || !["queued", "running"].includes(selectedRunInfo.status)) return;
-    const events = new EventSource(api.runEventsUrl(selectedRun));
     const update = () => {
       void selectRun(selectedRun);
       void refresh();
     };
-    events.addEventListener("run", update);
-    return () => events.close();
+    return api.subscribeToRunEvents(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
 
   useEffect(() => {
     if (!["queue", "workers"].includes(view)) return;
-    const events = new EventSource(api.workerEventsUrl());
     const update = () => { void refresh().catch(showError); };
-    events.addEventListener("worker", update);
-    return () => events.close();
+    return api.subscribeToWorkerEvents(update);
   }, [view, refresh]);
 
   function showError(error: unknown) {
@@ -428,7 +424,9 @@ export default function App() {
       const comparisonType = ["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType);
       const report = await api.createReport(runId, format, reportType, comparisonType && relatedReportRunId ? [relatedReportRunId] : []);
       setNotice(`${format.toUpperCase()} ${reportType.replaceAll("_", " ")} report generated.`);
-      window.open(api.reportDownloadUrl(report.id), "_blank", "noopener,noreferrer");
+      const reportUrl = await api.downloadReport(report.id);
+      window.open(reportUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
       if (selectedRun === runId) await selectRun(runId);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -837,9 +835,10 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
   return <div className="comparison-result"><div className="metric-grid"><Metric label="A-only correct" value={comparison.outcomes.run_a_only_correct} detail="sample outcomes" /><Metric label="B-only correct" value={comparison.outcomes.run_b_only_correct} detail="sample outcomes" /><Metric label="Latency difference" value={`${display(comparison.differences.average_latency_ms)} ms`} detail="A minus B" /><Metric label="Cost difference" value={display(comparison.differences.estimated_cost, 6)} detail="A minus B" /></div><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>A - B</th></tr></thead><tbody><tr><td>Accuracy</td><td>{percent(comparison.run_a_summary.samples.accuracy)}</td><td>{percent(comparison.run_b_summary.samples.accuracy)}</td><td>{percent(comparison.differences.accuracy)}</td></tr><tr><td>Success rate</td><td>{percent(comparison.run_a_summary.samples.success_rate)}</td><td>{percent(comparison.run_b_summary.samples.success_rate)}</td><td>{percent(comparison.differences.success_rate)}</td></tr><tr><td>P95 latency</td><td>{display(comparison.run_a_summary.latency_ms.p95)} ms</td><td>{display(comparison.run_b_summary.latency_ms.p95)} ms</td><td>{display(comparison.differences.p95_latency_ms)} ms</td></tr><tr><td>Output tokens</td><td>{display(comparison.run_a_summary.tokens.output)}</td><td>{display(comparison.run_b_summary.tokens.output)}</td><td>{display(comparison.differences.output_tokens)}</td></tr></tbody></table></div></div>;
 }
 
-function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
+export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
   const [shareForm, setShareForm] = useState(initialShare);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function createShare(report: Report) {
     if (onShare) {
@@ -856,7 +855,51 @@ function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (repo
     setShareLink(share.share_url);
   }
 
-  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section><div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
+  async function downloadReport(report: Report) {
+    setDownloadError(null);
+    try {
+      const objectUrl = await api.downloadReport(report.id);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `evaluation-report.${report.format === "markdown" ? "md" : report.format}`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The report download failed.");
+    }
+  }
+
+  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>Download</button><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
+}
+
+export function SharedReportPage({ token }: { token: string }) {
+  const [password, setPassword] = useState("");
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [message, setMessage] = useState("Enter the optional share password to open this read-only report.");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
+
+  async function openReport(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const nextUrl = await api.openSharedReport(token, password);
+      setReportUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return nextUrl;
+      });
+      setMessage("The shared report is ready to view.");
+    } catch (_error) {
+      setMessage("The shared report could not be opened. Check the password, expiry, or link.");
+    } finally {
+      setPassword("");
+      setBusy(false);
+    }
+  }
+
+  return <main className="shared-report"><section className="panel"><p className="eyebrow">Shared evaluation report</p><h1>Read-only report access</h1><p className="muted">The password is sent only with this request and is never added to the URL or browser storage.</p><form className="form" onSubmit={openReport}><label>Share password (if required)<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? "Opening report…" : "Open report"}</button></form><p className={reportUrl ? "notice" : "muted"} aria-live="polite">{message}</p>{reportUrl && <div className="actions"><a href={reportUrl} target="_blank" rel="noreferrer">Open report in a new tab</a><a href={reportUrl} download="evaluation-report">Download report</a></div>}</section></main>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {

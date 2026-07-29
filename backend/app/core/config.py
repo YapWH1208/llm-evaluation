@@ -30,6 +30,7 @@ class Settings:
     secret_encryption_key: str | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     data_root: str = "./data"
+    public_web_url: str | None = None
     admin_token: str | None = None
     allow_insecure_local_auth: bool = False
     database_init_mode: str = "auto_migrate"
@@ -52,6 +53,7 @@ class Settings:
             secret_encryption_key=getenv("LLE_SECRET_ENCRYPTION_KEY"),
             cors_origins=tuple(configured_origins.split(",")) if configured_origins else DEFAULT_CORS_ORIGINS,
             data_root=getenv("LLE_DATA_ROOT", "./data"),
+            public_web_url=_optional_public_web_url(getenv("LLE_PUBLIC_WEB_URL")),
             admin_token=getenv("LLE_ADMIN_TOKEN"),
             allow_insecure_local_auth=_environment_bool("LLE_ALLOW_INSECURE_LOCAL_AUTH"),
             database_init_mode=getenv("LLE_DATABASE_INIT_MODE", "auto_migrate"),
@@ -106,6 +108,15 @@ class Settings:
             return self.mongodb_database
         path = urlparse(self.database_url).path.strip("/")
         return path.split("/", 1)[0] or "llm_evaluation"
+
+
+def _optional_public_web_url(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    parsed = urlparse(value.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+        raise ValueError("LLE_PUBLIC_WEB_URL must be an absolute HTTP(S) URL without a query or fragment.")
+    return value.strip().rstrip("/")
 
 
 def _optional_positive_int(value: str | None) -> int | None:

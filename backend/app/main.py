@@ -102,7 +102,7 @@ def create_app(
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "X-Report-Password"],
     )
     app.state.settings = settings
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester(max_response_bytes=settings.provider_response_max_bytes)

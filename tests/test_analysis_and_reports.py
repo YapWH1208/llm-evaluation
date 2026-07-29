@@ -2,6 +2,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from urllib.parse import urlsplit
 
 from app.core.config import Settings
 from app.main import create_app
@@ -56,6 +57,7 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             data_root=str(tmp_path / "data"),
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+            public_web_url="https://evaluation.example.test",
         ),
         connection_tester=SuccessfulTester(),
         model_executor=EvidenceExecutor(),
@@ -181,10 +183,12 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
             json={"password": "view-only-password"},
         )
         assert share.status_code == 201
-        assert client.get(share.json()["share_url"]).status_code == 401
-        public_report = client.get(share.json()["share_url"], headers={"X-Report-Password": "view-only-password"})
+        assert share.json()["share_url"].startswith("https://evaluation.example.test/shared-reports/")
+        share_path = urlsplit(share.json()["share_url"]).path
+        assert client.get(share_path).status_code == 401
+        public_report = client.get(share_path, headers={"X-Report-Password": "view-only-password"})
         assert public_report.status_code == 200
         assert "# Evaluation report" in public_report.text
         revoked = client.post(f"/api/v1/reports/{report.json()['id']}/shares/{share.json()['id']}/revoke")
         assert revoked.status_code == 200
-        assert client.get(share.json()["share_url"], headers={"X-Report-Password": "view-only-password"}).status_code == 404
+        assert client.get(share_path, headers={"X-Report-Password": "view-only-password"}).status_code == 404

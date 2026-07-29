@@ -61,7 +61,7 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 1. Generate a Fernet key and choose a strong administrator token.
 2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
-3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote.
+3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin; the static host must route `/shared-reports/<token>` back to the frontend entry point.
 
 This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
 

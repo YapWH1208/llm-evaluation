@@ -214,7 +214,7 @@ def _report_file_response(report: Report, *, download: bool) -> FileResponse:
 
 
 def _share_response(share: ReportShare, request: Request, token: str | None = None) -> ReportShareResponse:
-    base_url = str(request.base_url).rstrip("/")
+    base_url = request.app.state.settings.public_web_url or str(request.base_url).rstrip("/")
     return ReportShareResponse(
         id=share.id,
         report_id=share.report_id,
@@ -227,7 +227,7 @@ def _share_response(share: ReportShare, request: Request, token: str | None = No
 
 
 def _share_document_response(share: dict, request: Request, token: str | None = None) -> ReportShareResponse:
-    base_url=str(request.base_url).rstrip("/")
+    base_url=request.app.state.settings.public_web_url or str(request.base_url).rstrip("/")
     return ReportShareResponse(id=str(share["id"]),report_id=str(share["report_id"]),expires_at=share["expires_at"],allow_download=bool(share["allow_download"]),revoked_at=share.get("revoked_at"),created_at=share["created_at"],share_url=f"{base_url}/shared-reports/{token}" if token else None)
 
 
