@@ -202,13 +202,22 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     assert claimed is not None
     assert claimed["id"] == "high"
     assert claimed["status"] == "leased"
+    assert claimed["lease_version"] == 1
+    original_token = claimed["lease_token"]
     tasks.documents[1]["status"] = "running"
     tasks.documents[1]["lease_expires_at"] = now - timedelta(seconds=1)
     client["override"]["sample_attempts"].insert_one({"_id": "attempt", "task_id": "high", "status": "running"})
 
     assert store.reclaim_expired_leases() == 1
     assert tasks.documents[1]["status"] == "pending"
+    assert tasks.documents[1]["lease_version"] == 2
     assert client["override"]["sample_attempts"].documents[0]["status"] == "pending"
+    reclaimed = store.claim_task(worker_id="worker-b", lease_seconds=30)
+    assert reclaimed is not None
+    assert reclaimed["id"] == "high"
+    assert reclaimed["lease_version"] == 3
+    assert reclaimed["lease_token"] != original_token
+    assert store.heartbeat_task(task_id="high", lease_token=str(original_token)) is None
 
 
 def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:

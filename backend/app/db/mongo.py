@@ -58,6 +58,7 @@ _COLLECTIONS = (
     "evaluation_suites",
     "evaluation_runs",
     "task_units",
+    "queue_admission_locks",
     "sample_attempts",
     "aggregate_metrics",
     "reports",
@@ -225,7 +226,30 @@ class MongoDocumentStore:
     ) -> dict[str, Any] | None:
         """Atomically claim one due task after applying every admission ceiling."""
 
-        self.reclaim_expired_leases()
+        lock_owner = self._acquire_admission_lock()
+        if lock_owner is None:
+            return None
+        try:
+            return self._claim_task_locked(
+                worker_id=worker_id,
+                lease_seconds=lease_seconds,
+                run_id=run_id,
+                system_max_concurrency=system_max_concurrency,
+                worker_max_concurrency=worker_max_concurrency,
+            )
+        finally:
+            self._release_admission_lock(lock_owner)
+
+    def _claim_task_locked(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int,
+        run_id: str | None,
+        system_max_concurrency: int | None,
+        worker_max_concurrency: int | None,
+    ) -> dict[str, Any] | None:
+        self.reclaim_expired_leases(lock_held=True)
         now = _utc_now()
         query: dict[str, Any] = {
             "status": {"$in": ["pending", "retry_scheduled"]},
@@ -241,9 +265,10 @@ class MongoDocumentStore:
                 if parent is None or parent.get("status") != "succeeded":
                     continue
             if not task.get("run_id"):
+                lease_version = int(task.get("lease_version", 0))
                 document = self.database["task_units"].find_one_and_update(
-                    {"_id": task["id"], **query},
-                    {"$set": {"status": "leased", "leased_by": worker_id, "lease_token": str(uuid4()), "lease_expires_at": now + timedelta(seconds=lease_seconds), "heartbeat_at": now, "updated_at": now}},
+                    {"_id": task["id"], **query, **_lease_version_query(task, lease_version)},
+                    {"$set": {"status": "leased", "leased_by": worker_id, "lease_token": str(uuid4()), "lease_version": lease_version + 1, "lease_expires_at": now + timedelta(seconds=lease_seconds), "heartbeat_at": now, "updated_at": now}},
                     return_document=_return_document_after(),
                 )
                 if isinstance(document, dict):
@@ -264,13 +289,15 @@ class MongoDocumentStore:
                 continue
             if not self._reserve_endpoint_budget(endpoint=endpoint, task=task, now=now):
                 continue
+            lease_version = int(task.get("lease_version", 0))
             document = self.database["task_units"].find_one_and_update(
-                {"_id": task["id"], **query},
+                {"_id": task["id"], **query, **_lease_version_query(task, lease_version)},
                 {
                     "$set": {
                         "status": "leased",
                         "leased_by": worker_id,
                         "lease_token": str(uuid4()),
+                        "lease_version": lease_version + 1,
                         "lease_expires_at": now + timedelta(seconds=lease_seconds),
                         "heartbeat_at": now,
                         "updated_at": now,
@@ -369,10 +396,15 @@ class MongoDocumentStore:
         lease_seconds: int = 60,
     ) -> dict[str, Any] | None:
         now = _utc_now()
+        current = self.database["task_units"].find_one({"_id": task_id})
+        if not isinstance(current, dict):
+            return None
+        lease_version = int(current.get("lease_version", 0))
         document = self.database["task_units"].find_one_and_update(
             {
                 "_id": task_id,
                 "lease_token": lease_token,
+                **_lease_version_query(current, lease_version),
                 "status": {"$in": ["leased", "running"]},
                 "lease_expires_at": {"$gte": now},
             },
@@ -446,28 +478,48 @@ class MongoDocumentStore:
         document_ids = [str(item["id"]) for item in self.list_documents(collection_name, query=query)]
         return sum(self.delete_document(collection_name, document_id) for document_id in document_ids)
 
-    def reclaim_expired_leases(self) -> int:
+    def reclaim_expired_leases(self, *, lock_held: bool = False) -> int:
+        lock_owner = None if lock_held else self._acquire_admission_lock()
+        if not lock_held and lock_owner is None:
+            return 0
+        try:
+            return self._reclaim_expired_leases_locked()
+        finally:
+            if lock_owner is not None:
+                self._release_admission_lock(lock_owner)
+
+    def _reclaim_expired_leases_locked(self) -> int:
         now = _utc_now()
         leased = self.database["task_units"].find(
             {"status": {"$in": ["leased", "running"]}, "lease_expires_at": {"$lt": now}},
-            {"_id": 1},
         )
-        task_ids = [document["_id"] for document in leased]
+        task_ids: list[str] = []
+        for task in leased:
+            lease_version = int(task.get("lease_version", 0))
+            reclaimed = self.database["task_units"].find_one_and_update(
+                {
+                    "_id": task["_id"],
+                    "status": {"$in": ["leased", "running"]},
+                    "lease_expires_at": {"$lt": now},
+                    **_lease_version_query(task, lease_version),
+                },
+                {
+                    "$set": {
+                        "status": "pending",
+                        "leased_by": None,
+                        "lease_token": None,
+                        "lease_version": lease_version + 1,
+                        "lease_expires_at": None,
+                        "heartbeat_at": None,
+                        "updated_at": now,
+                    }
+                },
+                return_document=_return_document_after(),
+            )
+            if isinstance(reclaimed, dict):
+                task_ids.append(str(task["_id"]))
         if not task_ids:
             return 0
-        self.database["task_units"].update_many(
-            {"_id": {"$in": task_ids}},
-            {
-                "$set": {
-                    "status": "pending",
-                    "leased_by": None,
-                    "lease_token": None,
-                    "lease_expires_at": None,
-                    "heartbeat_at": None,
-                    "updated_at": now,
-                }
-            },
-        )
         self.database["sample_attempts"].update_many(
             {"task_id": {"$in": task_ids}, "status": "running"},
             {"$set": {"status": "pending", "updated_at": now}},
@@ -486,6 +538,37 @@ class MongoDocumentStore:
             collection = self.database[collection_name]
             for keys, options in definitions:
                 collection.create_index(keys, **options)
+        lock = self.database["queue_admission_locks"]
+        if lock.find_one({"_id": "global"}) is None:
+            try:
+                lock.insert_one({"_id": "global", "id": "global", "owner": None, "locked_until": datetime(1970, 1, 1, tzinfo=timezone.utc)})
+            except Exception:
+                pass
+
+    def _acquire_admission_lock(self) -> str | None:
+        now = _utc_now()
+        owner = str(uuid4())
+        document = self.database["queue_admission_locks"].find_one_and_update(
+            {
+                "_id": "global",
+                "$or": [
+                    {"locked_until": {"$exists": False}},
+                    {"locked_until": None},
+                    {"locked_until": {"$lte": now}},
+                ],
+            },
+            {"$set": {"owner": owner, "locked_until": now + timedelta(seconds=30), "updated_at": now}},
+            return_document=_return_document_after(),
+        )
+        return owner if isinstance(document, dict) and document.get("owner") == owner else None
+
+    def _release_admission_lock(self, owner: str) -> None:
+        now = _utc_now()
+        self.database["queue_admission_locks"].find_one_and_update(
+            {"_id": "global", "owner": owner},
+            {"$set": {"owner": None, "locked_until": now, "updated_at": now}},
+            return_document=_return_document_after(),
+        )
 
     def _current_version(self) -> int:
         document = self.database["schema_versions"].find_one(sort=[("version", -1)])
@@ -555,6 +638,10 @@ def _task_budget(task: dict[str, Any]) -> tuple[int, int, int, int]:
         request_count = fallback_requests
     estimated_output_tokens = min(estimated_tokens, request_count * 32)
     return request_count, estimated_tokens, max(0, estimated_tokens - estimated_output_tokens), estimated_output_tokens
+
+
+def _lease_version_query(task: dict[str, Any], lease_version: int) -> dict[str, Any]:
+    return {"lease_version": lease_version} if "lease_version" in task else {"lease_version": {"$exists": False}}
 
 
 def _public_document(document: dict[str, Any]) -> dict[str, Any]:
