@@ -20,6 +20,7 @@ from app.db.models import DatasetVersion, ModelCapability
 from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
 from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
+from app.services.scoring import ScoringError, validate_scoring_rule
 
 
 class RunCreationError(ValueError):
@@ -105,6 +106,10 @@ def preflight_benchmark_run(
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
+    try:
+        validate_scoring_rule(_effective_scoring_rule(plugin.manifest, prompt_package))
+    except ScoringError as error:
+        issues.append(f"Scoring rule is invalid: {error}")
     datasets: list[dict[str, object]] = []
     for descriptor in plugin.manifest.get("datasets", []):
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
@@ -215,6 +220,10 @@ def create_benchmark_run(
         request_body_override=request_body_override,
     )
     scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_package)
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise RunCreationError(f"Scoring rule is invalid: {error}") from error
 
     snapshot = {
         "benchmark": {

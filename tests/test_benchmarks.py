@@ -66,6 +66,21 @@ def test_inline_custom_pack_is_runnable_and_reloaded_from_storage(tmp_path: Path
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "benchmark_id": "custom-inline", "benchmark_version": "1.0.0"})
         assert run.status_code == 201
         assert run.json()["total_samples"] == 1
+        revision = client.post(
+            "/api/v1/benchmarks/" + installed.json()[0]["id"] + "/versions",
+            json={
+                "version": "2.0.0",
+                "manifest": {
+                    "required_capabilities": ["text_input"],
+                    "scoring": {"type": "exact_match"},
+                    "samples": [{"sample_id": "custom-002", "prompt": "Reply with only NEW.", "reference_answer": "NEW"}],
+                },
+            },
+        )
+        assert revision.status_code == 201
+        rerun = client.post(f"/api/v1/evaluation-runs/{run.json()['id']}/rerun-benchmark")
+        assert rerun.status_code == 201
+        assert rerun.json()["benchmark_version"] == "1.0.0"
 
     unregister_manifest_plugin("custom-inline", "1.0.0")
     reloaded = create_app(settings)

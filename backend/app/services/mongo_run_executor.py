@@ -22,7 +22,7 @@ from app.services.evaluation_runs import (
     _split_samples_into_shards,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
-from app.services.scoring import ScoringError, score_prediction
+from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import recompute_mongo_aggregate_metrics
 from app.services.reports import ReportError
 from app.services.run_analysis import add_summary_insights, summarize_attempts
@@ -68,8 +68,13 @@ def preflight_mongo_benchmark_run(
     compatibility = _capability_compatibility(store, model_endpoint_id, plugin.manifest)
     if compatibility["unsupported"]:
         issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
-    if prompt_package_id and store.get_document("prompt_packages", prompt_package_id) is None:
+    prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
+    try:
+        validate_scoring_rule(_mongo_effective_scoring_rule(plugin.manifest, prompt_package))
+    except ScoringError as error:
+        issues.append(f"Scoring rule is invalid: {error}")
     datasets: list[dict[str, object]] = []
     for descriptor in plugin.manifest.get("datasets", []):
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
@@ -157,6 +162,10 @@ def create_mongo_benchmark_run(
         request_body_override=request_body_override,
     )
     scoring_rule = _mongo_effective_scoring_rule(plugin.manifest, prompt_package)
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise MongoRunExecutionError(f"Scoring rule is invalid: {error}") from error
 
     prompt_proxy = _proxy(prompt_package) if prompt_package else None
     now = _utc_now()

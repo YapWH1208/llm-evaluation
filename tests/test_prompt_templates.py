@@ -19,6 +19,11 @@ def test_prompt_packages_validate_variables_and_snapshot_nonstandard_flags(tmp_p
     with TestClient(app) as api:
         invalid = api.post("/api/v1/prompt-packages", json={"name": "bad", "version": "1", "user_template": "{{ unsupported }}"})
         assert invalid.status_code == 422
+        unsafe_scoring = api.post(
+            "/api/v1/prompt-packages",
+            json={"name": "unsafe", "version": "1", "user_template": "{{ question }}", "scoring_rule": {"type": "regex_match", "pattern": "(a+)+$"}},
+        )
+        assert unsafe_scoring.status_code == 422
 
         prompt = api.post(
             "/api/v1/prompt-packages",

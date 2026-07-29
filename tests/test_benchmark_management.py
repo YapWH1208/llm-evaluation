@@ -63,3 +63,36 @@ def test_updating_a_custom_manifest_removes_its_previous_runtime_plugin(tmp_path
             assert get_installed_plugin(*benchmark_key) is None
     finally:
         unregister_manifest_plugin(*benchmark_key)
+
+
+def test_published_benchmark_content_requires_an_explicit_new_version(tmp_path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'versions.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/benchmarks", json=_payload()).json()
+        assert api.patch(f"/api/v1/benchmarks/{created['id']}", json={"status": "enabled"}).status_code == 200
+        blocked = api.patch(f"/api/v1/benchmarks/{created['id']}", json={"manifest": {"modalities": ["text"]}})
+        assert blocked.status_code == 409
+        assert "new version" in blocked.json()["detail"]
+
+        revision = api.post(
+            f"/api/v1/benchmarks/{created['id']}/versions",
+            json={"version": "2", "display_name": "Vision smoke v2", "manifest": {"modalities": ["text"]}},
+        )
+        assert revision.status_code == 201
+        assert revision.json()["benchmark_id"] == created["benchmark_id"]
+        assert revision.json()["version"] == "2"
+        assert revision.json()["status"] == "registered"
+        assert api.get(f"/api/v1/benchmarks/{created['id']}").json()["manifest"]["modalities"] == ["image"]
+
+
+def test_mongodb_published_benchmark_content_requires_a_new_version(tmp_path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/benchmarks", json=_payload()).json()
+        assert api.patch(f"/api/v1/benchmarks/{created['id']}", json={"status": "enabled"}).status_code == 200
+        assert api.patch(f"/api/v1/benchmarks/{created['id']}", json={"display_name": "mutated"}).status_code == 409
+        revision = api.post(f"/api/v1/benchmarks/{created['id']}/versions", json={"version": "2", "manifest": {"modalities": ["text"]}})
+        assert revision.status_code == 201
+        assert revision.json()["version"] == "2"

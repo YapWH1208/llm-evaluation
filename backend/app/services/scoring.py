@@ -6,6 +6,10 @@ import re
 from collections import Counter
 from typing import Any
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+import regex as safe_regex
+
 from app.services.model_executor import normalize_exact_match
 
 
@@ -13,11 +17,122 @@ class ScoringError(ValueError):
     """Raised when a deterministic scoring rule cannot be applied safely."""
 
 
+_JSON_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
+_MAX_REGEX_LENGTH = 512
+_MAX_SCHEMA_BYTES = 65_536
+_MAX_RULE_CHECKS = 20
+_MAX_RULE_DEPTH = 3
+_REGEX_TIMEOUT_SECONDS = 0.05
+_SUPPORTED_RULE_TYPES = frozenset(
+    {
+        "exact_match", "normalized_exact_match", "multiple_choice", "numeric_match", "regex_match",
+        "json_schema", "token_f1", "f1", "bleu", "rouge", "rouge_l", "rouge_1", "rouge1", "wer", "cer",
+        "iou", "temporal_localization_error", "temporal_error", "unit_test_pass_rate", "unit_test", "length_limit",
+        "required_fields", "forbidden_fields", "output_format", "format", "refusal", "refusal_behavior",
+        "tool_selection", "tool_argument_validity", "tool_arguments", "citation_presence", "citations",
+        "schema_compliance", "json_schema_validation", "rules", "rule_checks", "contains",
+    }
+)
+
+
+def validate_scoring_rule(rule: dict[str, object], *, _depth: int = 0) -> None:
+    """Validate declarative scoring configuration before it reaches a worker.
+
+    JSON Schema is evaluated with the explicitly selected 2020-12 draft.
+    Python's backtracking regex engine has no per-match timeout, so user rules
+    intentionally accept only short, non-recursive patterns.
+    """
+
+    if not isinstance(rule, dict):
+        raise ScoringError("Scoring rule must be an object.")
+    rule_type = str(rule.get("type", "exact_match")).strip().lower()
+    if rule_type not in _SUPPORTED_RULE_TYPES:
+        raise ScoringError(f"Unsupported deterministic scoring type: {rule_type}.")
+    if _depth > _MAX_RULE_DEPTH:
+        raise ScoringError("Rule-check scoring is nested too deeply.")
+    if rule_type in {"regex_match"}:
+        _compile_safe_regex(rule.get("pattern"), "Regex scoring")
+    elif rule_type in {"json_schema", "schema_compliance", "json_schema_validation"}:
+        _validate_json_schema(rule.get("schema"), "JSON schema scoring")
+    elif rule_type in {"tool_argument_validity", "tool_arguments"}:
+        _validate_json_schema(rule.get("schema"), "Tool-argument scoring")
+    elif rule_type in {"rules", "rule_checks"}:
+        checks = rule.get("checks")
+        if not isinstance(checks, list) or not checks or len(checks) > _MAX_RULE_CHECKS:
+            raise ScoringError(f"Rule-check scoring requires 1 to {_MAX_RULE_CHECKS} checks.")
+        for check in checks:
+            if not isinstance(check, dict):
+                raise ScoringError("Rule-check scoring requires object checks.")
+            validate_scoring_rule(check, _depth=_depth + 1)
+    elif rule_type in {"output_format", "format"}:
+        output_format = str(rule.get("format", "")).lower()
+        if output_format not in {"json", "regex", "plain_text"}:
+            raise ScoringError("Output-format scoring supports json, regex, and plain_text.")
+        if output_format == "regex":
+            _compile_safe_regex(rule.get("pattern"), "Regex output-format scoring")
+    elif rule_type == "numeric_match":
+        _nonnegative_float(rule.get("absolute_tolerance", 0.0), "absolute_tolerance")
+        _nonnegative_float(rule.get("relative_tolerance", 0.0), "relative_tolerance")
+    elif rule_type == "bleu":
+        _positive_int(rule.get("max_order", 4), "max_order", maximum=4)
+    elif rule_type in {"temporal_localization_error", "temporal_error"}:
+        _nonnegative_float(rule.get("tolerance_seconds", 1.0), "tolerance_seconds")
+    elif rule_type in {"citation_presence", "citations"}:
+        _positive_int(rule.get("min_count", 1), "min_count")
+    elif rule_type == "length_limit":
+        unit = str(rule.get("unit", "characters"))
+        if unit not in {"characters", "tokens"}:
+            raise ScoringError("Length-limit unit must be characters or tokens.")
+        minimum = _nonnegative_float(rule["min"], "min") if "min" in rule else None
+        maximum = _nonnegative_float(rule["max"], "max") if "max" in rule else None
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ScoringError("Length-limit min cannot exceed max.")
+
+
+def _compile_safe_regex(value: object, label: str) -> safe_regex.Pattern:
+    if not isinstance(value, str) or not value:
+        raise ScoringError(f"{label} requires a non-empty pattern.")
+    if len(value) > _MAX_REGEX_LENGTH:
+        raise ScoringError(f"{label} pattern exceeds {_MAX_REGEX_LENGTH} characters.")
+    if re.search(r"\\[1-9]|\(\?", value) or re.search(r"\((?:[^()]|\\.)*[+*][^)]*\)[+*{]", value):
+        raise ScoringError(f"{label} pattern uses unsupported potentially unbounded constructs.")
+    try:
+        return safe_regex.compile(value, safe_regex.DOTALL)
+    except safe_regex.error as error:
+        raise ScoringError(f"Invalid regex scoring pattern: {error}") from error
+
+
+def _matches_safe_regex(pattern: safe_regex.Pattern, prediction: str, label: str, *, fullmatch: bool = False) -> bool:
+    matcher = pattern.fullmatch if fullmatch else pattern.search
+    try:
+        return matcher(prediction, timeout=_REGEX_TIMEOUT_SECONDS) is not None
+    except TimeoutError as error:
+        raise ScoringError(f"{label} exceeded the {_REGEX_TIMEOUT_SECONDS:g}-second match limit.") from error
+
+
+def _validate_json_schema(value: object, label: str) -> None:
+    if not isinstance(value, dict):
+        raise ScoringError(f"{label} requires a schema object.")
+    try:
+        if len(json.dumps(value, separators=(",", ":"))) > _MAX_SCHEMA_BYTES:
+            raise ScoringError(f"{label} exceeds {_MAX_SCHEMA_BYTES} bytes.")
+    except (TypeError, ValueError) as error:
+        raise ScoringError(f"{label} must be JSON-serializable.") from error
+    declared_draft = value.get("$schema")
+    if declared_draft is not None and declared_draft != _JSON_SCHEMA_DRAFT:
+        raise ScoringError(f"{label} must use {_JSON_SCHEMA_DRAFT} when declaring $schema.")
+    try:
+        Draft202012Validator.check_schema(value)
+    except SchemaError as error:
+        raise ScoringError(f"Invalid JSON Schema: {error.message}") from error
+
+
 def score_prediction(prediction: str, reference: dict[str, object]) -> float:
     """Score one parsed prediction using the immutable sample scoring snapshot."""
 
     config = reference.get("scoring")
     rule = dict(config) if isinstance(config, dict) else {"type": reference.get("type", "exact_match")}
+    validate_scoring_rule(rule)
     rule_type = str(rule.get("type", "exact_match")).strip().lower()
     expected = reference.get("answer")
     if rule_type == "exact_match":
@@ -28,21 +143,15 @@ def score_prediction(prediction: str, reference: dict[str, object]) -> float:
         return _numeric_match(prediction, expected, rule)
     if rule_type == "regex_match":
         pattern = rule.get("pattern", expected)
-        if not isinstance(pattern, str) or not pattern:
-            raise ScoringError("Regex scoring requires a non-empty pattern.")
-        try:
-            return float(re.search(pattern, prediction, re.DOTALL) is not None)
-        except re.error as error:
-            raise ScoringError(f"Invalid regex scoring pattern: {error}") from error
+        return float(_matches_safe_regex(_compile_safe_regex(pattern, "Regex scoring"), prediction, "Regex scoring"))
     if rule_type == "json_schema":
-        schema = rule.get("schema")
-        if not isinstance(schema, dict):
-            raise ScoringError("JSON schema scoring requires a schema object.")
+        schema = rule["schema"]
+        assert isinstance(schema, dict)
         try:
             value = json.loads(prediction)
         except json.JSONDecodeError:
             return 0.0
-        return float(_matches_schema(value, schema))
+        return float(Draft202012Validator(schema).is_valid(value))
     if rule_type in {"token_f1", "f1"}:
         return _token_f1(prediction, str(expected))
     if rule_type == "bleu":
@@ -270,10 +379,7 @@ def _output_format(prediction: str, rule: dict[str, object]) -> float:
         pattern = rule.get("pattern")
         if not isinstance(pattern, str) or not pattern:
             raise ScoringError("Regex output-format scoring requires a pattern.")
-        try:
-            return float(re.fullmatch(pattern, prediction, re.DOTALL) is not None)
-        except re.error as error:
-            raise ScoringError(f"Invalid regex scoring pattern: {error}") from error
+        return float(_matches_safe_regex(_compile_safe_regex(pattern, "Regex output-format scoring"), prediction, "Regex output-format scoring", fullmatch=True))
     if expected_format == "plain_text":
         return float(bool(prediction.strip()))
     raise ScoringError("Output-format scoring supports json, regex, and plain_text.")
@@ -300,15 +406,17 @@ def _tool_selection(prediction: str, expected: object, rule: dict[str, object]) 
 def _tool_argument_validity(prediction: str, rule: dict[str, object]) -> float:
     value = _json_object_or_none(prediction)
     schema = rule.get("schema")
-    if value is None or not isinstance(schema, dict):
-        raise ScoringError("Tool-argument scoring requires JSON output and a schema object.")
+    if value is None:
+        return 0.0
+    _validate_json_schema(schema, "Tool-argument scoring")
+    assert isinstance(schema, dict)
     arguments = value.get("arguments", value.get("tool_arguments"))
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments)
         except json.JSONDecodeError:
             return 0.0
-    return float(_matches_schema(arguments, schema))
+    return float(Draft202012Validator(schema).is_valid(arguments))
 
 
 def _citation_presence(prediction: str, rule: dict[str, object]) -> float:

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.models import BenchmarkDefinition, DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.benchmarks import register_manifest_plugin, unregister_manifest_plugin, validate_manifest_plugin
+from app.services.scoring import ScoringError, validate_scoring_rule
 
 
 router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])
@@ -38,6 +39,12 @@ class BenchmarkUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=200)
     manifest: dict[str, Any] | None = None
     status: Literal["registered", "enabled", "disabled"] | None = None
+
+
+class BenchmarkVersionCreate(BaseModel):
+    version: str = Field(min_length=1, max_length=64)
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    manifest: dict[str, Any]
 
 
 class BenchmarkPackInstall(BaseModel):
@@ -73,9 +80,43 @@ def _canonical_manifest(benchmark: BenchmarkCreate) -> dict[str, Any]:
         manifest[field] = expected
     try:
         validate_manifest_plugin(manifest)
-    except ValueError as error:
+        scoring_rule = manifest.get("scoring")
+        if scoring_rule is not None:
+            if not isinstance(scoring_rule, dict):
+                raise ScoringError("Benchmark scoring must be an object.")
+            validate_scoring_rule(scoring_rule)
+    except (ValueError, ScoringError) as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     return manifest
+
+
+def _is_published(definition: BenchmarkDefinition | dict[str, Any]) -> bool:
+    status_value = definition.get("status") if isinstance(definition, dict) else definition.status
+    source_value = definition.get("source") if isinstance(definition, dict) else definition.source
+    return str(status_value) != "registered" or str(source_value) == "builtin"
+
+
+def _versioned_benchmark_create(
+    source: BenchmarkDefinition | dict[str, Any],
+    payload: BenchmarkVersionCreate,
+) -> BenchmarkCreate:
+    benchmark_id = str(source["benchmark_id"] if isinstance(source, dict) else source.benchmark_id)
+    source_version = str(source["version"] if isinstance(source, dict) else source.version)
+    source_name = str(source["display_name"] if isinstance(source, dict) else source.display_name)
+    if payload.version == source_version:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A new benchmark version is required for a content revision.")
+    manifest = dict(payload.manifest)
+    manifest_id = manifest.get("benchmark_id")
+    if manifest_id is not None and manifest_id != benchmark_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Manifest benchmark_id must match the source benchmark.")
+    manifest.pop("benchmark_id", None)
+    manifest.pop("version", None)
+    return BenchmarkCreate(
+        benchmark_id=benchmark_id,
+        version=payload.version,
+        display_name=payload.display_name or source_name,
+        manifest=manifest,
+    )
 
 
 @router.get("", response_model=list[BenchmarkResponse])
@@ -167,6 +208,56 @@ def get_benchmark(benchmark_definition_id: str, request: Request, session: Sessi
     return item
 
 
+@router.post("/{benchmark_definition_id}/versions", response_model=BenchmarkResponse, status_code=status.HTTP_201_CREATED)
+def create_benchmark_version(
+    benchmark_definition_id: str,
+    payload: BenchmarkVersionCreate,
+    request: Request,
+    session: SessionDependency,
+) -> BenchmarkDefinition | dict[str, Any]:
+    """Create a new immutable content version from an existing definition."""
+
+    store = get_document_store(request)
+    if store is not None:
+        source = store.get_document("benchmark_definitions", benchmark_definition_id)
+        if source is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+        revision = _versioned_benchmark_create(source, payload)
+        if store.list_documents("benchmark_definitions", query={"benchmark_id": revision.benchmark_id, "version": revision.version}):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist")
+        manifest = _canonical_manifest(revision)
+        created = store.insert_document(
+            "benchmark_definitions",
+            {"benchmark_id": revision.benchmark_id, "version": revision.version, "display_name": revision.display_name, "manifest": manifest, "status": "registered", "source": "revision", "created_at": datetime.now()},
+        )
+        register_manifest_plugin(manifest)
+        return created
+
+    assert session is not None
+    source = session.get(BenchmarkDefinition, benchmark_definition_id)
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+    revision = _versioned_benchmark_create(source, payload)
+    manifest = _canonical_manifest(revision)
+    created = BenchmarkDefinition(
+        benchmark_id=revision.benchmark_id,
+        version=revision.version,
+        display_name=revision.display_name,
+        manifest=manifest,
+        status="registered",
+        source="revision",
+    )
+    session.add(created)
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Benchmark ID and version already exist") from error
+    session.refresh(created)
+    register_manifest_plugin(manifest)
+    return created
+
+
 @router.get("/{benchmark_definition_id}/prompt")
 def get_benchmark_prompt(benchmark_definition_id: str, request: Request, session: SessionDependency) -> dict[str, Any]:
     benchmark = get_benchmark(benchmark_definition_id, request, session)
@@ -216,6 +307,8 @@ def update_benchmark(
         existing = store.get_document("benchmark_definitions", benchmark_definition_id)
         if existing is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+        if _is_published(existing) and {"display_name", "manifest"}.intersection(values):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Published benchmark content is immutable; create a new version instead.")
         if "manifest" in values:
             replacement = BenchmarkCreate(benchmark_id=str(existing["benchmark_id"]), version=str(existing["version"]), display_name=str(values.get("display_name") or existing["display_name"]), manifest=values["manifest"])
             values["manifest"] = _canonical_manifest(replacement)
@@ -229,6 +322,8 @@ def update_benchmark(
     item = session.get(BenchmarkDefinition, benchmark_definition_id)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Benchmark definition not found")
+    if _is_published(item) and {"display_name", "manifest"}.intersection(values):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Published benchmark content is immutable; create a new version instead.")
     if "manifest" in values:
         replacement = BenchmarkCreate(benchmark_id=item.benchmark_id, version=item.version, display_name=str(values.get("display_name") or item.display_name), manifest=values["manifest"])
         values["manifest"] = _canonical_manifest(replacement)

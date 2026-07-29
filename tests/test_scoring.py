@@ -1,4 +1,4 @@
-from app.services.scoring import ScoringError, score_prediction
+from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 
 
 def test_deterministic_scoring_rules_cover_exact_numeric_regex_schema_and_f1() -> None:
@@ -16,6 +16,38 @@ def test_scoring_rejects_invalid_rule_configuration() -> None:
         assert "Invalid regex" in str(error)
     else:
         raise AssertionError("Expected invalid regex scoring configuration to fail.")
+
+
+def test_json_schema_scoring_uses_2020_12_semantics() -> None:
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["answer", "kind"],
+        "properties": {
+            "answer": {"type": "string"},
+            "kind": {"oneOf": [{"const": "short"}, {"const": "long"}]},
+        },
+        "allOf": [{"properties": {"answer": {"minLength": 1}}}],
+        "additionalProperties": False,
+    }
+    rule = {"type": "json_schema", "schema": schema}
+    assert score_prediction('{"answer":"ok","kind":"short"}', {"answer": None, "scoring": rule}) == 1.0
+    assert score_prediction('{"answer":"ok","kind":"short","debug":true}', {"answer": None, "scoring": rule}) == 0.0
+    assert score_prediction('{"answer":"","kind":"short"}', {"answer": None, "scoring": rule}) == 0.0
+
+
+def test_scoring_rule_validation_rejects_invalid_schemas_and_unbounded_regexes() -> None:
+    for rule in (
+        {"type": "json_schema", "schema": {"type": "not-a-json-schema-type"}},
+        {"type": "json_schema", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "type": "string"}},
+        {"type": "regex_match", "pattern": "(a+)+$"},
+        {"type": "rule_checks", "checks": []},
+    ):
+        try:
+            validate_scoring_rule(rule)
+        except ScoringError:
+            continue
+        raise AssertionError(f"Expected rule to be rejected: {rule}")
 
 
 def test_deterministic_scoring_covers_generation_speech_and_localization_metrics() -> None:
