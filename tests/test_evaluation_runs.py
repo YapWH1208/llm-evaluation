@@ -18,6 +18,26 @@ from app.services.run_executor import _retry_delay_seconds
 from app.services.task_queue import claim_task
 
 
+def _configure_dataset_download(monkeypatch, content: bytes) -> None:
+    class Response:
+        headers: dict[str, str] = {"content-length": str(len(content))}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield content
+
+    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.httpx.stream", lambda *_args, **_kwargs: Response())
+
+
 class SuccessfulTester:
     def test(self, _endpoint, _api_key: str) -> ConnectionTestResult:
         return ConnectionTestResult(True, "Connection succeeded.", 200)
@@ -437,6 +457,7 @@ def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tm
 def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "declared-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
@@ -458,7 +479,7 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
     with TestClient(app) as client:
         dataset = client.post(
             "/api/v1/datasets",
-            json={"dataset_id": "declared-samples", "version": "2026.07", "source_url": source.as_uri()},
+            json={"dataset_id": "declared-samples", "version": "2026.07", "source_url": "https://datasets.example.test/declared-samples.jsonl"},
         )
         assert dataset.status_code == 201
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
@@ -490,13 +511,14 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
 def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "manifest-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
             "version": "1.0.0",
             "required_capabilities": ["text_input"],
             "scoring": {"type": "exact_match"},
-            "datasets": [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+            "datasets": [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "source_url": "https://datasets.example.test/manifest-samples.jsonl"}],
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
@@ -518,7 +540,7 @@ def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_pa
         assert run.json()["status"] == "waiting_for_dataset"
         dataset_id = run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"]
         datasets = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
-        assert datasets[dataset_id]["source_url"] == source.as_uri()
+        assert datasets[dataset_id]["source_url"] == "https://datasets.example.test/manifest-samples.jsonl"
         assert datasets[dataset_id]["status"] == "not_downloaded"
 
         preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()

@@ -127,7 +127,7 @@ export type Dataset = {
   version: string;
   revision: string;
   source_url: string | null;
-  credential_env_var: string | null;
+  credential_binding_id: string | null;
   checksum: string | null;
   local_path: string | null;
   size_bytes: number | null;

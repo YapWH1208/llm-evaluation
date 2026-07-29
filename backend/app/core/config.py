@@ -1,10 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import re
+from dataclasses import dataclass, field
 from os import getenv
+from types import MappingProxyType
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+DEFAULT_DATASET_DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024
+_BINDING_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
+_ENVIRONMENT_VARIABLE_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetCredentialBinding:
+    """An administrator-owned reference to one dataset download credential."""
+
+    environment_variable: str
+    allowed_hosts: tuple[str, ...]
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -23,6 +38,9 @@ class Settings:
     application_version: str = "0.1.0"
     system_max_concurrency: int | None = None
     worker_max_concurrency: int | None = None
+    dataset_credential_bindings: Mapping[str, DatasetCredentialBinding] = field(default_factory=dict)
+    dataset_allowed_hosts: tuple[str, ...] = ()
+    dataset_download_max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -39,6 +57,11 @@ class Settings:
             mongodb_database=getenv("LLE_MONGODB_DATABASE"),
             system_max_concurrency=_optional_positive_int(getenv("LLE_SYSTEM_MAX_CONCURRENCY")),
             worker_max_concurrency=_optional_positive_int(getenv("LLE_WORKER_MAX_CONCURRENCY")),
+            dataset_credential_bindings=_dataset_credential_bindings_from_environment(),
+            dataset_allowed_hosts=_comma_separated_hosts(getenv("LLE_DATASET_ALLOWED_HOSTS")),
+            dataset_download_max_bytes=_positive_environment_int(
+                "LLE_DATASET_DOWNLOAD_MAX_BYTES", DEFAULT_DATASET_DOWNLOAD_MAX_BYTES
+            ),
         )
 
     @classmethod
@@ -102,3 +125,68 @@ def _environment_bool(name: str) -> bool:
     if normalized in {"0", "false", "no"}:
         return False
     raise ValueError(f"{name} must be a boolean value.")
+
+
+def _positive_environment_int(name: str, default: int) -> int:
+    value = getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive integer.") from error
+    if parsed < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+    return parsed
+
+
+def _comma_separated_hosts(value: str | None) -> tuple[str, ...]:
+    return tuple(
+        host
+        for item in (value or "").split(",")
+        if item.strip() and (host := _normalize_allowed_host(item))
+    )
+
+
+def _dataset_credential_bindings_from_environment() -> Mapping[str, DatasetCredentialBinding]:
+    raw = getenv("LLE_DATASET_CREDENTIAL_BINDINGS_JSON")
+    if raw is None or not raw.strip():
+        return MappingProxyType({})
+    try:
+        configured = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ValueError("LLE_DATASET_CREDENTIAL_BINDINGS_JSON must be a JSON object.") from error
+    if not isinstance(configured, dict):
+        raise ValueError("LLE_DATASET_CREDENTIAL_BINDINGS_JSON must be a JSON object.")
+
+    bindings: dict[str, DatasetCredentialBinding] = {}
+    for binding_id, definition in configured.items():
+        if not isinstance(binding_id, str) or not _BINDING_ID_PATTERN.fullmatch(binding_id):
+            raise ValueError("Dataset credential binding IDs must contain only letters, digits, underscores, or hyphens.")
+        if not isinstance(definition, dict):
+            raise ValueError(f"Dataset credential binding {binding_id!r} must be an object.")
+        environment_variable = definition.get("environment_variable")
+        allowed_hosts = definition.get("allowed_hosts")
+        if not isinstance(environment_variable, str) or not _ENVIRONMENT_VARIABLE_PATTERN.fullmatch(environment_variable):
+            raise ValueError(f"Dataset credential binding {binding_id!r} must define a valid environment_variable.")
+        if not isinstance(allowed_hosts, list) or not all(isinstance(host, str) for host in allowed_hosts):
+            raise ValueError(f"Dataset credential binding {binding_id!r} must define allowed_hosts as a string list.")
+        normalized_hosts = tuple(
+            host
+            for item in allowed_hosts
+            if item.strip() and (host := _normalize_allowed_host(item))
+        )
+        if not normalized_hosts:
+            raise ValueError(f"Dataset credential binding {binding_id!r} must allow at least one host.")
+        bindings[binding_id] = DatasetCredentialBinding(
+            environment_variable=environment_variable,
+            allowed_hosts=normalized_hosts,
+        )
+    return MappingProxyType(bindings)
+
+
+def _normalize_allowed_host(value: str) -> str:
+    host = value.strip().lower().rstrip(".")
+    if not host or "://" in host or "/" in host or "@" in host or ":" in host:
+        raise ValueError("Dataset allowed hosts must be bare hostnames without ports or paths.")
+    return host

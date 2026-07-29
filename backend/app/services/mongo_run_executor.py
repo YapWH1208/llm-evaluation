@@ -12,6 +12,7 @@ import base64
 from typing import Any
 
 from app.benchmarks import get_installed_plugin
+from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import (
@@ -347,7 +348,7 @@ def _register_mongo_declared_dataset(
     version = descriptor.get("version")
     revision = descriptor.get("revision")
     license_text = descriptor.get("license_text")
-    credential_env_var = descriptor.get("credential_env_var")
+    credential_binding_id = descriptor.get("credential_binding_id")
     checksum = descriptor.get("checksum")
     return store.insert_document(
         "dataset_versions",
@@ -358,7 +359,7 @@ def _register_mongo_declared_dataset(
             "source_url": source_url.strip(),
             "checksum": checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
             "license_text": license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-            "credential_env_var": credential_env_var.strip() if isinstance(credential_env_var, str) and credential_env_var.strip() else None,
+            "credential_binding_id": credential_binding_id.strip() if isinstance(credential_binding_id, str) and credential_binding_id.strip() else None,
             "local_path": None,
             "prepared_path": None,
             "size_bytes": None,
@@ -433,6 +434,7 @@ def execute_mongo_queued_run(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     run = store.get_document("evaluation_runs", run_id)
     if run is None:
@@ -453,6 +455,7 @@ def execute_mongo_queued_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=data_root,
+            settings=settings,
         )
         if run.get("status") in {"completed", "completed_with_errors"}:
             return run
@@ -588,6 +591,7 @@ def execute_mongo_leased_task(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     task = store.get_document("task_units", task_id)
     if task is None:
@@ -601,7 +605,7 @@ def execute_mongo_leased_task(
     if task["task_type"] == "report_generation":
         return _execute_mongo_report_task(store, task, lease_token, data_root=data_root)
     if task["task_type"] in {"dataset_preparation", "benchmark", "judge", "cleanup"}:
-        return _execute_mongo_stage_task(store, task, data_root=data_root)
+        return _execute_mongo_stage_task(store, task, data_root=data_root, settings=settings)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
@@ -697,7 +701,13 @@ def execute_mongo_leased_task(
     return run, task
 
 
-def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *, data_root: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _execute_mongo_stage_task(
+    store: MongoDocumentStore,
+    task: dict[str, Any],
+    *,
+    data_root: str,
+    settings: Settings | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
@@ -717,7 +727,7 @@ def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *
                     matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
                     dataset = matches[0] if matches else None
                 if dataset is None: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root)
+                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root, settings)
         except Exception as error:
             failed = store.update_document("task_units", str(task["id"]), {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()})
             assert failed is not None

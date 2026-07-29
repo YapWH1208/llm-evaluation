@@ -44,7 +44,16 @@ Use custom headers for non-secret routing metadata such as a project identifier.
 
 ## Dataset sources and credentials
 
-Dataset versions accept HTTP(S) and Git-release URLs, `hf://owner/repository/path/to/file` Hugging Face references, `file://` URLs, and local file paths. Optional credentials are referenced only by an environment-variable name (for example, `HUGGINGFACE_TOKEN`); the token value is never stored in the database or returned by the API. A download without its configured credential is marked `credential_required` until the deployment environment is updated.
+Dataset versions accept only `https://` URLs and `hf://owner/repository/path/to/file` Hugging Face references. `file://` URLs, local paths, HTTP, and custom downloader schemes are rejected; upload local revisions through the dataset upload endpoint instead. Downloads are streamed with a 64 MiB default cap, adjustable with `LLE_DATASET_DOWNLOAD_MAX_BYTES`.
+
+Administrators configure credential bindings outside evaluator input using `LLE_DATASET_CREDENTIAL_BINDINGS_JSON`. Each logical ID names one environment variable and the exact hosts that may receive its bearer token. For example:
+
+```powershell
+$env:HUGGINGFACE_TOKEN = "..."
+$env:LLE_DATASET_CREDENTIAL_BINDINGS_JSON = '{"huggingface":{"environment_variable":"HUGGINGFACE_TOKEN","allowed_hosts":["huggingface.co"]}}'
+```
+
+Evaluators submit `credential_binding_id: "huggingface"`; they never submit an environment-variable name. Existing `credential_env_var` database values remain historical metadata and are never dereferenced. Use `LLE_DATASET_ALLOWED_HOSTS` as an optional comma-separated deployment-wide source-host allowlist in addition to the restricted-address checks.
 
 ## Docker Compose
 

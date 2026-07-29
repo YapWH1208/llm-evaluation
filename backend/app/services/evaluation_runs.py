@@ -374,7 +374,7 @@ def _register_declared_dataset(session: Session, descriptor: dict[str, object]) 
     version = descriptor.get("version")
     revision = descriptor.get("revision")
     license_text = descriptor.get("license_text")
-    credential_env_var = descriptor.get("credential_env_var")
+    credential_binding_id = descriptor.get("credential_binding_id")
     checksum = descriptor.get("checksum")
     dataset = DatasetVersion(
         dataset_id=str(descriptor["dataset_id"]),
@@ -383,9 +383,9 @@ def _register_declared_dataset(session: Session, descriptor: dict[str, object]) 
         source_url=source_url.strip(),
         checksum=checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
         license_text=license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-        credential_env_var=(
-            credential_env_var.strip()
-            if isinstance(credential_env_var, str) and credential_env_var.strip()
+        credential_binding_id=(
+            credential_binding_id.strip()
+            if isinstance(credential_binding_id, str) and credential_binding_id.strip()
             else None
         ),
         status=("license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded"),

@@ -517,6 +517,7 @@ def execute_evaluation_run(
                 cipher=cipher,
                 model_executor=model_executor,
                 data_root=str(request.app.state.settings.data_root),
+                settings=request.app.state.settings,
             )
         assert session is not None
         return execute_queued_text_run(
@@ -525,6 +526,7 @@ def execute_evaluation_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=str(request.app.state.settings.data_root),
+            settings=request.app.state.settings,
         )
     except (RunExecutionError, MongoRunExecutionError) as error:
         status_code = (

@@ -21,6 +21,26 @@ from app.services.model_executor import SampleExecutionResult
 from app.benchmarks.text_quick_check import TextSample
 
 
+def _configure_dataset_download(monkeypatch, content: bytes) -> None:
+    class Response:
+        headers: dict[str, str] = {"content-length": str(len(content))}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield content
+
+    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.httpx.stream", lambda *_args, **_kwargs: Response())
+
+
 class FakeAdmin:
     def __init__(self) -> None:
         self.commands: list[str] = []
@@ -367,13 +387,14 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
 def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "manifest-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
             "version": "1.0.0",
             "required_capabilities": ["text_input"],
             "scoring": {"type": "exact_match"},
-            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": "https://datasets.example.test/manifest-samples.jsonl"}],
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
@@ -497,7 +518,7 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         assert uploaded.json()["status"] == "ready"
         assert uploaded.json()["size_bytes"] == len(b'{"question":"2 + 2"}\n')
         assert api.post(f"/api/v1/datasets/{dataset.json()['id']}/validate").json()["status"] == "ready"
-        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_env_var": "MONGO_DATASET_TOKEN"}).json()["credential_env_var"] == "MONGO_DATASET_TOKEN"
+        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_binding_id": None}).json()["credential_binding_id"] is None
         assert api.get("/api/v1/datasets/disk-usage").json()["cache_bytes"] >= len(b'{"question":"2 + 2"}\n')
 
 

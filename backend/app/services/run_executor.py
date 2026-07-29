@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db import (
     EvaluationRun,
@@ -50,6 +51,7 @@ def execute_queued_text_run(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> EvaluationRun:
     """Compatibility endpoint for a local interactive worker execution."""
 
@@ -72,6 +74,7 @@ def execute_queued_text_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=data_root,
+            settings=settings,
         )
         if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
             return run
@@ -86,6 +89,7 @@ def execute_leased_text_task(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> tuple[EvaluationRun, TaskUnit]:
     """Execute one leased task and either finish it or schedule a bounded retry."""
 
@@ -101,7 +105,7 @@ def execute_leased_text_task(
     if task.task_type == TaskType.REPORT_GENERATION.value:
         return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
     if task.task_type in {TaskType.DATASET_PREPARATION.value, TaskType.BENCHMARK.value, TaskType.JUDGE.value, TaskType.CLEANUP.value}:
-        return _execute_leased_stage_task(session, task, data_root=data_root)
+        return _execute_leased_stage_task(session, task, data_root=data_root, settings=settings)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
@@ -163,7 +167,13 @@ def execute_leased_text_task(
     return run, task
 
 
-def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: str) -> tuple[EvaluationRun, TaskUnit]:
+def _execute_leased_stage_task(
+    session: Session,
+    task: TaskUnit,
+    *,
+    data_root: str,
+    settings: Settings | None,
+) -> tuple[EvaluationRun, TaskUnit]:
     """Run non-inference worker stages through their own durable task interface.
 
     Dataset, benchmark, judge, and cleanup workers can share a process in the MVP,
@@ -191,7 +201,7 @@ def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: s
                     if isinstance(descriptor.get("revision"), str): query = query.where(DatasetVersion.revision == descriptor["revision"])
                     dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
                 if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.status != "ready": download_dataset(session, dataset, data_root)
+                if dataset.status != "ready": download_dataset(session, dataset, data_root, settings)
         except DatasetError as error:
             task.status = TaskStatus.RETRY_SCHEDULED.value; task.payload = {**payload, "dataset_error": str(error)}; clear_lease(task); session.commit(); raise RunExecutionError(str(error)) from error
     task.payload = {**payload, "worker_interface": task.task_type, "stage_completed_at": datetime.now(timezone.utc).isoformat()}

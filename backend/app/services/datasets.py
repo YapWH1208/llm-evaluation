@@ -9,14 +9,14 @@ import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from socket import getaddrinfo
-from urllib.parse import quote, unquote, urlparse
-from urllib.request import url2pathname
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
 
 
@@ -28,34 +28,18 @@ class DatasetDownloadPaused(DatasetError):
     pass
 
 
-DatasetDownloader = Callable[[str, str, dict[str, str]], tuple[Path | str, dict[str, str]]]
-DATASET_DOWNLOADER_PLUGINS: dict[str, DatasetDownloader] = {}
 MAX_PREPARED_ARCHIVE_FILES = 10_000
 MAX_PREPARED_ARCHIVE_BYTES = 512 * 1024 * 1024
-
-
-def register_dataset_downloader(scheme: str, downloader: DatasetDownloader) -> None:
-    """Register a source resolver without coupling dataset storage to a provider."""
-
-    normalized = scheme.lower().strip().removesuffix(":")
-    if not normalized or normalized in {"http", "https", "file", "hf"}:
-        raise DatasetError("Custom downloader schemes must be non-empty and cannot replace built-in sources.")
-    DATASET_DOWNLOADER_PLUGINS[normalized] = downloader
 
 
 def resolve_dataset_source(
     source_url: str,
     revision: str,
-    credential_env_var: str | None,
-) -> tuple[Path | str, dict[str, str]]:
-    """Resolve HTTP(S), Hugging Face, and explicitly provided local dataset sources."""
+    credential_binding_id: str | None,
+    settings: Settings | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Resolve one HTTPS or Hugging Face source under the deployment policy."""
 
-    headers: dict[str, str] = {}
-    if credential_env_var:
-        token = os.getenv(credential_env_var)
-        if not token:
-            raise DatasetError(f"Dataset credential environment variable {credential_env_var} is not configured.")
-        headers["Authorization"] = f"Bearer {token}"
     parsed = urlparse(source_url)
     if parsed.scheme == "hf":
         repository = parsed.netloc
@@ -65,28 +49,54 @@ def resolve_dataset_source(
         repository = f"{repository}/{path_parts[0]}"
         relative_path = "/".join(path_parts[1:])
         resolved = f"https://huggingface.co/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
-        _validate_remote_dataset_url(resolved)
-        return resolved, headers
-    if parsed.scheme in {"http", "https"} and parsed.netloc:
-        _validate_remote_dataset_url(source_url)
-        return source_url, headers
-    if parsed.scheme == "file":
-        return Path(url2pathname(unquote(parsed.path))).resolve(), headers
-    if not parsed.scheme:
-        return Path(source_url).expanduser().resolve(), headers
-    plugin = DATASET_DOWNLOADER_PLUGINS.get(parsed.scheme.lower())
-    if plugin is not None:
-        return plugin(source_url, revision, headers)
-    raise DatasetError("Dataset source must be HTTP(S), hf://owner/repository/path, file://, a local file path, or a registered downloader plugin.")
+    elif parsed.scheme == "https" and parsed.netloc:
+        resolved = source_url
+    else:
+        raise DatasetError(
+            "Dataset source must be an HTTPS URL or hf://owner/repository/path. "
+            "Use the upload endpoint for local files."
+        )
+
+    _validate_remote_dataset_url(
+        resolved,
+        allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
+    )
+    return resolved, _credential_headers(resolved, credential_binding_id, settings)
 
 
-def _validate_remote_dataset_url(source_url: str) -> None:
+def _credential_headers(
+    source_url: str,
+    credential_binding_id: str | None,
+    settings: Settings | None,
+) -> dict[str, str]:
+    if credential_binding_id is None:
+        return {}
+    binding = settings.dataset_credential_bindings.get(credential_binding_id) if settings is not None else None
+    if binding is None:
+        raise DatasetError(
+            f"Dataset credential binding {credential_binding_id!r} is not configured. "
+            "Ask an administrator to configure LLE_DATASET_CREDENTIAL_BINDINGS_JSON."
+        )
+    host = urlparse(source_url).hostname
+    if host is None or host.lower().rstrip(".") not in binding.allowed_hosts:
+        raise DatasetError(
+            f"Dataset credential binding {credential_binding_id!r} is not authorized for this source host."
+        )
+    token = os.getenv(binding.environment_variable)
+    if not token:
+        raise DatasetError(f"Dataset credential binding {credential_binding_id!r} is not available in this deployment.")
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, ...]) -> None:
     parsed = urlparse(source_url)
+    if parsed.scheme != "https":
+        raise DatasetError("Dataset URLs must use HTTPS.")
     host = parsed.hostname
     if not host:
         raise DatasetError("Dataset URL must include a hostname.")
-    allowed_hosts = {item.strip().lower() for item in os.getenv("LLE_DATASET_ALLOWED_HOSTS", "").split(",") if item.strip()}
-    if allowed_hosts and not any(host.lower() == item or host.lower().endswith(f".{item}") for item in allowed_hosts):
+    normalized_host = host.lower().rstrip(".")
+    if allowed_hosts and not any(normalized_host == item or normalized_host.endswith(f".{item}") for item in allowed_hosts):
         raise DatasetError("Dataset URL host is not allowed by the configured network policy.")
     try:
         addresses = {item[4][0] for item in getaddrinfo(host, None)}
@@ -103,24 +113,28 @@ def dataset_source_suffix(source_url: str) -> str:
     return suffix if suffix in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"} else ".bin"
 
 
-def write_dataset_source(source: Path | str, target: Path, headers: dict[str, str], on_chunk: Callable[[], None] | None = None) -> str:
+def write_dataset_source(
+    source: str,
+    target: Path,
+    headers: dict[str, str],
+    on_chunk: Callable[[], None] | None = None,
+    *,
+    max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
+) -> str:
     """Stream a configured source to a temporary file and return its SHA-256 digest."""
 
     digest = hashlib.sha256()
-    if isinstance(source, Path):
-        if not source.is_file():
-            raise DatasetError("Dataset local source file was not found.")
-        with source.open("rb") as input_file, target.open("wb") as output_file:
-            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
-                output_file.write(chunk)
-                digest.update(chunk)
-                if on_chunk:
-                    on_chunk()
-        return digest.hexdigest()
     with httpx.stream("GET", source, headers=headers, timeout=60, follow_redirects=False) as response:
         response.raise_for_status()
+        content_length = response.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+            raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+        written = 0
         with target.open("wb") as output_file:
             for chunk in response.iter_bytes():
+                written += len(chunk)
+                if written > max_bytes:
+                    raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
                 output_file.write(chunk)
                 digest.update(chunk)
                 if on_chunk:
@@ -253,7 +267,12 @@ def accept_license(session: Session, dataset: DatasetVersion) -> DatasetVersion:
     return dataset
 
 
-def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
+def download_dataset(
+    session: Session,
+    dataset: DatasetVersion,
+    data_root: str,
+    settings: Settings | None = None,
+) -> DatasetVersion:
     if not dataset.source_url:
         raise DatasetError("Dataset has no downloadable source URL.")
     if dataset.license_text and dataset.license_accepted_at is None:
@@ -264,13 +283,24 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
     target = destination / f"dataset{dataset_source_suffix(dataset.source_url)}"; temporary = destination / "dataset.part"
     dataset.status = DatasetStatus.DOWNLOADING.value; dataset.error_message = None; session.commit()
     try:
-        source, headers = resolve_dataset_source(dataset.source_url, dataset.revision, dataset.credential_env_var)
+        source, headers = resolve_dataset_source(
+            dataset.source_url,
+            dataset.revision,
+            dataset.credential_binding_id,
+            settings,
+        )
         def ensure_not_paused() -> None:
             session.refresh(dataset)
             if dataset.status == DatasetStatus.WAITING.value:
                 raise DatasetDownloadPaused("Dataset download was paused and can be retried.")
 
-        actual_checksum = write_dataset_source(source, temporary, headers, ensure_not_paused)
+        actual_checksum = write_dataset_source(
+            source,
+            temporary,
+            headers,
+            ensure_not_paused,
+            max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
+        )
         dataset.status = DatasetStatus.VERIFYING.value; session.commit()
         if dataset.checksum and dataset.checksum.lower() != actual_checksum:
             temporary.unlink(missing_ok=True)
@@ -286,7 +316,7 @@ def download_dataset(session: Session, dataset: DatasetVersion, data_root: str) 
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPStatusError, DatasetError) as error:
-        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_env_var and ("environment variable" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
+        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPError, OSError) as error:
