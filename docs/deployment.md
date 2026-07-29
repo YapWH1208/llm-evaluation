@@ -73,7 +73,27 @@ Before upgrades, run `python -m app.cli database preview`. After upgrades, run `
 
 ## Operational checks
 
-- `/health` confirms the configured relational database type and schema version.
-- `/api/v1/dashboard` exposes queue, endpoint, dataset, cost, error-rate, and worker-lease summaries.
+- `/health` confirms the configured database type, schema version, disk capacity, and queue counters. It returns HTTP 503 when the backing store cannot be reached; do not route traffic to an instance until it returns HTTP 200 with `database_connected: true`.
+- `/api/v1/dashboard` exposes queue, endpoint, dataset, cost, error-rate, and worker-lease summaries. Its evidence window is intentionally bounded to recent runs/samples so operators should use run-specific reports for full historical analysis.
 - `/api/v1/evaluation-runs/{run_id}/events` emits server-sent progress snapshots.
 - `/api/v1/audit-events` exposes successful mutating operation metadata to administrators.
+
+## Public report sharing
+
+Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin. Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Configure the static host to rewrite `/shared-reports/<token>` to the SPA entry point and allow `X-Report-Password` in CORS preflights.
+
+## Worker rollout and verification
+
+Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use PostgreSQL or MongoDB; keep SQLite to a single controlled API/worker process.
+
+Run the following non-Docker checks before publishing a deployment artifact:
+
+```powershell
+python -m pytest -q
+Set-Location frontend
+npm.cmd ci
+npm.cmd test -- --run
+npm.cmd run build
+```
+
+On a POSIX host, also run `bash -n quick-launch.sh`. The local launcher atomically creates `data/.lle-secret-key` with mode `0600` and refuses an existing insecure or non-regular key file.

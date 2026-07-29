@@ -30,6 +30,7 @@ def test_task_queue_lists_and_reprioritizes_pending_tasks(tmp_path: Path) -> Non
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         tasks = client.get("/api/v1/tasks", params={"run_id": run["id"]}).json()
         assert [task["task_type"] for task in tasks] == ["dataset_preparation", "benchmark", "evaluation_shard"]
+        assert len(client.get("/api/v1/tasks", params={"run_id": run["id"], "limit": 1}).json()) == 1
         evaluation_task = next(task for task in tasks if task["task_type"] == "evaluation_shard")
         assert evaluation_task["priority"] == 0
         updated = client.patch(f"/api/v1/tasks/{evaluation_task['id']}", json={"priority": 25})

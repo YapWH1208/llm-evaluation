@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.db.models import TaskUnit
 from app.db.mongo import MongoDocumentStore
@@ -99,18 +99,32 @@ async def worker_events(request: Request, once: bool = False) -> StreamingRespon
 def _worker_event_payload(request: Request) -> dict[str, Any]:
     store = get_document_store(request)
     if store is not None:
-        tasks = store.list_documents("task_units", sort=[("updated_at", -1)])
-        active = [task for task in tasks if task.get("status") in {"leased", "running"}]
+        active_query = {"status": {"$in": ["leased", "running"]}}
+        workers = store.distinct_values("task_units", "leased_by", active_query)
+        errors = store.list_documents(
+            "task_units",
+            query={"status": "failed"},
+            sort=[("updated_at", -1)],
+            limit=20,
+            projection={"id": 1, "run_id": 1, "payload": 1},
+        )
         return {
-            "queue": {"pending": sum(task.get("status") in {"pending", "retry_scheduled"} for task in tasks), "active": len(active)},
-            "workers": sorted({str(task["leased_by"]) for task in active if task.get("leased_by")}),
-            "errors": [{"task_id": task["id"], "run_id": task["run_id"], "retry_exhausted_reason": (task.get("payload") or {}).get("retry_exhausted_reason")} for task in tasks if task.get("status") == "failed"][:20],
+            "queue": {
+                "pending": store.count_documents("task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}),
+                "active": store.count_documents("task_units", active_query),
+            },
+            "workers": sorted(str(worker) for worker in workers if worker),
+            "errors": [{"task_id": task["id"], "run_id": task["run_id"], "retry_exhausted_reason": (task.get("payload") or {}).get("retry_exhausted_reason")} for task in errors],
         }
     with request.app.state.database.get_session() as session:
-        tasks = list(session.scalars(select(TaskUnit).order_by(TaskUnit.updated_at.desc())))
-        active = [task for task in tasks if task.status in {"leased", "running"}]
+        active_query = TaskUnit.status.in_(["leased", "running"])
+        workers = session.scalars(select(TaskUnit.leased_by).where(active_query, TaskUnit.leased_by.is_not(None)).distinct().limit(500))
+        errors = session.scalars(select(TaskUnit).where(TaskUnit.status == "failed").order_by(TaskUnit.updated_at.desc()).limit(20))
         return {
-            "queue": {"pending": sum(task.status in {"pending", "retry_scheduled"} for task in tasks), "active": len(active)},
-            "workers": sorted({str(task.leased_by) for task in active if task.leased_by}),
-            "errors": [{"task_id": task.id, "run_id": task.run_id, "retry_exhausted_reason": (task.payload or {}).get("retry_exhausted_reason")} for task in tasks if task.status == "failed"][:20],
+            "queue": {
+                "pending": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["pending", "retry_scheduled"]))) or 0,
+                "active": session.scalar(select(func.count()).select_from(TaskUnit).where(active_query)) or 0,
+            },
+            "workers": sorted(str(worker) for worker in workers if worker),
+            "errors": [{"task_id": task.id, "run_id": task.run_id, "retry_exhausted_reason": (task.payload or {}).get("retry_exhausted_reason")} for task in errors],
         }

@@ -160,25 +160,31 @@ def create_app(
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
-    def health() -> HealthResponse:
+    def health() -> HealthResponse | JSONResponse:
         database_connected = True
         queue = {"pending": 0, "active": 0}
         try:
             if document_store is not None:
-                tasks = document_store.list_documents("task_units")
-                queue = {"pending": sum(task.get("status") in {"pending", "retry_scheduled"} for task in tasks), "active": sum(task.get("status") in {"leased", "running"} for task in tasks)}
+                queue = {
+                    "pending": document_store.count_documents("task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}),
+                    "active": document_store.count_documents("task_units", {"status": {"$in": ["leased", "running"]}}),
+                }
             else:
                 assert database is not None
                 from app.db.models import TaskUnit
 
                 with database.get_session() as session:
                     session.execute(text("SELECT 1"))
-                    tasks = list(session.scalars(select(TaskUnit.status)))
-                    queue = {"pending": sum(item in {"pending", "retry_scheduled"} for item in tasks), "active": sum(item in {"leased", "running"} for item in tasks)}
+                    from sqlalchemy import func
+
+                    queue = {
+                        "pending": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["pending", "retry_scheduled"]))) or 0,
+                        "active": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["leased", "running"]))) or 0,
+                    }
         except Exception:
             database_connected = False
         disk = shutil.disk_usage(Path(settings.data_root).resolve())
-        return HealthResponse(
+        payload = HealthResponse(
             status="ok" if database_connected else "degraded",
             database=settings.database_kind,
             schema_version=Database.CURRENT_SCHEMA_VERSION,
@@ -186,6 +192,9 @@ def create_app(
             disk={"available_bytes": disk.free, "total_bytes": disk.total},
             queue=queue,
         )
+        if not database_connected:
+            return JSONResponse(status_code=503, content=payload.model_dump())
+        return payload
 
     return app
 

@@ -33,3 +33,11 @@ def test_compose_requires_runtime_secrets_and_binds_api_to_loopback() -> None:
     assert "${LLE_SECRET_ENCRYPTION_KEY:?" in compose
     assert "${LLE_POSTGRES_PASSWORD:?" in compose
     assert '"127.0.0.1:8000:8000"' in compose
+
+
+def test_posix_launcher_creates_only_private_atomic_secret_files() -> None:
+    launcher = (Path(__file__).resolve().parents[1] / "quick-launch.sh").read_text(encoding="utf-8")
+
+    assert "os.O_EXCL" in launcher
+    assert "0o600" in launcher
+    assert "mode != 0o600" in launcher

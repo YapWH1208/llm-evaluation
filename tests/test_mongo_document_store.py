@@ -51,9 +51,10 @@ class FakeAdmin:
 
 
 class FakeCollection:
-    def __init__(self) -> None:
+    def __init__(self, *, validator: dict[str, Any] | None = None) -> None:
         self.documents: list[dict[str, Any]] = []
         self.indexes: list[tuple[Any, dict[str, Any]]] = []
+        self.validator = validator
 
     def create_index(self, keys: Any, **options: Any) -> None:
         self.indexes.append((keys, options))
@@ -70,6 +71,15 @@ class FakeCollection:
 
     def find(self, query: dict[str, Any], _projection: dict[str, int] | None = None) -> "FakeCursor":
         return FakeCursor([dict(document) for document in self.documents if _matches(document, query)])
+
+    def count_documents(self, query: dict[str, Any]) -> int:
+        return sum(_matches(document, query) for document in self.documents)
+
+    def distinct(self, field: str, query: dict[str, Any]) -> list[Any]:
+        return list({document.get(field) for document in self.documents if _matches(document, query) and document.get(field) is not None})
+
+    def options(self) -> dict[str, Any]:
+        return {"validator": self.validator} if self.validator is not None else {}
 
     def find_one_and_update(self, query: dict[str, Any], update: dict[str, Any], *, sort: list[tuple[str, int]] | None = None, return_document: Any) -> dict[str, Any] | None:
         matches = [document for document in self.documents if _matches(document, query)]
@@ -108,10 +118,10 @@ class FakeDatabase:
     def __getitem__(self, name: str) -> FakeCollection:
         return self.collections.setdefault(name, FakeCollection())
 
-    def create_collection(self, name: str) -> FakeCollection:
+    def create_collection(self, name: str, **options: Any) -> FakeCollection:
         if name in self.collections:
             raise RuntimeError("collection already exists")
-        collection = FakeCollection()
+        collection = FakeCollection(validator=options.get("validator"))
         self.collections[name] = collection
         return collection
 
@@ -185,6 +195,18 @@ def test_mongo_validation_detects_missing_index_and_migration() -> None:
     assert "task_units.status_1_next_retry_at_1_priority_-1_created_at_1" in validation.missing_indexes
     assert "20260729_add_remediation_persistence_contracts" in validation.missing_migrations
     with pytest.raises(MongoValidationError):
+        store.initialize("validate")
+
+
+def test_mongo_validation_detects_missing_collection_validator() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    client["platform"]["task_units"].validator = None
+
+    validation = store.validate_schema()
+    assert "task_units" in validation.missing_validators
+    with pytest.raises(MongoValidationError, match="missing validators"):
         store.initialize("validate")
 
 

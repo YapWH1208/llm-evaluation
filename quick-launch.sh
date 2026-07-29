@@ -31,9 +31,16 @@ fi
 if [[ -z "${LLE_SECRET_ENCRYPTION_KEY:-}" ]]; then
     SECRET_FILE="$ROOT_DIR/data/.lle-secret-key"
     export LLE_SECRET_FILE="$SECRET_FILE"
-    if [[ ! -s "$SECRET_FILE" ]]; then
-        "$PYTHON" -c 'import os; from pathlib import Path; from cryptography.fernet import Fernet; path = Path(os.environ["LLE_SECRET_FILE"]); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(Fernet.generate_key())'
-    fi
+    "$PYTHON" -c 'import os, stat; from pathlib import Path; from cryptography.fernet import Fernet; path = Path(os.environ["LLE_SECRET_FILE"]); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+try:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+except FileExistsError:
+    mode = stat.S_IMODE(os.lstat(path).st_mode)
+    if not path.is_file() or path.is_symlink() or mode != 0o600: raise SystemExit("Refusing insecure LLE secret file; expected a regular file with mode 0600.")
+else:
+    try: os.write(fd, Fernet.generate_key())
+    finally: os.close(fd)
+    os.chmod(path, 0o600)'
     export LLE_SECRET_ENCRYPTION_KEY="$(tr -d '[:space:]' < "$SECRET_FILE")"
 fi
 

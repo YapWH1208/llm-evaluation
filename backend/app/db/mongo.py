@@ -31,6 +31,7 @@ class MongoValidation:
     expected_version: int
     missing_collections: tuple[str, ...]
     missing_indexes: tuple[str, ...] = ()
+    missing_validators: tuple[str, ...] = ()
     missing_migrations: tuple[str, ...] = ()
 
     @property
@@ -39,6 +40,7 @@ class MongoValidation:
             self.current_version == self.expected_version
             and not self.missing_collections
             and not self.missing_indexes
+            and not self.missing_validators
             and not self.missing_migrations
         )
 
@@ -118,6 +120,35 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
     ),
 }
 
+_VALIDATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "schema_versions": ("version", "applied_at"),
+    "schema_migrations": ("version", "migration_id", "description", "applied_at"),
+    "users": ("id", "email", "role", "status", "created_at"),
+    "model_endpoints": ("id", "base_url", "model_name", "status", "created_at"),
+    "model_capabilities": ("id", "model_endpoint_id", "capability_key"),
+    "endpoint_rate_windows": ("id", "model_endpoint_id", "window_started_at"),
+    "endpoint_second_rate_windows": ("id", "model_endpoint_id", "window_started_at"),
+    "media_assets": ("id", "sha256", "mime_type", "created_at"),
+    "benchmark_definitions": ("id", "benchmark_id", "version", "manifest", "created_at"),
+    "prompt_packages": ("id", "name", "version", "created_at"),
+    "dataset_versions": ("id", "dataset_id", "version", "revision", "status", "created_at"),
+    "evaluation_suites": ("id", "name", "version", "created_at"),
+    "evaluation_runs": ("id", "model_endpoint_id", "status", "created_at"),
+    "task_units": ("id", "run_id", "task_type", "status", "priority", "created_at"),
+    "queue_admission_locks": ("id", "owner", "locked_until"),
+    "sample_attempts": ("id", "run_id", "sample_id", "status", "created_at"),
+    "aggregate_metrics": ("id", "run_id", "metric_name", "created_at"),
+    "reports": ("id", "run_id", "format", "artifact_path", "generated_at"),
+    "report_shares": ("id", "report_id", "token_hash", "expires_at", "created_at"),
+    "human_reviews": ("id", "sample_attempt_id", "reviewer_id", "created_at"),
+    "judge_assessments": ("id", "sample_attempt_id", "judge_endpoint_id", "status", "created_at"),
+    "audit_events": ("id", "action", "entity_type", "created_at"),
+}
+_VALIDATORS = {
+    name: {"$jsonSchema": {"bsonType": "object", "required": list(required)}}
+    for name, required in _VALIDATOR_REQUIRED_FIELDS.items()
+}
+
 
 class MongoDocumentStore:
     """Initializes MongoDB collections and provides atomic lease operations."""
@@ -148,6 +179,7 @@ class MongoDocumentStore:
         collection_names = set(self.database.list_collection_names())
         missing_collections = tuple(sorted(set(_COLLECTIONS) - collection_names))
         missing_indexes: list[str] = []
+        missing_validators: list[str] = []
         for collection_name, definitions in _INDEXES.items():
             if collection_name not in collection_names:
                 continue
@@ -155,6 +187,9 @@ class MongoDocumentStore:
             for keys, _options in definitions:
                 if _index_signature(keys) not in existing_indexes:
                     missing_indexes.append(f"{collection_name}.{_index_name(keys)}")
+        for collection_name, validator in _VALIDATORS.items():
+            if collection_name in collection_names and _collection_validator(self.database[collection_name]) != validator:
+                missing_validators.append(collection_name)
         applied = {
             int(document.get("version", 0)): str(document.get("migration_id", ""))
             for document in self.database["schema_migrations"].find({})
@@ -171,6 +206,7 @@ class MongoDocumentStore:
             expected_version=self.CURRENT_SCHEMA_VERSION,
             missing_collections=missing_collections,
             missing_indexes=tuple(sorted(missing_indexes)),
+            missing_validators=tuple(sorted(missing_validators)),
             missing_migrations=tuple(sorted(missing_migrations)),
         )
 
@@ -187,6 +223,7 @@ class MongoDocumentStore:
                     f"MongoDB validation failed: version {validation.current_version}/{validation.expected_version}; "
                     f"missing collections: {', '.join(validation.missing_collections) or 'none'}; "
                     f"missing indexes: {', '.join(validation.missing_indexes) or 'none'}; "
+                    f"missing validators: {', '.join(validation.missing_validators) or 'none'}; "
                     f"missing migrations: {', '.join(validation.missing_migrations) or 'none'}."
                 )
             return validation
@@ -212,7 +249,13 @@ class MongoDocumentStore:
             current_version = migration.version
         validation = self.validate_schema()
         if not validation.is_valid:
-            raise MongoValidationError("MongoDB initialization completed but schema validation did not pass.")
+            raise MongoValidationError(
+                "MongoDB initialization completed but schema validation did not pass: "
+                f"collections={', '.join(validation.missing_collections) or 'none'}; "
+                f"indexes={', '.join(validation.missing_indexes) or 'none'}; "
+                f"validators={', '.join(validation.missing_validators) or 'none'}; "
+                f"migrations={', '.join(validation.missing_migrations) or 'none'}."
+            )
         return validation
 
     def claim_task(
@@ -442,8 +485,9 @@ class MongoDocumentStore:
         sort: list[tuple[str, int]] | None = None,
         offset: int | None = None,
         limit: int | None = None,
+        projection: dict[str, int] | None = None,
     ) -> list[dict[str, Any]]:
-        cursor = self.database[collection_name].find(query or {})
+        cursor = self.database[collection_name].find(query or {}, projection) if projection is not None else self.database[collection_name].find(query or {})
         if sort:
             cursor = cursor.sort(sort)
         if offset:
@@ -451,6 +495,22 @@ class MongoDocumentStore:
         if limit is not None:
             cursor = cursor.limit(limit) if hasattr(cursor, "limit") else cursor[:limit]
         return [_public_document(document) for document in cursor]
+
+    def count_documents(self, collection_name: str, query: dict[str, Any] | None = None) -> int:
+        collection = self.database[collection_name]
+        count_documents = getattr(collection, "count_documents", None)
+        if callable(count_documents):
+            return int(count_documents(query or {}))
+        return len(self.list_documents(collection_name, query=query))
+
+    def distinct_values(
+        self, collection_name: str, field: str, query: dict[str, Any] | None = None, *, limit: int = 500
+    ) -> list[Any]:
+        collection = self.database[collection_name]
+        distinct = getattr(collection, "distinct", None)
+        if callable(distinct):
+            return list(distinct(field, query or {}))[:limit]
+        return list({item.get(field) for item in self.list_documents(collection_name, query=query, limit=limit) if item.get(field) is not None})
 
     def update_document(
         self,
@@ -535,7 +595,9 @@ class MongoDocumentStore:
         existing = set(self.database.list_collection_names())
         for collection_name in _COLLECTIONS:
             if collection_name not in existing:
-                self.database.create_collection(collection_name)
+                self.database.create_collection(collection_name, validator=_VALIDATORS[collection_name])
+            else:
+                self._set_collection_validator(collection_name, _VALIDATORS[collection_name])
         for collection_name, definitions in _INDEXES.items():
             collection = self.database[collection_name]
             for keys, options in definitions:
@@ -546,6 +608,15 @@ class MongoDocumentStore:
                 lock.insert_one({"_id": "global", "id": "global", "owner": None, "locked_until": datetime(1970, 1, 1, tzinfo=timezone.utc)})
             except Exception:
                 pass
+
+    def _set_collection_validator(self, collection_name: str, validator: dict[str, Any]) -> None:
+        command = getattr(self.database, "command", None)
+        if callable(command):
+            command({"collMod": collection_name, "validator": validator})
+            return
+        collection = self.database[collection_name]
+        if hasattr(collection, "validator"):
+            collection.validator = validator
 
     def _acquire_admission_lock(self) -> str | None:
         now = _utc_now()
@@ -598,6 +669,15 @@ def _existing_index_signatures(collection: Any) -> set[tuple[tuple[str, int], ..
         _index_signature(keys)
         for keys, _options in getattr(collection, "indexes", ())
     }
+
+
+def _collection_validator(collection: Any) -> dict[str, Any] | None:
+    options = getattr(collection, "options", None)
+    if callable(options):
+        value = options()
+        return value.get("validator") if isinstance(value, dict) else None
+    value = getattr(collection, "validator", None)
+    return value if isinstance(value, dict) else None
 
 
 def _return_document_after() -> bool:
