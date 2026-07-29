@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -7,6 +8,13 @@ import httpx
 
 from app.db import ModelEndpoint
 from app.services.model_executor import _endpoint_url, _extract_prediction
+from app.services.outbound_network import (
+    OutboundNetworkError,
+    OutboundRedirectError,
+    OutboundResponseTooLargeError,
+    read_bounded_response,
+    validate_outbound_url,
+)
 from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
 
 
@@ -24,51 +32,64 @@ class ConnectionTester(Protocol):
 class OpenAIChatCompletionsConnectionTester:
     """Performs a bounded, text-only probe for each built-in protocol profile."""
 
-    def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, transport: httpx.BaseTransport | None = None, *, max_response_bytes: int = 4 * 1024 * 1024) -> None:
         self._transport = transport
+        self._max_response_bytes = max_response_bytes
 
     def test(self, endpoint: ModelEndpoint, api_key: str) -> ConnectionTestResult:
         request_body = self._build_request_body(endpoint)
         try:
+            endpoint_url = _endpoint_url(endpoint)
+            validate_outbound_url(endpoint_url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
                 transport=self._transport,
             ) as client:
-                response = client.post(
-                    _endpoint_url(endpoint),
+                with client.stream(
+                    "POST",
+                    endpoint_url,
                     headers=provider_headers(endpoint, api_key),
                     json=request_body,
-                )
+                ) as response:
+                    body = read_bounded_response(response, max_bytes=self._max_response_bytes)
+                    status_code = response.status_code
+                    is_error = response.is_error
+        except OutboundNetworkError as error:
+            return ConnectionTestResult(False, str(error))
+        except OutboundRedirectError as error:
+            return ConnectionTestResult(False, str(error))
+        except OutboundResponseTooLargeError as error:
+            return ConnectionTestResult(False, str(error))
         except httpx.TimeoutException:
             return ConnectionTestResult(False, "Provider request timed out.")
         except httpx.RequestError:
             return ConnectionTestResult(False, "Could not connect to the provider.")
 
-        if response.is_error:
+        if is_error:
             return ConnectionTestResult(
                 False,
-                f"Provider returned HTTP {response.status_code}.",
-                response.status_code,
+                f"Provider returned HTTP {status_code}.",
+                status_code,
             )
 
         try:
-            payload = response.json()
+            payload = json.loads(body)
         except ValueError:
             return ConnectionTestResult(
                 False,
                 "Provider returned a non-JSON response.",
-                response.status_code,
+                status_code,
             )
 
         if not isinstance(payload, dict) or not _has_expected_response_shape(endpoint, payload):
             return ConnectionTestResult(
                 False,
                 "Provider returned an unexpected response payload.",
-                response.status_code,
+                status_code,
             )
 
-        return ConnectionTestResult(True, "Connection succeeded.", response.status_code)
+        return ConnectionTestResult(True, "Connection succeeded.", status_code)
 
     @staticmethod
     def _build_request_body(endpoint: ModelEndpoint) -> dict[str, object]:

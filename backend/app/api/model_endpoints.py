@@ -17,6 +17,7 @@ from app.db import EndpointStatus, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
 from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
 from app.services.model_executor import OpenAIChatCompletionsExecutor
+from app.services.outbound_network import OutboundNetworkError, validate_outbound_url
 from app.services.provider_headers import validate_custom_headers
 
 router = APIRouter(prefix="/api/v1/model-endpoints", tags=["model endpoints"])
@@ -72,14 +73,10 @@ class EndpointBase(BaseModel):
             raise ValueError("base_url must be an absolute HTTP or HTTPS URL")
         if parsed.username or parsed.password:
             raise ValueError("base_url must not include credentials")
-        hostname = parsed.hostname
-        if hostname:
-            try:
-                address = ipaddress.ip_address(hostname)
-            except ValueError:
-                address = None
-            if address and (address.is_private or address.is_link_local or address.is_reserved or address.is_unspecified) and not address.is_loopback:
-                raise ValueError("base_url must not target a private or restricted network address")
+        try:
+            validate_outbound_url(value, allow_loopback=True, resolve_hostname=False)
+        except OutboundNetworkError as error:
+            raise ValueError(str(error)) from error
         return value.rstrip("/")
 
     @field_validator("default_request_body")

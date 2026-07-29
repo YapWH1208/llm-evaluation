@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import ipaddress
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -14,6 +15,13 @@ import httpx
 
 from app.db import ModelEndpoint
 from app.services.content_ir import ContentValidationError, normalize_content_parts
+from app.services.outbound_network import (
+    OutboundNetworkError,
+    OutboundRedirectError,
+    OutboundResponseTooLargeError,
+    read_bounded_response,
+    validate_outbound_url,
+)
 from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
 from app.services.request_body import effective_request_options, request_snapshot_metadata
 
@@ -44,8 +52,9 @@ class ModelExecutor(Protocol):
 class OpenAIChatCompletionsExecutor:
     """Executes a sample through one of the built-in provider protocol adapters."""
 
-    def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, transport: httpx.BaseTransport | None = None, *, max_response_bytes: int = 4 * 1024 * 1024) -> None:
         self._transport = transport
+        self._max_response_bytes = max_response_bytes
 
     def execute(
         self,
@@ -68,16 +77,35 @@ class OpenAIChatCompletionsExecutor:
                 latency_ms=_elapsed_ms(started_at),
             )
         try:
+            endpoint_url = _endpoint_url(endpoint)
+            validate_outbound_url(endpoint_url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
                 transport=self._transport,
             ) as client:
-                response = client.post(
-                    _endpoint_url(endpoint),
+                with client.stream(
+                    "POST",
+                    endpoint_url,
                     headers=provider_headers(endpoint, api_key),
                     json=outbound_request,
-                )
+                ) as response:
+                    body = read_bounded_response(response, max_bytes=self._max_response_bytes)
+                    status_code = response.status_code
+                    is_error = response.is_error
+                    response_headers = response.headers
+        except OutboundNetworkError as error:
+            return SampleExecutionResult(
+                False, request_snapshot, None, None, "unsafe_destination", str(error), latency_ms=_elapsed_ms(started_at)
+            )
+        except OutboundRedirectError as error:
+            return SampleExecutionResult(
+                False, request_snapshot, None, None, "redirect_blocked", str(error), latency_ms=_elapsed_ms(started_at)
+            )
+        except OutboundResponseTooLargeError as error:
+            return SampleExecutionResult(
+                False, request_snapshot, None, None, "response_too_large", str(error), latency_ms=_elapsed_ms(started_at)
+            )
         except httpx.TimeoutException:
             return SampleExecutionResult(
                 False,
@@ -99,21 +127,21 @@ class OpenAIChatCompletionsExecutor:
                 latency_ms=_elapsed_ms(started_at),
             )
 
-        raw_response = response.text
-        if response.is_error:
+        raw_response = body.decode("utf-8", errors="replace")
+        if is_error:
             return SampleExecutionResult(
                 False,
                 request_snapshot,
                 raw_response,
                 None,
-                f"http_{response.status_code}",
-                f"Provider returned HTTP {response.status_code}.",
+                f"http_{status_code}",
+                f"Provider returned HTTP {status_code}.",
                 latency_ms=_elapsed_ms(started_at),
-                retry_after_seconds=_parse_retry_after(response.headers.get("retry-after")),
+                retry_after_seconds=_parse_retry_after(response_headers.get("retry-after")),
             )
 
         try:
-            payload = response.json()
+            payload = json.loads(body)
             prediction = _extract_prediction(payload, _protocol_profile(endpoint))
             input_tokens, output_tokens = _extract_usage(payload)
         except (IndexError, KeyError, TypeError, ValueError):

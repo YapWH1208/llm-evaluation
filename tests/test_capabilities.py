@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 import httpx
+import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.core.config import Settings
@@ -10,6 +11,13 @@ from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
 from app.services.capability_detector import DEFAULT_CAPABILITY_KEYS, OpenAIChatCompletionsCapabilityDetector
 from app.db.models import ModelEndpoint
+
+@pytest.fixture(autouse=True)
+def public_provider_dns(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
 
 def test_capabilities_keep_user_declaration_separate(tmp_path: Path) -> None:
     app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", secret_encryption_key=Fernet.generate_key().decode()))

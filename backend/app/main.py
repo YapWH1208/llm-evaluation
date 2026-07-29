@@ -105,9 +105,9 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
     app.state.settings = settings
-    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
-    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor()
-    app.state.capability_detector = capability_detector or OpenAIChatCompletionsCapabilityDetector()
+    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.capability_detector = capability_detector or OpenAIChatCompletionsCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)
     app.include_router(model_endpoints_router)
     app.include_router(capabilities_router)
     app.include_router(datasets_router)

@@ -41,7 +41,7 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
         created_body = created.json()
         endpoint_id = created_body["id"]
         assert created_body["base_url"] == "https://models.example.test/v1"
-        assert created_body["api_key_mask"] == "鈥⑩€⑩€⑩€?key"
+        assert created_body["api_key_mask"] == "\u2022\u2022\u2022\u2022-key"
         assert "api_key" not in created_body
         assert "encrypted_api_key" not in created_body
         assert created_body["requests_per_second"] == 5
@@ -57,7 +57,7 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
             json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000},
         )
         assert updated.status_code == 200
-        assert updated.json()["api_key_mask"] == "鈥⑩€⑩€⑩€ret"
+        assert updated.json()["api_key_mask"] == "\u2022\u2022\u2022\u2022cret"
         assert updated.json()["tokens_per_minute"] == 9000
         assert updated.json()["output_tokens_per_minute"] == 4000
 

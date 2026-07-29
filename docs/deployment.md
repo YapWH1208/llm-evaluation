@@ -42,6 +42,8 @@ Choose the protocol profile when creating a model endpoint. The platform appends
 
 Use custom headers for non-secret routing metadata such as a project identifier. Authentication headers are reserved for the encrypted endpoint credential. Native adapters reject unsupported media shapes before sending them; run capability detection after a successful connection test to persist the exact profile evidence.
 
+Before each connection probe, capability probe, and model request, the platform resolves every A/AAAA address for the provider host and rejects loopback, private, link-local, multicast, reserved, and unspecified targets. Redirects are refused rather than followed. The explicit `ollama_chat` profile is the sole local-loopback exception. Provider response bodies are streamed and capped at 4 MiB by default; set `LLE_PROVIDER_RESPONSE_MAX_BYTES` to a positive deployment-specific limit when needed.
+
 ## Dataset sources and credentials
 
 Dataset versions accept only `https://` URLs and `hf://owner/repository/path/to/file` Hugging Face references. `file://` URLs, local paths, HTTP, and custom downloader schemes are rejected; upload local revisions through the dataset upload endpoint instead. Downloads are streamed with a 64 MiB default cap, adjustable with `LLE_DATASET_DOWNLOAD_MAX_BYTES`.

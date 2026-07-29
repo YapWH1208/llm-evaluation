@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 DEFAULT_DATASET_DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024
+DEFAULT_PROVIDER_RESPONSE_MAX_BYTES = 4 * 1024 * 1024
 _BINDING_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
 _ENVIRONMENT_VARIABLE_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
 
@@ -41,6 +42,7 @@ class Settings:
     dataset_credential_bindings: Mapping[str, DatasetCredentialBinding] = field(default_factory=dict)
     dataset_allowed_hosts: tuple[str, ...] = ()
     dataset_download_max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES
+    provider_response_max_bytes: int = DEFAULT_PROVIDER_RESPONSE_MAX_BYTES
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -61,6 +63,9 @@ class Settings:
             dataset_allowed_hosts=_comma_separated_hosts(getenv("LLE_DATASET_ALLOWED_HOSTS")),
             dataset_download_max_bytes=_positive_environment_int(
                 "LLE_DATASET_DOWNLOAD_MAX_BYTES", DEFAULT_DATASET_DOWNLOAD_MAX_BYTES
+            ),
+            provider_response_max_bytes=_positive_environment_int(
+                "LLE_PROVIDER_RESPONSE_MAX_BYTES", DEFAULT_PROVIDER_RESPONSE_MAX_BYTES
             ),
         )
 

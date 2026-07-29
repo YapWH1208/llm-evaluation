@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -13,6 +14,14 @@ from app.services.connection_tester import (
     ConnectionTestResult,
     OpenAIChatCompletionsConnectionTester,
 )
+
+
+@pytest.fixture(autouse=True)
+def public_provider_dns(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
 
 
 def test_openai_connection_probe_uses_a_small_protected_request() -> None:
@@ -82,6 +91,36 @@ def test_connection_probe_adapts_anthropic_messages_shape() -> None:
     endpoint = ModelEndpoint(display_name="Anthropic", base_url="https://models.example.test", model_name="claude-test", protocol_profile="anthropic_messages", encrypted_api_key="not-used", api_key_mask="****test")
     result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
+def test_connection_probe_rejects_restricted_dns_and_oversized_responses(monkeypatch) -> None:
+    called = False
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    endpoint = ModelEndpoint(display_name="Restricted", base_url="https://models.example.test/v1", model_name="model", encrypted_api_key="unused", api_key_mask="****")
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("127.0.0.1", 0))],
+    )
+    restricted = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    assert restricted.success is False
+    assert "restricted network" in restricted.message
+    assert called is False
+
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
+    oversized = OpenAIChatCompletionsConnectionTester(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=b"x" * 32)),
+        max_response_bytes=16,
+    ).test(endpoint, "secret")
+    assert oversized.success is False
+    assert "byte limit" in oversized.message
 
 
 def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
