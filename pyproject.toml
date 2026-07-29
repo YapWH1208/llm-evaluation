@@ -31,6 +31,11 @@ mongodb = [
   "pymongo>=4.6,<5.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["app*"]
+namespaces = true
+
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["backend"]
