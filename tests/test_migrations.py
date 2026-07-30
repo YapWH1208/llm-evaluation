@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, inspect, select
 
 from app.core.config import Settings
 from app.db.database import Database
+from app.db.migrations import MIGRATIONS
 from app.db.models import SchemaMigration, SchemaVersion
 
 
@@ -113,4 +114,21 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         assert password_limit_migration is not None
         assert password_limit_migration.migration_id == "20260730_add_report_share_password_limits"
     assert database.migration_preview() == ()
+    database.dispose()
+
+
+def test_initialize_backfills_a_missing_legacy_migration_ledger_before_upgrading(tmp_path: Path) -> None:
+    database = Database(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'legacy-v21.db'}"))
+    database.initialize()
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE schema_migrations")
+        connection.exec_driver_sql("DELETE FROM schema_versions WHERE version > 21")
+
+    validation = database.initialize()
+    assert validation.is_valid
+    with database.get_session() as session:
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
+        applied_versions = list(session.scalars(select(SchemaMigration.version).order_by(SchemaMigration.version)))
+    assert applied_versions == [migration.version for migration in MIGRATIONS]
+    assert database.initialize("validate").is_valid
     database.dispose()

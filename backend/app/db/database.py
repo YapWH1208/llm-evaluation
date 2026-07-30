@@ -222,6 +222,10 @@ class Database:
 
         if self.settings.database_backup_before_migrate and self.migration_preview():
             self.backup_before_migration()
+        with self.engine.connect() as connection:
+            migration_ledger_existed = "schema_migrations" in set(
+                connection.dialect.get_table_names(connection)
+            )
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as connection:
             current_version = connection.scalar(
@@ -229,6 +233,21 @@ class Database:
                 .order_by(SchemaVersion.version.desc())
                 .limit(1)
             ) or 0
+            # v1-v21 deployments predate the migration ledger.  Their existing
+            # schema_versions rows are the durable record that those canonical
+            # upgrades completed, so restore the ledger before validation adds
+            # newer entries. This is additive and never replays old DDL.
+            if not migration_ledger_existed:
+                for migration in MIGRATIONS:
+                    if migration.version > current_version:
+                        break
+                    connection.execute(
+                        SchemaMigration.__table__.insert().values(
+                            version=migration.version,
+                            migration_id=migration.migration_id,
+                            description=migration.description,
+                        )
+                    )
             for migration in MIGRATIONS:
                 if migration.version <= current_version:
                     continue

@@ -235,8 +235,25 @@ class MongoDocumentStore:
             return validation
 
         self.client.admin.command("ping")
+        migration_ledger_existed = "schema_migrations" in set(self.database.list_collection_names())
         self._ensure_collections_and_indexes()
         current_version = self._current_version()
+        # Older Mongo installations track completed versions but do not have
+        # the later migration ledger collection. Backfill its canonical rows
+        # before recording new versions, without replaying historical work.
+        if not migration_ledger_existed:
+            for migration in MIGRATIONS:
+                if migration.version > current_version:
+                    break
+                self.database["schema_migrations"].insert_one(
+                    {
+                        "_id": migration.version,
+                        "version": migration.version,
+                        "migration_id": migration.migration_id,
+                        "description": migration.description,
+                        "applied_at": _utc_now(),
+                    }
+                )
         for migration in MIGRATIONS:
             if migration.version <= current_version:
                 continue

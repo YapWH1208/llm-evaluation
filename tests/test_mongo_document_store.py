@@ -186,6 +186,24 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert len(client["platform"]["users"].indexes) == 2
 
 
+def test_mongo_store_backfills_missing_legacy_migration_ledger_before_upgrading() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    database = client["platform"]
+    del database.collections["schema_migrations"]
+    database["schema_versions"].documents = [
+        document for document in database["schema_versions"].documents if document["version"] <= 21
+    ]
+
+    validation = store.initialize()
+    assert validation.is_valid
+    assert [item["version"] for item in database["schema_migrations"].documents] == [
+        migration.version for migration in MIGRATIONS
+    ]
+    assert store.initialize("validate").is_valid
+
+
 def test_mongo_report_share_password_limiter_is_durable_and_expires() -> None:
     client = FakeClient()
     store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
