@@ -17,6 +17,7 @@ import {
   JudgeAgreement,
   PromptPackage,
   Report,
+  ReportShare,
   ReportType,
   Review,
   ReviewAgreement,
@@ -206,7 +207,6 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [reportType, setReportType] = useState<ReportType>("single_model");
   const [relatedReportRunId, setRelatedReportRunId] = useState("");
-  const [shareForm, setShareForm] = useState(initialShare);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -432,7 +432,7 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function shareReport(report: Report) {
+  async function shareReport(report: Report, shareForm: typeof initialShare): Promise<ReportShare> {
     setBusy(`share-${report.id}`);
     try {
       const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
@@ -443,7 +443,8 @@ export default function App() {
         include_evidence: shareForm.include_evidence,
       });
       setNotice(`Read-only share link (expires ${formatDate(share.expires_at)}): ${share.share_url}`);
-    } catch (error) { showError(error); } finally { setBusy(null); }
+      return share;
+    } finally { setBusy(null); }
   }
 
   async function createPrompt(event: FormEvent) {
@@ -835,24 +836,30 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
   return <div className="comparison-result"><div className="metric-grid"><Metric label="A-only correct" value={comparison.outcomes.run_a_only_correct} detail="sample outcomes" /><Metric label="B-only correct" value={comparison.outcomes.run_b_only_correct} detail="sample outcomes" /><Metric label="Latency difference" value={`${display(comparison.differences.average_latency_ms)} ms`} detail="A minus B" /><Metric label="Cost difference" value={display(comparison.differences.estimated_cost, 6)} detail="A minus B" /></div><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>A - B</th></tr></thead><tbody><tr><td>Accuracy</td><td>{percent(comparison.run_a_summary.samples.accuracy)}</td><td>{percent(comparison.run_b_summary.samples.accuracy)}</td><td>{percent(comparison.differences.accuracy)}</td></tr><tr><td>Success rate</td><td>{percent(comparison.run_a_summary.samples.success_rate)}</td><td>{percent(comparison.run_b_summary.samples.success_rate)}</td><td>{percent(comparison.differences.success_rate)}</td></tr><tr><td>P95 latency</td><td>{display(comparison.run_a_summary.latency_ms.p95)} ms</td><td>{display(comparison.run_b_summary.latency_ms.p95)} ms</td><td>{display(comparison.differences.p95_latency_ms)} ms</td></tr><tr><td>Output tokens</td><td>{display(comparison.run_a_summary.tokens.output)}</td><td>{display(comparison.run_b_summary.tokens.output)}</td><td>{display(comparison.differences.output_tokens)}</td></tr></tbody></table></div></div>;
 }
 
-export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
+export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report, form: typeof initialShare) => Promise<ReportShare> }) {
   const [shareForm, setShareForm] = useState(initialShare);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function createShare(report: Report) {
-    if (onShare) {
-      await onShare(report);
-      return;
+    setDownloadError(null);
+    try {
+      const form = shareForm;
+      const days = Math.min(365, Math.max(1, Number(form.days) || 7));
+      const share = onShare
+        ? await onShare(report, form)
+        : await api.createReportShare(report.id, {
+          expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+          password: form.password || undefined,
+          allow_download: form.allow_download,
+          include_evidence: form.include_evidence,
+        });
+      setShareLink(share.share_url);
+      // The one-time value is no longer needed after the server receives it.
+      setShareForm({ ...form, password: "" });
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The report share could not be created.");
     }
-    const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
-    const share = await api.createReportShare(report.id, {
-      expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
-      password: shareForm.password || undefined,
-      allow_download: shareForm.allow_download,
-      include_evidence: shareForm.include_evidence,
-    });
-    setShareLink(share.share_url);
   }
 
   async function downloadReport(report: Report) {

@@ -46,4 +46,27 @@ describe("public report sharing", () => {
     expect(api.downloadReport).toHaveBeenCalledWith("report-id");
     expect(click).toHaveBeenCalledOnce();
   });
+
+  it("passes the visible Reports share policy to the controlled share handler", async () => {
+    const user = userEvent.setup();
+    const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
+    const onShare = vi.fn().mockResolvedValue({ id: "share-id", report_id: report.id, expires_at: "2026-08-01T00:00:00Z", allow_download: true, revoked_at: null, created_at: "2026-07-29T00:00:00Z", share_url: "https://evaluation.example.test/shared-reports/token" });
+    render(<ReportsTable reports={[report]} onShare={onShare} />);
+
+    await user.clear(screen.getByLabelText("Expires in days"));
+    await user.type(screen.getByLabelText("Expires in days"), "21");
+    await user.type(screen.getByLabelText("Optional password"), "view-only-password");
+    await user.click(screen.getByLabelText("Allow download"));
+    await user.click(screen.getByLabelText("Share raw evidence"));
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    expect(onShare).toHaveBeenCalledWith(report, {
+      days: "21",
+      password: "view-only-password",
+      allow_download: true,
+      include_evidence: true,
+    });
+    expect(screen.getByLabelText("Optional password")).toHaveValue("");
+    expect(await screen.findByRole("link", { name: "Open the newly created share link" })).toHaveAttribute("href", "https://evaluation.example.test/shared-reports/token");
+  });
 });

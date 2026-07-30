@@ -88,7 +88,9 @@ class FakeCollection:
                 matches.sort(key=lambda document: document.get(key), reverse=direction < 0)
         if not matches:
             return None
-        matches[0].update(update["$set"])
+        matches[0].update(update.get("$set", {}))
+        for key, value in update.get("$inc", {}).items():
+            matches[0][key] = int(matches[0].get(key, 0)) + int(value)
         return dict(matches[0])
 
     def update_many(self, query: dict[str, Any], update: dict[str, Any]) -> None:
@@ -160,6 +162,8 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
                 return False
             if "$gte" in expected and not (actual >= expected["$gte"]):
                 return False
+            if "$gt" in expected and not (actual > expected["$gt"]):
+                return False
             continue
         if actual != expected:
             return False
@@ -180,6 +184,27 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert len(client["platform"]["schema_migrations"].documents) == len(MIGRATIONS)
     assert len(client["platform"]["task_units"].indexes) == 1
     assert len(client["platform"]["users"].indexes) == 2
+
+
+def test_mongo_report_share_password_limiter_is_durable_and_expires() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    now = datetime.now(timezone.utc)
+
+    for _ in range(5):
+        assert store.record_report_share_password_failure(
+            share_id="share-id", client_key="client-hash", now=now, window=timedelta(minutes=5), limit=5
+        )
+    assert store.report_share_password_attempt_limit_reached(
+        share_id="share-id", client_key="client-hash", now=now, limit=5
+    )
+    assert not store.record_report_share_password_failure(
+        share_id="share-id", client_key="client-hash", now=now, window=timedelta(minutes=5), limit=5
+    )
+    assert store.record_report_share_password_failure(
+        share_id="share-id", client_key="client-hash", now=now + timedelta(minutes=6), window=timedelta(minutes=5), limit=5
+    )
 
 
 def test_mongo_validation_detects_missing_index_and_migration() -> None:

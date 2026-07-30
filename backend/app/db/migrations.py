@@ -168,6 +168,10 @@ def _upgrade_v22_remediation_persistence_contracts(connection: Connection) -> No
         connection.execute(text("ALTER TABLE report_shares ALTER COLUMN password_hash TYPE VARCHAR(512)"))
 
 
+def _upgrade_v23_report_share_password_limits(_connection: Connection) -> None:
+    """The ORM creates the additive durable report-share password limiter table."""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -294,6 +298,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260729_add_remediation_persistence_contracts",
         description="Add lease fencing, safe dataset binding, and immutable report metadata fields.",
         upgrade=_upgrade_v22_remediation_persistence_contracts,
+    ),
+    Migration(
+        version=23,
+        migration_id="20260730_add_report_share_password_limits",
+        description="Add durable, expiring per-client failed-password windows for public report shares.",
+        upgrade=_upgrade_v23_report_share_password_limits,
     ),
 )
 

@@ -244,6 +244,11 @@ def _allowed_roles(path: str, method: str) -> set[str]:
         return {UserRole.ADMIN.value}
     if path.startswith("/api/v1/benchmarks") and method != "GET":
         return {UserRole.ADMIN.value}
+    # Endpoint changes and connection tests decrypt provider credentials.  They
+    # are administrator operations rather than ordinary evaluator work; an
+    # evaluator could otherwise redirect another endpoint to capture its key.
+    if path.startswith("/api/v1/model-endpoints") and method != "GET":
+        return {UserRole.ADMIN.value}
     if path.startswith("/api/v1/reviews") and method != "GET":
         return reviewer_roles
     if method in {"POST", "PATCH", "PUT", "DELETE"}:

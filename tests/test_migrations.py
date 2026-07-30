@@ -37,7 +37,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == list(range(2, 23))
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 24))
     database.initialize()
     database.initialize()
 
@@ -54,7 +54,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
     assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 22
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -109,5 +109,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         remediation_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 22))
         assert remediation_migration is not None
         assert remediation_migration.migration_id == "20260729_add_remediation_persistence_contracts"
+        password_limit_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 23))
+        assert password_limit_migration is not None
+        assert password_limit_migration.migration_id == "20260730_add_report_share_password_limits"
     assert database.migration_preview() == ()
     database.dispose()

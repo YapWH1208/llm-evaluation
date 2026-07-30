@@ -291,6 +291,26 @@ class ReportShare(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+
+class ReportSharePasswordAttempt(Base):
+    """One durable, expiring password-failure window per share and client partition."""
+
+    __tablename__ = "report_share_password_attempts"
+    __table_args__ = (
+        UniqueConstraint("share_id", "client_key", name="uq_report_share_password_attempt_client"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    share_id: Mapped[str] = mapped_column(
+        ForeignKey("report_shares.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
 class HumanReview(Base):
     __tablename__="human_reviews"
     id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))

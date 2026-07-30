@@ -82,7 +82,7 @@ Before upgrades, run `python -m app.cli database preview`. After upgrades, run `
 
 ## Public report sharing
 
-Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin. Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Configure the static host to rewrite `/shared-reports/<token>` to the SPA entry point and allow `X-Report-Password` in CORS preflights.
+Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Configure the static host to rewrite `/shared-reports/<token>` to the SPA entry point and allow `X-Report-Password` in CORS preflights.
 
 ## Worker rollout and verification
 

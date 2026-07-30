@@ -65,6 +65,7 @@ _COLLECTIONS = (
     "aggregate_metrics",
     "reports",
     "report_shares",
+    "report_share_password_attempts",
     "human_reviews",
     "judge_assessments",
     "audit_events",
@@ -108,6 +109,10 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
     "report_shares": (
         ((("token_hash", 1),), {"unique": True}),
     ),
+    "report_share_password_attempts": (
+        ((("share_id", 1), ("client_key", 1)), {"unique": True}),
+        ((("expires_at", 1),), {"expireAfterSeconds": 0}),
+    ),
     "sample_attempts": (
         ((("run_id", 1), ("sample_id", 1), ("attempt_number", 1)), {"unique": True}),
         ((("run_id", 1), ("status", 1)), {}),
@@ -140,6 +145,7 @@ _VALIDATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "aggregate_metrics": ("id", "run_id", "metric_name", "created_at"),
     "reports": ("id", "run_id", "format", "artifact_path", "generated_at"),
     "report_shares": ("id", "report_id", "token_hash", "expires_at", "created_at"),
+    "report_share_password_attempts": ("id", "share_id", "client_key", "failure_count", "expires_at"),
     "human_reviews": ("id", "sample_attempt_id", "reviewer_id", "created_at"),
     "judge_assessments": ("id", "sample_attempt_id", "judge_endpoint_id", "status", "created_at"),
     "audit_events": ("id", "action", "entity_type", "created_at"),
@@ -524,6 +530,78 @@ class MongoDocumentStore:
             return_document=_return_document_after(),
         )
         return _public_document(document) if isinstance(document, dict) else None
+
+    def report_share_password_attempt_limit_reached(
+        self, *, share_id: str, client_key: str, now: datetime, limit: int
+    ) -> bool:
+        document = self.database["report_share_password_attempts"].find_one(
+            {"share_id": share_id, "client_key": client_key, "expires_at": {"$gt": now}}
+        )
+        return bool(isinstance(document, dict) and int(document.get("failure_count", 0)) >= limit)
+
+    def record_report_share_password_failure(
+        self, *, share_id: str, client_key: str, now: datetime, window: timedelta, limit: int
+    ) -> bool:
+        """Atomically consume one permitted failure from a durable expiry window.
+
+        The compare-and-increment predicate makes concurrent web workers stop at
+        the configured limit; the TTL index removes expired MongoDB windows.
+        """
+
+        collection = self.database["report_share_password_attempts"]
+        document = collection.find_one_and_update(
+            {
+                "share_id": share_id,
+                "client_key": client_key,
+                "expires_at": {"$gt": now},
+                "failure_count": {"$lt": limit},
+            },
+            {"$inc": {"failure_count": 1}, "$set": {"updated_at": now}},
+            return_document=_return_document_after(),
+        )
+        if isinstance(document, dict):
+            return True
+        document = collection.find_one_and_update(
+            {
+                "share_id": share_id,
+                "client_key": client_key,
+                "expires_at": {"$lte": now},
+            },
+            {
+                "$set": {
+                    "failure_count": 1,
+                    "expires_at": now + window,
+                    "updated_at": now,
+                }
+            },
+            return_document=_return_document_after(),
+        )
+        if isinstance(document, dict):
+            return True
+        if self.report_share_password_attempt_limit_reached(
+            share_id=share_id, client_key=client_key, now=now, limit=limit
+        ):
+            return False
+        try:
+            self.insert_document(
+                "report_share_password_attempts",
+                {
+                    "share_id": share_id,
+                    "client_key": client_key,
+                    "failure_count": 1,
+                    "expires_at": now + window,
+                    "updated_at": now,
+                },
+            )
+            return True
+        except Exception as error:
+            # A concurrent unique-index winner is the only recoverable insert
+            # conflict. Re-check the shared row rather than masking DB failures.
+            if type(error).__name__ != "DuplicateKeyError":
+                raise
+            return self.record_report_share_password_failure(
+                share_id=share_id, client_key=client_key, now=now, window=window, limit=limit
+            )
 
     def delete_document(self, collection_name: str, document_id: str) -> bool:
         result = self.database[collection_name].delete_one({"_id": document_id})

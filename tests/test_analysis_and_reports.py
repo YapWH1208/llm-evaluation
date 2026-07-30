@@ -189,6 +189,16 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         public_report = client.get(share_path, headers={"X-Report-Password": "view-only-password"})
         assert public_report.status_code == 200
         assert "# Evaluation report" in public_report.text
+        assert public_report.headers["cache-control"] == "private, no-store"
+        assert public_report.headers["vary"] == "X-Report-Password"
+        # A password-authorized response must not make a later headerless read
+        # usable, even when a caller reuses the same client/cache context.
+        assert client.get(share_path).status_code == 401
+        for _ in range(3):
+            assert client.get(share_path).status_code == 401
+        # The SQL-backed shared limiter blocks the sixth read before hashing
+        # the password, including a correct value from that client partition.
+        assert client.get(share_path, headers={"X-Report-Password": "view-only-password"}).status_code == 401
         revoked = client.post(f"/api/v1/reports/{report.json()['id']}/shares/{share.json()['id']}/revoke")
         assert revoked.status_code == 200
         assert client.get(share_path, headers={"X-Report-Password": "view-only-password"}).status_code == 404

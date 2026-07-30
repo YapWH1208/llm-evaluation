@@ -12,10 +12,11 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import Report, ReportShare
+from app.db.models import Report, ReportShare, ReportSharePasswordAttempt
 from app.db.mongo import MongoDocumentStore
 from app.services.reports import ReportError, generate_report
 from app.services.mongo_reports import generate_mongo_report
@@ -23,7 +24,6 @@ from app.services.mongo_reports import generate_mongo_report
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 public_router = APIRouter(prefix="/shared-reports", tags=["shared reports"])
-_PASSWORD_ATTEMPTS: dict[str, list[datetime]] = {}
 _PASSWORD_WINDOW = timedelta(minutes=5)
 _PASSWORD_ATTEMPT_LIMIT = 5
 
@@ -181,10 +181,20 @@ def open_shared_report(token: str, request: Request, session: SessionDependency)
         matches=store.list_documents("report_shares",query={"token_hash":_hash_value(token)})
         share=matches[0] if matches else None; now=datetime.now(timezone.utc)
         if share is None or share.get("revoked_at") is not None or _as_utc(share["expires_at"]) <= now: raise HTTPException(404,"Shared report not found or expired")
-        if share.get("password_hash") is not None and not _verify_share_password(str(share["id"]), request.headers.get("X-Report-Password", ""), str(share["password_hash"]), now): raise HTTPException(401,"Shared report access was denied")
+        if share.get("password_hash") is not None:
+            if _password_attempt_limit_reached_for_document(store, str(share["id"]), request, now):
+                raise HTTPException(401, "Shared report access was denied")
+            valid, needs_upgrade = _verify_share_password(request.headers.get("X-Report-Password", ""), str(share["password_hash"]))
+            if not valid:
+                _record_document_password_failure(store, str(share["id"]), request, now)
+                raise HTTPException(401, "Shared report access was denied")
+            if needs_upgrade:
+                upgraded = store.update_document("report_shares", str(share["id"]), {"password_hash": _hash_password(request.headers.get("X-Report-Password", ""))})
+                assert upgraded is not None
+                share = upgraded
         report=store.get_document("reports",str(share["report_id"]))
         if report is None: raise HTTPException(404,"Report not found")
-        return _report_file_response(type("Report",(),report)(),download=bool(share["allow_download"]))
+        return _shared_report_file_response(type("Report",(),report)(),download=bool(share["allow_download"]))
     assert session is not None
     share = session.scalar(select(ReportShare).where(ReportShare.token_hash == _hash_value(token)))
     now = datetime.now(timezone.utc)
@@ -192,10 +202,17 @@ def open_shared_report(token: str, request: Request, session: SessionDependency)
         raise HTTPException(404, "Shared report not found or expired")
     if share.password_hash is not None:
         supplied = request.headers.get("X-Report-Password", "")
-        if not _verify_share_password(share.id, supplied, share.password_hash, now):
+        if _password_attempt_limit_reached(session, share.id, request, now):
             raise HTTPException(401, "Shared report access was denied")
+        valid, needs_upgrade = _verify_share_password(supplied, share.password_hash)
+        if not valid:
+            _record_password_failure(session, share.id, request, now)
+            raise HTTPException(401, "Shared report access was denied")
+        if needs_upgrade:
+            share.password_hash = _hash_password(supplied)
+            session.commit()
     report = _get_report(share.report_id, session)
-    return _report_file_response(report, download=share.allow_download)
+    return _shared_report_file_response(report, download=share.allow_download)
 
 
 def _get_report(report_id: str, session: Session) -> Report:
@@ -211,6 +228,15 @@ def _report_file_response(report: Report, *, download: bool) -> FileResponse:
         raise HTTPException(404, "Report artifact is no longer available")
     media_type = {"json": "application/json", "csv": "text/csv", "parquet": "application/vnd.apache.parquet", "html": "text/html", "markdown": "text/markdown", "pdf": "application/pdf"}.get(report.format, "application/octet-stream")
     return FileResponse(path, filename=path.name if download else None, media_type=media_type)
+
+
+def _shared_report_file_response(report: Report, *, download: bool) -> FileResponse:
+    """Prevent an authorized public share response from entering shared caches."""
+
+    response = _report_file_response(report, download=download)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Report-Password"
+    return response
 
 
 def _share_response(share: ReportShare, request: Request, token: str | None = None) -> ReportShareResponse:
@@ -241,12 +267,11 @@ def _hash_password(value: str) -> str:
     return "scrypt$16384$8$1$" + base64.b64encode(salt).decode("ascii") + "$" + base64.b64encode(digest).decode("ascii")
 
 
-def _verify_share_password(share_id: str, supplied: str, encoded: str, now: datetime) -> bool:
-    attempts = [attempt for attempt in _PASSWORD_ATTEMPTS.get(share_id, []) if now - attempt < _PASSWORD_WINDOW]
-    if len(attempts) >= _PASSWORD_ATTEMPT_LIMIT:
-        _PASSWORD_ATTEMPTS[share_id] = attempts
-        return False
+def _verify_share_password(supplied: str, encoded: str) -> tuple[bool, bool]:
+    """Return (valid, legacy_hash_needing_an_in-place_safe_upgrade)."""
+
     valid = False
+    legacy = not encoded.startswith("scrypt$")
     if encoded.startswith("scrypt$"):
         try:
             _, n, r, p, salt, digest = encoded.split("$", 5)
@@ -256,12 +281,106 @@ def _verify_share_password(share_id: str, supplied: str, encoded: str, now: date
             valid = False
     else:
         valid = hmac.compare_digest(_hash_value(supplied), encoded)
-    if valid:
-        _PASSWORD_ATTEMPTS.pop(share_id, None)
-    else:
-        attempts.append(now)
-        _PASSWORD_ATTEMPTS[share_id] = attempts
-    return valid
+    return valid, valid and legacy
+
+
+def _password_attempt_key(share_id: str, request: Request) -> str:
+    """Use a privacy-preserving client partition so one client cannot lock out all recipients."""
+
+    client_host = request.client.host if request.client is not None else "unknown"
+    # The share id is a separate key in the persistence record.  Keeping this
+    # field to the digest alone preserves the fixed-width storage contract.
+    del share_id
+    return _hash_value(client_host)
+
+
+def _password_attempt_limit_reached(session: Session, share_id: str, request: Request, now: datetime) -> bool:
+    attempt = session.scalar(
+        select(ReportSharePasswordAttempt).where(
+            ReportSharePasswordAttempt.share_id == share_id,
+            ReportSharePasswordAttempt.client_key == _password_attempt_key(share_id, request),
+        )
+    )
+    return bool(
+        attempt is not None
+        and _as_utc(attempt.expires_at) > now
+        and attempt.failure_count >= _PASSWORD_ATTEMPT_LIMIT
+    )
+
+
+def _record_password_failure(session: Session, share_id: str, request: Request, now: datetime) -> bool:
+    """Atomically consume a SQL-backed failure allowance for this client partition."""
+
+    client_key = _password_attempt_key(share_id, request)
+    expires_at = now + _PASSWORD_WINDOW
+    incremented = session.execute(
+        update(ReportSharePasswordAttempt)
+        .where(
+            ReportSharePasswordAttempt.share_id == share_id,
+            ReportSharePasswordAttempt.client_key == client_key,
+            ReportSharePasswordAttempt.expires_at > now,
+            ReportSharePasswordAttempt.failure_count < _PASSWORD_ATTEMPT_LIMIT,
+        )
+        .values(
+            failure_count=ReportSharePasswordAttempt.failure_count + 1,
+            updated_at=now,
+        )
+    )
+    if incremented.rowcount == 1:
+        session.commit()
+        return True
+    reset = session.execute(
+        update(ReportSharePasswordAttempt)
+        .where(
+            ReportSharePasswordAttempt.share_id == share_id,
+            ReportSharePasswordAttempt.client_key == client_key,
+            ReportSharePasswordAttempt.expires_at <= now,
+        )
+        .values(failure_count=1, expires_at=expires_at, updated_at=now)
+    )
+    if reset.rowcount == 1:
+        session.commit()
+        return True
+    if _password_attempt_limit_reached(session, share_id, request, now):
+        return False
+    try:
+        session.add(
+            ReportSharePasswordAttempt(
+                share_id=share_id,
+                client_key=client_key,
+                failure_count=1,
+                expires_at=expires_at,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        return True
+    except IntegrityError:
+        session.rollback()
+        return _record_password_failure(session, share_id, request, now)
+
+
+def _password_attempt_limit_reached_for_document(
+    store: MongoDocumentStore, share_id: str, request: Request, now: datetime
+) -> bool:
+    return store.report_share_password_attempt_limit_reached(
+        share_id=share_id,
+        client_key=_password_attempt_key(share_id, request),
+        now=now,
+        limit=_PASSWORD_ATTEMPT_LIMIT,
+    ) >= _PASSWORD_ATTEMPT_LIMIT
+
+
+def _record_document_password_failure(
+    store: MongoDocumentStore, share_id: str, request: Request, now: datetime
+) -> None:
+    store.record_report_share_password_failure(
+        share_id=share_id,
+        client_key=_password_attempt_key(share_id, request),
+        now=now,
+        window=_PASSWORD_WINDOW,
+        limit=_PASSWORD_ATTEMPT_LIMIT,
+    )
 
 
 def _as_utc(value: datetime) -> datetime:
