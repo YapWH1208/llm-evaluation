@@ -31,6 +31,7 @@ import {
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { localeIds, localeNames, type Locale } from "./i18n/catalog";
+import { reportCopy } from "./i18n/catalog";
 import { useTranslation } from "./i18n/LocaleProvider";
 import "./evidence.css";
 
@@ -817,6 +818,8 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
 }
 
 export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report, form: typeof initialShare) => Promise<ReportShare> }) {
+  const { locale } = useTranslation();
+  const copy = reportCopy[locale];
   const [shareForm, setShareForm] = useState(initialShare);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -838,7 +841,7 @@ export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?
       // The one-time value is no longer needed after the server receives it.
       setShareForm({ ...form, password: "" });
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "The report share could not be created.");
+      setDownloadError(error instanceof Error ? error.message : copy.shareCreateFailed);
     }
   }
 
@@ -852,17 +855,19 @@ export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "The report download failed.");
+      setDownloadError(error instanceof Error ? error.message : copy.downloadFailed);
     }
   }
 
-  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>Download</button><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
+  return reports.length === 0 ? <p className="empty">{copy.noArtifacts}</p> : <><section className="share-policy"><h3>{copy.readOnlyPolicy}</h3><div className="field-row"><label>{copy.expiresInDays}<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>{copy.optionalPassword}<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder={copy.passwordPlaceholder} /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> {copy.allowDownload}</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> {copy.shareRawEvidence}</label></div><p className="muted">{copy.policyDescription}</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">{copy.openShare}</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>{copy.format}</th><th>{copy.generated}</th><th>{copy.version}</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>{copy.download}</button><button className="secondary" onClick={() => void createShare(report)}>{copy.share}</button></div></td></tr>)}</tbody></table></div></>;
 }
 
 export function SharedReportPage({ token }: { token: string }) {
+  const { locale } = useTranslation();
+  const copy = reportCopy[locale];
   const [password, setPassword] = useState("");
   const [reportUrl, setReportUrl] = useState<string | null>(null);
-  const [message, setMessage] = useState("Enter the optional share password to open this read-only report.");
+  const [message, setMessage] = useState(copy.initialMessage);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
@@ -877,16 +882,16 @@ export function SharedReportPage({ token }: { token: string }) {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return nextUrl;
       });
-      setMessage("The shared report is ready to view.");
+      setMessage(copy.readyMessage);
     } catch (_error) {
-      setMessage("The shared report could not be opened. Check the password, expiry, or link.");
+      setMessage(copy.unavailableMessage);
     } finally {
       setPassword("");
       setBusy(false);
     }
   }
 
-  return <main className="shared-report"><section className="panel"><p className="eyebrow">Shared evaluation report</p><h1>Read-only report access</h1><p className="muted">The password is sent only with this request and is never added to the URL or browser storage.</p><form className="form" onSubmit={openReport}><label>Share password (if required)<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? "Opening report…" : "Open report"}</button></form><p className={reportUrl ? "notice" : "muted"} aria-live="polite">{message}</p>{reportUrl && <div className="actions"><a href={reportUrl} target="_blank" rel="noreferrer">Open report in a new tab</a><a href={reportUrl} download="evaluation-report">Download report</a></div>}</section></main>;
+  return <main className="shared-report"><section className="panel"><p className="eyebrow">{copy.sharedReport}</p><h1>{copy.readOnlyAccess}</h1><p className="muted">{copy.passwordSafety}</p><form className="form" onSubmit={openReport}><label>{copy.sharePassword}<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? copy.opening : copy.openReport}</button></form><p className={reportUrl ? "notice" : "muted"} aria-live="polite">{message}</p>{reportUrl && <div className="actions"><a href={reportUrl} target="_blank" rel="noreferrer">{copy.openNewTab}</a><a href={reportUrl} download="evaluation-report">{copy.download}</a></div>}</section></main>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {
