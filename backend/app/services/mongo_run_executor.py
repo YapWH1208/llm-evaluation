@@ -9,19 +9,23 @@ database is MongoDB.  All storage-specific operations remain in
 
 from datetime import datetime, timedelta, timezone
 import base64
+import json
 from typing import Any
 
 from app.benchmarks import get_installed_plugin
+from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import (
+    RunCreationError,
     _build_sample_messages,
     _estimate_sample_tokens,
+    _split_items_for_endpoint_budget,
     _sample_modality as _benchmark_sample_modality,
-    _split_samples_into_shards,
+    _split_samples_for_endpoint_budget,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
-from app.services.scoring import ScoringError, score_prediction
+from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import recompute_mongo_aggregate_metrics
 from app.services.reports import ReportError
 from app.services.run_analysis import add_summary_insights, summarize_attempts
@@ -67,8 +71,13 @@ def preflight_mongo_benchmark_run(
     compatibility = _capability_compatibility(store, model_endpoint_id, plugin.manifest)
     if compatibility["unsupported"]:
         issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
-    if prompt_package_id and store.get_document("prompt_packages", prompt_package_id) is None:
+    prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
+    try:
+        validate_scoring_rule(_mongo_effective_scoring_rule(plugin.manifest, prompt_package))
+    except ScoringError as error:
+        issues.append(f"Scoring rule is invalid: {error}")
     datasets: list[dict[str, object]] = []
     for descriptor in plugin.manifest.get("datasets", []):
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
@@ -156,6 +165,10 @@ def create_mongo_benchmark_run(
         request_body_override=request_body_override,
     )
     scoring_rule = _mongo_effective_scoring_rule(plugin.manifest, prompt_package)
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise MongoRunExecutionError(f"Scoring rule is invalid: {error}") from error
 
     prompt_proxy = _proxy(prompt_package) if prompt_package else None
     now = _utc_now()
@@ -167,6 +180,10 @@ def create_mongo_benchmark_run(
             "model_name": endpoint["model_name"],
             "protocol_profile": endpoint.get("protocol_profile", "openai_chat_completions"),
             "default_request_body": endpoint.get("default_request_body", {}),
+            "timeout_seconds": endpoint.get("timeout_seconds", 60),
+            "custom_headers": endpoint.get("custom_headers", {}),
+            "input_cost_per_million": endpoint.get("input_cost_per_million"),
+            "output_cost_per_million": endpoint.get("output_cost_per_million"),
         },
         "sample_ids": [sample.sample_id for sample in samples],
         "datasets": frozen_datasets,
@@ -250,7 +267,10 @@ def create_mongo_benchmark_run(
             "updated_at": now,
         },
     )
-    shards = _split_samples_into_shards(samples, plugin.manifest)
+    try:
+        shards = _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint)
+    except RunCreationError as error:
+        raise MongoRunExecutionError(str(error)) from error
     for shard_index, shard_samples in enumerate(shards, start=1):
         task = store.insert_document(
             "task_units",
@@ -262,6 +282,9 @@ def create_mongo_benchmark_run(
                     "sample_ids": [sample.sample_id for sample in shard_samples],
                     "estimated_request_count": len(shard_samples),
                     "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                    "sample_token_estimates": {
+                        sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                    },
                     "shard_index": shard_index,
                     "shard_count": len(shards),
                     "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
@@ -347,7 +370,7 @@ def _register_mongo_declared_dataset(
     version = descriptor.get("version")
     revision = descriptor.get("revision")
     license_text = descriptor.get("license_text")
-    credential_env_var = descriptor.get("credential_env_var")
+    credential_binding_id = descriptor.get("credential_binding_id")
     checksum = descriptor.get("checksum")
     return store.insert_document(
         "dataset_versions",
@@ -358,7 +381,7 @@ def _register_mongo_declared_dataset(
             "source_url": source_url.strip(),
             "checksum": checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
             "license_text": license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-            "credential_env_var": credential_env_var.strip() if isinstance(credential_env_var, str) and credential_env_var.strip() else None,
+            "credential_binding_id": credential_binding_id.strip() if isinstance(credential_binding_id, str) and credential_binding_id.strip() else None,
             "local_path": None,
             "prepared_path": None,
             "size_bytes": None,
@@ -418,7 +441,7 @@ def create_mongo_custom_multimodal_run(
     normalized = _normalize_mongo_messages(store, data_root, messages)
     request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
     dataset_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":None,"task_type":"dataset_preparation","payload":{"source":"user","prepared_inline":True},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     benchmark_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":dataset_task["id"],"task_type":"benchmark","payload":{"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","planned_samples":1},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":benchmark_task["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
@@ -433,17 +456,18 @@ def execute_mongo_queued_run(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     run = store.get_document("evaluation_runs", run_id)
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
-    if run["status"] != "queued":
-        raise MongoRunExecutionError("Only queued evaluation runs can be executed.")
-    for _ in range(32):
+    if run["status"] not in {"queued", "running"}:
+        raise MongoRunExecutionError("Only queued or running evaluation runs can be executed.")
+    while True:
         task = store.claim_task(worker_id="interactive-api", lease_seconds=600, run_id=run_id)
         if task is None or not task.get("lease_token"):
             current = store.get_document("evaluation_runs", run_id)
-            if current is not None and current.get("status") in {"queued", "completed", "completed_with_errors"}:
+            if current is not None and current.get("status") in {"queued", "running", "completed", "completed_with_errors"}:
                 return current
             raise MongoRunExecutionError("No due task is available for this evaluation run.")
         run, _ = execute_mongo_leased_task(
@@ -453,10 +477,10 @@ def execute_mongo_queued_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=data_root,
+            settings=settings,
         )
         if run.get("status") in {"completed", "completed_with_errors"}:
             return run
-    raise MongoRunExecutionError("Run task pipeline exceeded its local execution safety limit.")
 
 
 def clone_mongo_run(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
@@ -511,6 +535,9 @@ def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[s
     failed = [attempt for attempt in latest.values() if attempt.get("status") == "failed"]
     if not failed:
         raise MongoRunExecutionError("This run has no failed samples to retry.")
+    endpoint = store.get_document("model_endpoints", str(run["model_endpoint_id"]))
+    if endpoint is None:
+        raise MongoRunExecutionError("The model endpoint for this run no longer exists.")
     source_tasks = [
         task
         for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
@@ -524,57 +551,66 @@ def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[s
         if task.get("task_type") == "benchmark"
     ]
     now = _utc_now()
-    task = store.insert_document(
-        "task_units",
-        {
-            "run_id": run_id,
-            "parent_task_id": benchmark_tasks[0]["id"] if benchmark_tasks else None,
-            "task_type": "evaluation_shard",
-            "payload": {
-                "sample_ids": [attempt["sample_id"] for attempt in failed],
-                "estimated_request_count": len(failed),
-                "estimated_token_count": 0,
-                "retry_policy": retry_policy,
-                "manual_retry": True,
-            },
-            "status": "pending",
-            "priority": 0,
-            "attempt_count": 0,
-            "leased_by": None,
-            "lease_token": None,
-            "lease_expires_at": None,
-            "next_retry_at": None,
-            "heartbeat_at": None,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    for attempt in failed:
-        store.insert_document(
-            "sample_attempts",
+    try:
+        retry_groups = _split_items_for_endpoint_budget(
+            (tuple(failed),), endpoint, token_estimate=_estimate_mongo_retry_attempt_tokens
+        )
+    except RunCreationError as error:
+        raise MongoRunExecutionError(str(error)) from error
+    for group in retry_groups:
+        token_estimates = {str(attempt["sample_id"]): _estimate_mongo_retry_attempt_tokens(attempt) for attempt in group}
+        task = store.insert_document(
+            "task_units",
             {
                 "run_id": run_id,
-                "task_id": task["id"],
-                "sample_id": attempt["sample_id"],
-                "attempt_number": int(attempt["attempt_number"]) + 1,
-                "input_snapshot": attempt["input_snapshot"],
-                "reference_snapshot": attempt["reference_snapshot"],
-                "request_snapshot": None,
-                "raw_response": None,
-                "parsed_prediction": None,
-                "score": None,
-                "latency_ms": None,
-                "input_tokens": None,
-                "output_tokens": None,
-                "estimated_cost": None,
-                "error_type": None,
-                "error_message": None,
+                "parent_task_id": benchmark_tasks[0]["id"] if benchmark_tasks else None,
+                "task_type": "evaluation_shard",
+                "payload": {
+                    "sample_ids": [attempt["sample_id"] for attempt in group],
+                    "estimated_request_count": len(group),
+                    "estimated_token_count": sum(token_estimates.values()),
+                    "sample_token_estimates": token_estimates,
+                    "retry_policy": retry_policy,
+                    "manual_retry": True,
+                },
                 "status": "pending",
+                "priority": 0,
+                "attempt_count": 0,
+                "leased_by": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "next_retry_at": None,
+                "heartbeat_at": None,
                 "created_at": now,
-                "started_at": None,
-                "completed_at": None,
+                "updated_at": now,
             },
         )
+        for attempt in group:
+            store.insert_document(
+                "sample_attempts",
+                {
+                    "run_id": run_id,
+                    "task_id": task["id"],
+                    "sample_id": attempt["sample_id"],
+                    "attempt_number": int(attempt["attempt_number"]) + 1,
+                    "input_snapshot": attempt["input_snapshot"],
+                    "reference_snapshot": attempt["reference_snapshot"],
+                    "request_snapshot": None,
+                    "raw_response": None,
+                    "parsed_prediction": None,
+                    "score": None,
+                    "latency_ms": None,
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "estimated_cost": None,
+                    "error_type": None,
+                    "error_message": None,
+                    "status": "pending",
+                    "created_at": now,
+                    "started_at": None,
+                    "completed_at": None,
+                },
+            )
     updated = store.update_document("evaluation_runs", run_id, {"status": "queued", "completed_at": None})
     assert updated is not None
     return updated
@@ -588,12 +624,12 @@ def execute_mongo_leased_task(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     task = store.get_document("task_units", task_id)
     if task is None:
         raise MongoRunExecutionError("Task not found.")
-    if not _has_valid_lease(task, lease_token):
-        raise MongoRunExecutionError("Task lease is no longer valid.")
+    _require_current_mongo_lease(store, task_id, lease_token)
     if task["task_type"] == "scoring":
         return _execute_mongo_scoring_task(store, task, lease_token)
     if task["task_type"] == "aggregation":
@@ -601,44 +637,62 @@ def execute_mongo_leased_task(
     if task["task_type"] == "report_generation":
         return _execute_mongo_report_task(store, task, lease_token, data_root=data_root)
     if task["task_type"] in {"dataset_preparation", "benchmark", "judge", "cleanup"}:
-        return _execute_mongo_stage_task(store, task, data_root=data_root)
+        return _execute_mongo_stage_task(store, task, lease_token, data_root=data_root, settings=settings)
     if task["task_type"] != "evaluation_shard":
         raise MongoRunExecutionError("Unsupported task type.")
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
     if run["status"] not in {"queued", "running"}:
-        store.update_document("task_units", task_id, _lease_values("cancelled"))
         raise MongoRunExecutionError("Evaluation run is not executable in its current state.")
     endpoint = store.get_document("model_endpoints", str(run["model_endpoint_id"]))
     if endpoint is None:
         raise MongoRunExecutionError("The model endpoint for this run no longer exists.")
 
+    frozen_endpoint = _frozen_mongo_endpoint(run, endpoint)
     now = _utc_now()
-    store.update_document("evaluation_runs", run["id"], {"status": "running", "started_at": run.get("started_at") or now})
-    task = store.update_document(
-        "task_units",
-        task_id,
+    run = store.update_document_if(
+        "evaluation_runs",
+        str(run["id"]),
+        {"status": {"$in": ["queued", "running"]}},
+        {"status": "running", "started_at": run.get("started_at") or now},
+    )
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
+    task = store.update_task_if_current_lease(
+        task,
+        lease_token,
         {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1},
     )
-    assert task is not None
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before execution started.")
     policy = _retry_policy(_task_payload(task))
     attempts = _prepare_attempts(store, task)
     api_key = cipher.decrypt(str(endpoint["encrypted_api_key"]))
     retry_sample_ids: list[str] = []
     provider_retry_after_seconds: float | None = None
     for attempt in attempts:
+        _require_current_mongo_lease(store, task_id, lease_token)
+        _require_runnable_mongo_run(store, str(run["id"]))
         started_at = _utc_now()
-        store.update_document("sample_attempts", str(attempt["id"]), {"status": "leased", "completed_at": None})
-        store.update_document("sample_attempts", str(attempt["id"]), {"status": "running", "started_at": started_at, "completed_at": None})
-        result = model_executor.execute(_proxy(endpoint), api_key, attempt["input_snapshot"])
-        stored = _record_result(store, attempt, result, endpoint)
+        started = store.update_document_if(
+            "sample_attempts",
+            str(attempt["id"]),
+            {"status": "pending"},
+            {"status": "running", "started_at": started_at, "completed_at": None, "worker_lease_token": lease_token},
+        )
+        if started is None:
+            raise MongoRunExecutionError("Sample attempt is no longer available for this task lease.")
+        result = model_executor.execute(_proxy(frozen_endpoint), api_key, attempt["input_snapshot"])
+        _require_current_mongo_lease(store, task_id, lease_token)
+        stored = _record_result(store, attempt, result, frozen_endpoint, lease_token)
         if not result.success and _is_retryable(result.error_type, policy):
             retry_sample_ids.append(str(stored["sample_id"]))
             if result.retry_after_seconds is not None:
                 provider_retry_after_seconds = max(provider_retry_after_seconds or 0.0, result.retry_after_seconds)
 
     retry_sample_ids = sorted(set(retry_sample_ids))
+    _require_current_mongo_lease(store, task_id, lease_token)
     if retry_sample_ids and int(task["attempt_count"]) < int(policy["max_attempts"]):
         delay = _retry_delay_seconds(
             int(task["attempt_count"]), policy, provider_retry_after_seconds=provider_retry_after_seconds
@@ -653,9 +707,9 @@ def execute_mongo_leased_task(
                     "last_retry_delay_seconds": delay,
                 }
             )
-            task = store.update_document(
-                "task_units",
-                task_id,
+            task = store.update_task_if_current_lease(
+                task,
+                lease_token,
                 {
                     "payload": payload,
                     "status": "retry_scheduled",
@@ -663,44 +717,64 @@ def execute_mongo_leased_task(
                     **_lease_values(),
                 },
             )
-            assert task is not None
+            if task is None:
+                raise MongoRunExecutionError("Task lease was lost before retry scheduling.")
             for attempt in _latest_attempts(store, str(task["id"])).values():
                 if str(attempt["sample_id"]) in retry_sample_ids and attempt.get("status") == "failed":
                     store.update_document("sample_attempts", str(attempt["id"]), {"status": "retry_scheduled"})
             run = _update_run_progress(store, run["id"])
-            run = store.update_document("evaluation_runs", run["id"], {"status": "queued"})
-            assert run is not None
+            run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "queued"})
+            if run is None:
+                raise MongoRunExecutionError("Evaluation run is no longer executable.")
             return run, task
         payload.update({"retry_exhausted_reason": "max_total_wait_seconds", "retry_total_wait_seconds": prior_wait})
-        task = store.update_document("task_units", task_id, {"payload": payload})
-        assert task is not None
+        task = store.update_task_if_current_lease(task, lease_token, {"payload": payload})
+        if task is None:
+            raise MongoRunExecutionError("Task lease was lost before finalization.")
 
+    _require_current_mongo_lease(store, task_id, lease_token)
     run = _update_run_progress(store, run["id"])
-    task = store.update_document(
-        "task_units",
-        task_id,
+    task = store.update_task_if_current_lease(
+        task,
+        lease_token,
         {"status": "succeeded", "next_retry_at": None, **_lease_values()},
     )
-    assert task is not None
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before finalization.")
     incomplete_shards = [
         candidate
         for candidate in store.list_documents("task_units", query={"run_id": run["id"], "task_type": "evaluation_shard"})
         if candidate["id"] != task_id and candidate.get("status") in {"pending", "leased", "running", "retry_scheduled"}
     ]
     if incomplete_shards:
-        run = store.update_document("evaluation_runs", run["id"], {"status": "running", "completed_at": None})
-        assert run is not None
+        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "running", "completed_at": None})
+        if run is None:
+            raise MongoRunExecutionError("Evaluation run is no longer executable.")
         return run, task
-    run = store.update_document("evaluation_runs", run["id"], {"status": "scoring", "completed_at": None})
-    assert run is not None
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "scoring", "completed_at": None})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="scoring")
     return run, task
 
 
-def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *, data_root: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _execute_mongo_stage_task(
+    store: MongoDocumentStore,
+    task: dict[str, Any],
+    lease_token: str,
+    *,
+    data_root: str,
+    settings: Settings | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
+    task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
+    task = store.update_task_if_current_lease(
+        task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1}
+    )
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before execution started.")
     now = _utc_now()
     payload = _task_payload(task)
     if task["task_type"] == "dataset_preparation":
@@ -717,15 +791,27 @@ def _execute_mongo_stage_task(store: MongoDocumentStore, task: dict[str, Any], *
                     matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
                     dataset = matches[0] if matches else None
                 if dataset is None: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root)
+                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root, settings)
         except Exception as error:
-            failed = store.update_document("task_units", str(task["id"]), {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()})
-            assert failed is not None
+            failed = store.update_task_if_current_lease(
+                task,
+                lease_token,
+                {"status": "retry_scheduled", "payload": {**payload, "dataset_error": str(error)}, **_lease_values()},
+            )
+            if failed is None:
+                raise MongoRunExecutionError("Task lease was lost before retry scheduling.") from error
             raise MongoRunExecutionError(str(error)) from error
-    updated_task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "attempt_count": int(task.get("attempt_count", 0)) + 1, "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()}, **_lease_values()})
+    updated_task = store.update_task_if_current_lease(
+        task,
+        lease_token,
+        {"status": "succeeded", "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()}, **_lease_values()},
+    )
+    if updated_task is None:
+        raise MongoRunExecutionError("Task lease was lost before finalization.")
     if task["task_type"] == "dataset_preparation" and run.get("status") == "waiting_for_dataset":
-        run = store.update_document("evaluation_runs", str(run["id"]), {"status": "queued"})
-    assert updated_task is not None and run is not None
+        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "waiting_for_dataset"}, {"status": "queued"})
+        if run is None:
+            raise MongoRunExecutionError("Evaluation run is no longer executable.")
     return run, updated_task
 
 
@@ -737,15 +823,19 @@ def _execute_mongo_scoring_task(
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
-    if run.get("status") not in {"scoring", "running"} or not _has_valid_lease(task, lease_token):
+    if run.get("status") not in {"scoring", "running"}:
         raise MongoRunExecutionError("Evaluation run is not ready for scoring.")
-    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
-    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "scoring"})
-    assert task is not None and run is not None
+    task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
+    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before execution started.")
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["scoring", "running"]}}, {"status": "scoring"})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     attempts = _latest_run_attempts(store, str(run["id"]))
-    task = store.update_document(
-        "task_units",
-        str(task["id"]),
+    task = store.update_task_if_current_lease(
+        task,
+        lease_token,
         {
             "payload": {
                 **_task_payload(task),
@@ -757,8 +847,11 @@ def _execute_mongo_scoring_task(
             **_lease_values(),
         },
     )
-    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "aggregating"})
-    assert task is not None and run is not None
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before finalization.")
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "scoring"}, {"status": "aggregating"})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="aggregation")
     return run, task
 
@@ -771,19 +864,26 @@ def _execute_mongo_aggregation_task(
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
-    if run.get("status") not in {"aggregating", "scoring"} or not _has_valid_lease(task, lease_token):
+    if run.get("status") not in {"aggregating", "scoring"}:
         raise MongoRunExecutionError("Evaluation run is not ready for aggregation.")
-    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
-    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "aggregating"})
-    assert task is not None and run is not None
+    task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
+    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before execution started.")
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["aggregating", "scoring"]}}, {"status": "aggregating"})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     metrics = recompute_mongo_aggregate_metrics(store, str(run["id"]))
-    task = store.update_document(
-        "task_units",
-        str(task["id"]),
+    task = store.update_task_if_current_lease(
+        task,
+        lease_token,
         {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": "1.0.0"}, "status": "succeeded", **_lease_values()},
     )
-    run = store.update_document("evaluation_runs", str(run["id"]), {"status": "generating_report", "completed_at": None})
-    assert task is not None and run is not None
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before finalization.")
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "aggregating"}, {"status": "generating_report", "completed_at": None})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="report_generation")
     return run, task
 
@@ -798,10 +898,12 @@ def _execute_mongo_report_task(
     run = store.get_document("evaluation_runs", str(task["run_id"]))
     if run is None:
         raise MongoRunExecutionError("Evaluation run not found.")
-    if run.get("status") != "generating_report" or not _has_valid_lease(task, lease_token):
+    if run.get("status") != "generating_report":
         raise MongoRunExecutionError("Evaluation run is not ready for report generation.")
-    task = store.update_document("task_units", str(task["id"]), {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
-    assert task is not None
+    task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
+    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before execution started.")
     payload = _task_payload(task)
     try:
         from app.services.mongo_reports import generate_mongo_report
@@ -814,14 +916,20 @@ def _execute_mongo_report_task(
             report_type=str(payload.get("report_type", "single_model")),
         )
     except ReportError as error:
-        task = store.update_document("task_units", str(task["id"]), {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()})
-        run = store.update_document("evaluation_runs", str(run["id"]), {"status": str(payload.get("terminal_status", "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed")), "completed_at": _utc_now()})
-        assert task is not None and run is not None
+        task = store.update_task_if_current_lease(task, lease_token, {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()})
+        if task is None:
+            raise MongoRunExecutionError("Task lease was lost before finalization.") from error
+        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "generating_report"}, {"status": str(payload.get("terminal_status", "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed")), "completed_at": _utc_now()})
+        if run is None:
+            raise MongoRunExecutionError("Evaluation run is no longer executable.") from error
         raise MongoRunExecutionError(str(error)) from error
-    task = store.update_document("task_units", str(task["id"]), {"status": "succeeded", "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]}, **_lease_values()})
+    task = store.update_task_if_current_lease(task, lease_token, {"status": "succeeded", "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]}, **_lease_values()})
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before finalization.")
     final_status = "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"
-    run = store.update_document("evaluation_runs", str(run["id"]), {"status": final_status, "completed_at": _utc_now()})
-    assert task is not None and run is not None
+    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "generating_report"}, {"status": final_status, "completed_at": _utc_now()})
+    if run is None:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
     return run, task
 
 
@@ -948,6 +1056,7 @@ def _record_result(
     attempt: dict[str, Any],
     result: SampleExecutionResult,
     endpoint: dict[str, Any],
+    lease_token: str,
 ) -> dict[str, Any]:
     values: dict[str, Any] = {
         "request_snapshot": result.request_snapshot,
@@ -973,8 +1082,14 @@ def _record_result(
                 "error_message": result.error_message or "Sample execution failed.",
             }
         )
-    stored = store.update_document("sample_attempts", str(attempt["id"]), values)
-    assert stored is not None
+    stored = store.update_document_if(
+        "sample_attempts",
+        str(attempt["id"]),
+        {"status": "running", "worker_lease_token": lease_token},
+        {**values, "worker_lease_token": None},
+    )
+    if stored is None:
+        raise MongoRunExecutionError("Task lease was lost before result persistence.")
     return stored
 
 
@@ -1056,13 +1171,21 @@ def _estimate_message_tokens(messages: list[dict[str, object]]) -> int:
     return max(32, (text_length + 3) // 4 + 32)
 
 
-def _has_valid_lease(task: dict[str, Any], lease_token: str) -> bool:
-    expires_at = task.get("lease_expires_at")
-    if not isinstance(expires_at, datetime):
-        return False
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    return bool(task.get("lease_token") == lease_token and task.get("status") in {"leased", "running"} and expires_at >= _utc_now())
+def _estimate_mongo_retry_attempt_tokens(attempt: object) -> int:
+    """Recover a conservative quota estimate from a persisted Mongo attempt."""
+
+    value = attempt if isinstance(attempt, dict) else {}
+    snapshot = value.get("input_snapshot") if isinstance(value.get("input_snapshot"), dict) else {}
+    messages = snapshot.get("messages") if isinstance(snapshot.get("messages"), list) else []
+    encoded = json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    media_parts = sum(
+        1
+        for message in messages
+        if isinstance(message, dict) and isinstance(message.get("content"), list)
+        for part in message["content"]
+        if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
+    )
+    return max(1, (len(encoded) + 3) // 4) + 32 + (media_parts * 256)
 
 
 def _lease_values(status: str | None = None) -> dict[str, Any]:
@@ -1094,11 +1217,54 @@ def _proxy(document: dict[str, Any]) -> Any:
     return type("DocumentEndpoint", (), document)()
 
 
+def _frozen_mongo_endpoint(run: dict[str, Any], endpoint: dict[str, Any]) -> dict[str, Any]:
+    snapshot = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
+    frozen = snapshot.get("endpoint") if isinstance(snapshot.get("endpoint"), dict) else {}
+    values = dict(endpoint)
+    for name in (
+        "base_url",
+        "model_name",
+        "protocol_profile",
+        "default_request_body",
+        "timeout_seconds",
+        "custom_headers",
+        "input_cost_per_million",
+        "output_cost_per_million",
+    ):
+        if name in frozen:
+            values[name] = frozen[name]
+    return values
+
+
+def _require_current_mongo_lease(store: MongoDocumentStore, task_id: str, lease_token: str) -> dict[str, Any]:
+    task = store.get_document("task_units", task_id)
+    if task is None:
+        raise MongoRunExecutionError("Task lease was lost before result persistence.")
+    fenced = store.update_task_if_current_lease(task, lease_token)
+    if fenced is None:
+        raise MongoRunExecutionError("Task lease was lost before result persistence.")
+    return fenced
+
+
+def _require_runnable_mongo_run(store: MongoDocumentStore, run_id: str) -> None:
+    run = store.get_document("evaluation_runs", run_id)
+    if run is None or run.get("status") not in {"queued", "running"}:
+        raise MongoRunExecutionError("Evaluation run is no longer executable.")
+
+
 def _nonnegative_float(value: object) -> float:
     try:
         return max(0.0, float(value))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _positive_limit(value: object) -> int | None:
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
 
 
 def _utc_now() -> datetime:

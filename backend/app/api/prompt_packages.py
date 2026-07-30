@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import PromptPackage
 from app.db.mongo import MongoDocumentStore
 from app.services.prompt_templates import PromptTemplateError, validate_template
+from app.services.scoring import ScoringError, validate_scoring_rule
 
 router = APIRouter(prefix="/api/v1/prompt-packages", tags=["prompt packages"])
 class PromptPackageCreate(BaseModel):
@@ -24,6 +25,17 @@ class PromptPackageCreate(BaseModel):
         try:
             validate_template(value)
         except PromptTemplateError as error:
+            raise ValueError(str(error)) from error
+        return value
+
+    @field_validator("scoring_rule")
+    @classmethod
+    def validate_scoring_rule_config(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return value
+        try:
+            validate_scoring_rule(value)
+        except ScoringError as error:
             raise ValueError(str(error)) from error
         return value
 class PromptPackageResponse(PromptPackageCreate):

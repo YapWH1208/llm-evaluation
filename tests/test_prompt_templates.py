@@ -13,12 +13,17 @@ class SuccessfulTester:
 
 def test_prompt_packages_validate_variables_and_snapshot_nonstandard_flags(tmp_path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as api:
         invalid = api.post("/api/v1/prompt-packages", json={"name": "bad", "version": "1", "user_template": "{{ unsupported }}"})
         assert invalid.status_code == 422
+        unsafe_scoring = api.post(
+            "/api/v1/prompt-packages",
+            json={"name": "unsafe", "version": "1", "user_template": "{{ question }}", "scoring_rule": {"type": "regex_match", "pattern": "(a+)+$"}},
+        )
+        assert unsafe_scoring.status_code == 422
 
         prompt = api.post(
             "/api/v1/prompt-packages",

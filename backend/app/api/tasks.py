@@ -67,7 +67,13 @@ def list_tasks(
         query={}
         if run_id:query["run_id"]=run_id
         if task_status:query["status"]=task_status
-        return store.list_documents("task_units",query=query,sort=[("priority",-1),("created_at",1)])[max(0,offset):max(0,offset)+min(max(1,limit),1000)]
+        return store.list_documents(
+            "task_units",
+            query=query,
+            sort=[("priority", -1), ("created_at", 1)],
+            offset=max(0, offset),
+            limit=min(max(1, limit), 1000),
+        )
     assert session is not None
     query = select(TaskUnit)
     if run_id:

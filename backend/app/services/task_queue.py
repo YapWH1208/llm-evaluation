@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -15,16 +15,22 @@ from app.db.models import (
     SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
+    TaskType,
     TaskUnit,
     User,
 )
 
 
-def reclaim_expired_leases(session: Session) -> int:
+_ADMISSION_LOCK_KEY = 0x4C4C45
+
+
+def reclaim_expired_leases(session: Session, *, commit: bool = True) -> int:
     """Make crashed-worker tasks claimable again without discarding sample evidence."""
 
+    if commit:
+        _begin_admission_transaction(session)
     now = datetime.now(timezone.utc)
-    tasks = list(
+    candidates = list(
         session.scalars(
             select(TaskUnit).where(
                 TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
@@ -32,12 +38,29 @@ def reclaim_expired_leases(session: Session) -> int:
             )
         )
     )
-    for task in tasks:
-        task.status = TaskStatus.PENDING.value
-        task.leased_by = None
-        task.lease_token = None
-        task.lease_expires_at = None
-        task.heartbeat_at = None
+    reclaimed = 0
+    for task in candidates:
+        result = session.execute(
+            update(TaskUnit)
+            .where(
+                TaskUnit.id == task.id,
+                TaskUnit.lease_version == task.lease_version,
+                TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
+                TaskUnit.lease_expires_at < now,
+            )
+            .values(
+                status=TaskStatus.PENDING.value,
+                leased_by=None,
+                lease_token=None,
+                lease_expires_at=None,
+                heartbeat_at=None,
+                lease_version=TaskUnit.lease_version + 1,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            continue
+        reclaimed += 1
         session.execute(
             update(SampleAttempt)
             .where(
@@ -46,9 +69,10 @@ def reclaim_expired_leases(session: Session) -> int:
             )
             .values(status=SampleAttemptStatus.PENDING.value)
         )
-    if tasks:
+    if commit:
         session.commit()
-    return len(tasks)
+        session.expire_all()
+    return reclaimed
 
 
 def claim_task(
@@ -62,7 +86,8 @@ def claim_task(
 ) -> TaskUnit | None:
     """Atomically lease one due task, optionally restricting the claim to one run."""
 
-    reclaim_expired_leases(session)
+    _begin_admission_transaction(session)
+    reclaim_expired_leases(session, commit=False)
     now = datetime.now(timezone.utc)
     claimable = [TaskStatus.PENDING.value, TaskStatus.RETRY_SCHEDULED.value]
     query = select(TaskUnit.id).where(
@@ -103,6 +128,7 @@ def claim_task(
             update(TaskUnit)
             .where(
                 TaskUnit.id == task_id,
+                TaskUnit.lease_version == task.lease_version,
                 TaskUnit.status.in_(claimable),
                 or_(TaskUnit.next_retry_at.is_(None), TaskUnit.next_retry_at <= now),
             )
@@ -112,17 +138,27 @@ def claim_task(
                 lease_token=lease_token,
                 lease_expires_at=now + timedelta(seconds=lease_seconds),
                 heartbeat_at=now,
+                lease_version=TaskUnit.lease_version + 1,
             )
             .execution_options(synchronize_session=False)
         )
         if claimed.rowcount != 1:
             session.rollback()
-            continue
+            return claim_task(
+                session,
+                worker_id,
+                lease_seconds,
+                run_id=run_id,
+                system_max_concurrency=system_max_concurrency,
+                worker_max_concurrency=worker_max_concurrency,
+            )
         session.commit()
+        session.expire_all()
         task = session.get(TaskUnit, task_id)
         assert task is not None
         session.refresh(task)
         return task
+    session.commit()
     return None
 
 
@@ -142,11 +178,27 @@ def heartbeat_task(
         or _as_utc(task.lease_expires_at) < now
     ):
         return None
-    task.heartbeat_at = now
-    task.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    updated = session.execute(
+        update(TaskUnit)
+        .where(
+            TaskUnit.id == task_id,
+            TaskUnit.lease_token == lease_token,
+            TaskUnit.lease_version == task.lease_version,
+            TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
+            TaskUnit.lease_expires_at >= now,
+        )
+        .values(
+            heartbeat_at=now,
+            lease_expires_at=now + timedelta(seconds=lease_seconds),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if updated.rowcount != 1:
+        session.rollback()
+        return None
     session.commit()
-    session.refresh(task)
-    return task
+    session.expire_all()
+    return session.get(TaskUnit, task_id)
 
 
 def has_valid_lease(task: TaskUnit, lease_token: str, now: datetime | None = None) -> bool:
@@ -170,6 +222,24 @@ def clear_lease(task: TaskUnit) -> None:
     task.lease_token = None
     task.lease_expires_at = None
     task.heartbeat_at = None
+
+
+def _begin_admission_transaction(session: Session) -> None:
+    """Serialize capacity and rate reservations across all relational workers.
+
+    PostgreSQL uses a transaction-scoped advisory lock. SQLite has no row locks,
+    so an immediate write transaction is the equivalent safe single-writer gate.
+    ``claim_task`` already commits independently, therefore closing a caller's
+    read-only transaction before acquiring this gate preserves its contract.
+    """
+
+    if session.in_transaction():
+        session.commit()
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": _ADMISSION_LOCK_KEY})
+    elif dialect == "sqlite":
+        session.execute(text("BEGIN IMMEDIATE"))
 
 
 def _has_execution_capacity(
@@ -277,6 +347,10 @@ def _reserve_endpoint_budget(
     task: TaskUnit,
     now: datetime,
 ) -> bool:
+    # Only evaluation shards call the configured model endpoint. Pipeline
+    # bookkeeping must not consume the provider's inference budget.
+    if task.task_type != TaskType.EVALUATION_SHARD.value:
+        return True
     request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens = _task_budget(task)
     if all(
         limit is None
@@ -367,7 +441,16 @@ def _task_budget(task: TaskUnit) -> tuple[int, int, int, int]:
     except (TypeError, ValueError):
         estimated_tokens = 0
     if payload.get("retry_sample_ids"):
-        estimated_tokens = max(1, estimated_tokens // max(1, fallback_requests))
+        per_sample = payload.get("sample_token_estimates")
+        if isinstance(per_sample, dict):
+            selected = [sample_id for sample_id in sample_ids if isinstance(sample_id, str)]
+            selected_estimates = [per_sample.get(sample_id) for sample_id in selected]
+            if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates):
+                estimated_tokens = sum(int(value) for value in selected_estimates)
+            else:
+                estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
+        else:
+            estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
         request_count = fallback_requests
     estimated_output_tokens = min(estimated_tokens, request_count * 32)
     estimated_input_tokens = max(0, estimated_tokens - estimated_output_tokens)

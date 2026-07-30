@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, inspect, select
 
 from app.core.config import Settings
 from app.db.database import Database
+from app.db.migrations import MIGRATIONS
 from app.db.models import SchemaMigration, SchemaVersion
 
 
@@ -36,8 +37,8 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         )
     legacy_engine.dispose()
 
-    database = Database(Settings(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+    database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 24))
     database.initialize()
     database.initialize()
 
@@ -50,9 +51,11 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     judge_columns = {column["name"] for column in inspect(database.engine).get_columns("judge_assessments")}
     assert {"comparison_sample_attempt_id", "answer_order", "swap_test_group_id", "selected_answer"} <= judge_columns
     dataset_columns = {column["name"] for column in inspect(database.engine).get_columns("dataset_versions")}
-    assert {"size_bytes", "prepared_path"} <= dataset_columns
+    assert {"size_bytes", "prepared_path", "credential_binding_id"} <= dataset_columns
+    report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
+    assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 21
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -104,5 +107,28 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         aggregate_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 18))
         assert aggregate_migration is not None
         assert aggregate_migration.migration_id == "20260728_add_task_hierarchy_and_aggregate_metrics"
+        remediation_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 22))
+        assert remediation_migration is not None
+        assert remediation_migration.migration_id == "20260729_add_remediation_persistence_contracts"
+        password_limit_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 23))
+        assert password_limit_migration is not None
+        assert password_limit_migration.migration_id == "20260730_add_report_share_password_limits"
     assert database.migration_preview() == ()
+    database.dispose()
+
+
+def test_initialize_backfills_a_missing_legacy_migration_ledger_before_upgrading(tmp_path: Path) -> None:
+    database = Database(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'legacy-v21.db'}"))
+    database.initialize()
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE schema_migrations")
+        connection.exec_driver_sql("DELETE FROM schema_versions WHERE version > 21")
+
+    validation = database.initialize()
+    assert validation.is_valid
+    with database.get_session() as session:
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
+        applied_versions = list(session.scalars(select(SchemaMigration.version).order_by(SchemaMigration.version)))
+    assert applied_versions == [migration.version for migration in MIGRATIONS]
+    assert database.initialize("validate").is_valid
     database.dispose()

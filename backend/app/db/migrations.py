@@ -31,6 +31,21 @@ def _add_column_if_missing(
         connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_definition}"))
 
 
+def _create_index_if_missing(
+    connection: Connection,
+    table_name: str,
+    index_name: str,
+    columns: tuple[str, ...],
+) -> None:
+    table_names = set(inspect(connection).get_table_names())
+    if table_name not in table_names:
+        return
+    existing_indexes = {index.get("name") for index in inspect(connection).get_indexes(table_name)}
+    if index_name not in existing_indexes:
+        joined_columns = ", ".join(columns)
+        connection.execute(text(f"CREATE INDEX {index_name} ON {table_name} ({joined_columns})"))
+
+
 def _upgrade_v2_prompt_package_reference(connection: Connection) -> None:
     """Preserve existing runs while adding the prompt package snapshot reference."""
 
@@ -136,6 +151,25 @@ def _upgrade_v20_dataset_uploads(connection: Connection) -> None:
 
 def _upgrade_v21_dataset_preparation(connection: Connection) -> None:
     _add_column_if_missing(connection, "dataset_versions", "prepared_path", "prepared_path VARCHAR(2048)")
+
+
+def _upgrade_v22_remediation_persistence_contracts(connection: Connection) -> None:
+    """Add non-destructive fields required by the security and fencing remediation."""
+
+    _add_column_if_missing(connection, "task_units", "lease_version", "lease_version INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(connection, "dataset_versions", "credential_binding_id", "credential_binding_id VARCHAR(128)")
+    _add_column_if_missing(connection, "reports", "artifact_sha256", "artifact_sha256 VARCHAR(64)")
+    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_archived_at", ("archived_at",))
+    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_created_by", ("created_by",))
+    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_model_endpoint_id", ("model_endpoint_id",))
+    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_prompt_package_id", ("prompt_package_id",))
+    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_suite_id", ("suite_id",))
+    if connection.dialect.name == "postgresql":
+        connection.execute(text("ALTER TABLE report_shares ALTER COLUMN password_hash TYPE VARCHAR(512)"))
+
+
+def _upgrade_v23_report_share_password_limits(_connection: Connection) -> None:
+    """The ORM creates the additive durable report-share password limiter table."""
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -258,6 +292,18 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260728_add_dataset_preparation_index",
         description="Record atomically prepared dataset sample-index artifacts.",
         upgrade=_upgrade_v21_dataset_preparation,
+    ),
+    Migration(
+        version=22,
+        migration_id="20260729_add_remediation_persistence_contracts",
+        description="Add lease fencing, safe dataset binding, and immutable report metadata fields.",
+        upgrade=_upgrade_v22_remediation_persistence_contracts,
+    ),
+    Migration(
+        version=23,
+        migration_id="20260730_add_report_share_password_limits",
+        description="Add durable, expiring per-client failed-password windows for public report shares.",
+        upgrade=_upgrade_v23_report_share_password_limits,
     ),
 )
 

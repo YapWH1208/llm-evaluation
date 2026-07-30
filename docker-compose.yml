@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: lle
       POSTGRES_USER: lle
-      POSTGRES_PASSWORD: change-me
+      POSTGRES_PASSWORD: "${LLE_POSTGRES_PASSWORD:?Set LLE_POSTGRES_PASSWORD before starting Compose}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lle -d lle"]
       interval: 5s
@@ -19,11 +19,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      LLE_DATABASE_URL: postgresql+psycopg://lle:change-me@postgres:5432/lle
-      LLE_SECRET_ENCRYPTION_KEY: replace-with-a-Fernet-key
+      LLE_DATABASE_URL: "postgresql+psycopg://lle:${LLE_POSTGRES_PASSWORD:?Set LLE_POSTGRES_PASSWORD before starting Compose}@postgres:5432/lle"
+      LLE_SECRET_ENCRYPTION_KEY: "${LLE_SECRET_ENCRYPTION_KEY:?Set LLE_SECRET_ENCRYPTION_KEY before starting Compose}"
+      LLE_ADMIN_TOKEN: "${LLE_ADMIN_TOKEN:?Set LLE_ADMIN_TOKEN before starting Compose}"
       LLE_CORS_ORIGINS: http://127.0.0.1:5173
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/data
 

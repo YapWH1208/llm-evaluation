@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import json
 from collections import defaultdict
@@ -49,22 +50,41 @@ def generate_report(
         raise ReportError(f"{report_type} reports require at least one related completed run.")
     payload["report_type"] = report_type
     payload["related_runs"] = related_runs
-    directory = Path(data_root).resolve() / "reports" / run.id
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{report_type}.{extension}"
-    _write_report(path, format, payload)
-
     report = Report(
         run_id=run.id,
         report_type=report_type,
         format=format,
-        artifact_path=str(path),
-        generator_version="1.2.0",
+        artifact_path="",
+        generator_version="1.3.0",
     )
     session.add(report)
-    session.commit()
+    session.flush()
+    directory = Path(data_root).resolve() / "reports" / run.id
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{report.id}.{extension}"
+    try:
+        _write_report(path, format, payload)
+        report.artifact_path = str(path)
+        report.artifact_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        session.commit()
+    except Exception:
+        session.rollback()
+        path.unlink(missing_ok=True)
+        raise
     session.refresh(report)
     return report
+
+
+def delete_report_artifact(data_root: str, artifact_path: str) -> None:
+    """Delete only an artifact that remains within this deployment's report root."""
+
+    reports_root = Path(data_root).resolve() / "reports"
+    path = Path(artifact_path).resolve()
+    try:
+        path.relative_to(reports_root)
+    except ValueError:
+        return
+    path.unlink(missing_ok=True)
 
 
 def _related_run_overviews(session: Session, primary_run: EvaluationRun, related_run_ids: list[str]) -> list[dict[str, Any]]:
@@ -378,6 +398,8 @@ def _pdf_report(payload: dict[str, Any]) -> bytes:
         f"{attempt['sample_id']} | attempt {attempt['attempt']} | {attempt['status']} | score {_display(attempt['score'])} | {_display(attempt['latency_ms'])} ms"
         for attempt in payload["attempts"][:25]
     )
+    if len(payload["attempts"]) > 25:
+        lines.append(f"PDF summary omits {len(payload['attempts']) - 25} additional sample outcomes; use HTML, JSON, CSV, or Parquet for complete evidence.")
     content_lines = ["BT", "/F1 12 Tf", "50 760 Td", "15 TL"]
     for index, line in enumerate(lines):
         if index:

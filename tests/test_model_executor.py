@@ -1,10 +1,51 @@
 import json
 
 import httpx
+import pytest
 
 from app.db.models import ModelEndpoint
 from app.services.model_executor import OpenAIChatCompletionsExecutor
 from app.services.request_body import resolve_request_body
+
+
+@pytest.fixture(autouse=True)
+def public_provider_dns(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
+
+
+def test_executor_rejects_restricted_dns_redirects_and_oversized_responses(monkeypatch) -> None:
+    endpoint = ModelEndpoint(
+        display_name="executor test",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****test",
+    )
+    snapshot = {"messages": [{"role": "user", "content": "hello"}]}
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("169.254.1.2", 0))],
+    )
+    unsafe = OpenAIChatCompletionsExecutor(httpx.MockTransport(lambda _request: pytest.fail("unsafe request was sent"))).execute(endpoint, "secret", snapshot)
+    assert unsafe.error_type == "unsafe_destination"
+    assert unsafe.raw_response is None
+
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
+    redirected = OpenAIChatCompletionsExecutor(httpx.MockTransport(lambda _request: httpx.Response(302, headers={"location": "https://elsewhere.example.test"}))).execute(endpoint, "secret", snapshot)
+    assert redirected.error_type == "redirect_blocked"
+    assert redirected.raw_response is None
+    oversized = OpenAIChatCompletionsExecutor(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=b"x" * 32)),
+        max_response_bytes=16,
+    ).execute(endpoint, "secret", snapshot)
+    assert oversized.error_type == "response_too_large"
+    assert oversized.raw_response is None
 
 
 def test_request_body_resolution_records_layer_precedence_and_protected_fields() -> None:

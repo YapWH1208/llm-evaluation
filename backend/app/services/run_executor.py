@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db import (
     EvaluationRun,
@@ -22,7 +24,7 @@ from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.aggregation import recompute_aggregate_metrics
 from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
-from app.services.task_queue import claim_task, clear_lease, has_valid_lease
+from app.services.task_queue import claim_task, clear_lease
 from app.services.datasets import DatasetError, download_dataset
 from app.db.models import DatasetVersion
 
@@ -50,19 +52,20 @@ def execute_queued_text_run(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> EvaluationRun:
     """Compatibility endpoint for a local interactive worker execution."""
 
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise RunExecutionError("Evaluation run not found.")
-    if run.status != RunStatus.QUEUED.value:
-        raise RunExecutionError("Only queued evaluation runs can be executed.")
-    for _ in range(32):
+    if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}:
+        raise RunExecutionError("Only queued or running evaluation runs can be executed.")
+    while True:
         task = claim_task(session, "interactive-api", lease_seconds=600, run_id=run_id)
         if task is None or task.lease_token is None:
             session.refresh(run)
-            if run.status in {RunStatus.QUEUED.value, RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
+            if run.status in {RunStatus.QUEUED.value, RunStatus.RUNNING.value, RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
                 return run
             raise RunExecutionError("No due task is available for this evaluation run.")
         run, _ = execute_leased_text_task(
@@ -72,10 +75,10 @@ def execute_queued_text_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=data_root,
+            settings=settings,
         )
         if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
             return run
-    raise RunExecutionError("Run task pipeline exceeded its local execution safety limit.")
 
 
 def execute_leased_text_task(
@@ -86,14 +89,14 @@ def execute_leased_text_task(
     cipher: SecretCipher,
     model_executor: ModelExecutor,
     data_root: str = "data",
+    settings: Settings | None = None,
 ) -> tuple[EvaluationRun, TaskUnit]:
     """Execute one leased task and either finish it or schedule a bounded retry."""
 
     task = session.get(TaskUnit, task_id)
     if task is None:
         raise RunExecutionError("Task not found.")
-    if not has_valid_lease(task, lease_token):
-        raise RunExecutionError("Task lease is no longer valid.")
+    _require_current_lease(session, task, lease_token)
     if task.task_type == TaskType.SCORING.value:
         return _execute_leased_scoring_task(session, task, lease_token)
     if task.task_type == TaskType.AGGREGATION.value:
@@ -101,7 +104,7 @@ def execute_leased_text_task(
     if task.task_type == TaskType.REPORT_GENERATION.value:
         return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
     if task.task_type in {TaskType.DATASET_PREPARATION.value, TaskType.BENCHMARK.value, TaskType.JUDGE.value, TaskType.CLEANUP.value}:
-        return _execute_leased_stage_task(session, task, data_root=data_root)
+        return _execute_leased_stage_task(session, task, lease_token, data_root=data_root, settings=settings)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
 
@@ -109,13 +112,11 @@ def execute_leased_text_task(
     if run is None:
         raise RunExecutionError("Evaluation run not found.")
     if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}:
-        task.status = TaskStatus.CANCELLED.value
-        clear_lease(task)
-        session.commit()
         raise RunExecutionError("Evaluation run is not executable in its current state.")
     endpoint = session.get(ModelEndpoint, run.model_endpoint_id)
     if endpoint is None:
         raise RunExecutionError("The model endpoint for this run no longer exists.")
+    frozen_endpoint = _frozen_endpoint(run, endpoint)
 
     run.status = RunStatus.RUNNING.value
     run.started_at = run.started_at or datetime.now(timezone.utc)
@@ -129,10 +130,11 @@ def execute_leased_text_task(
     provider_retry_after_seconds: float | None = None
     policy = _retry_policy(task.payload)
     for attempt in attempts:
-        _mark_attempt_leased(session, attempt)
-        _mark_attempt_running(session, attempt)
-        result = model_executor.execute(endpoint, api_key, attempt.input_snapshot)
-        _record_result(attempt, result, endpoint)
+        _require_runnable_run(session, run)
+        _mark_attempt_running(session, task, lease_token, attempt)
+        result = model_executor.execute(frozen_endpoint, api_key, attempt.input_snapshot)
+        _require_current_lease(session, task, lease_token)
+        _record_result(attempt, result, frozen_endpoint)
         if not result.success and _is_retryable(result.error_type, policy):
             retry_sample_ids.append(attempt.sample_id)
             if result.retry_after_seconds is not None:
@@ -143,6 +145,7 @@ def execute_leased_text_task(
         session.commit()
 
     retry_sample_ids = sorted(set(retry_sample_ids))
+    _require_current_lease(session, task, lease_token)
     if (
         retry_sample_ids
         and task.attempt_count < policy["max_attempts"]
@@ -163,7 +166,14 @@ def execute_leased_text_task(
     return run, task
 
 
-def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: str) -> tuple[EvaluationRun, TaskUnit]:
+def _execute_leased_stage_task(
+    session: Session,
+    task: TaskUnit,
+    lease_token: str,
+    *,
+    data_root: str,
+    settings: Settings | None,
+) -> tuple[EvaluationRun, TaskUnit]:
     """Run non-inference worker stages through their own durable task interface.
 
     Dataset, benchmark, judge, and cleanup workers can share a process in the MVP,
@@ -173,6 +183,7 @@ def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: s
     run = session.get(EvaluationRun, task.run_id)
     if run is None:
         raise RunExecutionError("Evaluation run not found.")
+    _require_current_lease(session, task, lease_token)
     task.status = TaskStatus.RUNNING.value
     task.attempt_count += 1
     session.commit()
@@ -191,9 +202,11 @@ def _execute_leased_stage_task(session: Session, task: TaskUnit, *, data_root: s
                     if isinstance(descriptor.get("revision"), str): query = query.where(DatasetVersion.revision == descriptor["revision"])
                     dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
                 if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.status != "ready": download_dataset(session, dataset, data_root)
+                if dataset.status != "ready": download_dataset(session, dataset, data_root, settings)
         except DatasetError as error:
+            _require_current_lease(session, task, lease_token)
             task.status = TaskStatus.RETRY_SCHEDULED.value; task.payload = {**payload, "dataset_error": str(error)}; clear_lease(task); session.commit(); raise RunExecutionError(str(error)) from error
+    _require_current_lease(session, task, lease_token)
     task.payload = {**payload, "worker_interface": task.task_type, "stage_completed_at": datetime.now(timezone.utc).isoformat()}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
@@ -215,14 +228,14 @@ def _execute_leased_scoring_task(
         raise RunExecutionError("Evaluation run not found.")
     if run.status not in {RunStatus.SCORING.value, RunStatus.RUNNING.value}:
         raise RunExecutionError("Evaluation run is not ready for scoring.")
-    if not has_valid_lease(task, lease_token):
-        raise RunExecutionError("Task lease is no longer valid.")
+    _require_current_lease(session, task, lease_token)
     task.status = TaskStatus.RUNNING.value
     task.attempt_count += 1
     run.status = RunStatus.SCORING.value
     session.commit()
 
     latest = _latest_run_attempts(session, run.id)
+    _require_current_lease(session, task, lease_token)
     task.payload = {
         **(task.payload or {}),
         "scored_samples": sum(attempt.score is not None for attempt in latest.values()),
@@ -249,14 +262,14 @@ def _execute_leased_aggregation_task(
         raise RunExecutionError("Evaluation run not found.")
     if run.status not in {RunStatus.AGGREGATING.value, RunStatus.SCORING.value}:
         raise RunExecutionError("Evaluation run is not ready for aggregation.")
-    if not has_valid_lease(task, lease_token):
-        raise RunExecutionError("Task lease is no longer valid.")
+    _require_current_lease(session, task, lease_token)
     task.status = TaskStatus.RUNNING.value
     task.attempt_count += 1
     run.status = RunStatus.AGGREGATING.value
     session.commit()
 
     metrics = recompute_aggregate_metrics(session, run.id, commit=False)
+    _require_current_lease(session, task, lease_token)
     task.payload = {**(task.payload or {}), "metric_count": len(metrics), "aggregation_version": "1.0.0"}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
@@ -279,8 +292,9 @@ def _execute_leased_report_task(
     run = session.get(EvaluationRun, task.run_id)
     if run is None:
         raise RunExecutionError("Evaluation run not found.")
-    if run.status != RunStatus.GENERATING_REPORT.value or not has_valid_lease(task, lease_token):
+    if run.status != RunStatus.GENERATING_REPORT.value:
         raise RunExecutionError("Evaluation run is not ready for report generation.")
+    _require_current_lease(session, task, lease_token)
     task.status = TaskStatus.RUNNING.value
     task.attempt_count += 1
     session.commit()
@@ -294,6 +308,7 @@ def _execute_leased_report_task(
             report_type=str(payload.get("report_type", "single_model")),
         )
     except ReportError as error:
+        _require_current_lease(session, task, lease_token)
         task.status = TaskStatus.FAILED.value
         task.payload = {**payload, "report_error": str(error)}
         clear_lease(task)
@@ -301,6 +316,7 @@ def _execute_leased_report_task(
         run.completed_at = datetime.now(timezone.utc)
         session.commit()
         raise RunExecutionError(str(error)) from error
+    _require_current_lease(session, task, lease_token)
     task.payload = {**payload, "report_id": report.id, "artifact_path": report.artifact_path}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
@@ -397,20 +413,18 @@ def _latest_run_attempts(session: Session, run_id: str) -> dict[str, SampleAttem
     return latest
 
 
-def _mark_attempt_running(session: Session, attempt: SampleAttempt) -> None:
+def _mark_attempt_running(
+    session: Session, task: TaskUnit, lease_token: str, attempt: SampleAttempt
+) -> None:
+    """Persist the running transition only while this worker still owns the task."""
+
+    _require_current_lease(session, task, lease_token)
     attempt.status = SampleAttemptStatus.RUNNING.value
     attempt.started_at = datetime.now(timezone.utc)
     attempt.completed_at = None
     session.commit()
 
-
-def _mark_attempt_leased(session: Session, attempt: SampleAttempt) -> None:
-    attempt.status = SampleAttemptStatus.LEASED.value
-    attempt.completed_at = None
-    session.commit()
-
-
-def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoint: ModelEndpoint) -> None:
+def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoint: Any) -> None:
     attempt.request_snapshot = result.request_snapshot
     attempt.raw_response = result.raw_response
     attempt.parsed_prediction = result.prediction
@@ -437,8 +451,55 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoi
     attempt.error_message = result.error_message or "Sample execution failed."
 
 
+def _frozen_endpoint(run: EvaluationRun, endpoint: ModelEndpoint) -> SimpleNamespace:
+    snapshot = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
+    frozen = snapshot.get("endpoint") if isinstance(snapshot.get("endpoint"), dict) else {}
+    return SimpleNamespace(
+        base_url=str(frozen.get("base_url", endpoint.base_url)),
+        model_name=str(frozen.get("model_name", endpoint.model_name)),
+        protocol_profile=str(frozen.get("protocol_profile", endpoint.protocol_profile)),
+        default_request_body=frozen.get("default_request_body", endpoint.default_request_body),
+        timeout_seconds=int(frozen.get("timeout_seconds", endpoint.timeout_seconds)),
+        custom_headers=frozen.get("custom_headers", endpoint.custom_headers),
+        input_cost_per_million=frozen.get("input_cost_per_million", endpoint.input_cost_per_million),
+        output_cost_per_million=frozen.get("output_cost_per_million", endpoint.output_cost_per_million),
+    )
+
+
+def _require_current_lease(session: Session, task: TaskUnit, lease_token: str) -> None:
+    """Acquire a transactional write fence before persisting worker state.
+
+    The conditional update locks the current task row through the following
+    commit. Pause, cancel, reclaim, and a newer lease all change the predicate,
+    so a stale worker cannot update evidence or final task/run state afterward.
+    """
+
+    now = datetime.now(timezone.utc)
+    fenced = session.execute(
+        update(TaskUnit)
+        .where(
+            TaskUnit.id == task.id,
+            TaskUnit.lease_token == lease_token,
+            TaskUnit.lease_version == task.lease_version,
+            TaskUnit.status.in_([TaskStatus.LEASED.value, TaskStatus.RUNNING.value]),
+            TaskUnit.lease_expires_at >= now,
+        )
+        .values(heartbeat_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if fenced.rowcount != 1:
+        session.rollback()
+        raise RunExecutionError("Task lease was lost before result persistence.")
+
+
+def _require_runnable_run(session: Session, run: EvaluationRun) -> None:
+    session.refresh(run)
+    if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}:
+        raise RunExecutionError("Evaluation run is no longer executable.")
+
+
 def _estimate_cost(
-    endpoint: ModelEndpoint,
+    endpoint: Any,
     input_tokens: int | None,
     output_tokens: int | None,
 ) -> float | None:

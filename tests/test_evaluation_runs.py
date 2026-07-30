@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+import httpx
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -15,7 +16,27 @@ from app.benchmarks.text_quick_check import TextSample
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.services.run_executor import _retry_delay_seconds
-from app.services.task_queue import claim_task
+from app.services.task_queue import claim_task, reclaim_expired_leases
+
+
+def _configure_dataset_download(monkeypatch, content: bytes) -> None:
+    class Response:
+        headers: dict[str, str] = {"content-length": str(len(content))}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield content
+
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 
 class SuccessfulTester:
@@ -76,7 +97,7 @@ class RetryAfterExecutor:
 
 def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path) -> None:
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
         ),
@@ -138,7 +159,7 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
 
 def test_builtin_benchmark_packs_are_registered_and_preserve_multimodal_samples(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     expected_packs = {
@@ -176,7 +197,7 @@ def test_benchmark_samples_are_split_into_independent_shards_before_scoring(tmp_
     )
     monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
@@ -197,7 +218,7 @@ def test_benchmark_samples_are_split_into_independent_shards_before_scoring(tmp_
 
 def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
         )
@@ -223,7 +244,7 @@ def test_run_requires_a_verified_endpoint(tmp_path: Path) -> None:
 
 def test_run_rejects_effectively_unsupported_benchmark_capability(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -237,7 +258,7 @@ def test_run_rejects_effectively_unsupported_benchmark_capability(tmp_path: Path
 
 def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) -> None:
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
         ),
@@ -302,7 +323,7 @@ def test_execute_queued_run_captures_sample_evidence_and_scores(tmp_path: Path) 
 def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> None:
     executor = RetryOnceExecutor()
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=executor,
     )
@@ -342,7 +363,7 @@ def test_worker_leases_and_retries_only_retryable_samples(tmp_path: Path) -> Non
 
 def test_report_generation_failure_preserves_completed_evaluation_results(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
@@ -371,7 +392,7 @@ def test_report_generation_failure_preserves_completed_evaluation_results(tmp_pa
 
 def test_run_preflight_estimates_work_without_creating_a_run(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -388,7 +409,7 @@ def test_run_preflight_estimates_work_without_creating_a_run(tmp_path: Path) -> 
 
 def test_run_scheduling_controls_and_benchmark_rerun_preserve_source_evidence(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
@@ -408,7 +429,7 @@ def test_run_scheduling_controls_and_benchmark_rerun_preserve_source_evidence(tm
 
 def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -437,6 +458,7 @@ def test_sample_attempt_list_uses_database_pagination_for_unfiltered_evidence(tm
 def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "declared-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
@@ -451,14 +473,14 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
     )
     monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
     with TestClient(app) as client:
         dataset = client.post(
             "/api/v1/datasets",
-            json={"dataset_id": "declared-samples", "version": "2026.07", "source_url": source.as_uri()},
+            json={"dataset_id": "declared-samples", "version": "2026.07", "source_url": "https://datasets.example.test/declared-samples.jsonl"},
         )
         assert dataset.status_code == 201
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"}).json()
@@ -490,19 +512,20 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
 def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "manifest-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
             "version": "1.0.0",
             "required_capabilities": ["text_input"],
             "scoring": {"type": "exact_match"},
-            "datasets": [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+            "datasets": [{"dataset_id": "manifest-samples", "version": "2026.07", "revision": "r1", "source_url": "https://datasets.example.test/manifest-samples.jsonl"}],
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
     monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -518,7 +541,7 @@ def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_pa
         assert run.json()["status"] == "waiting_for_dataset"
         dataset_id = run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"]
         datasets = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
-        assert datasets[dataset_id]["source_url"] == source.as_uri()
+        assert datasets[dataset_id]["source_url"] == "https://datasets.example.test/manifest-samples.jsonl"
         assert datasets[dataset_id]["status"] == "not_downloaded"
 
         preparation = client.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
@@ -529,7 +552,7 @@ def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_pa
 
 def test_non_inference_worker_interfaces_are_independently_leased_and_audited(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
@@ -555,7 +578,7 @@ def test_non_inference_worker_interfaces_are_independently_leased_and_audited(tm
 
 def test_retry_after_and_total_wait_bound_are_recorded_without_requeuing(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=RetryAfterExecutor(),
     )
@@ -604,7 +627,7 @@ def test_retry_delay_supports_fixed_exponential_jitter_and_provider_hint() -> No
 def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: Path) -> None:
     executor = FatalThenSuccessfulExecutor()
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=executor,
     )
@@ -632,7 +655,7 @@ def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: P
 
 def test_expired_worker_lease_requeues_only_inflight_sample_attempts(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -657,7 +680,7 @@ def test_expired_worker_lease_requeues_only_inflight_sample_attempts(tmp_path: P
 
 def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(app) as client:
@@ -669,7 +692,7 @@ def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
 
     rpm_app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'rpm.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rpm.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
     )
     with TestClient(rpm_app) as client:
@@ -687,7 +710,7 @@ def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path
 
 def test_worker_claim_honors_system_and_worker_concurrency_limits(tmp_path: Path) -> None:
     app = create_app(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{tmp_path / 'platform.db'}",
             secret_encryption_key=Fernet.generate_key().decode("utf-8"),
             system_max_concurrency=1,
@@ -709,7 +732,7 @@ def test_worker_claim_honors_system_and_worker_concurrency_limits(tmp_path: Path
 
 
 def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -> None:
-    rps_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'rps.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
+    rps_app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rps.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
     with TestClient(rps_app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"requests_per_second":1}).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
@@ -720,16 +743,172 @@ def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -
         with rps_app.state.database.get_session() as session:
             assert session.scalar(select(EndpointSecondRateWindow)).request_count == 1
 
-    tokens_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'tokens.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
+    tokens_app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'tokens.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
     with TestClient(tokens_app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"output_tokens_per_minute":16}).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
-        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
+        response = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1})
+        assert response.status_code == 409
+        assert "token budget" in response.json()["detail"]
+
+
+def test_token_limited_runs_split_shards_before_admission(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'token-shards.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","tokens_per_minute":100},
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        created = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"]})
+        assert created.status_code == 201
+        with app.state.database.get_session() as session:
+            shards = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == created.json()["id"], TaskUnit.task_type == "evaluation_shard")))
+            assert len(shards) > 1
+            assert all(task.payload["estimated_token_count"] <= 100 for task in shards)
+
+
+def test_low_rps_runs_split_requests_and_continue_when_the_next_window_opens(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rps-continuation.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model","requests_per_second":1},
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"]}).json()
+        with app.state.database.get_session() as session:
+            shards = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run["id"], TaskUnit.task_type == "evaluation_shard")))
+            assert len(shards) == run["total_samples"]
+            assert all(task.payload["estimated_request_count"] == 1 for task in shards)
+
+        first_window = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+        assert first_window.status_code == 200
+        assert first_window.json()["status"] == "running"
+        for _ in range(run["total_samples"] - 1):
+            with app.state.database.get_session() as session:
+                rate_window = session.scalar(select(EndpointSecondRateWindow))
+                assert rate_window is not None
+                # Simulate the next fixed one-second provider window.
+                rate_window.request_count = 0
+                session.commit()
+            resumed = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
+            assert resumed.status_code == 200
+
+        assert resumed.json()["status"] == "completed"
+
+
+def test_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> None:
+    class LeaseLosingExecutor:
+        def execute(self, _endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            with app.state.database.get_session() as session:
+                task = session.scalar(select(TaskUnit).where(TaskUnit.task_type == "evaluation_shard", TaskUnit.status == "running"))
+                assert task is not None
+                task.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+                session.commit()
+                assert reclaim_expired_leases(session) == 1
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'late-result.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=LeaseLosingExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = client.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        assert claim is not None
+        late = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_path: Path) -> None:
+    class PausingExecutor:
+        def execute(self, _endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            from app.api.evaluation_runs import pause_evaluation_run
+
+            with app.state.database.get_session() as session:
+                run = session.scalar(select(EvaluationRun).where(EvaluationRun.status == "running"))
+                assert run is not None
+                pause_evaluation_run(run.id, SimpleNamespace(app=app), session)
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'pause-result.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=PausingExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = client.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        late = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        assert client.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "paused"
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_queued_run_uses_frozen_endpoint_configuration_and_rotated_secret(tmp_path: Path) -> None:
+    captured: list[tuple[str, str, int, dict[str, object], str]] = []
+
+    class SnapshotExecutor:
+        def execute(self, endpoint, api_key: str, input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            captured.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key))
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'snapshot.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=SnapshotExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "initial-secret",
+                "model_name": "frozen-model",
+                "timeout_seconds": 42,
+                "custom_headers": {"X-Run-Mode": "frozen"},
+                "default_request_body": {"temperature": 0.1},
+            },
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        changed = client.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={
+                "base_url": "https://changed.models.example.test/v1",
+                "api_key": "rotated-secret",
+                "model_name": "changed-model",
+                "timeout_seconds": 5,
+                "custom_headers": {"X-Run-Mode": "changed"},
+                "default_request_body": {"temperature": 0.9},
+            },
+        )
+        assert changed.status_code == 200
+        assert client.post(f"/api/v1/evaluation-runs/{run['id']}/execute").json()["status"] == "completed"
+
+    assert captured == [("https://models.example.test/v1", "frozen-model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 
 def test_worker_claim_honors_run_and_shared_api_key_concurrency_limits(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
     with TestClient(app) as client:
         first_endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-a.example.test/v1","api_key":"shared-provider-key","model_name":"a","max_concurrency":3,"api_key_max_concurrency":1}).json()
         second_endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models-b.example.test/v1","api_key":"shared-provider-key","model_name":"b","max_concurrency":3,"api_key_max_concurrency":1}).json()
@@ -746,7 +925,7 @@ def test_worker_claim_honors_run_and_shared_api_key_concurrency_limits(tmp_path:
 
 
 def test_worker_claim_honors_user_and_benchmark_concurrency_limits(tmp_path: Path) -> None:
-    user_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'user-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    user_app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'user-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
     with TestClient(user_app) as client:
         endpoints = [client.post("/api/v1/model-endpoints", json={"base_url":f"https://models-{name}.example.test/v1","api_key":f"key-{name}","model_name":name,"max_concurrency":3}).json() for name in ("a", "b")]
         for endpoint in endpoints:
@@ -762,7 +941,7 @@ def test_worker_claim_honors_user_and_benchmark_concurrency_limits(tmp_path: Pat
             assert claim_task(session, "worker-a", run_id=runs[0]["id"]) is not None
             assert claim_task(session, "worker-b", run_id=runs[1]["id"]) is None
 
-    benchmark_app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'benchmark-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    benchmark_app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'benchmark-limits.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
     with TestClient(benchmark_app) as client:
         endpoints = [client.post("/api/v1/model-endpoints", json={"base_url":f"https://benchmark-{name}.example.test/v1","api_key":f"benchmark-key-{name}","model_name":name,"max_concurrency":3}).json() for name in ("a", "b")]
         for endpoint in endpoints:
@@ -779,7 +958,7 @@ def test_worker_claim_honors_user_and_benchmark_concurrency_limits(tmp_path: Pat
 
 
 def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")))
     with TestClient(app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"test-secret-key","model_name":"example-model"}).json()
         with app.state.database.get_session() as session:
@@ -797,7 +976,7 @@ def test_run_snapshots_a_versioned_prompt_package(tmp_path: Path) -> None:
 
 def test_prompt_scoring_rule_is_snapshotted_and_applied_to_execution(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'scoring.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'scoring.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )
@@ -815,7 +994,7 @@ def test_prompt_scoring_rule_is_snapshotted_and_applied_to_execution(tmp_path: P
 
 def test_terminal_run_must_be_archived_before_deletion(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'archive.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'archive.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         connection_tester=SuccessfulTester(),
         model_executor=ExactAnswerExecutor(),
     )

@@ -11,7 +11,7 @@ from app.main import create_app
 
 def test_health_initializes_the_configured_sqlite_database(tmp_path: Path) -> None:
     database_path = tmp_path / "platform.db"
-    app = create_app(Settings(database_url=f"sqlite:///{database_path}"))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{database_path}"))
 
     with TestClient(app) as client:
         response = client.get("/health")
@@ -30,3 +30,14 @@ def test_health_initializes_the_configured_sqlite_database(tmp_path: Path) -> No
 
         with app.state.database.get_session() as session:
             assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == LATEST_SCHEMA_VERSION
+
+
+def test_health_returns_a_non_success_status_when_the_database_is_unavailable(tmp_path: Path, monkeypatch) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}"))
+    with TestClient(app) as client:
+        monkeypatch.setattr(app.state.database, "get_session", lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")))
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
+    assert response.json()["database_connected"] is False

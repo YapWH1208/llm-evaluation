@@ -8,9 +8,11 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+import pytest
+import httpx
 
 from app.core.config import Settings
-from app.db.mongo import MongoDocumentStore, MongoValidation
+from app.db.mongo import MongoDocumentStore, MongoValidation, MongoValidationError
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
 from app.db.models import CapabilityDetection
@@ -18,6 +20,26 @@ from app.services.capability_detector import CapabilityDetectionResult
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.benchmarks.text_quick_check import TextSample
+
+
+def _configure_dataset_download(monkeypatch, content: bytes) -> None:
+    class Response:
+        headers: dict[str, str] = {"content-length": str(len(content))}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield content
+
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 
 class FakeAdmin:
@@ -30,9 +52,10 @@ class FakeAdmin:
 
 
 class FakeCollection:
-    def __init__(self) -> None:
+    def __init__(self, *, validator: dict[str, Any] | None = None) -> None:
         self.documents: list[dict[str, Any]] = []
         self.indexes: list[tuple[Any, dict[str, Any]]] = []
+        self.validator = validator
 
     def create_index(self, keys: Any, **options: Any) -> None:
         self.indexes.append((keys, options))
@@ -50,6 +73,15 @@ class FakeCollection:
     def find(self, query: dict[str, Any], _projection: dict[str, int] | None = None) -> "FakeCursor":
         return FakeCursor([dict(document) for document in self.documents if _matches(document, query)])
 
+    def count_documents(self, query: dict[str, Any]) -> int:
+        return sum(_matches(document, query) for document in self.documents)
+
+    def distinct(self, field: str, query: dict[str, Any]) -> list[Any]:
+        return list({document.get(field) for document in self.documents if _matches(document, query) and document.get(field) is not None})
+
+    def options(self) -> dict[str, Any]:
+        return {"validator": self.validator} if self.validator is not None else {}
+
     def find_one_and_update(self, query: dict[str, Any], update: dict[str, Any], *, sort: list[tuple[str, int]] | None = None, return_document: Any) -> dict[str, Any] | None:
         matches = [document for document in self.documents if _matches(document, query)]
         if sort:
@@ -57,7 +89,9 @@ class FakeCollection:
                 matches.sort(key=lambda document: document.get(key), reverse=direction < 0)
         if not matches:
             return None
-        matches[0].update(update["$set"])
+        matches[0].update(update.get("$set", {}))
+        for key, value in update.get("$inc", {}).items():
+            matches[0][key] = int(matches[0].get(key, 0)) + int(value)
         return dict(matches[0])
 
     def update_many(self, query: dict[str, Any], update: dict[str, Any]) -> None:
@@ -87,10 +121,10 @@ class FakeDatabase:
     def __getitem__(self, name: str) -> FakeCollection:
         return self.collections.setdefault(name, FakeCollection())
 
-    def create_collection(self, name: str) -> FakeCollection:
+    def create_collection(self, name: str, **options: Any) -> FakeCollection:
         if name in self.collections:
             raise RuntimeError("collection already exists")
-        collection = FakeCollection()
+        collection = FakeCollection(validator=options.get("validator"))
         self.collections[name] = collection
         return collection
 
@@ -129,6 +163,8 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
                 return False
             if "$gte" in expected and not (actual >= expected["$gte"]):
                 return False
+            if "$gt" in expected and not (actual > expected["$gt"]):
+                return False
             continue
         if actual != expected:
             return False
@@ -137,7 +173,7 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
 
 def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
 
     assert store.settings.mongodb_database_name == "platform"
     assert store.migration_preview() == MIGRATIONS
@@ -151,9 +187,76 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert len(client["platform"]["users"].indexes) == 2
 
 
+def test_mongo_store_backfills_missing_legacy_migration_ledger_before_upgrading() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    database = client["platform"]
+    del database.collections["schema_migrations"]
+    database["schema_versions"].documents = [
+        document for document in database["schema_versions"].documents if document["version"] <= 21
+    ]
+
+    validation = store.initialize()
+    assert validation.is_valid
+    assert [item["version"] for item in database["schema_migrations"].documents] == [
+        migration.version for migration in MIGRATIONS
+    ]
+    assert store.initialize("validate").is_valid
+
+
+def test_mongo_report_share_password_limiter_is_durable_and_expires() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    now = datetime.now(timezone.utc)
+
+    for _ in range(5):
+        assert store.record_report_share_password_failure(
+            share_id="share-id", client_key="client-hash", now=now, window=timedelta(minutes=5), limit=5
+        )
+    assert store.report_share_password_attempt_limit_reached(
+        share_id="share-id", client_key="client-hash", now=now, limit=5
+    )
+    assert not store.record_report_share_password_failure(
+        share_id="share-id", client_key="client-hash", now=now, window=timedelta(minutes=5), limit=5
+    )
+    assert store.record_report_share_password_failure(
+        share_id="share-id", client_key="client-hash", now=now + timedelta(minutes=6), window=timedelta(minutes=5), limit=5
+    )
+
+
+def test_mongo_validation_detects_missing_index_and_migration() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    client["platform"]["task_units"].indexes.clear()
+    client["platform"]["schema_migrations"].documents = [
+        document for document in client["platform"]["schema_migrations"].documents if document["version"] != 22
+    ]
+
+    validation = store.validate_schema()
+    assert "task_units.status_1_next_retry_at_1_priority_-1_created_at_1" in validation.missing_indexes
+    assert "20260729_add_remediation_persistence_contracts" in validation.missing_migrations
+    with pytest.raises(MongoValidationError):
+        store.initialize("validate")
+
+
+def test_mongo_validation_detects_missing_collection_validator() -> None:
+    client = FakeClient()
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
+    store.initialize()
+    client["platform"]["task_units"].validator = None
+
+    validation = store.validate_schema()
+    assert "task_units" in validation.missing_validators
+    with pytest.raises(MongoValidationError, match="missing validators"):
+        store.initialize("validate")
+
+
 def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform", mongodb_database="override"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform", mongodb_database="override"), client=client)
     store.initialize()
     now = datetime.now(timezone.utc)
     tasks = client["override"]["task_units"]
@@ -165,18 +268,27 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     assert claimed is not None
     assert claimed["id"] == "high"
     assert claimed["status"] == "leased"
+    assert claimed["lease_version"] == 1
+    original_token = claimed["lease_token"]
     tasks.documents[1]["status"] = "running"
     tasks.documents[1]["lease_expires_at"] = now - timedelta(seconds=1)
     client["override"]["sample_attempts"].insert_one({"_id": "attempt", "task_id": "high", "status": "running"})
 
     assert store.reclaim_expired_leases() == 1
     assert tasks.documents[1]["status"] == "pending"
+    assert tasks.documents[1]["lease_version"] == 2
     assert client["override"]["sample_attempts"].documents[0]["status"] == "pending"
+    reclaimed = store.claim_task(worker_id="worker-b", lease_seconds=30)
+    assert reclaimed is not None
+    assert reclaimed["id"] == "high"
+    assert reclaimed["lease_version"] == 3
+    assert reclaimed["lease_token"] != original_token
+    assert store.heartbeat_task(task_id="high", lease_token=str(original_token)) is None
 
 
 def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings(database_url="mongodb://mongo.test/platform"), client=client)
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
     store.initialize()
     now = datetime.now(timezone.utc)
     first_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
@@ -211,7 +323,7 @@ def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, c
         def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(cli.Settings, "from_environment", lambda: Settings(database_url="mongodb://mongo.test/platform"))
+    monkeypatch.setattr(cli.Settings, "from_environment", lambda: Settings.local_development(database_url="mongodb://mongo.test/platform"))
     monkeypatch.setattr(cli, "MongoDocumentStore", FakeMongoStore)
 
     assert cli.main(["database", "initialize"]) == 0
@@ -226,7 +338,7 @@ class SuccessfulTester:
 
 def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -270,7 +382,7 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
             ]
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -304,10 +416,13 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
 
 
 def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
+    captured: list[tuple[str, str, int, dict[str, Any], str]] = []
+
     class ExactExecutor:
         def execute(self, endpoint: Any, api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            captured.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key))
             assert endpoint.model_name == "model"
-            assert api_key == "secret"
+            assert api_key == "rotated-secret"
             assert input_snapshot["messages"]
             return SampleExecutionResult(
                 True,
@@ -320,7 +435,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
             )
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         secret_encryption_key=Fernet.generate_key().decode(),
     )
@@ -333,11 +448,16 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
     with TestClient(app) as api:
         endpoint = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "timeout_seconds": 42, "custom_headers": {"X-Run-Mode": "frozen"}},
         ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         assert run.status_code == 201
+        changed = api.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"base_url": "https://changed.models.example.test/v1", "api_key": "rotated-secret", "model_name": "changed", "timeout_seconds": 5, "custom_headers": {"X-Run-Mode": "changed"}},
+        )
+        assert changed.status_code == 200
         completed = api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute")
         assert completed.status_code == 200
         assert completed.json()["status"] == "completed"
@@ -345,24 +465,26 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
         assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
+        assert captured == [("https://models.example.test/v1", "model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 
 def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "manifest-samples.jsonl"
     source.write_text('{"question":"2 + 2"}\n', encoding="utf-8")
+    _configure_dataset_download(monkeypatch, source.read_bytes())
     plugin = SimpleNamespace(
         manifest={
             "benchmark_id": "text-quick-check",
             "version": "1.0.0",
             "required_capabilities": ["text_input"],
             "scoring": {"type": "exact_match"},
-            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": source.as_uri()}],
+            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": "https://datasets.example.test/manifest-samples.jsonl"}],
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
     monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -385,7 +507,7 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
 
 def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -408,7 +530,7 @@ def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypa
     )
     monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
@@ -428,7 +550,7 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(
         settings,
         connection_tester=SuccessfulTester(),
@@ -458,9 +580,70 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
 
 
+def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+
+    class LeaseLosingExecutor:
+        def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            running = store.list_documents("task_units", query={"task_type": "evaluation_shard", "status": "running"})
+            assert len(running) == 1
+            assert store.update_document("task_units", running[0]["id"], {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)})
+            assert store.reclaim_expired_leases() == 1
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=LeaseLosingExecutor(), document_store=store)
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
+        late = api.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        attempt = api.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_mongodb_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+
+    class PausingExecutor:
+        def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            from app.api.evaluation_runs import pause_evaluation_run
+
+            run = store.list_documents("evaluation_runs", query={"status": "running"})[0]
+            pause_evaluation_run(str(run["id"]), SimpleNamespace(app=app), None)
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=PausingExecutor(), document_store=store)
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        late = api.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "paused"
+        attempt = api.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
 def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         benchmarks = api.get("/api/v1/benchmarks")
@@ -480,7 +663,7 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         assert uploaded.json()["status"] == "ready"
         assert uploaded.json()["size_bytes"] == len(b'{"question":"2 + 2"}\n')
         assert api.post(f"/api/v1/datasets/{dataset.json()['id']}/validate").json()["status"] == "ready"
-        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_env_var": "MONGO_DATASET_TOKEN"}).json()["credential_env_var"] == "MONGO_DATASET_TOKEN"
+        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_binding_id": None}).json()["credential_binding_id"] is None
         assert api.get("/api/v1/datasets/disk-usage").json()["cache_bytes"] >= len(b'{"question":"2 + 2"}\n')
 
 
@@ -491,7 +674,7 @@ def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "ok")
 
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         endpoint = api.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
@@ -516,7 +699,7 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings(
+    settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
         data_root=str(tmp_path),
         secret_encryption_key=Fernet.generate_key().decode(),

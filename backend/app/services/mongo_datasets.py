@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.mongo import MongoDocumentStore
 from app.services.datasets import DatasetDownloadPaused, DatasetError, clear_prepared_dataset_cache, dataset_disk_usage, dataset_source_suffix, prepare_dataset_cache, resolve_dataset_source, validate_prepared_dataset_cache, write_dataset_source
 
@@ -68,6 +69,7 @@ def download_mongo_dataset(
     store: MongoDocumentStore,
     dataset_id: str,
     data_root: str,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     dataset = _get_dataset(store, dataset_id)
     source_url = dataset.get("source_url")
@@ -82,13 +84,24 @@ def download_mongo_dataset(
     temporary = destination / "dataset.part"
     store.update_document("dataset_versions", dataset_id, {"status": "downloading", "error_message": None})
     try:
-        source, headers = resolve_dataset_source(source_url, str(dataset["revision"]), dataset.get("credential_env_var") if isinstance(dataset.get("credential_env_var"), str) else None)
+        source, headers = resolve_dataset_source(
+            source_url,
+            str(dataset["revision"]),
+            dataset.get("credential_binding_id") if isinstance(dataset.get("credential_binding_id"), str) else None,
+            settings,
+        )
         def ensure_not_paused() -> None:
             current = _get_dataset(store, dataset_id)
             if current.get("status") == "waiting":
                 raise DatasetDownloadPaused("Dataset download was paused and can be retried.")
 
-        actual_checksum = write_dataset_source(source, temporary, headers, ensure_not_paused)
+        actual_checksum = write_dataset_source(
+            source,
+            temporary,
+            headers,
+            ensure_not_paused,
+            max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
+        )
         store.update_document("dataset_versions", dataset_id, {"status": "verifying"})
         expected_checksum = dataset.get("checksum")
         if isinstance(expected_checksum, str) and expected_checksum.lower() != actual_checksum:
@@ -105,7 +118,7 @@ def download_mongo_dataset(
         raise DatasetError(str(error)) from error
     except (DatasetError, httpx.HTTPStatusError) as error:
         status_code = getattr(getattr(error, "response", None), "status_code", 0)
-        credential_required = dataset.get("credential_env_var") and ("environment variable" in str(error) or status_code in {401, 403})
+        credential_required = dataset.get("credential_binding_id") and ("credential binding" in str(error) or status_code in {401, 403})
         store.update_document("dataset_versions", dataset_id, {"status": "credential_required" if credential_required else "failed", "error_message": str(error)[:500]})
         raise DatasetError(str(error)) from error
     except (httpx.HTTPError, OSError) as error:

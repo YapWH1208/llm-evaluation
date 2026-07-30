@@ -1,0 +1,4 @@
+/docs
+.code-review-graph/
+*.db
+/data

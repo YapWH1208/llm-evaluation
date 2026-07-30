@@ -24,7 +24,7 @@ def _sample_attempt(client: TestClient, app) -> dict[str, object]:
 
 def test_human_review_agreement_requires_two_independent_reviewers_then_records_adjudication(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'reviews.db'}", secret_encryption_key=Fernet.generate_key().decode())
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'reviews.db'}", secret_encryption_key=Fernet.generate_key().decode())
     )
     with TestClient(app) as client:
         attempt = _sample_attempt(client, app)
@@ -54,7 +54,7 @@ def test_human_review_agreement_requires_two_independent_reviewers_then_records_
 
 
 def test_reviewer_cannot_submit_the_same_review_stage_twice(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'reviews.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'reviews.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:
         attempt = _sample_attempt(client, app)
         payload = {"sample_attempt_id": attempt["id"], "reviewer_id": "reviewer-a", "review_stage": "primary"}

@@ -9,12 +9,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
-from app.db.models import HumanReview, JudgeAssessment
+from app.db.models import HumanReview, JudgeAssessment, Report
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
@@ -22,6 +22,7 @@ from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.services.reports import delete_report_artifact
 from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
@@ -35,6 +36,18 @@ from app.services.mongo_run_executor import (
 )
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
+_ACTIVE_TASK_STATUSES = (
+    TaskStatus.PENDING.value,
+    TaskStatus.RETRY_SCHEDULED.value,
+    TaskStatus.LEASED.value,
+    TaskStatus.RUNNING.value,
+)
+_ACTIVE_ATTEMPT_STATUSES = (
+    SampleAttemptStatus.PENDING.value,
+    SampleAttemptStatus.LEASED.value,
+    SampleAttemptStatus.RUNNING.value,
+    SampleAttemptStatus.RETRY_SCHEDULED.value,
+)
 
 
 class EvaluationRunCreate(BaseModel):
@@ -301,9 +314,9 @@ def pause_evaluation_run(run_id: str, request: Request, session: SessionDependen
         run = store.get_document("evaluation_runs", run_id)
         if run is None: raise HTTPException(404, "Evaluation run not found")
         if run["status"] not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}: raise HTTPException(409, "Run cannot be paused in its current state")
-        for task in store.list_documents("task_units", query={"run_id": run_id}):
-            if task["status"] in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
-                store.update_document("task_units", str(task["id"]), {"status": TaskStatus.CANCELLED.value})
+        store.invalidate_run_tasks(run_id)
+        for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
+            store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.PENDING.value, "completed_at": None, "worker_lease_token": None})
         updated = store.update_document("evaluation_runs", run_id, {"status": RunStatus.PAUSED.value})
         assert updated is not None
         return updated
@@ -312,7 +325,25 @@ def pause_evaluation_run(run_id: str, request: Request, session: SessionDependen
     if run is None: raise HTTPException(404, "Evaluation run not found")
     if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}: raise HTTPException(409, "Run cannot be paused in its current state")
     run.status = RunStatus.PAUSED.value
-    session.query(TaskUnit).filter(TaskUnit.run_id == run.id, TaskUnit.status.in_([TaskStatus.PENDING.value, TaskStatus.RUNNING.value])).update({TaskUnit.status: TaskStatus.CANCELLED.value})
+    session.execute(
+        update(TaskUnit)
+        .where(TaskUnit.run_id == run.id, TaskUnit.status.in_(_ACTIVE_TASK_STATUSES))
+        .values(
+            status=TaskStatus.CANCELLED.value,
+            leased_by=None,
+            lease_token=None,
+            lease_expires_at=None,
+            heartbeat_at=None,
+            lease_version=TaskUnit.lease_version + 1,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    session.execute(
+        update(SampleAttempt)
+        .where(SampleAttempt.run_id == run.id, SampleAttempt.status.in_(_ACTIVE_ATTEMPT_STATUSES))
+        .values(status=SampleAttemptStatus.PENDING.value, completed_at=None)
+        .execution_options(synchronize_session=False)
+    )
     session.commit(); session.refresh(run); return run
 
 @router.post("/{run_id}/resume", response_model=EvaluationRunResponse)
@@ -344,10 +375,9 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
         run = store.get_document("evaluation_runs", run_id)
         if run is None: raise HTTPException(404, "Evaluation run not found")
         if run["status"] in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}: raise HTTPException(409, "Run cannot be cancelled in its current state")
-        for task in store.list_documents("task_units", query={"run_id": run_id}):
-            store.update_document("task_units", str(task["id"]), {"status": TaskStatus.CANCELLED.value})
-        for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": SampleAttemptStatus.PENDING.value}):
-            store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.CANCELLED.value})
+        store.invalidate_run_tasks(run_id)
+        for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
+            store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.CANCELLED.value, "worker_lease_token": None})
         updated = store.update_document("evaluation_runs", run_id, {"status": RunStatus.CANCELLED.value})
         assert updated is not None
         return updated
@@ -356,8 +386,25 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
     if run is None: raise HTTPException(404, "Evaluation run not found")
     if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}: raise HTTPException(409, "Run cannot be cancelled in its current state")
     run.status = RunStatus.CANCELLED.value
-    session.query(TaskUnit).filter(TaskUnit.run_id == run.id).update({TaskUnit.status: TaskStatus.CANCELLED.value})
-    session.query(SampleAttempt).filter(SampleAttempt.run_id == run.id, SampleAttempt.status == SampleAttemptStatus.PENDING.value).update({SampleAttempt.status: SampleAttemptStatus.CANCELLED.value})
+    session.execute(
+        update(TaskUnit)
+        .where(TaskUnit.run_id == run.id, TaskUnit.status.in_(_ACTIVE_TASK_STATUSES))
+        .values(
+            status=TaskStatus.CANCELLED.value,
+            leased_by=None,
+            lease_token=None,
+            lease_expires_at=None,
+            heartbeat_at=None,
+            lease_version=TaskUnit.lease_version + 1,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    session.execute(
+        update(SampleAttempt)
+        .where(SampleAttempt.run_id == run.id, SampleAttempt.status.in_(_ACTIVE_ATTEMPT_STATUSES))
+        .values(status=SampleAttemptStatus.CANCELLED.value)
+        .execution_options(synchronize_session=False)
+    )
     session.commit(); session.refresh(run); return run
 
 
@@ -400,13 +447,17 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         if run.get("archived_at") is None:
             raise HTTPException(409, "Archive the evaluation run before deleting it")
         attempt_ids = [str(item["id"]) for item in store.list_documents("sample_attempts", query={"run_id": run_id})]
-        report_ids = [str(item["id"]) for item in store.list_documents("reports", query={"run_id": run_id})]
+        reports = store.list_documents("reports", query={"run_id": run_id})
+        report_ids = [str(item["id"]) for item in reports]
         if attempt_ids:
             store.delete_documents("human_reviews", {"sample_attempt_id": {"$in": attempt_ids}})
             store.delete_documents("judge_assessments", {"sample_attempt_id": {"$in": attempt_ids}})
             store.delete_documents("judge_assessments", {"comparison_sample_attempt_id": {"$in": attempt_ids}})
         if report_ids:
             store.delete_documents("report_shares", {"report_id": {"$in": report_ids}})
+        for report in reports:
+            if isinstance(report.get("artifact_path"), str):
+                delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
         store.delete_documents("task_units", {"run_id": run_id})
         store.delete_documents("sample_attempts", {"run_id": run_id})
         store.delete_documents("reports", {"run_id": run_id})
@@ -418,6 +469,8 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         raise HTTPException(404, "Evaluation run not found")
     if run.archived_at is None:
         raise HTTPException(409, "Archive the evaluation run before deleting it")
+    for report in session.scalars(select(Report).where(Report.run_id == run.id)):
+        delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
     session.delete(run)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -517,6 +570,7 @@ def execute_evaluation_run(
                 cipher=cipher,
                 model_executor=model_executor,
                 data_root=str(request.app.state.settings.data_root),
+                settings=request.app.state.settings,
             )
         assert session is not None
         return execute_queued_text_run(
@@ -525,6 +579,7 @@ def execute_evaluation_run(
             cipher=cipher,
             model_executor=model_executor,
             data_root=str(request.app.state.settings.data_root),
+            settings=request.app.state.settings,
         )
     except (RunExecutionError, MongoRunExecutionError) as error:
         status_code = (

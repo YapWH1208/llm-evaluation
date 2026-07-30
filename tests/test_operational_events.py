@@ -21,7 +21,7 @@ class ExactExecutor:
 
 def test_completed_run_emits_sse_snapshot_and_mutations_are_audited(tmp_path: Path) -> None:
     app = create_app(
-        Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
         model_executor=ExactExecutor(),
     )

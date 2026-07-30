@@ -10,7 +10,7 @@ from app.db.migrations import MIGRATIONS
 def test_database_preview_validation_and_sqlite_backup(tmp_path: Path) -> None:
     database_path = tmp_path / "platform.db"
     database = Database(
-        Settings(
+        Settings.local_development(
             database_url=f"sqlite:///{database_path}",
             data_root=str(tmp_path / "data"),
         )
@@ -34,5 +34,24 @@ def test_database_preview_validation_and_sqlite_backup(tmp_path: Path) -> None:
 
 
 def test_database_kind_recognizes_postgresql_and_mongodb_urls() -> None:
-    assert Settings(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "postgresql"
-    assert Settings(database_url="mongodb://host/db").database_kind == "mongodb"
+    assert Settings.local_development(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "postgresql"
+    assert Settings.local_development(database_url="mongodb://host/db").database_kind == "mongodb"
+
+
+def test_schema_validation_detects_missing_column_index_and_migration(tmp_path: Path) -> None:
+    database = Database(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'damaged.db'}"))
+    try:
+        database.initialize()
+        with database.engine.begin() as connection:
+            connection.exec_driver_sql("DROP INDEX ix_task_units_claimable")
+            connection.exec_driver_sql("ALTER TABLE task_units DROP COLUMN lease_version")
+            connection.exec_driver_sql("DELETE FROM schema_migrations WHERE version = 22")
+
+        validation = database.validate_schema()
+        assert "task_units.lease_version" in validation.missing_columns
+        assert "task_units.ix_task_units_claimable" in validation.missing_indexes
+        assert "20260729_add_remediation_persistence_contracts" in validation.missing_migrations
+        with pytest.raises(DatabaseValidationError):
+            database.initialize("validate")
+    finally:
+        database.dispose()

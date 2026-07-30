@@ -73,6 +73,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        settings.validate_authentication()
         if document_store is not None:
             document_store.initialize()
             _ensure_mongo_builtin_benchmarks(document_store)
@@ -100,13 +101,13 @@ def create_app(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Report-Password"],
     )
     app.state.settings = settings
-    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester()
-    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor()
-    app.state.capability_detector = capability_detector or OpenAIChatCompletionsCapabilityDetector()
+    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.capability_detector = capability_detector or OpenAIChatCompletionsCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)
     app.include_router(model_endpoints_router)
     app.include_router(capabilities_router)
     app.include_router(datasets_router)
@@ -137,6 +138,8 @@ def create_app(
 
     @app.middleware("http")
     async def require_configured_api_token(request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if not request.url.path.startswith("/api/v1"):
             return await call_next(request)
         role, actor_id = _authenticate_request(request, settings, database, document_store)
@@ -157,25 +160,31 @@ def create_app(
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
-    def health() -> HealthResponse:
+    def health() -> HealthResponse | JSONResponse:
         database_connected = True
         queue = {"pending": 0, "active": 0}
         try:
             if document_store is not None:
-                tasks = document_store.list_documents("task_units")
-                queue = {"pending": sum(task.get("status") in {"pending", "retry_scheduled"} for task in tasks), "active": sum(task.get("status") in {"leased", "running"} for task in tasks)}
+                queue = {
+                    "pending": document_store.count_documents("task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}),
+                    "active": document_store.count_documents("task_units", {"status": {"$in": ["leased", "running"]}}),
+                }
             else:
                 assert database is not None
                 from app.db.models import TaskUnit
 
                 with database.get_session() as session:
                     session.execute(text("SELECT 1"))
-                    tasks = list(session.scalars(select(TaskUnit.status)))
-                    queue = {"pending": sum(item in {"pending", "retry_scheduled"} for item in tasks), "active": sum(item in {"leased", "running"} for item in tasks)}
+                    from sqlalchemy import func
+
+                    queue = {
+                        "pending": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["pending", "retry_scheduled"]))) or 0,
+                        "active": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["leased", "running"]))) or 0,
+                    }
         except Exception:
             database_connected = False
         disk = shutil.disk_usage(Path(settings.data_root).resolve())
-        return HealthResponse(
+        payload = HealthResponse(
             status="ok" if database_connected else "degraded",
             database=settings.database_kind,
             schema_version=Database.CURRENT_SCHEMA_VERSION,
@@ -183,6 +192,9 @@ def create_app(
             disk={"available_bytes": disk.free, "total_bytes": disk.total},
             queue=queue,
         )
+        if not database_connected:
+            return JSONResponse(status_code=503, content=payload.model_dump())
+        return payload
 
     return app
 
@@ -197,7 +209,9 @@ def _authenticate_request(
     document_store: MongoDocumentStore | None,
 ) -> tuple[str | None, str | None]:
     if not settings.admin_token:
-        return UserRole.ADMIN.value, None
+        if settings.allow_insecure_local_auth:
+            return UserRole.ADMIN.value, None
+        return None, None
     supplied = request.headers.get("Authorization", "")
     expected = f"Bearer {settings.admin_token}"
     if hmac.compare_digest(supplied, expected):
@@ -229,6 +243,11 @@ def _allowed_roles(path: str, method: str) -> set[str]:
     if path.startswith("/api/v1/workers"):
         return {UserRole.ADMIN.value}
     if path.startswith("/api/v1/benchmarks") and method != "GET":
+        return {UserRole.ADMIN.value}
+    # Endpoint changes and connection tests decrypt provider credentials.  They
+    # are administrator operations rather than ordinary evaluator work; an
+    # evaluator could otherwise redirect another endpoint to capture its key.
+    if path.startswith("/api/v1/model-endpoints") and method != "GET":
         return {UserRole.ADMIN.value}
     if path.startswith("/api/v1/reviews") and method != "GET":
         return reviewer_roles

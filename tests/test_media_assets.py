@@ -9,7 +9,7 @@ from app.main import create_app
 
 def test_media_asset_store_validates_content_and_returns_a_normalized_content_part(tmp_path: Path) -> None:
     png = b"\x89PNG\r\n\x1a\nminimal-png-content"
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:
         created = client.post(
             "/api/v1/assets",
@@ -33,7 +33,7 @@ def test_media_asset_store_validates_content_and_returns_a_normalized_content_pa
 
 
 def test_media_asset_store_rejects_declared_mime_mismatches(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data")))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/assets",

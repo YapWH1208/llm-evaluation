@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.db.models import DatasetVersion, ModelCapability
 from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
 from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
+from app.services.scoring import ScoringError, validate_scoring_rule
 
 
 class RunCreationError(ValueError):
@@ -99,12 +101,21 @@ def preflight_benchmark_run(
     samples = plugin.samples(sample_limit)
     if not samples:
         issues.append("At least one benchmark sample is required.")
+    else:
+        try:
+            _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint)
+        except RunCreationError as error:
+            issues.append(str(error))
     compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
     if compatibility["unsupported"]:
         issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
+    try:
+        validate_scoring_rule(_effective_scoring_rule(plugin.manifest, prompt_package))
+    except ScoringError as error:
+        issues.append(f"Scoring rule is invalid: {error}")
     datasets: list[dict[str, object]] = []
     for descriptor in plugin.manifest.get("datasets", []):
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
@@ -215,6 +226,10 @@ def create_benchmark_run(
         request_body_override=request_body_override,
     )
     scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_package)
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise RunCreationError(f"Scoring rule is invalid: {error}") from error
 
     snapshot = {
         "benchmark": {
@@ -228,6 +243,10 @@ def create_benchmark_run(
             "model_name": endpoint.model_name,
             "protocol_profile": endpoint.protocol_profile,
             "default_request_body": endpoint.default_request_body,
+            "timeout_seconds": endpoint.timeout_seconds,
+            "custom_headers": endpoint.custom_headers,
+            "input_cost_per_million": endpoint.input_cost_per_million,
+            "output_cost_per_million": endpoint.output_cost_per_million,
         },
         "sample_ids": [sample.sample_id for sample in samples],
         "datasets": frozen_datasets,
@@ -280,7 +299,7 @@ def create_benchmark_run(
     )
     session.add(benchmark_task)
     session.flush()
-    shards = _split_samples_into_shards(samples, plugin.manifest)
+    shards = _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint)
     for shard_index, shard_samples in enumerate(shards, start=1):
         task = TaskUnit(
             run_id=run.id,
@@ -290,6 +309,9 @@ def create_benchmark_run(
                 "sample_ids": [sample.sample_id for sample in shard_samples],
                 "estimated_request_count": len(shard_samples),
                 "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                "sample_token_estimates": {
+                    sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                },
                 "shard_index": shard_index,
                 "shard_count": len(shards),
                 "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
@@ -374,7 +396,7 @@ def _register_declared_dataset(session: Session, descriptor: dict[str, object]) 
     version = descriptor.get("version")
     revision = descriptor.get("revision")
     license_text = descriptor.get("license_text")
-    credential_env_var = descriptor.get("credential_env_var")
+    credential_binding_id = descriptor.get("credential_binding_id")
     checksum = descriptor.get("checksum")
     dataset = DatasetVersion(
         dataset_id=str(descriptor["dataset_id"]),
@@ -383,9 +405,9 @@ def _register_declared_dataset(session: Session, descriptor: dict[str, object]) 
         source_url=source_url.strip(),
         checksum=checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
         license_text=license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-        credential_env_var=(
-            credential_env_var.strip()
-            if isinstance(credential_env_var, str) and credential_env_var.strip()
+        credential_binding_id=(
+            credential_binding_id.strip()
+            if isinstance(credential_binding_id, str) and credential_binding_id.strip()
             else None
         ),
         status=("license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded"),
@@ -529,6 +551,84 @@ def _split_samples_into_shards(
         modalities = {str(item) for item in manifest.get("modalities", []) if isinstance(item, str)}
         shard_size = 5 if "video" in modalities else 20 if "audio" in modalities else 25 if "image" in modalities else 50
     return tuple(tuple(samples[index : index + shard_size]) for index in range(0, len(samples), shard_size))
+
+
+def _split_samples_for_endpoint_budget(
+    samples: tuple[object, ...],
+    manifest: dict[str, object],
+    endpoint: object,
+) -> tuple[tuple[object, ...], ...]:
+    """Split manifest shards again until each task fits every endpoint window.
+
+    Admission is atomic, but it can only admit a task that is individually
+    below every configured request and token cap.  Sharding here keeps a run
+    executable instead of creating work that can never be claimed.
+    """
+
+    return _split_items_for_endpoint_budget(
+        _split_samples_into_shards(samples, manifest),
+        endpoint,
+        token_estimate=_estimate_sample_tokens,
+    )
+
+
+def _split_items_for_endpoint_budget(
+    candidate_shards: tuple[tuple[object, ...], ...],
+    endpoint: object,
+    *,
+    token_estimate: Callable[[object], int],
+) -> tuple[tuple[object, ...], ...]:
+    """Return budget-safe subshards for any items with a token estimator."""
+
+    shards: list[tuple[object, ...]] = []
+    for candidate_shard in candidate_shards:
+        current: list[object] = []
+        current_tokens = 0
+        for item in candidate_shard:
+            estimate = max(1, int(token_estimate(item)))
+            if not _fits_endpoint_budget(endpoint, len(current) + 1, current_tokens + estimate):
+                if not current:
+                    raise RunCreationError(
+                        "A benchmark sample exceeds the configured endpoint request or token budget."
+                    )
+                shards.append(tuple(current))
+                current = []
+                current_tokens = 0
+                if not _fits_endpoint_budget(endpoint, 1, estimate):
+                    raise RunCreationError(
+                        "A benchmark sample exceeds the configured endpoint request or token budget."
+                    )
+            current.append(item)
+            current_tokens += estimate
+        if current:
+            shards.append(tuple(current))
+    return tuple(shards)
+
+
+def _fits_endpoint_budget(endpoint: object, request_count: int, estimated_tokens: int) -> bool:
+    estimated_output_tokens = min(estimated_tokens, request_count * 32)
+    estimated_input_tokens = max(0, estimated_tokens - estimated_output_tokens)
+    limits = (
+        ("requests_per_second", request_count),
+        ("requests_per_minute", request_count),
+        ("tokens_per_minute", estimated_tokens),
+        ("input_tokens_per_minute", estimated_input_tokens),
+        ("output_tokens_per_minute", estimated_output_tokens),
+    )
+    for field, measured in limits:
+        limit = _endpoint_positive_limit(endpoint, field)
+        if limit is not None and measured > limit:
+            return False
+    return True
+
+
+def _endpoint_positive_limit(endpoint: object, field: str) -> int | None:
+    value = endpoint.get(field) if isinstance(endpoint, dict) else getattr(endpoint, field, None)
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
 
 
 def _capability_compatibility(

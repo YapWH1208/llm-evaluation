@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -9,6 +10,14 @@ import httpx
 
 from app.db.models import CapabilityDetection, ModelEndpoint
 from app.services.model_executor import OpenAIChatCompletionsExecutor, _endpoint_url, _extract_prediction, _extract_usage
+from app.services.outbound_network import (
+    OutboundNetworkError,
+    OutboundRedirectError,
+    OutboundResponseTooLargeError,
+    pinned_outbound_transport,
+    read_bounded_response,
+    validate_outbound_url,
+)
 from app.services.provider_headers import provider_headers
 
 
@@ -68,8 +77,9 @@ class OpenAIChatCompletionsCapabilityDetector:
 
     ADAPTER_VERSION = "provider-protocols/1"
 
-    def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, transport: httpx.BaseTransport | None = None, *, max_response_bytes: int = 4 * 1024 * 1024) -> None:
         self._transport = transport
+        self._max_response_bytes = max_response_bytes
 
     def detect(
         self,
@@ -104,16 +114,41 @@ class OpenAIChatCompletionsCapabilityDetector:
         try:
             request_body = self._request_body(endpoint, messages, capability_key)
             request_summary = _safe_request_summary(capability_key, messages, request_body)
+            endpoint_url = _endpoint_url(endpoint)
+            addresses = validate_outbound_url(endpoint_url, allow_loopback=str(getattr(endpoint, "protocol_profile", "")) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
-                transport=self._transport,
+                transport=pinned_outbound_transport(addresses, injected_transport=self._transport),
             ) as client:
-                response = client.post(
-                    _endpoint_url(endpoint),
+                with client.stream(
+                    "POST",
+                    endpoint_url,
                     headers=provider_headers(endpoint, api_key),
                     json=request_body,
-                )
+                ) as response:
+                    body = read_bounded_response(response, max_bytes=self._max_response_bytes)
+                    status_code = response.status_code
+                    is_error = response.is_error
+                    content_type = response.headers.get("content-type", "").lower()
+        except OutboundNetworkError as error:
+            return CapabilityDetectionResult(
+                capability_key,
+                CapabilityDetection.INCONCLUSIVE,
+                self._evidence("unsafe_destination", reason=str(error), request_summary=request_summary),
+            )
+        except OutboundRedirectError as error:
+            return CapabilityDetectionResult(
+                capability_key,
+                CapabilityDetection.INCONCLUSIVE,
+                self._evidence("redirect_blocked", reason=str(error), request_summary=request_summary),
+            )
+        except OutboundResponseTooLargeError as error:
+            return CapabilityDetectionResult(
+                capability_key,
+                CapabilityDetection.INCONCLUSIVE,
+                self._evidence("response_too_large", reason=str(error), request_summary=request_summary),
+            )
         except httpx.TimeoutException:
             return CapabilityDetectionResult(
                 capability_key,
@@ -127,50 +162,50 @@ class OpenAIChatCompletionsCapabilityDetector:
                 self._evidence("connection_error", reason="Could not connect to the provider.", request_summary=request_summary),
             )
 
-        if response.is_error:
+        if is_error:
             status = (
                 CapabilityDetection.FAILED
-                if response.status_code in {400, 404, 405, 415, 422}
+                if status_code in {400, 404, 405, 415, 422}
                 else CapabilityDetection.INCONCLUSIVE
             )
             return CapabilityDetectionResult(
                 capability_key,
                 status,
-                self._evidence("http_error", provider_status_code=response.status_code, request_summary=request_summary, response_summary=f"HTTP {response.status_code}"),
+                self._evidence("http_error", provider_status_code=status_code, request_summary=request_summary, response_summary=f"HTTP {status_code}"),
             )
 
-        if capability_key == "streaming" and response.headers.get("content-type", "").lower().startswith("text/event-stream"):
+        if capability_key == "streaming" and content_type.startswith("text/event-stream"):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.PASSED,
-                self._evidence("passed", provider_status_code=response.status_code, response_mode="sse", request_summary=request_summary, response_summary="SSE response accepted"),
+                self._evidence("passed", provider_status_code=status_code, response_mode="sse", request_summary=request_summary, response_summary="SSE response accepted"),
             )
 
         try:
-            payload = response.json()
+            payload = json.loads(body)
         except ValueError:
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("invalid_json", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Non-JSON response"),
+                self._evidence("invalid_json", provider_status_code=status_code, request_summary=request_summary, response_summary="Non-JSON response"),
             )
 
         if not isinstance(payload, dict) or not _has_expected_response_shape(endpoint, payload):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("unexpected_response", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Unexpected provider response shape"),
+                self._evidence("unexpected_response", provider_status_code=status_code, request_summary=request_summary, response_summary="Unexpected provider response shape"),
             )
         if capability_key == "usage_reporting" and _extract_usage(payload) == (None, None):
             return CapabilityDetectionResult(
                 capability_key,
                 CapabilityDetection.FAILED,
-                self._evidence("usage_missing", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Usage fields absent"),
+                self._evidence("usage_missing", provider_status_code=status_code, request_summary=request_summary, response_summary="Usage fields absent"),
             )
         return CapabilityDetectionResult(
             capability_key,
             CapabilityDetection.PASSED,
-            self._evidence("passed", provider_status_code=response.status_code, request_summary=request_summary, response_summary="Expected provider response shape"),
+            self._evidence("passed", provider_status_code=status_code, request_summary=request_summary, response_summary="Expected provider response shape"),
         )
 
     @classmethod

@@ -17,6 +17,7 @@ import {
   JudgeAgreement,
   PromptPackage,
   Report,
+  ReportShare,
   ReportType,
   Review,
   ReviewAgreement,
@@ -60,7 +61,7 @@ const initialEndpoint = {
   output_tokens_per_minute: "",
 };
 const initialPrompt = { name: "", version: "1", prompt_type: "user_custom", system_message: "", user_template: "{{ question }}", few_shot_examples: "[]", output_format: "{}", response_parser: "{}", scoring_rule: "{}", change_log: "" };
-const initialDataset = { dataset_id: "", version: "1", revision: "default", source_url: "", checksum: "", credential_env_var: "", license_text: "" };
+const initialDataset = { dataset_id: "", version: "1", revision: "default", source_url: "", checksum: "", credential_binding_id: "", license_text: "" };
 const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
@@ -206,7 +207,6 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [reportType, setReportType] = useState<ReportType>("single_model");
   const [relatedReportRunId, setRelatedReportRunId] = useState("");
-  const [shareForm, setShareForm] = useState(initialShare);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -245,21 +245,17 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRun || !selectedRunInfo || !["queued", "running"].includes(selectedRunInfo.status)) return;
-    const events = new EventSource(api.runEventsUrl(selectedRun));
     const update = () => {
       void selectRun(selectedRun);
       void refresh();
     };
-    events.addEventListener("run", update);
-    return () => events.close();
+    return api.subscribeToRunEvents(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
 
   useEffect(() => {
     if (!["queue", "workers"].includes(view)) return;
-    const events = new EventSource(api.workerEventsUrl());
     const update = () => { void refresh().catch(showError); };
-    events.addEventListener("worker", update);
-    return () => events.close();
+    return api.subscribeToWorkerEvents(update);
   }, [view, refresh]);
 
   function showError(error: unknown) {
@@ -428,13 +424,15 @@ export default function App() {
       const comparisonType = ["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType);
       const report = await api.createReport(runId, format, reportType, comparisonType && relatedReportRunId ? [relatedReportRunId] : []);
       setNotice(`${format.toUpperCase()} ${reportType.replaceAll("_", " ")} report generated.`);
-      window.open(api.reportDownloadUrl(report.id), "_blank", "noopener,noreferrer");
+      const reportUrl = await api.downloadReport(report.id);
+      window.open(reportUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
       if (selectedRun === runId) await selectRun(runId);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function shareReport(report: Report) {
+  async function shareReport(report: Report, shareForm: typeof initialShare): Promise<ReportShare> {
     setBusy(`share-${report.id}`);
     try {
       const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
@@ -445,7 +443,8 @@ export default function App() {
         include_evidence: shareForm.include_evidence,
       });
       setNotice(`Read-only share link (expires ${formatDate(share.expires_at)}): ${share.share_url}`);
-    } catch (error) { showError(error); } finally { setBusy(null); }
+      return share;
+    } finally { setBusy(null); }
   }
 
   async function createPrompt(event: FormEvent) {
@@ -463,7 +462,7 @@ export default function App() {
     event.preventDefault();
     setBusy("dataset");
     try {
-      await api.createDataset({ ...datasetForm, source_url: datasetForm.source_url || null, checksum: datasetForm.checksum || null, credential_env_var: datasetForm.credential_env_var || null, license_text: datasetForm.license_text || null });
+      await api.createDataset({ ...datasetForm, source_url: datasetForm.source_url || null, checksum: datasetForm.checksum || null, credential_binding_id: datasetForm.credential_binding_id || null, license_text: datasetForm.license_text || null });
       setDatasetForm(initialDataset);
       setNotice("Dataset version registered.");
       await refresh();
@@ -706,7 +705,7 @@ export default function App() {
       {view === "workspace" && <>
         <section className="grid two">
           <article className="panel"><h2>Create prompt package</h2><form onSubmit={createPrompt} className="form"><label>Name<input required value={promptForm.name} onChange={(event) => setPromptForm({ ...promptForm, name: event.target.value })} /></label><label>Version<input required value={promptForm.version} onChange={(event) => setPromptForm({ ...promptForm, version: event.target.value })} /></label><label>Prompt type<select value={promptForm.prompt_type} onChange={(event) => setPromptForm({ ...promptForm, prompt_type: event.target.value })}><option value="official">Official prompt</option><option value="platform_default">Platform default</option><option value="user_custom">User custom</option><option value="benchmark_variant">Benchmark variant</option><option value="language_specific">Language-specific</option></select></label><label>System message<textarea value={promptForm.system_message} onChange={(event) => setPromptForm({ ...promptForm, system_message: event.target.value })} /></label><label>User template<textarea required value={promptForm.user_template} onChange={(event) => setPromptForm({ ...promptForm, user_template: event.target.value })} placeholder="{{ question }}, {{ context }}, {{ image }}, {{ audio }}, {{ video }}, {{ language }}" /></label><label>Few-shot examples (JSON array)<textarea value={promptForm.few_shot_examples} onChange={(event) => setPromptForm({ ...promptForm, few_shot_examples: event.target.value })} spellCheck={false} /></label><label>Output format (JSON)<textarea value={promptForm.output_format} onChange={(event) => setPromptForm({ ...promptForm, output_format: event.target.value })} spellCheck={false} /></label><label>Response parser (JSON)<textarea value={promptForm.response_parser} onChange={(event) => setPromptForm({ ...promptForm, response_parser: event.target.value })} spellCheck={false} /></label><label>Scoring rule (JSON)<textarea value={promptForm.scoring_rule} onChange={(event) => setPromptForm({ ...promptForm, scoring_rule: event.target.value })} spellCheck={false} /></label><label>Change log<textarea value={promptForm.change_log} onChange={(event) => setPromptForm({ ...promptForm, change_log: event.target.value })} /></label><button disabled={busy === "prompt"}>Save versioned prompt</button></form></article>
-          <article className="panel"><h2>Register dataset version</h2><form onSubmit={createDataset} className="form"><label>Dataset ID<input required value={datasetForm.dataset_id} onChange={(event) => setDatasetForm({ ...datasetForm, dataset_id: event.target.value })} /></label><div className="field-row"><label>Version<input required value={datasetForm.version} onChange={(event) => setDatasetForm({ ...datasetForm, version: event.target.value })} /></label><label>Revision<input required value={datasetForm.revision} onChange={(event) => setDatasetForm({ ...datasetForm, revision: event.target.value })} /></label></div><label>Source URL or local path<input value={datasetForm.source_url} onChange={(event) => setDatasetForm({ ...datasetForm, source_url: event.target.value })} placeholder="https://…, hf://owner/repository/path, or file:///…" /></label><label>Expected SHA-256 checksum<input value={datasetForm.checksum} onChange={(event) => setDatasetForm({ ...datasetForm, checksum: event.target.value })} placeholder="Optional; calculated after first verified download" /></label><label>Credential environment variable<input value={datasetForm.credential_env_var} onChange={(event) => setDatasetForm({ ...datasetForm, credential_env_var: event.target.value.toUpperCase() })} placeholder="Optional, e.g. HUGGINGFACE_TOKEN" /></label><label>License text<textarea value={datasetForm.license_text} onChange={(event) => setDatasetForm({ ...datasetForm, license_text: event.target.value })} /></label><button disabled={busy === "dataset"}>Register dataset</button></form></article>
+          <article className="panel"><h2>Register dataset version</h2><form onSubmit={createDataset} className="form"><label>Dataset ID<input required value={datasetForm.dataset_id} onChange={(event) => setDatasetForm({ ...datasetForm, dataset_id: event.target.value })} /></label><div className="field-row"><label>Version<input required value={datasetForm.version} onChange={(event) => setDatasetForm({ ...datasetForm, version: event.target.value })} /></label><label>Revision<input required value={datasetForm.revision} onChange={(event) => setDatasetForm({ ...datasetForm, revision: event.target.value })} /></label></div><label>Source HTTPS URL<input value={datasetForm.source_url} onChange={(event) => setDatasetForm({ ...datasetForm, source_url: event.target.value })} placeholder="https://… or hf://owner/repository/path" /></label><p className="muted">Use the dataset upload action for local files.</p><label>Expected SHA-256 checksum<input value={datasetForm.checksum} onChange={(event) => setDatasetForm({ ...datasetForm, checksum: event.target.value })} placeholder="Optional; calculated after first verified download" /></label><label>Credential binding ID<input value={datasetForm.credential_binding_id} onChange={(event) => setDatasetForm({ ...datasetForm, credential_binding_id: event.target.value })} placeholder="Optional administrator-configured binding" /></label><label>License text<textarea value={datasetForm.license_text} onChange={(event) => setDatasetForm({ ...datasetForm, license_text: event.target.value })} /></label><button disabled={busy === "dataset"}>Register dataset</button></form></article>
         </section>
         <section className="grid two"><article className="panel"><h2>Custom multimodal quick check</h2><form className="form" onSubmit={createMultimodalRun}><label>Endpoint<select required value={multimodalForm.endpoint_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Sample ID<input required value={multimodalForm.sample_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, sample_id: event.target.value })} /></label><label>Prompt<textarea required value={multimodalForm.prompt} onChange={(event) => setMultimodalForm({ ...multimodalForm, prompt: event.target.value })} placeholder="Describe or answer a question about the attached media." /></label><label>Expected text answer<textarea required value={multimodalForm.reference_answer} onChange={(event) => setMultimodalForm({ ...multimodalForm, reference_answer: event.target.value })} /></label><label>Uploaded media<select required value={multimodalForm.asset_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, asset_id: event.target.value })}><option value="">Upload an asset first</option>{uploadedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.original_filename} · {asset.media_kind}</option>)}</select></label><button disabled={busy === "multimodal-run"}>Queue multimodal run</button></form></article><article className="panel"><h2>Media asset upload</h2><p className="muted">Files are validated by MIME signature, content-addressed, and stored outside browser memory before they enter a run snapshot.</p><label className="file-picker">Choose image, audio, video, or PDF<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/wav,audio/mpeg,video/mp4,video/webm,application/pdf" onChange={(event) => void uploadAsset(event)} /></label>{busy === "asset-upload" && <p className="muted">Uploading and validating asset...</p>}{uploadedAssets.length > 0 && <div className="asset-list">{uploadedAssets.map((asset) => <button className={multimodalForm.asset_id === asset.id ? "asset selected" : "asset"} key={asset.id} onClick={() => setMultimodalForm({ ...multimodalForm, asset_id: asset.id })}><strong>{asset.original_filename}</strong><span>{asset.media_kind} · {display(asset.size_bytes)} bytes</span></button>)}</div>}</article></section>
         <section className="grid two"><article className="panel"><h2>Create evaluation suite</h2><form onSubmit={createSuite} className="form"><label>Name<input required value={suiteForm.name} onChange={(event) => setSuiteForm({ ...suiteForm, name: event.target.value })} /></label><label>Version<input required value={suiteForm.version} onChange={(event) => setSuiteForm({ ...suiteForm, version: event.target.value })} /></label><label>Benchmarks (id@version)<input required value={suiteForm.benchmarks} onChange={(event) => setSuiteForm({ ...suiteForm, benchmarks: event.target.value })} /></label><label>Suite default Request Body (JSON)<textarea value={suiteForm.default_request_body} onChange={(event) => setSuiteForm({ ...suiteForm, default_request_body: event.target.value })} spellCheck={false} /></label><label>Prompt overrides (JSON)<textarea value={suiteForm.default_prompt_overrides} onChange={(event) => setSuiteForm({ ...suiteForm, default_prompt_overrides: event.target.value })} spellCheck={false} /></label><label>Weight configuration (JSON)<textarea value={suiteForm.weight_configuration} onChange={(event) => setSuiteForm({ ...suiteForm, weight_configuration: event.target.value })} spellCheck={false} /></label><label>Description<textarea value={suiteForm.description} onChange={(event) => setSuiteForm({ ...suiteForm, description: event.target.value })} /></label><button disabled={busy === "suite"}>Save suite</button></form></article><article className="panel"><h2>Evaluation suites</h2>{suites.length === 0 ? <p className="empty">No suites have been created.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3>{suite.name} v{suite.version}</h3><p className="muted">{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on {endpoint.display_name}</button>)}</article>)}</div>}</article></section>
@@ -765,7 +764,7 @@ function VirtualTaskQueue({ tasks, busy, onPriority }: { tasks: Task[]; busy: st
 function DatasetCatalog({ datasets, busy, onPrepare, onPause, onUpload, onValidate, onClear }: { datasets: Dataset[]; busy: string | null; onPrepare: (dataset: Dataset) => Promise<void>; onPause: (dataset: Dataset) => Promise<void>; onUpload: (dataset: Dataset, event: ChangeEvent<HTMLInputElement>) => Promise<void>; onValidate: (dataset: Dataset) => Promise<void>; onClear: (dataset: Dataset) => Promise<void> }) {
   const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
   useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [datasets]);
-  return <section className="panel"><div className="section-title"><div><h2>Dataset catalog</h2><span>{datasets.length} versioned sources</span></div><span>{usage ? `${display(usage.cache_bytes)} cached · ${display(usage.available_bytes)} free` : "Loading disk usage…"}</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset source from the Workspace catalog.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div className="section-title"><h3>{dataset.dataset_id} v{dataset.version}</h3><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span></div><p className="muted">Revision {dataset.revision} · {dataset.source_url ? "source configured" : "upload a local file"}</p><p className="muted">{dataset.size_bytes === null ? "Not cached" : `${display(dataset.size_bytes)} bytes`} · {dataset.checksum ? `SHA-256 ${dataset.checksum.slice(0, 12)}…` : "Checksum generated on import"}</p>{dataset.credential_env_var && <p className="muted">Server credential reference: {dataset.credential_env_var}</p>}{dataset.error_message && <p className="error">{dataset.error_message}</p>}<div className="actions">{dataset.status !== "ready" && dataset.status !== "downloading" && <button disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPrepare(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : dataset.status === "waiting" || dataset.status === "failed" ? "Retry download" : "Download and verify"}</button>}{dataset.status === "downloading" && <button className="secondary" disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPause(dataset)}>Pause download</button>}{dataset.local_path && <><button className="secondary" disabled={busy === `dataset-validate-${dataset.id}`} onClick={() => void onValidate(dataset)}>Validate cache</button><button className="secondary" disabled={busy === `dataset-clear-${dataset.id}`} onClick={() => void onClear(dataset)}>Clear cache</button></>}<label className="file-picker">Upload local revision<input aria-label={`Upload local revision for ${dataset.dataset_id}`} type="file" accept=".json,.jsonl,.csv,.tsv,.txt,.zip,.parquet" disabled={busy === `dataset-upload-${dataset.id}`} onChange={(event) => void onUpload(dataset, event)} /></label></div></article>)}</div>}</section>;
+  return <section className="panel"><div className="section-title"><div><h2>Dataset catalog</h2><span>{datasets.length} versioned sources</span></div><span>{usage ? `${display(usage.cache_bytes)} cached · ${display(usage.available_bytes)} free` : "Loading disk usage…"}</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset source from the Workspace catalog.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div className="section-title"><h3>{dataset.dataset_id} v{dataset.version}</h3><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span></div><p className="muted">Revision {dataset.revision} · {dataset.source_url ? "source configured" : "upload a local file"}</p><p className="muted">{dataset.size_bytes === null ? "Not cached" : `${display(dataset.size_bytes)} bytes`} · {dataset.checksum ? `SHA-256 ${dataset.checksum.slice(0, 12)}…` : "Checksum generated on import"}</p>{dataset.credential_binding_id && <p className="muted">Server credential binding: {dataset.credential_binding_id}</p>}{dataset.error_message && <p className="error">{dataset.error_message}</p>}<div className="actions">{dataset.status !== "ready" && dataset.status !== "downloading" && <button disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPrepare(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : dataset.status === "waiting" || dataset.status === "failed" ? "Retry download" : "Download and verify"}</button>}{dataset.status === "downloading" && <button className="secondary" disabled={busy === `dataset-${dataset.id}`} onClick={() => void onPause(dataset)}>Pause download</button>}{dataset.local_path && <><button className="secondary" disabled={busy === `dataset-validate-${dataset.id}`} onClick={() => void onValidate(dataset)}>Validate cache</button><button className="secondary" disabled={busy === `dataset-clear-${dataset.id}`} onClick={() => void onClear(dataset)}>Clear cache</button></>}<label className="file-picker">Upload local revision<input aria-label={`Upload local revision for ${dataset.dataset_id}`} type="file" accept=".json,.jsonl,.csv,.tsv,.txt,.zip,.parquet" disabled={busy === `dataset-upload-${dataset.id}`} onChange={(event) => void onUpload(dataset, event)} /></label></div></article>)}</div>}</section>;
 }
 
 function SampleEvidenceBrowser({ attempts, onReview, onLoadMore, loadingMore }: { attempts: SampleAttempt[]; onReview: (attempt: SampleAttempt) => void; onLoadMore: () => Promise<void>; loadingMore: boolean }) {
@@ -837,26 +836,77 @@ function ComparisonView({ comparison }: { comparison: Comparison }) {
   return <div className="comparison-result"><div className="metric-grid"><Metric label="A-only correct" value={comparison.outcomes.run_a_only_correct} detail="sample outcomes" /><Metric label="B-only correct" value={comparison.outcomes.run_b_only_correct} detail="sample outcomes" /><Metric label="Latency difference" value={`${display(comparison.differences.average_latency_ms)} ms`} detail="A minus B" /><Metric label="Cost difference" value={display(comparison.differences.estimated_cost, 6)} detail="A minus B" /></div><div className="table-wrap"><table><thead><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>A - B</th></tr></thead><tbody><tr><td>Accuracy</td><td>{percent(comparison.run_a_summary.samples.accuracy)}</td><td>{percent(comparison.run_b_summary.samples.accuracy)}</td><td>{percent(comparison.differences.accuracy)}</td></tr><tr><td>Success rate</td><td>{percent(comparison.run_a_summary.samples.success_rate)}</td><td>{percent(comparison.run_b_summary.samples.success_rate)}</td><td>{percent(comparison.differences.success_rate)}</td></tr><tr><td>P95 latency</td><td>{display(comparison.run_a_summary.latency_ms.p95)} ms</td><td>{display(comparison.run_b_summary.latency_ms.p95)} ms</td><td>{display(comparison.differences.p95_latency_ms)} ms</td></tr><tr><td>Output tokens</td><td>{display(comparison.run_a_summary.tokens.output)}</td><td>{display(comparison.run_b_summary.tokens.output)}</td><td>{display(comparison.differences.output_tokens)}</td></tr></tbody></table></div></div>;
 }
 
-function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report) => void }) {
+export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report, form: typeof initialShare) => Promise<ReportShare> }) {
   const [shareForm, setShareForm] = useState(initialShare);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function createShare(report: Report) {
-    if (onShare) {
-      await onShare(report);
-      return;
+    setDownloadError(null);
+    try {
+      const form = shareForm;
+      const days = Math.min(365, Math.max(1, Number(form.days) || 7));
+      const share = onShare
+        ? await onShare(report, form)
+        : await api.createReportShare(report.id, {
+          expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+          password: form.password || undefined,
+          allow_download: form.allow_download,
+          include_evidence: form.include_evidence,
+        });
+      setShareLink(share.share_url);
+      // The one-time value is no longer needed after the server receives it.
+      setShareForm({ ...form, password: "" });
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The report share could not be created.");
     }
-    const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
-    const share = await api.createReportShare(report.id, {
-      expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
-      password: shareForm.password || undefined,
-      allow_download: shareForm.allow_download,
-      include_evidence: shareForm.include_evidence,
-    });
-    setShareLink(share.share_url);
   }
 
-  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section><div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><a href={api.reportDownloadUrl(report.id)} target="_blank" rel="noreferrer">Download</a><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
+  async function downloadReport(report: Report) {
+    setDownloadError(null);
+    try {
+      const objectUrl = await api.downloadReport(report.id);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `evaluation-report.${report.format === "markdown" ? "md" : report.format}`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The report download failed.");
+    }
+  }
+
+  return reports.length === 0 ? <p className="empty">No report artifacts for this run yet.</p> : <><section className="share-policy"><h3>Read-only sharing policy</h3><div className="field-row"><label>Expires in days<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>Optional password<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder="Required to open when set" /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> Allow download</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> Share raw evidence</label></div><p className="muted">Raw JSON, CSV, and Parquet reports require both controls. Share links can be revoked through the report API.</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">Open the newly created share link</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>Format</th><th>Generated</th><th>Version</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>Download</button><button className="secondary" onClick={() => void createShare(report)}>Share</button></div></td></tr>)}</tbody></table></div></>;
+}
+
+export function SharedReportPage({ token }: { token: string }) {
+  const [password, setPassword] = useState("");
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [message, setMessage] = useState("Enter the optional share password to open this read-only report.");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
+
+  async function openReport(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const nextUrl = await api.openSharedReport(token, password);
+      setReportUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return nextUrl;
+      });
+      setMessage("The shared report is ready to view.");
+    } catch (_error) {
+      setMessage("The shared report could not be opened. Check the password, expiry, or link.");
+    } finally {
+      setPassword("");
+      setBusy(false);
+    }
+  }
+
+  return <main className="shared-report"><section className="panel"><p className="eyebrow">Shared evaluation report</p><h1>Read-only report access</h1><p className="muted">The password is sent only with this request and is never added to the URL or browser storage.</p><form className="form" onSubmit={openReport}><label>Share password (if required)<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? "Opening report…" : "Open report"}</button></form><p className={reportUrl ? "notice" : "muted"} aria-live="polite">{message}</p>{reportUrl && <div className="actions"><a href={reportUrl} target="_blank" rel="noreferrer">Open report in a new tab</a><a href={reportUrl} download="evaluation-report">Download report</a></div>}</section></main>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {

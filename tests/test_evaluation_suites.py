@@ -25,7 +25,7 @@ class SuccessfulTester:
 
 
 def test_evaluation_suite_crud_is_versioned(tmp_path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as api:
         created = api.post("/api/v1/evaluation-suites", json=_suite())
         assert created.status_code == 201
@@ -39,7 +39,7 @@ def test_evaluation_suite_crud_is_versioned(tmp_path) -> None:
 
 def test_mongodb_evaluation_suite_crud(tmp_path) -> None:
     client = FakeClient()
-    settings = Settings(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         suite = api.post("/api/v1/evaluation-suites", json=_suite()).json()
@@ -47,7 +47,7 @@ def test_mongodb_evaluation_suite_crud(tmp_path) -> None:
 
 
 def test_suite_schedules_a_run_with_immutable_suite_snapshot(tmp_path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()), connection_tester=SuccessfulTester())
     with TestClient(app) as api:
         prompt = api.post("/api/v1/prompt-packages", json={"name": "suite-prompt", "version": "1", "user_template": "Answer only: {{ question }}"}).json()
         payload = {**_suite(), "default_prompt_overrides": {"text-quick-check@1.0.0": prompt["id"]}}

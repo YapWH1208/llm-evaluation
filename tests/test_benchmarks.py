@@ -9,7 +9,7 @@ from app.benchmarks import unregister_manifest_plugin
 
 
 def test_builtin_benchmark_manifest_is_registered_and_selectable(tmp_path: Path) -> None:
-    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()))
     with TestClient(app) as client:
         benchmarks = client.get("/api/v1/benchmarks")
         assert benchmarks.status_code == 200
@@ -36,7 +36,7 @@ def test_builtin_benchmark_manifest_is_registered_and_selectable(tmp_path: Path)
 
 
 def test_inline_custom_pack_is_runnable_and_reloaded_from_storage(tmp_path: Path) -> None:
-    settings = Settings(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode())
     pack = {
         "pack_name": "custom-smoke",
         "benchmarks": [{
@@ -66,6 +66,21 @@ def test_inline_custom_pack_is_runnable_and_reloaded_from_storage(tmp_path: Path
         run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "benchmark_id": "custom-inline", "benchmark_version": "1.0.0"})
         assert run.status_code == 201
         assert run.json()["total_samples"] == 1
+        revision = client.post(
+            "/api/v1/benchmarks/" + installed.json()[0]["id"] + "/versions",
+            json={
+                "version": "2.0.0",
+                "manifest": {
+                    "required_capabilities": ["text_input"],
+                    "scoring": {"type": "exact_match"},
+                    "samples": [{"sample_id": "custom-002", "prompt": "Reply with only NEW.", "reference_answer": "NEW"}],
+                },
+            },
+        )
+        assert revision.status_code == 201
+        rerun = client.post(f"/api/v1/evaluation-runs/{run.json()['id']}/rerun-benchmark")
+        assert rerun.status_code == 201
+        assert rerun.json()["benchmark_version"] == "1.0.0"
 
     unregister_manifest_plugin("custom-inline", "1.0.0")
     reloaded = create_app(settings)

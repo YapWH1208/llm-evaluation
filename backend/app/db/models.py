@@ -238,6 +238,7 @@ class DatasetVersion(Base):
     revision: Mapped[str] = mapped_column(String(128), nullable=False, default="default")
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     credential_env_var: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    credential_binding_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     local_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -273,6 +274,7 @@ class Report(Base):
     report_type: Mapped[str] = mapped_column(String(64), nullable=False)
     format: Mapped[str] = mapped_column(String(16), nullable=False)
     artifact_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    artifact_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     generator_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
@@ -283,11 +285,31 @@ class ReportShare(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     report_id: Mapped[str] = mapped_column(ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
-    password_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     allow_download: Mapped[bool] = mapped_column(nullable=False, default=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ReportSharePasswordAttempt(Base):
+    """One durable, expiring password-failure window per share and client partition."""
+
+    __tablename__ = "report_share_password_attempts"
+    __table_args__ = (
+        UniqueConstraint("share_id", "client_key", name="uq_report_share_password_attempt_client"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    share_id: Mapped[str] = mapped_column(
+        ForeignKey("report_shares.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 class HumanReview(Base):
     __tablename__="human_reviews"
@@ -480,6 +502,7 @@ class TaskUnit(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     leased_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

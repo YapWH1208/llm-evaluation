@@ -6,6 +6,8 @@ Use the default `sqlite:///./data/llm_evaluation.db` URL for a single-host works
 
 Set `LLE_SECRET_ENCRYPTION_KEY` before adding an endpoint. Use a stable Fernet key in the platform secret store; changing it prevents decryption of existing endpoint credentials.
 
+Set `LLE_ADMIN_TOKEN` before serving shared or remote traffic. The API refuses to start without it unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development. The local launcher sets that opt-in only when no administrator token is supplied and binds both services to `127.0.0.1`.
+
 ## PostgreSQL team mode
 
 Install the PostgreSQL dependency extra, set `LLE_DATABASE_URL` to a `postgresql+psycopg://` URL, and run the database CLI before serving traffic:
@@ -18,7 +20,7 @@ python -m app.cli database initialize
 python -m app.cli database validate
 ```
 
-The task lease protocol uses conditional state updates and lease tokens. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
+The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
 
 Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; administrators can set a user ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
 
@@ -40,26 +42,60 @@ Choose the protocol profile when creating a model endpoint. The platform appends
 
 Use custom headers for non-secret routing metadata such as a project identifier. Authentication headers are reserved for the encrypted endpoint credential. Native adapters reject unsupported media shapes before sending them; run capability detection after a successful connection test to persist the exact profile evidence.
 
+Before each connection probe, capability probe, and model request, the platform resolves every A/AAAA address for the provider host and rejects loopback, private, link-local, multicast, reserved, and unspecified targets. Redirects are refused rather than followed. The explicit `ollama_chat` profile is the sole local-loopback exception. Provider response bodies are streamed and capped at 4 MiB by default; set `LLE_PROVIDER_RESPONSE_MAX_BYTES` to a positive deployment-specific limit when needed.
+
 ## Dataset sources and credentials
 
-Dataset versions accept HTTP(S) and Git-release URLs, `hf://owner/repository/path/to/file` Hugging Face references, `file://` URLs, and local file paths. Optional credentials are referenced only by an environment-variable name (for example, `HUGGINGFACE_TOKEN`); the token value is never stored in the database or returned by the API. A download without its configured credential is marked `credential_required` until the deployment environment is updated.
+Dataset versions accept only `https://` URLs and `hf://owner/repository/path/to/file` Hugging Face references. `file://` URLs, local paths, HTTP, and custom downloader schemes are rejected; upload local revisions through the dataset upload endpoint instead. Downloads are streamed with a 64 MiB default cap, adjustable with `LLE_DATASET_DOWNLOAD_MAX_BYTES`.
+
+Administrators configure credential bindings outside evaluator input using `LLE_DATASET_CREDENTIAL_BINDINGS_JSON`. Each logical ID names one environment variable and the exact hosts that may receive its bearer token. For example:
+
+```powershell
+$env:HUGGINGFACE_TOKEN = "..."
+$env:LLE_DATASET_CREDENTIAL_BINDINGS_JSON = '{"huggingface":{"environment_variable":"HUGGINGFACE_TOKEN","allowed_hosts":["huggingface.co"]}}'
+```
+
+Evaluators submit `credential_binding_id: "huggingface"`; they never submit an environment-variable name. Existing `credential_env_var` database values remain historical metadata and are never dereferenced. Use `LLE_DATASET_ALLOWED_HOSTS` as an optional comma-separated deployment-wide source-host allowlist in addition to the restricted-address checks.
 
 ## Docker Compose
 
-1. Generate a Fernet key.
-2. Replace `LLE_SECRET_ENCRYPTION_KEY` and the PostgreSQL password in `docker-compose.yml` before use.
-3. Run `docker compose up --build`.
-4. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote.
+1. Generate a Fernet key and choose a strong administrator token.
+2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
+3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin; the static host must route `/shared-reports/<token>` back to the frontend entry point.
+
+This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
 
 ## Migration and backup policy
 
 `auto_migrate` is the default startup mode. Production services can set `LLE_DATABASE_INIT_MODE=validate` and perform migrations through CI or the CLI. SQLite backups can be enabled with `LLE_DATABASE_BACKUP_BEFORE_MIGRATE=true`; the backup uses SQLite's online backup API and writes to `<data-root>/backups`.
 
+Validation checks migration records, tables, columns, indexes, unique constraints, foreign keys, and Mongo collection validators. Very early SQLite databases retain their original `evaluation_runs` table without three later foreign-key declarations; this compatibility exception is reported in source and avoids a destructive table rebuild, while newly created and all other persisted structures remain checked.
+
 Before upgrades, run `python -m app.cli database preview`. After upgrades, run `python -m app.cli database validate` and check `/health` for the expected schema version.
 
 ## Operational checks
 
-- `/health` confirms the configured relational database type and schema version.
-- `/api/v1/dashboard` exposes queue, endpoint, dataset, cost, error-rate, and worker-lease summaries.
+- `/health` confirms the configured database type, schema version, disk capacity, and queue counters. It returns HTTP 503 when the backing store cannot be reached; do not route traffic to an instance until it returns HTTP 200 with `database_connected: true`.
+- `/api/v1/dashboard` exposes queue, endpoint, dataset, cost, error-rate, and worker-lease summaries. Its evidence window is intentionally bounded to recent runs/samples so operators should use run-specific reports for full historical analysis.
 - `/api/v1/evaluation-runs/{run_id}/events` emits server-sent progress snapshots.
 - `/api/v1/audit-events` exposes successful mutating operation metadata to administrators.
+
+## Public report sharing
+
+Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Configure the static host to rewrite `/shared-reports/<token>` to the SPA entry point and allow `X-Report-Password` in CORS preflights.
+
+## Worker rollout and verification
+
+Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use PostgreSQL or MongoDB; keep SQLite to a single controlled API/worker process.
+
+Run the following non-Docker checks before publishing a deployment artifact:
+
+```powershell
+python -m pytest -q
+Set-Location frontend
+npm.cmd ci
+npm.cmd test -- --run
+npm.cmd run build
+```
+
+On a POSIX host, also run `bash -n quick-launch.sh`. The local launcher atomically creates `data/.lle-secret-key` with mode `0600` and refuses an existing insecure or non-regular key file.
