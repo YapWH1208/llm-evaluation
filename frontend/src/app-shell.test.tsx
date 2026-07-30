@@ -4,8 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./components/AppShell";
 import { navigationGroups } from "./dashboard/navigation";
+import { navigationCopy } from "./i18n/catalog";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> = {}) {
   const props = {
@@ -21,7 +26,7 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> =
     onViewChange: vi.fn(),
     ...overrides,
   };
-  render(<AppShell {...props}><p>Workspace content</p></AppShell>);
+  render(<LocaleProvider><AppShell {...props}><p>Workspace content</p></AppShell></LocaleProvider>);
   return props;
 }
 
@@ -30,9 +35,9 @@ describe("AppShell", () => {
     const props = renderShell();
 
     for (const group of navigationGroups) {
-      expect(screen.getByRole("region", { name: group.label.en })).toBeVisible();
+      expect(screen.getByRole("region", { name: navigationCopy.en.groups[group.id] })).toBeVisible();
       for (const item of group.items) {
-        expect(screen.getByRole("button", { name: item.label.en })).toBeVisible();
+        expect(screen.getByRole("button", { name: navigationCopy.en.items[item.view].label })).toBeVisible();
       }
     }
 

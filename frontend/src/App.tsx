@@ -30,17 +30,12 @@ import {
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
+import { type Locale } from "./i18n/catalog";
+import { useTranslation } from "./i18n/LocaleProvider";
 import "./evidence.css";
 
 type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
-type Locale = "en" | "zh-CN";
-
-const navigationLabels: Record<Locale, Record<View, string>> = {
-  en: { dashboard: "Dashboard", models: "Models", capabilities: "Capabilities", workspace: "Workspace", benchmarks: "Benchmarks", datasets: "Datasets", suites: "Suites", runs: "Runs", queue: "Task queue", workers: "Workers", analysis: "Analysis", compare: "Compare", reports: "Reports", reviews: "Human review", users: "Users", settings: "Settings" },
-  "zh-CN": { dashboard: "仪表盘", models: "模型", capabilities: "能力", workspace: "工作区", benchmarks: "评测基准", datasets: "数据集", suites: "评测套件", runs: "运行任务", queue: "任务队列", workers: "工作节点", analysis: "分析", compare: "对比", reports: "报告", reviews: "人工评审", users: "用户", settings: "设置" },
-};
-
 const initialEndpoint = {
   base_url: "",
   api_key: "",
@@ -163,9 +158,9 @@ function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
 }
 
 export default function App() {
+  const { locale, setLocale } = useTranslation();
   const [view, setView] = useState<View>("dashboard");
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
-  const [locale, setLocale] = useState<Locale>(() => window.localStorage.getItem("lle-locale") === "zh-CN" ? "zh-CN" : "en");
   const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [runs, setRuns] = useState<EvaluationRun[]>([]);
@@ -236,11 +231,6 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("lle-theme", theme);
   }, [theme]);
-
-  useEffect(() => {
-    document.documentElement.lang = locale;
-    window.localStorage.setItem("lle-locale", locale);
-  }, [locale]);
 
   const completedRuns = useMemo(() => runs.filter((run) => run.status.startsWith("completed")), [runs]);
   const selectedRunInfo = runs.find((run) => run.id === selectedRun) ?? null;
