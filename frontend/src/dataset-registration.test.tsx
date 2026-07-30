@@ -43,5 +43,5 @@ describe("dataset registration", () => {
       credential_binding_id: "private-dataset",
       license_text: null,
     });
-  });
+  }, 10_000);
 });

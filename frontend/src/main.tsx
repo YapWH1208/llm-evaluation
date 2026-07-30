@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App, { SharedReportPage } from "./App";
 import "./styles.css";
+import "./workspace-theme.css";
 
 const sharedReport = window.location.pathname.match(/^\/shared-reports\/([^/]+)\/?$/);
 
