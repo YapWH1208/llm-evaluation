@@ -12,6 +12,7 @@ from app.services.outbound_network import (
     OutboundNetworkError,
     OutboundRedirectError,
     OutboundResponseTooLargeError,
+    pinned_outbound_transport,
     read_bounded_response,
     validate_outbound_url,
 )
@@ -40,11 +41,11 @@ class OpenAIChatCompletionsConnectionTester:
         request_body = self._build_request_body(endpoint)
         try:
             endpoint_url = _endpoint_url(endpoint)
-            validate_outbound_url(endpoint_url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
+            addresses = validate_outbound_url(endpoint_url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
-                transport=self._transport,
+                transport=pinned_outbound_transport(addresses, injected_transport=self._transport),
             ) as client:
                 with client.stream(
                     "POST",

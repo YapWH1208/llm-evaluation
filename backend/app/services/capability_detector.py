@@ -14,6 +14,7 @@ from app.services.outbound_network import (
     OutboundNetworkError,
     OutboundRedirectError,
     OutboundResponseTooLargeError,
+    pinned_outbound_transport,
     read_bounded_response,
     validate_outbound_url,
 )
@@ -114,11 +115,11 @@ class OpenAIChatCompletionsCapabilityDetector:
             request_body = self._request_body(endpoint, messages, capability_key)
             request_summary = _safe_request_summary(capability_key, messages, request_body)
             endpoint_url = _endpoint_url(endpoint)
-            validate_outbound_url(endpoint_url, allow_loopback=str(getattr(endpoint, "protocol_profile", "")) == "ollama_chat")
+            addresses = validate_outbound_url(endpoint_url, allow_loopback=str(getattr(endpoint, "protocol_profile", "")) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
-                transport=self._transport,
+                transport=pinned_outbound_transport(addresses, injected_transport=self._transport),
             ) as client:
                 with client.stream(
                     "POST",

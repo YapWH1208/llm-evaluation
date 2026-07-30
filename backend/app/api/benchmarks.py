@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -302,6 +302,7 @@ def update_benchmark(
     session: SessionDependency,
 ) -> BenchmarkDefinition | dict[str, Any]:
     values = payload.model_dump(exclude_unset=True)
+    content_fields = {"display_name", "manifest"}.intersection(values)
     store = get_document_store(request)
     if store is not None:
         existing = store.get_document("benchmark_definitions", benchmark_definition_id)
@@ -312,8 +313,15 @@ def update_benchmark(
         if "manifest" in values:
             replacement = BenchmarkCreate(benchmark_id=str(existing["benchmark_id"]), version=str(existing["version"]), display_name=str(values.get("display_name") or existing["display_name"]), manifest=values["manifest"])
             values["manifest"] = _canonical_manifest(replacement)
-        updated = store.update_document("benchmark_definitions", benchmark_definition_id, values)
-        assert updated is not None
+        if content_fields:
+            updated = store.update_document_if(
+                "benchmark_definitions", benchmark_definition_id, {"status": "registered"}, values
+            )
+            if updated is None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Published benchmark content is immutable; create a new version instead.")
+        else:
+            updated = store.update_document("benchmark_definitions", benchmark_definition_id, values)
+            assert updated is not None
         if "manifest" in values:
             unregister_manifest_plugin(str(existing["benchmark_id"]), str(existing["version"]))
             register_manifest_plugin(values["manifest"])
@@ -327,8 +335,18 @@ def update_benchmark(
     if "manifest" in values:
         replacement = BenchmarkCreate(benchmark_id=item.benchmark_id, version=item.version, display_name=str(values.get("display_name") or item.display_name), manifest=values["manifest"])
         values["manifest"] = _canonical_manifest(replacement)
-    for field, value in values.items():
-        setattr(item, field, value)
+    if content_fields:
+        result = session.execute(
+            update(BenchmarkDefinition)
+            .where(BenchmarkDefinition.id == benchmark_definition_id, BenchmarkDefinition.status == "registered")
+            .values(**values)
+        )
+        if result.rowcount != 1:
+            session.rollback()
+            raise HTTPException(status.HTTP_409_CONFLICT, "Published benchmark content is immutable; create a new version instead.")
+    else:
+        for field, value in values.items():
+            setattr(item, field, value)
     session.commit()
     session.refresh(item)
     if "manifest" in values:

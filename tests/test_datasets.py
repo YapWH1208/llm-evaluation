@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import zipfile
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from app.core.config import DatasetCredentialBinding, Settings
@@ -22,7 +23,7 @@ def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
 
 
 def test_dataset_rejects_local_sources_and_uses_administrator_credential_bindings(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     settings = Settings.local_development(
         database_url=f"sqlite:///{tmp_path/'db.sqlite'}",
         data_root=str(tmp_path / "data"),
@@ -94,7 +95,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
         resolve_dataset_source("file:///private.jsonl", "main", None)
     with pytest.raises(DatasetError, match="HTTPS URL"):
         resolve_dataset_source(str(tmp_path / "private.jsonl"), "main", None)
-    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     settings = Settings.local_development(
         database_url="sqlite:///./ignored.db",
         dataset_credential_bindings={
@@ -112,23 +113,11 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
 
 
 def test_dataset_download_enforces_streamed_byte_limit(tmp_path: Path, monkeypatch) -> None:
-    class Response:
-        headers: dict[str, str] = {}
-
-        def __enter__(self) -> "Response":
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def raise_for_status(self) -> None:
-            return None
-
-        def iter_bytes(self):
-            yield b"1234"
-            yield b"5678"
-
-    monkeypatch.setattr("app.services.datasets.httpx.stream", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr(
+        "app.services.datasets.pinned_outbound_transport",
+        lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=b"12345678")),
+    )
     with pytest.raises(DatasetError, match="byte limit"):
         write_dataset_source("https://datasets.example.test/dataset.jsonl", tmp_path / "dataset.part", {}, max_bytes=6)
 

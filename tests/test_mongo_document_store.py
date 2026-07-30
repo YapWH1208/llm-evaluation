@@ -9,6 +9,7 @@ from typing import Any
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 import pytest
+import httpx
 
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore, MongoValidation, MongoValidationError
@@ -37,8 +38,8 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
         def iter_bytes(self):
             yield content
 
-    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
-    monkeypatch.setattr("app.services.datasets.httpx.stream", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 
 class FakeAdmin:
@@ -604,6 +605,37 @@ def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: P
         claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
         late = api.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
         assert late.status_code == 409
+        attempt = api.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_mongodb_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+
+    class PausingExecutor:
+        def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            from app.api.evaluation_runs import pause_evaluation_run
+
+            run = store.list_documents("evaluation_runs", query={"status": "running"})[0]
+            pause_evaluation_run(str(run["id"]), SimpleNamespace(app=app), None)
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=PausingExecutor(), document_store=store)
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        late = api.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "paused"
         attempt = api.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
         assert attempt["status"] == "pending"
         assert attempt["raw_response"] is None

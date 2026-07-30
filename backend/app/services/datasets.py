@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import json
 import os
 import shutil
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from socket import getaddrinfo
 from urllib.parse import quote, urlparse
 from uuid import uuid4
 
@@ -18,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
+from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
 class DatasetError(ValueError):
@@ -88,7 +87,7 @@ def _credential_headers(
     return {"Authorization": f"Bearer {token}"}
 
 
-def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, ...]) -> None:
+def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, ...]) -> tuple[str, ...]:
     parsed = urlparse(source_url)
     if parsed.scheme != "https":
         raise DatasetError("Dataset URLs must use HTTPS.")
@@ -99,13 +98,9 @@ def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, .
     if allowed_hosts and not any(normalized_host == item or normalized_host.endswith(f".{item}") for item in allowed_hosts):
         raise DatasetError("Dataset URL host is not allowed by the configured network policy.")
     try:
-        addresses = {item[4][0] for item in getaddrinfo(host, None)}
-    except OSError as error:
-        raise DatasetError("Dataset URL hostname could not be resolved.") from error
-    for address in addresses:
-        parsed_address = ipaddress.ip_address(address)
-        if parsed_address.is_private or parsed_address.is_loopback or parsed_address.is_link_local or parsed_address.is_multicast or parsed_address.is_reserved or parsed_address.is_unspecified:
-            raise DatasetError("Dataset URL resolves to a private or restricted network address.")
+        return validate_outbound_url(source_url)
+    except OutboundNetworkError as error:
+        raise DatasetError(str(error)) from error
 
 
 def dataset_source_suffix(source_url: str) -> str:
@@ -124,21 +119,26 @@ def write_dataset_source(
     """Stream a configured source to a temporary file and return its SHA-256 digest."""
 
     digest = hashlib.sha256()
-    with httpx.stream("GET", source, headers=headers, timeout=60, follow_redirects=False) as response:
-        response.raise_for_status()
-        content_length = response.headers.get("content-length")
-        if content_length and content_length.isdigit() and int(content_length) > max_bytes:
-            raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-        written = 0
-        with target.open("wb") as output_file:
-            for chunk in response.iter_bytes():
-                written += len(chunk)
-                if written > max_bytes:
-                    raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-                output_file.write(chunk)
-                digest.update(chunk)
-                if on_chunk:
-                    on_chunk()
+    try:
+        addresses = validate_outbound_url(source)
+    except OutboundNetworkError as error:
+        raise DatasetError(str(error)) from error
+    with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
+        with client.stream("GET", source, headers=headers) as response:
+            response.raise_for_status()
+            content_length = response.headers.get("content-length")
+            if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+                raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+            written = 0
+            with target.open("wb") as output_file:
+                for chunk in response.iter_bytes():
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                    output_file.write(chunk)
+                    digest.update(chunk)
+                    if on_chunk:
+                        on_chunk()
     return digest.hexdigest()
 
 

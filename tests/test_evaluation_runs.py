@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+import httpx
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -34,8 +35,8 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
         def iter_bytes(self):
             yield content
 
-    monkeypatch.setattr("app.services.datasets.getaddrinfo", lambda *_args: [(None, None, None, None, ("93.184.216.34", 0))])
-    monkeypatch.setattr("app.services.datasets.httpx.stream", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 
 class SuccessfulTester:
@@ -746,8 +747,28 @@ def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -
     with TestClient(tokens_app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"output_tokens_per_minute":16}).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        assert client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1}).status_code == 201
-        assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-a"}).json() is None
+        response = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"],"sample_limit":1})
+        assert response.status_code == 409
+        assert "token budget" in response.json()["detail"]
+
+
+def test_token_limited_runs_split_shards_before_admission(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'token-shards.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","tokens_per_minute":100},
+        ).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        created = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id":endpoint["id"]})
+        assert created.status_code == 201
+        with app.state.database.get_session() as session:
+            shards = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == created.json()["id"], TaskUnit.task_type == "evaluation_shard")))
+            assert len(shards) > 1
+            assert all(task.payload["estimated_token_count"] <= 100 for task in shards)
 
 
 def test_low_rps_runs_split_requests_and_continue_when_the_next_window_opens(tmp_path: Path) -> None:
@@ -808,6 +829,35 @@ def test_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> 
         assert claim is not None
         late = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
         assert late.status_code == 409
+        attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
+        assert attempt["status"] == "pending"
+        assert attempt["raw_response"] is None
+
+
+def test_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_path: Path) -> None:
+    class PausingExecutor:
+        def execute(self, _endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
+            from app.api.evaluation_runs import pause_evaluation_run
+
+            with app.state.database.get_session() as session:
+                run = session.scalar(select(EvaluationRun).where(EvaluationRun.status == "running"))
+                assert run is not None
+                pause_evaluation_run(run.id, SimpleNamespace(app=app), session)
+            return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
+
+    app = create_app(
+        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'pause-result.db'}", secret_encryption_key=Fernet.generate_key().decode()),
+        connection_tester=SuccessfulTester(),
+        model_executor=PausingExecutor(),
+    )
+    with TestClient(app) as client:
+        endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        claim = client.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
+        late = client.post(f"/api/v1/workers/tasks/{claim['id']}/execute", json={"lease_token": claim["lease_token"]})
+        assert late.status_code == 409
+        assert client.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "paused"
         attempt = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()[0]
         assert attempt["status"] == "pending"
         assert attempt["raw_response"] is None

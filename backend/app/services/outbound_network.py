@@ -5,7 +5,9 @@ from collections.abc import Iterable
 from socket import SOCK_STREAM, getaddrinfo
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
+from httpx._transports.default import map_httpcore_exceptions
 
 
 class OutboundNetworkError(ValueError):
@@ -18,6 +20,74 @@ class OutboundResponseTooLargeError(ValueError):
 
 class OutboundRedirectError(ValueError):
     """Raised when a provider asks the client to follow a new destination."""
+
+
+class _PinnedNetworkBackend(httpcore.SyncBackend):
+    """Connect an httpcore pool to validated addresses without another DNS lookup."""
+
+    def __init__(self, addresses: tuple[str, ...]) -> None:
+        super().__init__()
+        self._addresses = addresses
+        self._next_address = 0
+
+    def connect_tcp(self, host: str, port: int, **kwargs: object) -> httpcore.NetworkStream:
+        del host
+        address = self._addresses[self._next_address % len(self._addresses)]
+        self._next_address += 1
+        return super().connect_tcp(address, port, **kwargs)
+
+
+class _PinnedResponseStream(httpx.SyncByteStream):
+    def __init__(self, stream: Iterable[bytes]) -> None:
+        self._stream = stream
+
+    def __iter__(self) -> Iterable[bytes]:
+        yield from self._stream
+
+    def close(self) -> None:
+        close = getattr(self._stream, "close", None)
+        if callable(close):
+            close()
+
+
+class PinnedHTTPTransport(httpx.BaseTransport):
+    """HTTP transport that pins connection establishment to safe DNS answers.
+
+    The pool still receives the original request hostname, so its Host header
+    and TLS SNI/certificate validation remain correct.  Only the socket target
+    is substituted, preventing a later DNS resolution from being rebound to an
+    internal address.
+    """
+
+    def __init__(self, addresses: tuple[str, ...]) -> None:
+        if not addresses:
+            raise ValueError("Pinned outbound transport requires a resolved address.")
+        self._pool = httpcore.ConnectionPool(network_backend=_PinnedNetworkBackend(addresses))
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        core_request = httpcore.Request(
+            method=request.method,
+            url=httpcore.URL(
+                scheme=request.url.raw_scheme,
+                host=request.url.raw_host,
+                port=request.url.port,
+                target=request.url.raw_path,
+            ),
+            headers=request.headers.raw,
+            content=request.stream,
+            extensions=request.extensions,
+        )
+        with map_httpcore_exceptions():
+            response = self._pool.handle_request(core_request)
+        return httpx.Response(
+            status_code=response.status,
+            headers=response.headers,
+            stream=_PinnedResponseStream(response.stream),
+            extensions=response.extensions,
+        )
+
+    def close(self) -> None:
+        self._pool.close()
 
 
 def validate_outbound_url(
@@ -53,6 +123,14 @@ def validate_outbound_url(
     for address in addresses:
         _validate_address(address, allow_loopback=allow_loopback)
     return addresses
+
+
+def pinned_outbound_transport(
+    addresses: tuple[str, ...], *, injected_transport: httpx.BaseTransport | None = None
+) -> httpx.BaseTransport:
+    """Use an injected transport in tests, otherwise pin to validated DNS answers."""
+
+    return injected_transport if injected_transport is not None else PinnedHTTPTransport(addresses)
 
 
 def _validate_literal_host(host: str, *, allow_loopback: bool) -> None:

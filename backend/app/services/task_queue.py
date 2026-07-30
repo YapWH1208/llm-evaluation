@@ -441,7 +441,16 @@ def _task_budget(task: TaskUnit) -> tuple[int, int, int, int]:
     except (TypeError, ValueError):
         estimated_tokens = 0
     if payload.get("retry_sample_ids"):
-        estimated_tokens = max(1, estimated_tokens // max(1, fallback_requests))
+        per_sample = payload.get("sample_token_estimates")
+        if isinstance(per_sample, dict):
+            selected = [sample_id for sample_id in sample_ids if isinstance(sample_id, str)]
+            selected_estimates = [per_sample.get(sample_id) for sample_id in selected]
+            if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates):
+                estimated_tokens = sum(int(value) for value in selected_estimates)
+            else:
+                estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
+        else:
+            estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
         request_count = fallback_requests
     estimated_output_tokens = min(estimated_tokens, request_count * 32)
     estimated_input_tokens = max(0, estimated_tokens - estimated_output_tokens)

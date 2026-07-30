@@ -548,6 +548,41 @@ class MongoDocumentStore:
         )
         return _public_document(document) if isinstance(document, dict) else None
 
+    def update_document_if(
+        self,
+        collection_name: str,
+        document_id: str,
+        conditions: dict[str, Any],
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Conditionally persist a document transition and return its post-image."""
+
+        document = self.database[collection_name].find_one_and_update(
+            {"_id": document_id, **conditions},
+            {"$set": {**values, "updated_at": _utc_now()}},
+            return_document=_return_document_after(),
+        )
+        return _public_document(document) if isinstance(document, dict) else None
+
+    def update_task_if_current_lease(
+        self, task: dict[str, Any], lease_token: str, values: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        """Apply a task transition only for the exact active lease generation."""
+
+        now = _utc_now()
+        lease_version = int(task.get("lease_version", 0))
+        return self.update_document_if(
+            "task_units",
+            str(task["id"]),
+            {
+                "lease_token": lease_token,
+                **_lease_version_query(task, lease_version),
+                "status": {"$in": ["leased", "running"]},
+                "lease_expires_at": {"$gte": now},
+            },
+            {"heartbeat_at": now, **(values or {})},
+        )
+
     def report_share_password_attempt_limit_reached(
         self, *, share_id: str, client_key: str, now: datetime, limit: int
     ) -> bool:
@@ -634,6 +669,37 @@ class MongoDocumentStore:
             return int(getattr(result, "deleted_count", 0))
         document_ids = [str(item["id"]) for item in self.list_documents(collection_name, query=query)]
         return sum(self.delete_document(collection_name, document_id) for document_id in document_ids)
+
+    def invalidate_run_tasks(self, run_id: str) -> int:
+        """Fence every active task in a run before pause/cancel returns."""
+
+        active = {"pending", "retry_scheduled", "leased", "running"}
+        invalidated = 0
+        now = _utc_now()
+        for task in self.database["task_units"].find({"run_id": run_id, "status": {"$in": list(active)}}):
+            lease_version = int(task.get("lease_version", 0))
+            document = self.database["task_units"].find_one_and_update(
+                {
+                    "_id": task["_id"],
+                    "status": {"$in": list(active)},
+                    **_lease_version_query(task, lease_version),
+                },
+                {
+                    "$set": {
+                        "status": "cancelled",
+                        "leased_by": None,
+                        "lease_token": None,
+                        "lease_expires_at": None,
+                        "heartbeat_at": None,
+                        "updated_at": now,
+                    },
+                    "$inc": {"lease_version": 1},
+                },
+                return_document=_return_document_after(),
+            )
+            if isinstance(document, dict):
+                invalidated += 1
+        return invalidated
 
     def reclaim_expired_leases(self, *, lock_held: bool = False) -> int:
         lock_owner = None if lock_held else self._acquire_admission_lock()
@@ -811,7 +877,16 @@ def _task_budget(task: dict[str, Any]) -> tuple[int, int, int, int]:
     except (TypeError, ValueError):
         estimated_tokens = 0
     if payload.get("retry_sample_ids"):
-        estimated_tokens = max(1, estimated_tokens // max(1, fallback_requests))
+        per_sample = payload.get("sample_token_estimates")
+        if isinstance(per_sample, dict):
+            selected = [sample_id for sample_id in sample_ids if isinstance(sample_id, str)]
+            selected_estimates = [per_sample.get(sample_id) for sample_id in selected]
+            if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates):
+                estimated_tokens = sum(int(value) for value in selected_estimates)
+            else:
+                estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
+        else:
+            estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests
         request_count = fallback_requests
     estimated_output_tokens = min(estimated_tokens, request_count * 32)
     return request_count, estimated_tokens, max(0, estimated_tokens - estimated_output_tokens), estimated_output_tokens
