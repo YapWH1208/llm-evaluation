@@ -29,6 +29,7 @@ import {
   User,
 } from "./api";
 import { AppShell } from "./components/AppShell";
+import { OverviewDashboard } from "./components/OverviewDashboard";
 import "./evidence.css";
 
 type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
@@ -651,7 +652,7 @@ export default function App() {
       onViewChange={setView}
     >
 
-      {view === "dashboard" && <DashboardView dashboard={dashboard} onRun={(runId) => { void selectRun(runId); setView("runs"); }} />}
+      {view === "dashboard" && <OverviewDashboard dashboard={dashboard} endpoints={endpoints} runs={runs} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
 
       {view === "models" && <>
         <section className="grid two">
@@ -733,14 +734,6 @@ export default function App() {
       {view === "settings" && <section className="grid two"><article className="panel"><h2>System settings</h2><p className="muted">Runtime settings are configured through the deployment environment; sensitive values never return to the browser.</p><dl><dt>Database</dt><dd>{systemHealth?.database ?? "Unavailable"} · {systemHealth?.database_connected ? "connected" : "unavailable"}</dd><dt>Schema version</dt><dd>{systemHealth?.schema_version ?? "--"}</dd><dt>Health</dt><dd>{systemHealth?.status ?? "Unavailable"}</dd><dt>Queue</dt><dd>{systemHealth ? `${systemHealth.queue.pending} pending · ${systemHealth.queue.active} active` : "--"}</dd><dt>Disk</dt><dd>{systemHealth ? `${display(systemHealth.disk.available_bytes)} free of ${display(systemHealth.disk.total_bytes)}` : "--"}</dd><dt>Theme</dt><dd>{theme}</dd></dl><label>Workspace language<select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}><option value="en">English</option><option value="zh-CN">简体中文</option></select></label><label>Administrator or user bearer token<input type="password" value={apiToken} onChange={(event) => setApiToken(event.target.value)} placeholder="Optional when server auth is enabled" /></label><div className="actions"><button onClick={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }}>Save token</button><button className="secondary" onClick={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }}>Clear token</button></div></article><article className="panel"><h2>SQLite operating guidance</h2><p>SQLite is suitable for local or small-team use. Use PostgreSQL or MongoDB for multi-process, distributed worker deployments; configure global worker ceilings with deployment environment settings.</p><button className="secondary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>Switch to {theme === "dark" ? "light" : "dark"} mode</button></article></section>}
     </AppShell>
   );
-}
-
-function DashboardView({ dashboard, onRun }: { dashboard: Dashboard | null; onRun: (runId: string) => void }) {
-  if (!dashboard) return <section className="panel"><p className="empty">Loading operational status...</p></section>;
-  return <>
-    <section className="dashboard" aria-label="Operational status"><Metric label="Active runs" value={dashboard.runs.active} detail={`${dashboard.queue.pending} pending · ${dashboard.queue.leased} leased`} /><Metric label="Endpoints" value={`${dashboard.endpoints.available}/${dashboard.endpoints.total}`} detail={`${dashboard.endpoints.unavailable} unavailable`} /><Metric label="Workers" value={dashboard.workers.active} detail="active leased workers" /><Metric label="Estimated cost" value={Object.entries(dashboard.api.estimated_cost_by_currency).map(([currency, value]) => money(value, currency)).join(" · ") || "--"} detail="completed run evidence" /></section>
-    <section className="grid two"><article className="panel"><h2>Evaluation health</h2><div className="metric-grid"><Metric label="Accuracy" value={percent(dashboard.quality.samples.accuracy)} detail={`${dashboard.quality.samples.successful}/${dashboard.quality.samples.total} successful`} /><Metric label="API errors" value={percent(dashboard.api.request_error_rate)} detail={`${dashboard.quality.errors.api_errors} requests`} /><Metric label="P95 latency" value={`${display(dashboard.quality.latency_ms.p95)} ms`} detail={`${dashboard.quality.latency_ms.measured_samples} measured`} /><Metric label="Tokens" value={display(dashboard.quality.tokens.total)} detail={`${display(dashboard.quality.tokens.input)} in / ${display(dashboard.quality.tokens.output)} out`} /></div></article><article className="panel"><h2>Recent completed runs</h2>{dashboard.runs.recent_completed.length === 0 ? <p className="empty">No completed runs yet.</p> : <div className="recent-list">{dashboard.runs.recent_completed.map((run) => <button key={run.id} className="recent-run" onClick={() => onRun(run.id)}><strong>{run.benchmark_id}</strong><span>{run.completed_samples}/{run.total_samples} samples · {formatDate(run.completed_at)}</span></button>)}</div>}</article></section>
-  </>;
 }
 
 function Metric({ label, value, detail }: { label: string; value: string | number; detail: string }) {
