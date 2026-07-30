@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Dashboard, Endpoint, EvaluationRun, Task } from "./api";
 import { OverviewDashboard } from "./components/OverviewDashboard";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(cleanup);
 
@@ -31,7 +32,7 @@ function renderOverview(overrides: Partial<React.ComponentProps<typeof OverviewD
     onOpenView: vi.fn(),
     ...overrides,
   };
-  render(<OverviewDashboard {...props} />);
+  render(<LocaleProvider><OverviewDashboard {...props} /></LocaleProvider>);
   return props;
 }
 
