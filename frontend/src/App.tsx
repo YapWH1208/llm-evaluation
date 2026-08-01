@@ -30,7 +30,8 @@ import {
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
-import { catalogs, localeIds, localeNames, reportCopy, resolveLocale, type Locale } from "./i18n/catalog";
+import { localeIds, localeNames, reportCopy, resolveLocale, type Locale } from "./i18n/catalog";
+import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./i18n/formatters";
 import { translateStaticText } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
 import { StaticCopy } from "./i18n/StaticCopy";
@@ -68,27 +69,10 @@ const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", s
 const initialUser = { email: "", display_name: "", role: "viewer", max_concurrency: "" };
 const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
 
-function formatDate(value: string | null) {
-  const locale = resolveLocale(document.documentElement.lang);
-  return value ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : catalogs[locale]["common.notRecorded"];
-}
-
-function display(value: number | null | undefined, digits = 2) {
-  return value === null || value === undefined ? "--" : new Intl.NumberFormat(resolveLocale(document.documentElement.lang), { maximumFractionDigits: digits }).format(value);
-}
-
-function percent(value: number | null | undefined) {
-  return value === null || value === undefined ? "--" : new Intl.NumberFormat(resolveLocale(document.documentElement.lang), { style: "percent", maximumFractionDigits: 1 }).format(value);
-}
-
-function money(value: number | null | undefined, currency: string | null | undefined) {
-  const locale = resolveLocale(document.documentElement.lang);
-  return value === null || value === undefined ? catalogs[locale]["common.notConfigured"] : `${display(value, 6)} ${currency ?? ""}`.trim();
-}
-
-function staticMessage(value: string) {
-  return translateStaticText(resolveLocale(document.documentElement.lang), value);
-}
+const formatDate = formatWorkspaceDate;
+const display = formatWorkspaceNumber;
+const percent = formatWorkspacePercent;
+const money = formatWorkspaceMoney;
 
 function optionalNumber(value: string) {
   return value.trim() === "" ? null : Number(value);
@@ -259,7 +243,7 @@ export default function App() {
   }, [view, refresh]);
 
   function showError(error: unknown) {
-    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : staticMessage("Unable to reach the evaluation service."));
+    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : translateStaticText(resolveLocale(document.documentElement.lang), "Unable to reach the evaluation service."));
   }
 
   async function createEndpoint(event: FormEvent) {
