@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api, type Report } from "./api";
 import { ReportsTable, SharedReportPage } from "./App";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
   cleanup();
@@ -14,7 +15,7 @@ describe("public report sharing", () => {
   it("keeps the password out of browser storage and the URL after opening a report", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "openSharedReport").mockResolvedValue("blob:shared-report");
-    render(<SharedReportPage token="public-token" />);
+    render(<LocaleProvider><SharedReportPage token="public-token" /></LocaleProvider>);
 
     await user.type(screen.getByLabelText("Share password (if required)"), "view-only-password");
     await user.click(screen.getByRole("button", { name: "Open report" }));
@@ -29,7 +30,7 @@ describe("public report sharing", () => {
   it("announces a generic failure for an unavailable or invalid share", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "openSharedReport").mockRejectedValue(new Error("denied"));
-    render(<SharedReportPage token="public-token" />);
+    render(<LocaleProvider><SharedReportPage token="public-token" /></LocaleProvider>);
 
     await user.click(screen.getByRole("button", { name: "Open report" }));
     expect(await screen.findByText("The shared report could not be opened. Check the password, expiry, or link.")).toBeVisible();
@@ -40,7 +41,7 @@ describe("public report sharing", () => {
     const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
     vi.spyOn(api, "downloadReport").mockResolvedValue("blob:protected-report");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    render(<ReportsTable reports={[report]} />);
+    render(<LocaleProvider><ReportsTable reports={[report]} /></LocaleProvider>);
 
     await user.click(screen.getByRole("button", { name: "Download" }));
     expect(api.downloadReport).toHaveBeenCalledWith("report-id");
@@ -51,7 +52,7 @@ describe("public report sharing", () => {
     const user = userEvent.setup();
     const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
     const onShare = vi.fn().mockResolvedValue({ id: "share-id", report_id: report.id, expires_at: "2026-08-01T00:00:00Z", allow_download: true, revoked_at: null, created_at: "2026-07-29T00:00:00Z", share_url: "https://evaluation.example.test/shared-reports/token" });
-    render(<ReportsTable reports={[report]} onShare={onShare} />);
+    render(<LocaleProvider><ReportsTable reports={[report]} onShare={onShare} /></LocaleProvider>);
 
     await user.clear(screen.getByLabelText("Expires in days"));
     await user.type(screen.getByLabelText("Expires in days"), "21");

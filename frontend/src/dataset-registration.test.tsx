@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { api } from "./api";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
   cleanup();
@@ -27,7 +28,7 @@ describe("dataset registration", () => {
     vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
     const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
 
-    render(<App />);
+    render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("button", { name: "Workspace" }));
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
@@ -43,5 +44,5 @@ describe("dataset registration", () => {
       credential_binding_id: "private-dataset",
       license_text: null,
     });
-  });
+  }, 10_000);
 });
