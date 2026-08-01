@@ -2,14 +2,19 @@ import { ReactNode, useLayoutEffect, useRef } from "react";
 import { translateStaticText } from "./operationalCopy";
 import { useTranslation } from "./LocaleProvider";
 
-const protectedSelector = "pre, code, textarea, input, [data-i18n-preserve], .evidence, .review, .badge";
+const protectedSelector = "pre, code, textarea, input, [data-i18n-preserve], .evidence, .review, .badge, .error, .run-summary > strong, .overview-run > strong, .recent-run > strong";
 const protectedAttributeSelector = "pre, code, [data-i18n-preserve], .evidence, .review, .badge";
 const attributeNames = ["placeholder", "aria-label", "title"] as const;
 const serverStatusValues = new Set(["available", "unavailable", "pending", "queued", "running", "paused", "completed", "completed_with_errors", "cancelled", "failed", "ready", "downloading", "waiting", "disabled", "enabled", "registered", "deprecated", "broken", "supported", "unsupported", "unknown", "succeeded", "unreviewed", "reviewed", "adjudicated"]);
+const staticOptionValues = new Set(["", "openai_chat_completions", "openai_responses", "anthropic_messages", "gemini_generate_content", "azure_openai_chat_completions", "ollama_chat", "custom_http_json", "unknown", "supported", "unsupported", "official", "platform_default", "user_custom", "benchmark_variant", "language_specific", "all", "succeeded", "failed", "pending", "running", "correct", "incorrect", "any", "api", "parser", "disagreement", "agreement", "unreviewed", "reviewed", "adjudicated", "latency", "tokens", "cost", "primary", "secondary", "viewer", "reviewer", "evaluator", "admin", "single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "human_review"]);
 
 function isProtected(node: Text) {
   const parent = node.parentElement;
   if (parent?.closest(protectedSelector)) return true;
+  if (parent?.tagName === "OPTION") {
+    const value = parent.getAttribute("value");
+    if (value !== null && !staticOptionValues.has(value)) return true;
+  }
   return parent?.tagName !== "OPTION" && serverStatusValues.has(node.nodeValue?.trim().toLowerCase() ?? "");
 }
 

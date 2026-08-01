@@ -330,6 +330,73 @@ const words: Record<string, readonly string[]> = {
   yet: ["尚未", "encore", "noch", "ещё", "まだ", "아직", "lagi"],
 };
 
+const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
+  en: {},
+  "zh-CN": {
+    "OpenAI-compatible Chat Completions": "兼容 OpenAI 的聊天补全",
+    "OpenAI-compatible Responses API": "兼容 OpenAI 的 Responses API",
+    "Anthropic Messages": "Anthropic 消息 API",
+    "Gemini GenerateContent": "Gemini 内容生成",
+    "Azure OpenAI Chat Completions": "Azure OpenAI 聊天补全",
+    "Ollama Chat": "Ollama 聊天",
+    "Custom HTTP JSON": "自定义 HTTP JSON",
+  },
+  fr: {
+    "OpenAI-compatible Chat Completions": "Complétions de chat compatibles OpenAI",
+    "OpenAI-compatible Responses API": "API Responses compatible OpenAI",
+    "Anthropic Messages": "Messages Anthropic",
+    "Gemini GenerateContent": "Génération de contenu Gemini",
+    "Azure OpenAI Chat Completions": "Complétions de chat Azure OpenAI",
+    "Ollama Chat": "Chat Ollama",
+    "Custom HTTP JSON": "JSON HTTP personnalisé",
+  },
+  de: {
+    "OpenAI-compatible Chat Completions": "OpenAI-kompatible Chat-Vervollständigungen",
+    "OpenAI-compatible Responses API": "OpenAI-kompatible Responses-API",
+    "Anthropic Messages": "Anthropic Messages",
+    "Gemini GenerateContent": "Gemini-Inhaltsgenerierung",
+    "Azure OpenAI Chat Completions": "Azure OpenAI Chat-Vervollständigungen",
+    "Ollama Chat": "Ollama-Chat",
+    "Custom HTTP JSON": "Benutzerdefiniertes HTTP-JSON",
+  },
+  ru: {
+    "OpenAI-compatible Chat Completions": "Совместимые с OpenAI чат-завершения",
+    "OpenAI-compatible Responses API": "Совместимый с OpenAI API Responses",
+    "Anthropic Messages": "Сообщения Anthropic",
+    "Gemini GenerateContent": "Генерация контента Gemini",
+    "Azure OpenAI Chat Completions": "Чат-завершения Azure OpenAI",
+    "Ollama Chat": "Чат Ollama",
+    "Custom HTTP JSON": "Пользовательский HTTP JSON",
+  },
+  ja: {
+    "OpenAI-compatible Chat Completions": "OpenAI 互換チャット補完",
+    "OpenAI-compatible Responses API": "OpenAI 互換 Responses API",
+    "Anthropic Messages": "Anthropic メッセージ API",
+    "Gemini GenerateContent": "Gemini コンテンツ生成",
+    "Azure OpenAI Chat Completions": "Azure OpenAI チャット補完",
+    "Ollama Chat": "Ollama チャット",
+    "Custom HTTP JSON": "カスタム HTTP JSON",
+  },
+  ko: {
+    "OpenAI-compatible Chat Completions": "OpenAI 호환 채팅 완성",
+    "OpenAI-compatible Responses API": "OpenAI 호환 Responses API",
+    "Anthropic Messages": "Anthropic 메시지 API",
+    "Gemini GenerateContent": "Gemini 콘텐츠 생성",
+    "Azure OpenAI Chat Completions": "Azure OpenAI 채팅 완성",
+    "Ollama Chat": "Ollama 채팅",
+    "Custom HTTP JSON": "사용자 지정 HTTP JSON",
+  },
+  ms: {
+    "OpenAI-compatible Chat Completions": "Pelengkapan sembang serasi OpenAI",
+    "OpenAI-compatible Responses API": "API Responses serasi OpenAI",
+    "Anthropic Messages": "Mesej Anthropic",
+    "Gemini GenerateContent": "Penjanaan kandungan Gemini",
+    "Azure OpenAI Chat Completions": "Pelengkapan sembang Azure OpenAI",
+    "Ollama Chat": "Sembang Ollama",
+    "Custom HTTP JSON": "HTTP JSON tersuai",
+  },
+};
+
 const phrases: Record<Locale, Record<string, string>> = {
   en: {},
   "zh-CN": { "Add model endpoint": "添加模型端点", "Run configuration": "运行配置", "No model endpoints yet.": "尚无模型端点。", "Model capabilities": "模型能力", "Evaluation suites": "评测套件", "System settings": "系统设置", "Human review": "人工审查" },
@@ -370,8 +437,8 @@ export function translateStaticText(locale: Locale, text: string): string {
   const prefix = match?.[1] ?? "";
   const source = match?.[2] ?? text;
   const suffix = match?.[3] ?? "";
-  if (!staticSourceTexts.has(source)) return text;
-  const exact = phrases[locale][source];
+  const exact = protocolProfilePhrases[locale][source] ?? phrases[locale][source];
+  if (!staticSourceTexts.has(source) && !exact) return text;
   if (exact) return `${prefix}${exact}${suffix}`;
   const wordIndex = localeIds.indexOf(locale) - 1;
   return `${prefix}${source.replace(/\{\{[A-Za-z]+\}\}|[A-Za-z]+(?:-[A-Za-z]+)*/g, (token) => token.startsWith("{{") ? token : words[token.toLowerCase()]?.[wordIndex] ?? token)}${suffix}`;

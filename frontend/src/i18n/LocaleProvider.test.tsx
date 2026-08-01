@@ -33,6 +33,7 @@ describe("LocaleProvider", () => {
 
     await user.click(screen.getByRole("button", { name: "Japanese" }));
     expect(screen.getByTestId("locale")).toHaveTextContent("ja");
+    expect(screen.getByTestId("number")).toHaveTextContent("1,234.5");
     expect(screen.getByTestId("copy")).toHaveTextContent("閉じる");
     expect(window.localStorage.getItem("lle-locale")).toBe("ja");
     expect(document.documentElement.lang).toBe("ja");

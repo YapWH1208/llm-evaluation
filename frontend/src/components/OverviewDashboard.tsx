@@ -71,7 +71,7 @@ export function OverviewDashboard({ dashboard, endpoints, runs, tasks, onInspect
         {activeRuns.length === 0 ? <div className="overview-empty"><strong>{copy.noActiveRuns}</strong><span>{copy.noActiveDescription}</span><button onClick={() => onOpenView("workspace")}>{copy.setupEvaluation}</button></div> : <div className="overview-run-list">
           {activeRuns.map((run) => <button className="overview-run" key={run.id} onClick={() => onInspectRun(run.id)}>
             <span className={`badge ${run.status}`}>{run.status}</span>
-            <strong>{run.benchmark_id} <small>v{run.benchmark_version}</small></strong>
+            <strong data-i18n-preserve>{run.benchmark_id} <small>v{run.benchmark_version}</small></strong>
             <span>{run.completed_samples}/{run.total_samples} {copy.samples}</span>
             <span className="overview-run-link">{copy.inspect}</span>
           </button>)}

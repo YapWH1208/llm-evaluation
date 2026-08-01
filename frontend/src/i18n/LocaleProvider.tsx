@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { catalogs, Locale, resolveLocale, TranslationKey } from "./catalog";
+import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./formatters";
 
 type TranslationValues = Record<string, number | string | null | undefined>;
 
@@ -31,10 +32,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((nextLocale: Locale) => setLocaleState(resolveLocale(nextLocale)), []);
   const t = useCallback((key: TranslationKey, values?: TranslationValues) => interpolate(catalogs[locale][key] ?? catalogs.en[key], values), [locale]);
-  const formatNumber = useCallback((value: number | null | undefined, digits = 2) => value === null || value === undefined ? "--" : new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value), [locale]);
-  const formatPercent = useCallback((value: number | null | undefined) => value === null || value === undefined ? "--" : new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(value), [locale]);
-  const formatDate = useCallback((value: string | null | undefined) => value ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : t("common.notRecorded"), [locale, t]);
-  const formatCurrency = useCallback((value: number | null | undefined, currency: string | null | undefined, digits = 6) => value === null || value === undefined ? t("common.notConfigured") : new Intl.NumberFormat(locale, { style: "currency", currency: currency ?? "USD", maximumFractionDigits: digits }).format(value), [locale, t]);
+  const formatNumber = useCallback((value: number | null | undefined, digits = 2) => formatWorkspaceNumber(locale, value, digits), [locale]);
+  const formatPercent = useCallback((value: number | null | undefined) => formatWorkspacePercent(locale, value), [locale]);
+  const formatDate = useCallback((value: string | null | undefined) => formatWorkspaceDate(locale, value), [locale]);
+  const formatCurrency = useCallback((value: number | null | undefined, currency: string | null | undefined, digits = 6) => formatWorkspaceMoney(locale, value, currency, digits), [locale]);
 
   const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale, t, formatDate, formatNumber, formatPercent, formatCurrency }), [formatCurrency, formatDate, formatNumber, formatPercent, locale, setLocale, t]);
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
