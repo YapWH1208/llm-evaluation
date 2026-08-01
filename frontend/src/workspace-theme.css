@@ -23,6 +23,10 @@
   background: var(--canvas);
 }
 
+.localized-static-copy {
+  display: contents;
+}
+
 :root[data-theme="light"] {
   --canvas: #f4f7fb;
   --canvas-soft: #edf2f8;

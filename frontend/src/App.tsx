@@ -30,9 +30,10 @@ import {
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
-import { localeIds, localeNames, type Locale } from "./i18n/catalog";
-import { reportCopy } from "./i18n/catalog";
+import { catalogs, localeIds, localeNames, reportCopy, resolveLocale, type Locale } from "./i18n/catalog";
+import { translateStaticText } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
+import { StaticCopy } from "./i18n/StaticCopy";
 import "./evidence.css";
 
 type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
@@ -68,19 +69,25 @@ const initialUser = { email: "", display_name: "", role: "viewer", max_concurren
 const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
 
 function formatDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
+  const locale = resolveLocale(document.documentElement.lang);
+  return value ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : catalogs[locale]["common.notRecorded"];
 }
 
 function display(value: number | null | undefined, digits = 2) {
-  return value === null || value === undefined ? "--" : new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(value);
+  return value === null || value === undefined ? "--" : new Intl.NumberFormat(resolveLocale(document.documentElement.lang), { maximumFractionDigits: digits }).format(value);
 }
 
 function percent(value: number | null | undefined) {
-  return value === null || value === undefined ? "--" : `${(value * 100).toFixed(1)}%`;
+  return value === null || value === undefined ? "--" : new Intl.NumberFormat(resolveLocale(document.documentElement.lang), { style: "percent", maximumFractionDigits: 1 }).format(value);
 }
 
 function money(value: number | null | undefined, currency: string | null | undefined) {
-  return value === null || value === undefined ? "Not configured" : `${display(value, 6)} ${currency ?? ""}`.trim();
+  const locale = resolveLocale(document.documentElement.lang);
+  return value === null || value === undefined ? catalogs[locale]["common.notConfigured"] : `${display(value, 6)} ${currency ?? ""}`.trim();
+}
+
+function staticMessage(value: string) {
+  return translateStaticText(resolveLocale(document.documentElement.lang), value);
 }
 
 function optionalNumber(value: string) {
@@ -252,7 +259,7 @@ export default function App() {
   }, [view, refresh]);
 
   function showError(error: unknown) {
-    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : "Unable to reach the evaluation service.");
+    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : staticMessage("Unable to reach the evaluation service."));
   }
 
   async function createEndpoint(event: FormEvent) {
@@ -642,6 +649,7 @@ export default function App() {
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       onViewChange={setView}
     >
+      <StaticCopy>
 
       {view === "dashboard" && <OverviewDashboard dashboard={dashboard} endpoints={endpoints} runs={runs} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
 
@@ -723,6 +731,7 @@ export default function App() {
       {view === "users" && <section className="grid two"><article className="panel"><h2>Create user</h2><form className="form" onSubmit={createUser}><label>Email<input required type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} /></label><label>Display name<input required value={userForm.display_name} onChange={(event) => setUserForm({ ...userForm, display_name: event.target.value })} /></label><label>Role<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}><option value="viewer">Viewer</option><option value="reviewer">Reviewer</option><option value="evaluator">Evaluator</option><option value="admin">Admin</option></select></label><label>User concurrency cap<input type="number" min="1" max="1000" value={userForm.max_concurrency} onChange={(event) => setUserForm({ ...userForm, max_concurrency: event.target.value })} placeholder="Unlimited" /></label><button disabled={busy === "user"}>Create API-token user</button></form></article><article className="panel"><h2>Users and audit trail</h2>{users.length === 0 ? <p className="empty">User administration needs an administrator bearer token when server authentication is enabled.</p> : <div className="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Cap</th><th>Status</th><th>Created</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td>{user.display_name}<br /><small>{user.email}</small></td><td>{user.role}</td><td>{user.max_concurrency ?? "∞"}</td><td>{user.status}</td><td>{formatDate(user.created_at)}</td></tr>)}</tbody></table></div>}<h3>Recent audit events</h3>{auditEvents.length === 0 ? <p className="empty">No events available.</p> : <div className="table-wrap"><table><thead><tr><th>Action</th><th>Entity</th><th>When</th></tr></thead><tbody>{auditEvents.slice(0, 12).map((event) => <tr key={event.id}><td>{event.action}</td><td>{event.entity_type}</td><td>{formatDate(event.created_at)}</td></tr>)}</tbody></table></div>}</article></section>}
 
       {view === "settings" && <section className="grid two"><article className="panel"><h2>System settings</h2><p className="muted">Runtime settings are configured through the deployment environment; sensitive values never return to the browser.</p><dl><dt>Database</dt><dd>{systemHealth?.database ?? "Unavailable"} · {systemHealth?.database_connected ? "connected" : "unavailable"}</dd><dt>Schema version</dt><dd>{systemHealth?.schema_version ?? "--"}</dd><dt>Health</dt><dd>{systemHealth?.status ?? "Unavailable"}</dd><dt>Queue</dt><dd>{systemHealth ? `${systemHealth.queue.pending} pending · ${systemHealth.queue.active} active` : "--"}</dd><dt>Disk</dt><dd>{systemHealth ? `${display(systemHealth.disk.available_bytes)} free of ${display(systemHealth.disk.total_bytes)}` : "--"}</dd><dt>Theme</dt><dd>{theme}</dd></dl><label>Workspace language<select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}>{localeIds.map((localeId) => <option key={localeId} value={localeId}>{localeNames[localeId]}</option>)}</select></label><label>Administrator or user bearer token<input type="password" value={apiToken} onChange={(event) => setApiToken(event.target.value)} placeholder="Optional when server auth is enabled" /></label><div className="actions"><button onClick={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }}>Save token</button><button className="secondary" onClick={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }}>Clear token</button></div></article><article className="panel"><h2>SQLite operating guidance</h2><p>SQLite is suitable for local or small-team use. Use PostgreSQL or MongoDB for multi-process, distributed worker deployments; configure global worker ceilings with deployment environment settings.</p><button className="secondary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>Switch to {theme === "dark" ? "light" : "dark"} mode</button></article></section>}
+      </StaticCopy>
     </AppShell>
   );
 }
