@@ -28,6 +28,7 @@ const words: Record<string, readonly string[]> = {
   browser: ["浏览器", "navigateur", "Browser", "браузер", "ブラウザ", "브라우저", "pelayar"],
   cache: ["缓存", "cache", "Cache", "кэш", "キャッシュ", "캐시", "cache"],
   cancel: ["取消", "annuler", "abbrechen", "отменить", "キャンセル", "취소", "batal"],
+  cancelled: ["已取消", "annulée", "abgebrochen", "отменён", "キャンセル済み", "취소됨", "dibatalkan"],
   capability: ["能力", "capacité", "Fähigkeit", "возможность", "機能", "기능", "keupayaan"],
   cap: ["上限", "plafond", "Obergrenze", "лимит", "上限", "한도", "had"],
   catalog: ["目录", "catalogue", "Katalog", "каталог", "カタログ", "카탈로그", "katalog"],
@@ -43,6 +44,7 @@ const words: Record<string, readonly string[]> = {
   complete: ["完成", "terminé", "abgeschlossen", "завершён", "完了", "완료", "selesai"],
   completed: ["已完成", "terminé", "abgeschlossen", "завершено", "完了", "완료됨", "selesai"],
   configuration: ["配置", "configuration", "Konfiguration", "конфигурация", "設定", "구성", "konfigurasi"],
+  configured: ["已配置", "configuré", "konfiguriert", "настроен", "設定済み", "구성됨", "dikonfigurasikan"],
   configure: ["配置", "configurer", "konfigurieren", "настроить", "設定", "구성", "konfigurasi"],
   connection: ["连接", "connexion", "Verbindung", "подключение", "接続", "연결", "sambungan"],
   content: ["内容", "contenu", "Inhalt", "содержимое", "コンテンツ", "콘텐츠", "kandungan"],
@@ -73,6 +75,7 @@ const words: Record<string, readonly string[]> = {
   evaluation: ["评测", "évaluation", "Bewertung", "оценка", "評価", "평가", "penilaian"],
   events: ["事件", "événements", "Ereignisse", "события", "イベント", "이벤트", "peristiwa"],
   execution: ["执行", "exécution", "Ausführung", "выполнение", "実行", "실행", "pelaksanaan"],
+  executed: ["已执行", "exécutée", "ausgeführt", "выполнен", "実行済み", "실행됨", "dilaksanakan"],
   file: ["文件", "fichier", "Datei", "файл", "ファイル", "파일", "fail"],
   filters: ["筛选器", "filtres", "Filter", "фильтры", "フィルター", "필터", "penapis"],
   form: ["表单", "formulaire", "Formular", "форма", "フォーム", "양식", "borang"],
@@ -92,6 +95,7 @@ const words: Record<string, readonly string[]> = {
   local: ["本地", "local", "lokal", "локальный", "ローカル", "로컬", "setempat"],
   log: ["日志", "journal", "Protokoll", "журнал", "ログ", "로그", "log"],
   media: ["媒体", "média", "Medien", "медиа", "メディア", "미디어", "media"],
+  multi: ["多", "multi", "mehrere", "несколько", "複数", "다중", "berbilang"],
   model: ["模型", "modèle", "Modell", "модель", "モデル", "모델", "model"],
   name: ["名称", "nom", "Name", "имя", "名前", "이름", "nama"],
   new: ["新建", "nouveau", "neu", "новый", "新規", "새", "baharu"],
@@ -108,9 +112,11 @@ const words: Record<string, readonly string[]> = {
   output: ["输出", "sortie", "Ausgabe", "вывод", "出力", "출력", "output"],
   package: ["包", "package", "Paket", "пакет", "パッケージ", "패키지", "pakej"],
   pause: ["暂停", "mettre en pause", "pausieren", "приостановить", "一時停止", "일시 중지", "jeda"],
+  paused: ["已暂停", "mise en pause", "pausiert", "приостановлен", "一時停止済み", "일시 중지됨", "dijeda"],
   pending: ["待处理", "en attente", "ausstehend", "ожидающий", "保留中", "보류", "menunggu"],
   preflight: ["预检", "pré-vérification", "Vorprüfung", "предпроверка", "事前確認", "사전 점검", "pra-semak"],
   priority: ["优先级", "priorité", "Priorität", "приоритет", "優先度", "우선순위", "keutamaan"],
+  production: ["生产", "production", "Produktion", "производство", "本番", "프로덕션", "pengeluaran"],
   prompt: ["提示词", "invite", "Prompt", "запрос", "プロンプト", "프롬프트", "gesaan"],
   provider: ["提供方", "fournisseur", "Anbieter", "поставщик", "プロバイダー", "공급자", "penyedia"],
   queue: ["队列", "file", "Warteschlange", "очередь", "キュー", "대기열", "baris"],
@@ -127,6 +133,7 @@ const words: Record<string, readonly string[]> = {
   required: ["必填", "requis", "erforderlich", "обязательный", "必須", "필수", "diperlukan"],
   response: ["响应", "réponse", "Antwort", "ответ", "応答", "응답", "respons"],
   resume: ["恢复", "reprendre", "fortsetzen", "возобновить", "再開", "재개", "sambung"],
+  resumed: ["已恢复", "reprise", "fortgesetzt", "возобновлён", "再開済み", "재개됨", "disambung"],
   retry: ["重试", "réessayer", "wiederholen", "повторить", "再試行", "재시도", "cuba lagi"],
   review: ["审查", "révision", "Überprüfung", "проверка", "レビュー", "검토", "semakan"],
   reviewer: ["审查者", "évaluateur", "Prüfer", "рецензент", "レビュアー", "검토자", "penyemak"],
@@ -162,8 +169,8 @@ const words: Record<string, readonly string[]> = {
   validate: ["验证", "valider", "validieren", "проверить", "検証", "검증", "sahkan"],
   version: ["版本", "version", "Version", "версия", "バージョン", "버전", "versi"],
   view: ["查看", "voir", "anzeigen", "просмотреть", "表示", "보기", "lihat"],
-  worker: ["工作节点", "worker", "Worker", "воркер", "ワーカー", "워커", "pekerja"],
-  workers: ["工作节点", "workers", "Worker", "воркеры", "ワーカー", "워커", "pekerja"],
+  worker: ["工作节点", "agent", "Worker", "воркер", "ワーカー", "워커", "pekerja"],
+  workers: ["工作节点", "agents", "Worker", "воркеры", "ワーカー", "워커", "pekerja"],
   workspace: ["工作区", "espace de travail", "Arbeitsbereich", "рабочее пространство", "ワークスペース", "작업 공간", "ruang kerja"],
   a: ["一个", "un", "ein", "один", "1つの", "하나의", "satu"],
   action: ["操作", "action", "Aktion", "действие", "操作", "작업", "tindakan"],
@@ -284,6 +291,7 @@ const words: Record<string, readonly string[]> = {
   shared: ["共享", "partagé", "geteilt", "общий", "共有", "공유", "dikongsi"],
   signals: ["信号", "signaux", "Signale", "сигналы", "シグナル", "신호", "isyarat"],
   signature: ["签名", "signature", "Signatur", "подпись", "署名", "서명", "tandatangan"],
+  single: ["单", "unique", "einzel", "одна", "単一", "단일", "tunggal"],
   significant: ["显著", "significatif", "signifikant", "значительный", "重要", "중요", "ketara"],
   snapshot: ["快照", "instantané", "Snapshot", "снимок", "スナップショット", "스냅샷", "petikan"],
   states: ["状态", "états", "Zustände", "состояния", "状態", "상태", "keadaan"],
@@ -313,6 +321,7 @@ const words: Record<string, readonly string[]> = {
   verify: ["验证", "vérifier", "prüfen", "проверить", "確認", "검증", "sahkan"],
   versioned: ["已版本化", "versionné", "versioniert", "версионированный", "バージョン管理済み", "버전 관리됨", "berversi"],
   video: ["视频", "vidéo", "Video", "видео", "動画", "비디오", "video"],
+  vision: ["视觉", "vision", "Vision", "зрение", "ビジョン", "비전", "penglihatan"],
   weight: ["权重", "poids", "Gewichtung", "вес", "重み", "가중치", "berat"],
   win: ["胜出", "gagner", "gewinnen", "победить", "勝つ", "승리", "menang"],
   with: ["带有", "avec", "mit", "с", "と", "함께", "dengan"],
@@ -351,6 +360,8 @@ const staticSourceTexts = new Set([
   "Run executive summary", "Completion", "Accuracy", "Latency", "Loading summary...", "Durable run log", "Refreshes with live run events", "No task or sample lifecycle events have been recorded.", "Capability evidence", "No scored capability evidence yet.", "Score", "Samples", "Run signals", "No significant anomalies or regressions detected.", "Loading next page…", "Load next evidence page", "Reviewer ID", "Review stage", "Primary review", "Secondary review", "Adjudication", "Rubric (JSON)", "Labels (comma-separated)", "This records a final decision over all saved primary and secondary reviews.", "Save review", "Review agreement", "Open a sample to load review agreement.", "Saved reviews", "No human review has been saved for this attempt.", "LLM-as-judge", "Independent judge endpoint", "Request judge assessment", "Judge evidence", "No independent judge assessment has been recorded.", "Report artifacts",
   "Blinded pairwise judge", "Model identities are never sent to the judge.", "Compare with matching sample attempt", "Single-answer judge assessment", "Or paste a sample attempt ID", "Run reverse-order swap test", "Run blinded comparison", "Judge agreement", "Open a sample to load judge agreement.", "Analysis heatmaps", "Every cell keeps its sample count, 95% confidence interval, latency, cost, and optional baseline delta.", "Baseline run", "No baseline", "Interactive capability chart", "Click or use Enter on a bar to inspect a model-capability result.", "Complete a run to populate interactive score bars.", "Complete runs to populate this analysis.", "Row", "Column", "Samples / 95% CI", "Baseline / Δ", "Errors", "A-only correct", "B-only correct", "Latency difference", "Cost difference", "Metric", "Success rate", "P95 latency", "Output tokens",
   "My local model", "Optional for a local Ollama service", "Stored encrypted", "Unlimited", "Use endpoint capacity", "production, vision", "sample, prediction, error", "Unable to reach the evaluation service.",
+  "configured", "cost not configured", "executed", "paused", "resumed", "cancelled", "single model", "multi model", "prompt comparison", "Capability probing sends small requests to this provider and may incur API charges. Continue?", "Remove the cached data for {{dataset}} v{{version}}? The registered version will remain.",
+  "Endpoint saved. Test its connection before starting a run.", "Capability probe completed. Declared capability settings were not changed.", "User capability declaration saved alongside detection evidence.", "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}.", "Preflight blocked: {{issues}}", "{{benchmark}} queued with an immutable configuration snapshot.", "Run cloned with a new immutable configuration snapshot.", "Benchmark rerun queued with a link to its source run.", "Failed samples were queued as new attempts.", "Run archived. Its evidence remains available through the API until deleted.", "Run {{action}}.", "Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.", "{{benchmark}} is now {{status}}.", "{{dataset}} download paused.", "{{format}} {{reportType}} report generated.", "Read-only share link (expires {{expires}}): {{url}}", "Versioned prompt package saved.", "Dataset version registered.", "User created. Copy this API token now: {{token}}", "Versioned evaluation suite saved.", "{{count}} suite run(s) queued.", "Validated media asset uploaded and selected for the custom run.", "Select an available endpoint and upload or select a media asset first.", "Custom multimodal run queued with an immutable asset snapshot.", "License accepted. The dataset can now be downloaded.", "Dataset downloaded, verified, and cached.", "Dataset upload checksum verified and stored in the local dataset cache.", "Dataset cache checksum and size were verified.", "Dataset cache removed. You can download or upload it again.", "Choose two different runs from the same benchmark version.", "Human review saved separately from automated results.", "Blinded pairwise judge evidence and swap-test results saved.", "Independent LLM-as-judge assessment saved with rationale evidence.", "Task priority updated to {{priority}}.",
 ]);
 
 export function translateStaticText(locale: Locale, text: string): string {
@@ -363,5 +374,9 @@ export function translateStaticText(locale: Locale, text: string): string {
   const exact = phrases[locale][source];
   if (exact) return `${prefix}${exact}${suffix}`;
   const wordIndex = localeIds.indexOf(locale) - 1;
-  return `${prefix}${source.replace(/[A-Za-z]+(?:-[A-Za-z]+)*/g, (token) => words[token.toLowerCase()]?.[wordIndex] ?? token)}${suffix}`;
+  return `${prefix}${source.replace(/\{\{[A-Za-z]+\}\}|[A-Za-z]+(?:-[A-Za-z]+)*/g, (token) => token.startsWith("{{") ? token : words[token.toLowerCase()]?.[wordIndex] ?? token)}${suffix}`;
+}
+
+export function translateStaticTemplate(locale: Locale, template: string, values: Record<string, string | number> = {}): string {
+  return translateStaticText(locale, template).replace(/\{\{([A-Za-z]+)\}\}/g, (_match, key: string) => String(values[key] ?? ""));
 }

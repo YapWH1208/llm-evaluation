@@ -30,9 +30,9 @@ import {
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
-import { localeIds, localeNames, reportCopy, resolveLocale, type Locale } from "./i18n/catalog";
+import { localeIds, localeNames, reportCopy, type Locale } from "./i18n/catalog";
 import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./i18n/formatters";
-import { translateStaticText } from "./i18n/operationalCopy";
+import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
 import { StaticCopy } from "./i18n/StaticCopy";
 import "./evidence.css";
@@ -242,8 +242,16 @@ export default function App() {
     return api.subscribeToWorkerEvents(update);
   }, [view, refresh]);
 
+  function showNotice(template: string, values?: Record<string, string | number>) {
+    setNotice(translateStaticTemplate(locale, template, values));
+  }
+
   function showError(error: unknown) {
-    setNotice(error instanceof ApiError ? error.message : error instanceof Error ? error.message : translateStaticText(resolveLocale(document.documentElement.lang), "Unable to reach the evaluation service."));
+    if (error instanceof ApiError || error instanceof Error) {
+      setNotice(error.message);
+      return;
+    }
+    showNotice("Unable to reach the evaluation service.");
   }
 
   async function createEndpoint(event: FormEvent) {
@@ -276,7 +284,7 @@ export default function App() {
         currency: form.currency.toUpperCase(),
       });
       setForm(initialEndpoint);
-      setNotice("Endpoint saved. Test its connection before starting a run.");
+      showNotice("Endpoint saved. Test its connection before starting a run.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -291,12 +299,12 @@ export default function App() {
   }
 
   async function probeCapabilities(endpointId: string) {
-    if (!window.confirm("Capability probing sends small requests to this provider and may incur API charges. Continue?")) return;
+    if (!window.confirm(translateStaticTemplate(locale, "Capability probing sends small requests to this provider and may incur API charges. Continue?"))) return;
     setBusy(`capabilities-${endpointId}`);
     try {
       const detected = await api.detectCapabilities(endpointId);
       setCapabilities((current) => ({ ...current, [endpointId]: detected }));
-      setNotice("Capability probe completed. Declared capability settings were not changed.");
+      showNotice("Capability probe completed. Declared capability settings were not changed.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -305,7 +313,7 @@ export default function App() {
     try {
       const updated = await api.declareCapability(endpointId, capability.capability_key, status);
       setCapabilities((current) => ({ ...current, [endpointId]: (current[endpointId] ?? []).map((item) => item.capability_key === updated.capability_key ? updated : item) }));
-      setNotice("User capability declaration saved alongside detection evidence.");
+      showNotice("User capability declaration saved alongside detection evidence.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -314,8 +322,10 @@ export default function App() {
     try {
       const [benchmarkId, benchmarkVersion] = selectedBenchmark.split("@", 2);
       const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
-      const cost = preflight.estimated_cost === null ? "cost not configured" : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
-      setNotice(preflight.can_queue ? `Preflight ready: ${preflight.sample_count} samples, ${preflight.estimated_requests} requests, ${preflight.estimated_input_tokens + preflight.estimated_output_tokens} estimated tokens, ${cost}.` : `Preflight blocked: ${preflight.issues.join(" ")}`);
+      const cost = preflight.estimated_cost === null ? translateStaticTemplate(locale, "cost not configured") : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
+      showNotice(preflight.can_queue ? "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}." : "Preflight blocked: {{issues}}", preflight.can_queue
+        ? { samples: preflight.sample_count, requests: preflight.estimated_requests, tokens: preflight.estimated_input_tokens + preflight.estimated_output_tokens, cost }
+        : { issues: preflight.issues.join(" ") });
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -326,7 +336,7 @@ export default function App() {
       const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
       await selectRun(run.id);
       setView("runs");
-      setNotice(`${benchmarkId}@${benchmarkVersion} queued with an immutable configuration snapshot.`);
+      showNotice("{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: `${benchmarkId}@${benchmarkVersion}` });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -342,7 +352,14 @@ export default function App() {
                 : action === "rerun" ? await api.rerunBenchmark(run.id)
                   : action === "retry" ? await api.retryFailedRun(run.id)
                     : await api.archiveRun(run.id);
-      setNotice(action === "clone" ? "Run cloned with a new immutable configuration snapshot." : action === "rerun" ? "Benchmark rerun queued with a link to its source run." : action === "retry" ? "Failed samples were queued as new attempts." : action === "archive" ? "Run archived. Its evidence remains available through the API until deleted." : `Run ${action === "execute" ? "executed" : action + "d"}.`);
+      if (action === "clone") showNotice("Run cloned with a new immutable configuration snapshot.");
+      else if (action === "rerun") showNotice("Benchmark rerun queued with a link to its source run.");
+      else if (action === "retry") showNotice("Failed samples were queued as new attempts.");
+      else if (action === "archive") showNotice("Run archived. Its evidence remains available through the API until deleted.");
+      else {
+        const actionResult = action === "execute" ? "executed" : action === "pause" ? "paused" : action === "resume" ? "resumed" : "cancelled";
+        showNotice("Run {{action}}.", { action: translateStaticTemplate(locale, actionResult) });
+      }
       await selectRun(result.id);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -354,7 +371,7 @@ export default function App() {
       const value = runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "");
       const updated = await api.updateRunConcurrency(run.id, optionalNumber(value));
       setRunConcurrencyEdits((current) => ({ ...current, [run.id]: updated.max_concurrency?.toString() ?? "" }));
-      setNotice("Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.");
+      showNotice("Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -364,7 +381,7 @@ export default function App() {
     setBusy(`benchmark-${benchmark.id}`);
     try {
       await api.updateBenchmark(benchmark.id, { status });
-      setNotice(`${benchmark.display_name} is now ${status}.`);
+      showNotice("{{benchmark}} is now {{status}}.", { benchmark: benchmark.display_name, status });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -373,7 +390,7 @@ export default function App() {
     setBusy(`dataset-${dataset.id}`);
     try {
       await api.pauseDataset(dataset.id);
-      setNotice(`${dataset.dataset_id} download paused.`);
+      showNotice("{{dataset}} download paused.", { dataset: dataset.dataset_id });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -407,7 +424,7 @@ export default function App() {
     try {
       const comparisonType = ["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType);
       const report = await api.createReport(runId, format, reportType, comparisonType && relatedReportRunId ? [relatedReportRunId] : []);
-      setNotice(`${format.toUpperCase()} ${reportType.replaceAll("_", " ")} report generated.`);
+      showNotice("{{format}} {{reportType}} report generated.", { format: format.toUpperCase(), reportType: translateStaticTemplate(locale, reportType.replaceAll("_", " ")) });
       const reportUrl = await api.downloadReport(report.id);
       window.open(reportUrl, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
@@ -426,7 +443,7 @@ export default function App() {
         allow_download: shareForm.allow_download,
         include_evidence: shareForm.include_evidence,
       });
-      setNotice(`Read-only share link (expires ${formatDate(share.expires_at)}): ${share.share_url}`);
+      showNotice("Read-only share link (expires {{expires}}): {{url}}", { expires: formatDate(share.expires_at) ?? "--", url: share.share_url ?? "--" });
       return share;
     } finally { setBusy(null); }
   }
@@ -437,7 +454,7 @@ export default function App() {
     try {
       await api.createPromptPackage({ ...promptForm, system_message: promptForm.system_message || null, few_shot_examples: parseJsonArray(promptForm.few_shot_examples, "Few-shot examples"), output_format: parseJsonObject(promptForm.output_format, "Output format"), response_parser: parseJsonObject(promptForm.response_parser, "Response parser"), scoring_rule: parseJsonObject(promptForm.scoring_rule, "Scoring rule"), change_log: promptForm.change_log || null });
       setPromptForm(initialPrompt);
-      setNotice("Versioned prompt package saved.");
+      showNotice("Versioned prompt package saved.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -448,7 +465,7 @@ export default function App() {
     try {
       await api.createDataset({ ...datasetForm, source_url: datasetForm.source_url || null, checksum: datasetForm.checksum || null, credential_binding_id: datasetForm.credential_binding_id || null, license_text: datasetForm.license_text || null });
       setDatasetForm(initialDataset);
-      setNotice("Dataset version registered.");
+      showNotice("Dataset version registered.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -459,7 +476,7 @@ export default function App() {
     try {
       const created = await api.createUser({ ...userForm, max_concurrency: optionalNumber(userForm.max_concurrency) });
       setUserForm(initialUser);
-      setNotice(`User created. Copy this API token now: ${created.api_token}`);
+      showNotice("User created. Copy this API token now: {{token}}", { token: created.api_token });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -471,12 +488,12 @@ export default function App() {
       return { benchmark_id, version };
     });
     setBusy("suite");
-    try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list, default_request_body: parseJsonObject(suiteForm.default_request_body, "Suite default request body"), default_prompt_overrides: parseJsonObject(suiteForm.default_prompt_overrides, "Suite default prompt overrides"), weight_configuration: parseJsonObject(suiteForm.weight_configuration, "Suite weight configuration") }); setSuiteForm(initialSuite); setNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
+    try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list, default_request_body: parseJsonObject(suiteForm.default_request_body, "Suite default request body"), default_prompt_overrides: parseJsonObject(suiteForm.default_prompt_overrides, "Suite default prompt overrides"), weight_configuration: parseJsonObject(suiteForm.weight_configuration, "Suite weight configuration") }); setSuiteForm(initialSuite); showNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function queueSuite(suiteId: string, endpointId: string) {
     setBusy(`suite-${suiteId}`);
-    try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency)); setNotice(`${nextRuns.length} suite run(s) queued.`); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
+    try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency)); showNotice("{{count}} suite run(s) queued.", { count: nextRuns.length }); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function uploadAsset(event: ChangeEvent<HTMLInputElement>) {
@@ -488,7 +505,7 @@ export default function App() {
       const asset = await api.uploadAsset({ filename: file.name, mime_type: file.type, base64_data: dataUrl.split(",", 2)[1] ?? "" });
       setUploadedAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
       setMultimodalForm((current) => ({ ...current, asset_id: asset.id }));
-      setNotice("Validated media asset uploaded and selected for the custom run.");
+      showNotice("Validated media asset uploaded and selected for the custom run.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -496,7 +513,7 @@ export default function App() {
     event.preventDefault();
     const asset = uploadedAssets.find((item) => item.id === multimodalForm.asset_id);
     if (!asset || !multimodalForm.endpoint_id) {
-      setNotice("Select an available endpoint and upload or select a media asset first.");
+      showNotice("Select an available endpoint and upload or select a media asset first.");
       return;
     }
     setBusy("multimodal-run");
@@ -510,7 +527,7 @@ export default function App() {
       setMultimodalForm(initialMultimodal);
       await selectRun(run.id);
       setView("runs");
-      setNotice("Custom multimodal run queued with an immutable asset snapshot.");
+      showNotice("Custom multimodal run queued with an immutable asset snapshot.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -520,10 +537,10 @@ export default function App() {
     try {
       if (dataset.license_text && !dataset.license_accepted_at) {
         await api.acceptDatasetLicense(dataset.id);
-        setNotice("License accepted. The dataset can now be downloaded.");
+        showNotice("License accepted. The dataset can now be downloaded.");
       } else {
         await api.downloadDataset(dataset.id);
-        setNotice("Dataset downloaded, verified, and cached.");
+        showNotice("Dataset downloaded, verified, and cached.");
       }
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -536,28 +553,28 @@ export default function App() {
     try {
       const dataUrl = await fileAsDataUrl(file);
       await api.uploadDataset(dataset.id, { filename: file.name, base64_data: dataUrl.split(",", 2)[1] ?? "" });
-      setNotice("Dataset upload checksum verified and stored in the local dataset cache.");
+      showNotice("Dataset upload checksum verified and stored in the local dataset cache.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function validateDataset(dataset: Dataset) {
     setBusy(`dataset-validate-${dataset.id}`);
-    try { await api.validateDataset(dataset.id); setNotice("Dataset cache checksum and size were verified."); await refresh(); }
+    try { await api.validateDataset(dataset.id); showNotice("Dataset cache checksum and size were verified."); await refresh(); }
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function clearDatasetCache(dataset: Dataset) {
-    if (!window.confirm(`Remove the cached data for ${dataset.dataset_id} v${dataset.version}? The registered version will remain.`)) return;
+    if (!window.confirm(translateStaticTemplate(locale, "Remove the cached data for {{dataset}} v{{version}}? The registered version will remain.", { dataset: dataset.dataset_id, version: dataset.version }))) return;
     setBusy(`dataset-clear-${dataset.id}`);
-    try { await api.clearDatasetCache(dataset.id); setNotice("Dataset cache removed. You can download or upload it again."); await refresh(); }
+    try { await api.clearDatasetCache(dataset.id); showNotice("Dataset cache removed. You can download or upload it again."); await refresh(); }
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function compareRuns(event: FormEvent) {
     event.preventDefault();
     if (!comparisonRunA || !comparisonRunB || comparisonRunA === comparisonRunB) {
-      setNotice("Choose two different runs from the same benchmark version.");
+      showNotice("Choose two different runs from the same benchmark version.");
       return;
     }
     setBusy("compare");
@@ -592,7 +609,7 @@ export default function App() {
       const [nextReviews, nextAgreement] = await Promise.all([api.listReviews(selectedAttempt.id), api.getReviewAgreement(selectedAttempt.id)]);
       setReviews(nextReviews);
       setReviewAgreement(nextAgreement);
-      setNotice("Human review saved separately from automated results.");
+      showNotice("Human review saved separately from automated results.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -607,7 +624,7 @@ export default function App() {
       const [nextAssessments, nextAgreement] = await Promise.all([api.listJudgeAssessments(selectedAttempt.id), api.getJudgeAgreement(selectedAttempt.id)]);
       setJudgeAssessments(nextAssessments);
       setJudgeAgreement(nextAgreement);
-      setNotice(judgeForm.comparison_attempt_id.trim() ? "Blinded pairwise judge evidence and swap-test results saved." : "Independent LLM-as-judge assessment saved with rationale evidence.");
+      showNotice(judgeForm.comparison_attempt_id.trim() ? "Blinded pairwise judge evidence and swap-test results saved." : "Independent LLM-as-judge assessment saved with rationale evidence.");
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -616,7 +633,7 @@ export default function App() {
     try {
       const updated = await api.updateTaskPriority(task.id, priority);
       setTasks((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setNotice(`Task priority updated to ${updated.priority}.`);
+      showNotice("Task priority updated to {{priority}}.", { priority: updated.priority });
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
