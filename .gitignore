@@ -2,3 +2,5 @@
 .code-review-graph/
 *.db
 /data
+/.vite
+reasonix.toml

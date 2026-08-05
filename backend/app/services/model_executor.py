@@ -23,7 +23,7 @@ from app.services.outbound_network import (
     read_bounded_response,
     validate_outbound_url,
 )
-from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
+from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, is_sensitive_body_key, provider_headers
 from app.services.request_body import effective_request_options, request_snapshot_metadata
 
 
@@ -231,7 +231,7 @@ def _allowed_defaults(defaults: dict[str, object]) -> dict[str, Any]:
     return {
         key: value
         for key, value in defaults.items()
-        if key not in PROTECTED_REQUEST_FIELDS
+        if key not in PROTECTED_REQUEST_FIELDS and not is_sensitive_body_key(key)
     }
 
 

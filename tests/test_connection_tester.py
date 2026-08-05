@@ -76,6 +76,22 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
+def test_connection_probe_accepts_a_successful_provider_response_without_evaluation_payload() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Provider-specific response",
+        base_url="https://models.example.test/v1",
+        model_name="test-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
+
+    result = OpenAIChatCompletionsConnectionTester(
+        httpx.MockTransport(lambda _request: httpx.Response(200, json={"status": "ok", "request_id": "provider-123"}))
+    ).test(endpoint, "secret")
+
+    assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
 def test_connection_probe_adapts_anthropic_messages_shape() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url == "https://models.example.test/v1/messages"
@@ -157,6 +173,17 @@ def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
             "message": "Connection succeeded.",
             "provider_status_code": 200,
             "tested_at": probe.json()["tested_at"],
+            "request": {
+                "method": "POST",
+                "url": "https://models.example.test/v1/chat/completions",
+                "body": {
+                    "model": "example-model",
+                    "messages": [{"role": "user", "content": "Respond with the single word OK."}],
+                    "temperature": 0,
+                    "max_tokens": 8,
+                    "stream": False,
+                },
+            },
         }
 
         with app.state.database.get_session() as session:
@@ -165,3 +192,56 @@ def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
             assert stored.status == "available"
             assert stored.last_connection_error is None
             assert stored.last_tested_at is not None
+
+
+def test_connection_probe_rejects_non_json_successful_response() -> None:
+    endpoint = ModelEndpoint(
+        display_name="HTML page",
+        base_url="https://models.example.test/v1",
+        model_name="test-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
+    result = OpenAIChatCompletionsConnectionTester(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=b"<html><body>ok</body></html>"))
+    ).test(endpoint, "secret")
+    assert result.success is False
+    assert "non-JSON" in result.message
+
+
+def test_connection_probe_accepts_an_empty_successful_response() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Empty body",
+        base_url="https://models.example.test/v1",
+        model_name="test-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
+    result = OpenAIChatCompletionsConnectionTester(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=b""))
+    ).test(endpoint, "secret")
+    assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
+def test_connection_probe_omits_sensitive_default_body_keys() -> None:
+    observed_body: dict[str, object] | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal observed_body
+        observed_body = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    endpoint = ModelEndpoint(
+        display_name="Stashed keys",
+        base_url="https://models.example.test/v1",
+        model_name="test-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+        default_request_body={"api_key": "stashed-secret", "secret_token": "stashed-token", "temperature": 0.5},
+    )
+    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    assert result.success is True
+    assert observed_body is not None
+    assert "api_key" not in observed_body
+    assert "secret_token" not in observed_body
+    assert observed_body["temperature"] == 0

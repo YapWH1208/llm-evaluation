@@ -23,6 +23,16 @@ const en = {
   "locale.label": "Workspace language",
   "locale.unsupported": "Unsupported locale",
   "provider.missing": "Translation provider is unavailable.",
+  "datasetRun.title": "Dataset evaluation",
+  "datasetRun.dataset": "Dataset",
+  "datasetRun.promptPackage": "Prompt package (optional)",
+  "datasetRun.referenceField": "Reference field",
+  "datasetRun.referenceFieldHint": "Record field holding the expected answer",
+  "datasetRun.sampleLimit": "Sample limit",
+  "datasetRun.endpoint": "Endpoint",
+  "datasetRun.nonReadyHint": "Only ready datasets are listed. Download and verify other versions first.",
+  "datasetRun.queue": "Queue dataset run",
+  "datasetRun.queued": "Dataset evaluation run queued.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -38,6 +48,16 @@ const zhCN: TranslationCatalog = {
   "locale.label": "工作区语言",
   "locale.unsupported": "不支持的语言区域",
   "provider.missing": "翻译提供程序不可用。",
+  "datasetRun.title": "数据集评测",
+  "datasetRun.dataset": "数据集",
+  "datasetRun.promptPackage": "提示词包（可选）",
+  "datasetRun.referenceField": "参考答案字段",
+  "datasetRun.referenceFieldHint": "保存预期答案的记录字段",
+  "datasetRun.sampleLimit": "样本数量上限",
+  "datasetRun.endpoint": "端点",
+  "datasetRun.nonReadyHint": "仅列出已就绪的数据集。请先下载并验证其他版本。",
+  "datasetRun.queue": "将数据集评测加入队列",
+  "datasetRun.queued": "数据集评测已加入队列。",
 };
 
 const fr: TranslationCatalog = {
@@ -50,6 +70,16 @@ const fr: TranslationCatalog = {
   "locale.label": "Langue de l’espace de travail",
   "locale.unsupported": "Langue non prise en charge",
   "provider.missing": "Le fournisseur de traductions est indisponible.",
+  "datasetRun.title": "Évaluation du jeu de données",
+  "datasetRun.dataset": "Jeu de données",
+  "datasetRun.promptPackage": "Pack de prompts (facultatif)",
+  "datasetRun.referenceField": "Champ de référence",
+  "datasetRun.referenceFieldHint": "Champ de l’enregistrement contenant la réponse attendue",
+  "datasetRun.sampleLimit": "Limite d’échantillons",
+  "datasetRun.endpoint": "Point de terminaison",
+  "datasetRun.nonReadyHint": "Seuls les jeux de données prêts sont répertoriés. Téléchargez et vérifiez d’abord les autres versions.",
+  "datasetRun.queue": "Mettre l’évaluation du jeu de données en file",
+  "datasetRun.queued": "Évaluation du jeu de données mise en file.",
 };
 
 const de: TranslationCatalog = {
@@ -62,6 +92,16 @@ const de: TranslationCatalog = {
   "locale.label": "Arbeitsbereichssprache",
   "locale.unsupported": "Nicht unterstützte Sprache",
   "provider.missing": "Der Übersetzungsanbieter ist nicht verfügbar.",
+  "datasetRun.title": "Datensatz-Evaluierung",
+  "datasetRun.dataset": "Datensatz",
+  "datasetRun.promptPackage": "Prompt-Paket (optional)",
+  "datasetRun.referenceField": "Referenzfeld",
+  "datasetRun.referenceFieldHint": "Datensatzfeld mit der erwarteten Antwort",
+  "datasetRun.sampleLimit": "Stichprobenlimit",
+  "datasetRun.endpoint": "Endpunkt",
+  "datasetRun.nonReadyHint": "Nur bereite Datensätze werden aufgelistet. Laden Sie andere Versionen zuerst herunter und prüfen Sie sie.",
+  "datasetRun.queue": "Datensatz-Evaluierung einreihen",
+  "datasetRun.queued": "Datensatz-Evaluierung in die Warteschlange eingereiht.",
 };
 
 const ru: TranslationCatalog = {
@@ -74,6 +114,16 @@ const ru: TranslationCatalog = {
   "locale.label": "Язык рабочего пространства",
   "locale.unsupported": "Неподдерживаемая локаль",
   "provider.missing": "Поставщик переводов недоступен.",
+  "datasetRun.title": "Оценка набора данных",
+  "datasetRun.dataset": "Набор данных",
+  "datasetRun.promptPackage": "Пакет промптов (необязательно)",
+  "datasetRun.referenceField": "Поле эталонного ответа",
+  "datasetRun.referenceFieldHint": "Поле записи с ожидаемым ответом",
+  "datasetRun.sampleLimit": "Лимит выборки",
+  "datasetRun.endpoint": "Конечная точка",
+  "datasetRun.nonReadyHint": "Перечислены только готовые наборы данных. Сначала загрузите и проверьте другие версии.",
+  "datasetRun.queue": "Поставить оценку набора данных в очередь",
+  "datasetRun.queued": "Оценка набора данных поставлена в очередь.",
 };
 
 const ja: TranslationCatalog = {
@@ -86,6 +136,16 @@ const ja: TranslationCatalog = {
   "locale.label": "ワークスペースの言語",
   "locale.unsupported": "サポートされていないロケール",
   "provider.missing": "翻訳プロバイダーを利用できません。",
+  "datasetRun.title": "データセット評価",
+  "datasetRun.dataset": "データセット",
+  "datasetRun.promptPackage": "プロンプト パッケージ（省略可能）",
+  "datasetRun.referenceField": "参照フィールド",
+  "datasetRun.referenceFieldHint": "期待される回答を保持するレコード フィールド",
+  "datasetRun.sampleLimit": "サンプル上限",
+  "datasetRun.endpoint": "エンドポイント",
+  "datasetRun.nonReadyHint": "準備ができたデータセットのみが表示されます。他のバージョンを先にダウンロードして検証してください。",
+  "datasetRun.queue": "データセット評価をキューに入れる",
+  "datasetRun.queued": "データセット評価がキューに入りました。",
 };
 
 const ko: TranslationCatalog = {
@@ -98,6 +158,16 @@ const ko: TranslationCatalog = {
   "locale.label": "작업 공간 언어",
   "locale.unsupported": "지원하지 않는 로캘",
   "provider.missing": "번역 공급자를 사용할 수 없습니다.",
+  "datasetRun.title": "데이터 세트 평가",
+  "datasetRun.dataset": "데이터 세트",
+  "datasetRun.promptPackage": "프롬프트 패키지(선택 사항)",
+  "datasetRun.referenceField": "참조 필드",
+  "datasetRun.referenceFieldHint": "예상 답변이 포함된 레코드 필드",
+  "datasetRun.sampleLimit": "샘플 제한",
+  "datasetRun.endpoint": "엔드포인트",
+  "datasetRun.nonReadyHint": "준비된 데이터 세트만 나열됩니다. 다른 버전을 먼저 다운로드하여 확인하세요.",
+  "datasetRun.queue": "데이터 세트 평가 대기열에 추가",
+  "datasetRun.queued": "데이터 세트 평가가 대기열에 추가되었습니다.",
 };
 
 const ms: TranslationCatalog = {
@@ -110,6 +180,16 @@ const ms: TranslationCatalog = {
   "locale.label": "Bahasa ruang kerja",
   "locale.unsupported": "Bahasa tidak disokong",
   "provider.missing": "Penyedia terjemahan tidak tersedia.",
+  "datasetRun.title": "Penilaian set data",
+  "datasetRun.dataset": "Set data",
+  "datasetRun.promptPackage": "Pakej prom (pilihan)",
+  "datasetRun.referenceField": "Medan rujukan",
+  "datasetRun.referenceFieldHint": "Medan rekod yang mengandungi jawapan yang dijangkakan",
+  "datasetRun.sampleLimit": "Had sampel",
+  "datasetRun.endpoint": "Titik akhir",
+  "datasetRun.nonReadyHint": "Hanya set data yang sedia disenaraikan. Muat turun dan sahkan versi lain dahulu.",
+  "datasetRun.queue": "Letakkan penilaian set data dalam baris",
+  "datasetRun.queued": "Penilaian set data telah dimasukkan ke dalam baris.",
 };
 
 export const catalogs: Record<Locale, TranslationCatalog> = { en, "zh-CN": zhCN, fr, de, ru, ja, ko, ms };

@@ -13,6 +13,7 @@ import json
 from typing import Any
 
 from app.benchmarks import get_installed_plugin
+from app.benchmarks.registry import BenchmarkSample
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
@@ -24,6 +25,13 @@ from app.services.evaluation_runs import (
     _sample_modality as _benchmark_sample_modality,
     _split_samples_for_endpoint_budget,
 )
+from app.services.dataset_runs import (
+    DATASET_RUN_BENCHMARK_ID,
+    DATASET_RUN_BENCHMARK_VERSION,
+    DatasetRunError,
+    _build_dataset_samples,
+)
+from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import recompute_mongo_aggregate_metrics
@@ -328,6 +336,304 @@ def create_mongo_benchmark_run(
                 },
             )
     return run
+
+
+def create_mongo_dataset_run(
+    store: MongoDocumentStore,
+    *,
+    data_root: str,
+    model_endpoint_id: str,
+    dataset_version_id: str,
+    prompt_package_id: str | None,
+    reference_field: str,
+    sample_limit: int,
+    request_body_override: dict[str, object] | None = None,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
+) -> dict[str, Any]:
+    endpoint = store.get_document("model_endpoints", model_endpoint_id)
+    if endpoint is None:
+        raise MongoRunExecutionError("Model endpoint not found.")
+    if endpoint.get("status") != "available":
+        raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
+    dataset = store.get_document("dataset_versions", dataset_version_id)
+    if dataset is None:
+        raise MongoRunExecutionError("Dataset version not found.")
+    if dataset.get("status") != "ready" or not dataset.get("prepared_path"):
+        raise MongoRunExecutionError(f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it before running.")
+    prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
+        raise MongoRunExecutionError("Prompt package not found.")
+    if not reference_field.strip():
+        raise MongoRunExecutionError("A reference field is required.")
+    try:
+        samples, skipped = _build_dataset_samples(
+            prepared_path=dataset["prepared_path"],
+            data_root=data_root,
+            sample_limit=sample_limit,
+            reference_field=reference_field.strip(),
+            prompt_package=_proxy(prompt_package) if prompt_package else None,
+            dataset_id=dataset["dataset_id"],
+            dataset_version=dataset["version"],
+        )
+    except (DatasetRecordError, DatasetRunError) as error:
+        raise MongoRunExecutionError(str(error)) from error
+    if not samples:
+        raise MongoRunExecutionError(
+            f"None of the first {sample_limit} records contain the reference field {reference_field!r}; "
+            "check the field name or register a different dataset."
+        )
+    compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
+    if compatibility["unsupported"]:
+        raise MongoRunExecutionError(
+            "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
+        )
+    scoring_rule = dict(prompt_package.get("scoring_rule")) if prompt_package and isinstance(prompt_package.get("scoring_rule"), dict) and prompt_package.get("scoring_rule") else {"type": "exact_match"}
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise MongoRunExecutionError(f"Scoring rule is invalid: {error}") from error
+    request_body_evidence = _mongo_request_body_evidence(
+        endpoint=endpoint,
+        benchmark_manifest=_dataset_run_manifest(),
+        suite_snapshot=None,
+        request_body_override=request_body_override,
+    )
+    frozen_datasets = [{
+        "dataset_id": dataset["dataset_id"],
+        "version": dataset["version"],
+        "revision": dataset.get("revision", "default"),
+        "dataset_version_id": dataset["id"],
+    }]
+    now = _utc_now()
+    snapshot = {
+        "benchmark": {"id": DATASET_RUN_BENCHMARK_ID, "version": DATASET_RUN_BENCHMARK_VERSION, "source": "user", "manifest": _dataset_run_manifest()},
+        "endpoint": {
+            "id": endpoint["id"],
+            "base_url": endpoint["base_url"],
+            "model_name": endpoint["model_name"],
+            "protocol_profile": endpoint.get("protocol_profile", "openai_chat_completions"),
+            "default_request_body": endpoint.get("default_request_body", {}),
+            "timeout_seconds": endpoint.get("timeout_seconds", 60),
+            "custom_headers": endpoint.get("custom_headers", {}),
+            "input_cost_per_million": endpoint.get("input_cost_per_million"),
+            "output_cost_per_million": endpoint.get("output_cost_per_million"),
+        },
+        "datasets": frozen_datasets,
+        "dataset_version": {"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default")},
+        "reference_field": reference_field.strip(),
+        "sample_limit": sample_limit,
+        "skipped_records": skipped,
+        "sample_ids": [sample.sample_id for sample in samples],
+        "capability_compatibility": compatibility,
+        "prompt_package": (
+            {"id": prompt_package["id"], "name": prompt_package["name"], "version": prompt_package["version"],
+             "system_message": prompt_package.get("system_message"), "user_template": prompt_package["user_template"],
+             "few_shot_examples": prompt_package.get("few_shot_examples", []), "scoring_rule": prompt_package.get("scoring_rule")}
+            if prompt_package else None
+        ),
+        "request_body_evidence": request_body_evidence,
+    }
+    run = store.insert_document(
+        "evaluation_runs",
+        {
+            "model_endpoint_id": model_endpoint_id,
+            "prompt_package_id": prompt_package_id,
+            "suite_id": None,
+            "created_by": created_by,
+            "max_concurrency": max_concurrency,
+            "benchmark_id": DATASET_RUN_BENCHMARK_ID,
+            "benchmark_version": DATASET_RUN_BENCHMARK_VERSION,
+            "configuration_snapshot": snapshot,
+            "status": "queued",
+            "total_samples": len(samples),
+            "completed_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "created_at": now,
+            "started_at": None,
+            "completed_at": None,
+            "archived_at": None,
+        },
+    )
+    dataset_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": None,
+            "task_type": "dataset_preparation",
+            "payload": {"datasets": frozen_datasets, "prepared_inline": False},
+            "status": "pending",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    benchmark_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": dataset_task["id"],
+            "task_type": "benchmark",
+            "payload": {"benchmark_id": DATASET_RUN_BENCHMARK_ID, "benchmark_version": DATASET_RUN_BENCHMARK_VERSION, "planned_samples": len(samples)},
+            "status": "pending",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    try:
+        shards = _split_samples_for_endpoint_budget(tuple(samples), _dataset_run_manifest(), endpoint)
+    except RunCreationError as error:
+        raise MongoRunExecutionError(str(error)) from error
+    for shard_index, shard_samples in enumerate(shards, start=1):
+        task = store.insert_document(
+            "task_units",
+            {
+                "run_id": run["id"],
+                "parent_task_id": benchmark_task["id"],
+                "task_type": "evaluation_shard",
+                "payload": {
+                    "sample_ids": [sample.sample_id for sample in shard_samples],
+                    "estimated_request_count": len(shard_samples),
+                    "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                    "sample_token_estimates": {sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples},
+                    "shard_index": shard_index,
+                    "shard_count": len(shards),
+                    "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+                },
+                "status": "pending",
+                "priority": 0,
+                "attempt_count": 0,
+                "leased_by": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "next_retry_at": None,
+                "heartbeat_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        for sample in shard_samples:
+            store.insert_document(
+                "sample_attempts",
+                {
+                    "run_id": run["id"],
+                    "task_id": task["id"],
+                    "sample_id": sample.sample_id,
+                    "attempt_number": 1,
+                    "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
+                    "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    "request_snapshot": None,
+                    "raw_response": None,
+                    "parsed_prediction": None,
+                    "score": None,
+                    "latency_ms": None,
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "estimated_cost": None,
+                    "error_type": None,
+                    "error_message": None,
+                    "status": "pending",
+                    "created_at": now,
+                    "started_at": None,
+                    "completed_at": None,
+                },
+            )
+    return run
+
+
+def preflight_mongo_dataset_run(
+    store: MongoDocumentStore,
+    *,
+    data_root: str,
+    model_endpoint_id: str,
+    dataset_version_id: str,
+    prompt_package_id: str | None,
+    reference_field: str,
+    sample_limit: int,
+    request_body_override: dict[str, object] | None = None,
+) -> dict[str, object]:
+    issues: list[str] = []
+    endpoint = store.get_document("model_endpoints", model_endpoint_id)
+    if endpoint is None:
+        issues.append("Model endpoint not found.")
+    elif endpoint.get("status") != "available":
+        issues.append("Model endpoint must pass a connection test before scheduling a run.")
+    dataset = store.get_document("dataset_versions", dataset_version_id)
+    if dataset is None:
+        issues.append("Dataset version not found.")
+    elif dataset.get("status") != "ready" or not dataset.get("prepared_path"):
+        issues.append(f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it first.")
+    if prompt_package_id and store.get_document("prompt_packages", prompt_package_id) is None:
+        issues.append("Prompt package not found.")
+    if not reference_field.strip():
+        issues.append("A reference field is required.")
+    samples: list[BenchmarkSample] = []
+    datasets: list[dict[str, object]] = []
+    if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
+        datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default"), "status": dataset["status"], "will_prepare": False})
+        try:
+            samples, _skipped = _build_dataset_samples(
+                prepared_path=dataset["prepared_path"],
+                data_root=data_root,
+                sample_limit=sample_limit,
+                reference_field=reference_field.strip(),
+                prompt_package=_proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
+                dataset_id=dataset["dataset_id"],
+                dataset_version=dataset["version"],
+            )
+            if not samples:
+                issues.append(f"None of the first {sample_limit} records contain the reference field {reference_field!r}.")
+        except (DatasetRecordError, DatasetRunError) as error:
+            issues.append(str(error))
+    if endpoint is not None and endpoint.get("status") == "available":
+        compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
+        if compatibility["unsupported"]:
+            issues.append("Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"]))
+    else:
+        compatibility = {"required": ["text_input"], "unsupported": [], "unverified": []}
+    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
+    estimated_output_tokens = len(samples) * 64
+    estimated_cost = (
+        ((estimated_input_tokens * endpoint.get("input_cost_per_million")) + (estimated_output_tokens * endpoint.get("output_cost_per_million"))) / 1_000_000
+        if endpoint is not None and endpoint.get("input_cost_per_million") is not None and endpoint.get("output_cost_per_million") is not None
+        else None
+    )
+    return {
+        "can_queue": not issues,
+        "issues": issues,
+        "sample_count": len(samples),
+        "estimated_requests": len(samples),
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost": estimated_cost,
+        "currency": endpoint.get("currency") if endpoint is not None else None,
+        "compatibility": compatibility,
+        "datasets": datasets,
+        "request_body_evidence": (
+            _mongo_request_body_evidence(endpoint=endpoint, benchmark_manifest=_dataset_run_manifest(), suite_snapshot=None, request_body_override=request_body_override)
+            if endpoint is not None else None
+        ),
+    }
+
+
+def _dataset_run_manifest() -> dict[str, object]:
+    from app.services.dataset_runs import _DATASET_RUN_MANIFEST
+
+    return dict(_DATASET_RUN_MANIFEST)
 
 
 def _freeze_mongo_declared_datasets(

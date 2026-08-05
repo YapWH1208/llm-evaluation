@@ -16,20 +16,29 @@ class PromptTemplateError(ValueError):
     pass
 
 
-def validate_template(template: str) -> set[str]:
-    """Reject unsupported interpolation variables at package-registration time."""
+def validate_template(template: str, *, extra_variables: frozenset[str] = frozenset()) -> set[str]:
+    """Reject unsupported interpolation variables at package-registration time.
+
+    ``extra_variables`` allows caller-known variables (for example dataset
+    record field names) without relaxing the allowlist for other callers.
+    """
 
     variables = set(_VARIABLE.findall(template))
-    unsupported = sorted(variables - ALLOWED_TEMPLATE_VARIABLES)
+    unsupported = sorted(variables - (ALLOWED_TEMPLATE_VARIABLES | extra_variables))
     if unsupported:
         raise PromptTemplateError("Unsupported template variable(s): " + ", ".join(unsupported))
     return variables
 
 
-def render_template(template: str, values: Mapping[str, object]) -> str:
+def render_template(
+    template: str,
+    values: Mapping[str, object],
+    *,
+    extra_variables: frozenset[str] = frozenset(),
+) -> str:
     """Render only the explicitly supported variables with deterministic values."""
 
-    validate_template(template)
+    validate_template(template, extra_variables=extra_variables)
 
     def substitute(match: re.Match[str]) -> str:
         name = match.group(1)

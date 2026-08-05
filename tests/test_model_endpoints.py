@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
-from app.db import ModelEndpoint
+from app.db import EndpointStatus, ModelEndpoint
 from app.main import create_app
 
 
@@ -54,12 +54,13 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
 
         updated = client.patch(
             f"/api/v1/model-endpoints/{endpoint_id}",
-            json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000},
+            json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000, "requests_per_second": None},
         )
         assert updated.status_code == 200
         assert updated.json()["api_key_mask"] == "\u2022\u2022\u2022\u2022cret"
         assert updated.json()["tokens_per_minute"] == 9000
         assert updated.json()["output_tokens_per_minute"] == 4000
+        assert updated.json()["requests_per_second"] is None
 
         with app.state.database.get_session() as session:
             stored = session.scalar(select(ModelEndpoint).where(ModelEndpoint.id == endpoint_id))
@@ -98,9 +99,16 @@ def test_model_endpoint_persists_supported_protocol_profile(tmp_path: Path) -> N
         assert response.status_code == 201
         endpoint = response.json()
         assert endpoint["protocol_profile"] == "openai_responses"
+        with app.state.database.get_session() as session:
+            stored = session.get(ModelEndpoint, endpoint["id"])
+            assert stored is not None
+            stored.status = EndpointStatus.AVAILABLE.value
+            session.commit()
         updated = client.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"protocol_profile": "openai_chat_completions"})
         assert updated.status_code == 200
         assert updated.json()["protocol_profile"] == "openai_chat_completions"
+        assert updated.json()["status"] == "unverified"
+        assert updated.json()["last_tested_at"] is None
 
 
 def test_model_endpoint_accepts_all_built_in_provider_protocol_profiles(tmp_path: Path) -> None:
@@ -171,3 +179,36 @@ def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) ->
 
     assert response.status_code == 422
     assert "protected fields" in response.json()["detail"][0]["msg"]
+
+
+def test_endpoint_patch_with_unchanged_connection_fields_keeps_status(tmp_path: Path) -> None:
+    from app.services.connection_tester import ConnectionTestResult
+
+    class SuccessfulTester:
+        def test(self, endpoint, api_key: str) -> ConnectionTestResult:
+            assert api_key == "test-secret-key"
+            return ConnectionTestResult(True, "Connection succeeded.", 200)
+
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}",
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
+        )
+        endpoint_id = created.json()["id"]
+        assert client.post(f"/api/v1/model-endpoints/{endpoint_id}/connection-test").status_code == 200
+        assert client.get(f"/api/v1/model-endpoints/{endpoint_id}").json()["status"] == "available"
+
+        unchanged = client.patch(f"/api/v1/model-endpoints/{endpoint_id}", json={"base_url": "https://models.example.test/v1"})
+        assert unchanged.status_code == 200
+        assert unchanged.json()["status"] == "available"
+
+        changed = client.patch(f"/api/v1/model-endpoints/{endpoint_id}", json={"base_url": "https://other.example.test/v1"})
+        assert changed.status_code == 200
+        assert changed.json()["status"] == "unverified"

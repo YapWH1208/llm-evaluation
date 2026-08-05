@@ -21,6 +21,17 @@ PROTECTED_REQUEST_FIELDS = frozenset(
     }
 )
 
+_SENSITIVE_BODY_KEYS = frozenset(
+    {"api_key", "apikey", "api-key", "token", "access_token", "auth_token", "authorization", "secret", "password"}
+)
+
+
+def is_sensitive_body_key(name: str) -> bool:
+    """True when a request-body field name could carry credentials."""
+
+    normalized = str(name).lower().replace("_", "-").replace(" ", "-").strip("-")
+    return normalized in _SENSITIVE_BODY_KEYS or normalized.endswith(("-key", "-token", "-secret"))
+
 
 def validate_custom_headers(value: dict[str, Any]) -> dict[str, str]:
     """Allow provider routing headers while reserving authentication for the secret vault."""

@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher, SecretConfigurationError, mask_secret
 from app.db import EndpointStatus, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
-from app.services.connection_tester import ConnectionTestResult, ConnectionTester, PROTECTED_REQUEST_FIELDS
+from app.services.connection_tester import (
+    ConnectionTestResult,
+    ConnectionTester,
+    PROTECTED_REQUEST_FIELDS,
+    build_connection_test_request,
+)
 from app.services.model_executor import OpenAIChatCompletionsExecutor
 from app.services.outbound_network import OutboundNetworkError, validate_outbound_url
 from app.services.provider_headers import validate_custom_headers
@@ -32,7 +37,40 @@ ProtocolProfile = Literal[
 ]
 
 
-def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
+def _connection_fields_changed(payload: object, update_values: dict[str, Any], current: object, *, mongo: bool) -> bool:
+    """True when a connection-affecting field's value actually changed.
+
+    The status reset must fire on value changes, not on field presence: an
+    idempotent re-save with identical values must not take the endpoint out
+    of service.  A non-None ``api_key`` in the payload always counts as a
+    change because it re-encrypts a new secret.
+    """
+
+    connection_fields = {
+        "api_key",
+        "base_url",
+        "model_name",
+        "protocol_profile",
+        "custom_headers",
+        "default_request_body",
+        "timeout_seconds",
+    }
+    if "api_key" in payload.model_fields_set and payload.api_key is not None:
+        return True
+    for field in connection_fields.intersection(payload.model_fields_set):
+        if field == "api_key":
+            continue
+        new_value = update_values.get(field)
+        if new_value is None:
+            continue
+        current_value = current.get(field) if mongo else getattr(current, field, None)
+        if new_value != current_value:
+            return True
+    return False
+
+
+def _validate_loopback_profile(
+    base_url: str, protocol_profile: str) -> None:
     hostname = urlparse(base_url).hostname
     if hostname is None:
         return
@@ -334,6 +372,13 @@ class ConnectionTestResponse(BaseModel):
     message: str
     provider_status_code: int | None
     tested_at: datetime
+    request: "ConnectionTestRequestResponse"
+
+
+class ConnectionTestRequestResponse(BaseModel):
+    method: Literal["POST"]
+    url: str
+    body: dict[str, Any]
 
 
 class RequestPreviewRequest(BaseModel):
@@ -357,6 +402,7 @@ def test_model_endpoint_connection(
     store = get_document_store(request)
     if store is not None:
         endpoint = get_document_endpoint_or_404(store, endpoint_id)
+        test_request = build_connection_test_request(_endpoint_proxy(endpoint))
         try:
             api_key = cipher.decrypt(str(endpoint["encrypted_api_key"]))
         except SecretConfigurationError as error:
@@ -379,9 +425,15 @@ def test_model_endpoint_connection(
             message=result.message,
             provider_status_code=result.provider_status_code,
             tested_at=tested_at,
+            request=ConnectionTestRequestResponse(
+                method="POST",
+                url=test_request.url,
+                body=test_request.body,
+            ),
         )
     assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
+    test_request = build_connection_test_request(endpoint)
     try:
         api_key = cipher.decrypt(endpoint.encrypted_api_key)
     except SecretConfigurationError as error:
@@ -402,6 +454,11 @@ def test_model_endpoint_connection(
         message=result.message,
         provider_status_code=result.provider_status_code,
         tested_at=tested_at,
+        request=ConnectionTestRequestResponse(
+            method="POST",
+            url=test_request.url,
+            body=test_request.body,
+        ),
     )
 
 
@@ -429,11 +486,22 @@ def update_model_endpoint(
     session: SessionDependency,
     cipher: CipherDependency,
 ) -> ModelEndpoint | dict[str, Any]:
+    nullable_fields = {
+        "api_key_max_concurrency",
+        "requests_per_second",
+        "requests_per_minute",
+        "tokens_per_minute",
+        "input_tokens_per_minute",
+        "output_tokens_per_minute",
+        "input_cost_per_million",
+        "output_cost_per_million",
+        "notes",
+    }
     store = get_document_store(request)
     if store is not None:
         existing = get_document_endpoint_or_404(store, endpoint_id)
         update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
-        update_values = {key: value for key, value in update_values.items() if value is not None}
+        update_values = {key: value for key, value in update_values.items() if value is not None or key in nullable_fields}
         try:
             _validate_loopback_profile(
                 str(update_values.get("base_url", existing["base_url"])),
@@ -448,12 +516,21 @@ def update_model_endpoint(
             update_values["encrypted_api_key"] = cipher.encrypt(api_key)
             update_values["api_key_mask"] = mask_secret(api_key)
             update_values["api_key_fingerprint"] = _api_key_fingerprint(api_key)
+        if _connection_fields_changed(payload, update_values, existing, mongo=True):
+            update_values.update(
+                {
+                    "status": EndpointStatus.UNVERIFIED.value,
+                    "last_tested_at": None,
+                    "last_connection_error": None,
+                }
+            )
         updated = store.update_document("model_endpoints", endpoint_id, update_values)
         assert updated is not None
         return updated
     assert session is not None
     endpoint = get_endpoint_or_404(session, endpoint_id)
     update_values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
+    update_values = {key: value for key, value in update_values.items() if value is not None or key in nullable_fields}
     try:
         _validate_loopback_profile(
             str(update_values.get("base_url", endpoint.base_url)),
@@ -462,15 +539,21 @@ def update_model_endpoint(
     except ValueError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
 
+    connection_changed = _connection_fields_changed(payload, update_values, endpoint, mongo=False)
+
     for field, value in update_values.items():
-        if value is not None:
-            setattr(endpoint, field, value)
+        setattr(endpoint, field, value)
 
     if "api_key" in payload.model_fields_set and payload.api_key is not None:
         api_key = payload.api_key.get_secret_value()
         endpoint.encrypted_api_key = cipher.encrypt(api_key)
         endpoint.api_key_mask = mask_secret(api_key)
         endpoint.api_key_fingerprint = _api_key_fingerprint(api_key)
+
+    if connection_changed:
+        endpoint.status = EndpointStatus.UNVERIFIED.value
+        endpoint.last_tested_at = None
+        endpoint.last_connection_error = None
 
     session.commit()
     session.refresh(endpoint)

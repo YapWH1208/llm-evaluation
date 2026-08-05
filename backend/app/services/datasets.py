@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
@@ -7,7 +8,7 @@ import shutil
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urljoin, urlparse
 from uuid import uuid4
 
 import httpx
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
+from app.services.dataset_records import iter_delimited_rows
 from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
@@ -29,6 +31,7 @@ class DatasetDownloadPaused(DatasetError):
 
 MAX_PREPARED_ARCHIVE_FILES = 10_000
 MAX_PREPARED_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_DOWNLOAD_REDIRECTS = 5
 
 
 def resolve_dataset_source(
@@ -47,7 +50,7 @@ def resolve_dataset_source(
             raise DatasetError("Hugging Face sources must use hf://owner/repository/path/to/file.")
         repository = f"{repository}/{path_parts[0]}"
         relative_path = "/".join(path_parts[1:])
-        resolved = f"https://huggingface.co/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
+        resolved = f"https://huggingface.co/datasets/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
     elif parsed.scheme == "https" and parsed.netloc:
         resolved = source_url
     else:
@@ -103,6 +106,15 @@ def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, .
         raise DatasetError(str(error)) from error
 
 
+def _host_not_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
+    """Apply the deployment host policy to one redirect hop (empty = allow all)."""
+
+    if not allowed_hosts or host is None:
+        return False
+    normalized = host.lower().rstrip(".")
+    return not any(normalized == item or normalized.endswith(f".{item}") for item in allowed_hosts)
+
+
 def dataset_source_suffix(source_url: str) -> str:
     suffix = Path(urlparse(source_url).path).suffix.lower()
     return suffix if suffix in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"} else ".bin"
@@ -115,31 +127,50 @@ def write_dataset_source(
     on_chunk: Callable[[], None] | None = None,
     *,
     max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
+    allowed_hosts: tuple[str, ...] = (),
 ) -> str:
-    """Stream a configured source to a temporary file and return its SHA-256 digest."""
+    """Redirects are followed only after every hop passes the same outbound URL and host-policy validation as the original source, so no unvalidated destination is ever contacted and the redirect body is never written to disk.
+    """
 
     digest = hashlib.sha256()
-    try:
-        addresses = validate_outbound_url(source)
-    except OutboundNetworkError as error:
-        raise DatasetError(str(error)) from error
-    with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
-        with client.stream("GET", source, headers=headers) as response:
-            response.raise_for_status()
-            content_length = response.headers.get("content-length")
-            if content_length and content_length.isdigit() and int(content_length) > max_bytes:
-                raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-            written = 0
-            with target.open("wb") as output_file:
-                for chunk in response.iter_bytes():
-                    written += len(chunk)
-                    if written > max_bytes:
-                        raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-                    output_file.write(chunk)
-                    digest.update(chunk)
-                    if on_chunk:
-                        on_chunk()
-    return digest.hexdigest()
+    current = source
+    source_host = urlparse(source).hostname
+    hop_headers = headers
+    for _hop in range(MAX_DOWNLOAD_REDIRECTS + 1):
+        try:
+            addresses = validate_outbound_url(current)
+        except OutboundNetworkError as error:
+            raise DatasetError(str(error)) from error
+        with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
+            with client.stream("GET", current, headers=hop_headers) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise DatasetError("Dataset source redirected without a Location header.")
+                    current = urljoin(current, location)
+                    if urlparse(current).scheme != "https":
+                        raise DatasetError("Dataset redirects must use HTTPS.")
+                    if _host_not_allowed(urlparse(current).hostname, allowed_hosts):
+                        raise DatasetError("Dataset redirect target is not allowed by the configured network policy.")
+                    if urlparse(current).hostname != source_host:
+                        hop_headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
+                    continue
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+                    raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                written = 0
+                with target.open("wb") as output_file:
+                    for chunk in response.iter_bytes():
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                        output_file.write(chunk)
+                        digest.update(chunk)
+                        if on_chunk:
+                            on_chunk()
+                return digest.hexdigest()
+    raise DatasetError(f"Dataset source redirected more than {MAX_DOWNLOAD_REDIRECTS} times.")
 
 
 def prepare_dataset_cache(target: Path) -> Path:
@@ -242,6 +273,27 @@ def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
 
 
 def _indexable_record_numbers(path: Path) -> Iterator[int]:
+    if path.suffix.lower() == ".json":
+        try:
+            value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (json.JSONDecodeError, OSError) as error:
+            raise DatasetError(f"Dataset JSON source could not be parsed: {error}") from error
+        if isinstance(value, dict):
+            yield 1
+            return
+        if isinstance(value, list):
+            for number in range(1, len(value) + 1):
+                yield number
+            return
+        raise DatasetError("Dataset JSON sources must be an object or an array of objects.")
+    if path.suffix.lower() in {".csv", ".tsv"}:
+        delimiter = "," if path.suffix.lower() == ".csv" else "\t"
+        try:
+            for start_line, _fields in iter_delimited_rows(path, delimiter=delimiter):
+                yield start_line
+        except (csv.Error, OSError) as error:
+            raise DatasetError(f"Dataset delimited source could not be parsed: {error}") from error
+        return
     if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
         yield 1
         return
@@ -300,6 +352,7 @@ def download_dataset(
             headers,
             ensure_not_paused,
             max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
+            allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
         )
         dataset.status = DatasetStatus.VERIFYING.value; session.commit()
         if dataset.checksum and dataset.checksum.lower() != actual_checksum:
@@ -316,7 +369,17 @@ def download_dataset(
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPStatusError, DatasetError) as error:
-        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
+        message = str(error)
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+        if status_code == 404:
+            message = f"{message} The repository or file may not exist; check the owner/repository name and revision."
+        elif status_code in {401, 403}:
+            message = (
+                f"{message} Hugging Face requires authentication for this source "
+                "(private or gated repository), or the repository is not a public dataset."
+            )
+        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in message or status_code in {401, 403}) else DatasetStatus.FAILED.value
+        dataset.error_message = message[:500]
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPError, OSError) as error:
