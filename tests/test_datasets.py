@@ -104,7 +104,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
     )
     monkeypatch.setenv("HUGGINGFACE_TOKEN", "test-token")
     resolved, headers = resolve_dataset_source("hf://owner/repository/path/to/file.jsonl", "main", "huggingface", settings)
-    assert resolved == "https://huggingface.co/owner/repository/resolve/main/path/to/file.jsonl"
+    assert resolved == "https://huggingface.co/datasets/owner/repository/resolve/main/path/to/file.jsonl"
     assert headers == {"Authorization": "Bearer test-token"}
     with pytest.raises(DatasetError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)

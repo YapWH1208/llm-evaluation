@@ -47,7 +47,7 @@ def resolve_dataset_source(
             raise DatasetError("Hugging Face sources must use hf://owner/repository/path/to/file.")
         repository = f"{repository}/{path_parts[0]}"
         relative_path = "/".join(path_parts[1:])
-        resolved = f"https://huggingface.co/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
+        resolved = f"https://huggingface.co/datasets/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
     elif parsed.scheme == "https" and parsed.netloc:
         resolved = source_url
     else:
