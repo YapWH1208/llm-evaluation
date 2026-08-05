@@ -30,6 +30,7 @@ const en = {
   "datasetRun.referenceFieldHint": "Record field holding the expected answer",
   "datasetRun.sampleLimit": "Sample limit",
   "datasetRun.endpoint": "Endpoint",
+  "datasetRun.nonReadyHint": "Only ready datasets are listed. Download and verify other versions first.",
   "datasetRun.queue": "Queue dataset run",
   "datasetRun.queued": "Dataset evaluation run queued.",
 } as const;
@@ -54,6 +55,7 @@ const zhCN: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "保存预期答案的记录字段",
   "datasetRun.sampleLimit": "样本数量上限",
   "datasetRun.endpoint": "端点",
+  "datasetRun.nonReadyHint": "仅列出已就绪的数据集。请先下载并验证其他版本。",
   "datasetRun.queue": "将数据集评测加入队列",
   "datasetRun.queued": "数据集评测已加入队列。",
 };
@@ -75,6 +77,7 @@ const fr: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "Champ de l’enregistrement contenant la réponse attendue",
   "datasetRun.sampleLimit": "Limite d’échantillons",
   "datasetRun.endpoint": "Point de terminaison",
+  "datasetRun.nonReadyHint": "Seuls les jeux de données prêts sont répertoriés. Téléchargez et vérifiez d’abord les autres versions.",
   "datasetRun.queue": "Mettre l’évaluation du jeu de données en file",
   "datasetRun.queued": "Évaluation du jeu de données mise en file.",
 };
@@ -96,6 +99,7 @@ const de: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "Datensatzfeld mit der erwarteten Antwort",
   "datasetRun.sampleLimit": "Stichprobenlimit",
   "datasetRun.endpoint": "Endpunkt",
+  "datasetRun.nonReadyHint": "Nur bereite Datensätze werden aufgelistet. Laden Sie andere Versionen zuerst herunter und prüfen Sie sie.",
   "datasetRun.queue": "Datensatz-Evaluierung einreihen",
   "datasetRun.queued": "Datensatz-Evaluierung in die Warteschlange eingereiht.",
 };
@@ -117,6 +121,7 @@ const ru: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "Поле записи с ожидаемым ответом",
   "datasetRun.sampleLimit": "Лимит выборки",
   "datasetRun.endpoint": "Конечная точка",
+  "datasetRun.nonReadyHint": "Перечислены только готовые наборы данных. Сначала загрузите и проверьте другие версии.",
   "datasetRun.queue": "Поставить оценку набора данных в очередь",
   "datasetRun.queued": "Оценка набора данных поставлена в очередь.",
 };
@@ -138,6 +143,7 @@ const ja: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "期待される回答を保持するレコード フィールド",
   "datasetRun.sampleLimit": "サンプル上限",
   "datasetRun.endpoint": "エンドポイント",
+  "datasetRun.nonReadyHint": "準備ができたデータセットのみが表示されます。他のバージョンを先にダウンロードして検証してください。",
   "datasetRun.queue": "データセット評価をキューに入れる",
   "datasetRun.queued": "データセット評価がキューに入りました。",
 };
@@ -159,6 +165,7 @@ const ko: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "예상 답변이 포함된 레코드 필드",
   "datasetRun.sampleLimit": "샘플 제한",
   "datasetRun.endpoint": "엔드포인트",
+  "datasetRun.nonReadyHint": "준비된 데이터 세트만 나열됩니다. 다른 버전을 먼저 다운로드하여 확인하세요.",
   "datasetRun.queue": "데이터 세트 평가 대기열에 추가",
   "datasetRun.queued": "데이터 세트 평가가 대기열에 추가되었습니다.",
 };
@@ -180,6 +187,7 @@ const ms: TranslationCatalog = {
   "datasetRun.referenceFieldHint": "Medan rekod yang mengandungi jawapan yang dijangkakan",
   "datasetRun.sampleLimit": "Had sampel",
   "datasetRun.endpoint": "Titik akhir",
+  "datasetRun.nonReadyHint": "Hanya set data yang sedia disenaraikan. Muat turun dan sahkan versi lain dahulu.",
   "datasetRun.queue": "Letakkan penilaian set data dalam baris",
   "datasetRun.queued": "Penilaian set data telah dimasukkan ke dalam baris.",
 };

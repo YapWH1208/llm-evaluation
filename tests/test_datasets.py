@@ -200,3 +200,11 @@ def test_dataset_download_does_not_forward_authorization_across_hosts(tmp_path: 
     assert any(key.lower() == "authorization" for key in seen[0])
     assert not any(key.lower() == "authorization" for key in seen[1])
     assert (tmp_path / "out.jsonl").read_bytes() == b"ok"
+
+
+def test_dataset_download_rejects_redirect_outside_allowed_hosts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(307, headers={"location": "https://cdn.example.test/final.jsonl"})
+    _redirect_transport(monkeypatch, handler, extra_public_hosts=("cdn.example.test",))
+    with pytest.raises(DatasetError, match="not allowed"):
+        write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {}, allowed_hosts=("datasets.example.test",))

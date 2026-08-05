@@ -108,11 +108,11 @@ In the **Runs** view, open the dataset run form and configure:
   dataset.
 - **Endpoint** — any model endpoint with status `available`.
 
-The form runs a **preflight** before queueing: it reports the number of usable
-records, estimated requests, token counts, and estimated cost for the selected
-endpoint, and lists any blocking issues (for example a reference field that
-matches no record field, or an unavailable endpoint). Resolve the issues and
-re-run the preflight until it passes, then **Queue** the run.
+The form queues the run directly; the backend validates it and returns clear
+errors when a check fails — for example a dataset version that is not `ready`,
+a reference field that matches no record field, or an endpoint that is not
+available. For scripted checks, the API additionally exposes
+`POST /api/v1/evaluation-runs/dataset/preflight`.
 
 ## 6. Watch and inspect
 

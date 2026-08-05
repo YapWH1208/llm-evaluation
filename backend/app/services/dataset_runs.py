@@ -357,7 +357,7 @@ def _build_dataset_samples(
                 prompt=prompt,
                 reference_answer=str(reference),
                 metadata={"source": entry["source"], "record_number": str(entry["record_number"]), "dataset": dataset_id},
-                messages=({"role": "user", "content": prompt},),
+                messages=tuple(_build_record_messages(fields, prompt_package, prompt)),
             )
         )
     return samples, skipped
@@ -377,3 +377,25 @@ def _render_record_prompt(fields: dict[str, object], prompt_package: PromptPacka
         if isinstance(value, str) and value:
             return value
     return None
+
+
+def _build_record_messages(
+    fields: dict[str, object],
+    prompt_package: PromptPackage | None,
+    rendered_prompt: str,
+) -> list[dict[str, object]]:
+    """Build the full attempt message list from a prompt package and record render.
+
+    Mirrors the benchmark path: system message, few-shot examples, then the
+    rendered user message.  The prompt is fully rendered here (record fields
+    applied), so callers must not re-apply the package when storing attempts.
+    """
+
+    messages: list[dict[str, object]] = []
+    if prompt_package is not None and prompt_package.system_message:
+        messages.append({"role": "system", "content": prompt_package.system_message})
+    for example in prompt_package.few_shot_examples if prompt_package is not None else []:
+        if isinstance(example, dict) and isinstance(example.get("role"), str) and isinstance(example.get("content"), str):
+            messages.append({"role": example["role"], "content": example["content"]})
+    messages.append({"role": "user", "content": rendered_prompt})
+    return messages

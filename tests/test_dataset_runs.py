@@ -18,7 +18,7 @@ class _SuccessfulTester:
 
 class _DatasetAnswerExecutor:
     def execute(self, endpoint, _api_key: str, input_snapshot: dict[str, object]) -> SampleExecutionResult:
-        prompt = str(input_snapshot["messages"][0]["content"])
+        prompt = str(input_snapshot["messages"][-1]["content"])
         prediction = "4" if "2+2" in prompt else "6"
         return SampleExecutionResult(
             success=True,
@@ -62,7 +62,7 @@ def _register_ready_dataset(client: TestClient, dataset_id: str = "demo") -> dic
 def _prompt_package(client: TestClient) -> str:
     created = client.post(
         "/api/v1/prompt-packages",
-        json={"name": "record-template", "version": "1.0.0", "prompt_type": "user_custom", "user_template": "Q: {{question}}\nA:", "scoring_rule": {"type": "exact_match"}},
+        json={"name": "record-template", "version": "1.0.0", "prompt_type": "user_custom", "user_template": "Q: {{question}}\nA:", "system_message": "Answer only the number.", "few_shot_examples": [{"role": "assistant", "content": "4"}], "scoring_rule": {"type": "exact_match"}},
     )
     assert created.status_code == 201
     return created.json()["id"]
@@ -114,7 +114,10 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         assert executed.json()["successful_samples"] == 2
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert len(attempts) == 2
-        contents = {attempt["input_snapshot"]["messages"][0]["content"] for attempt in attempts}
+        message_lists = [attempt["input_snapshot"]["messages"] for attempt in attempts]
+        assert all(messages[0] == {"role": "system", "content": "Answer only the number."} for messages in message_lists)
+        assert all(messages[1] == {"role": "assistant", "content": "4"} for messages in message_lists)
+        contents = {messages[2]["content"] for messages in message_lists}
         assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
         assert {attempt["reference_snapshot"]["answer"] for attempt in attempts} == {"4", "6"}
         assert {attempt["score"] for attempt in attempts} == {1.0}

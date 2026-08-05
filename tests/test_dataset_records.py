@@ -77,3 +77,20 @@ def test_dataset_records_rejects_unsafe_prepared_path_and_unsupported_format(tmp
     )
     with pytest.raises(DatasetRecordError, match="not supported"):
         list(iter_dataset_records(prepared_path, str(tmp_path / "data")))
+
+
+def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) -> None:
+    from app.services.datasets import prepare_dataset_cache
+
+    root = tmp_path / "datasets" / "demo" / "1" / "main"
+    root.mkdir(parents=True)
+    array_target = root / "array.json"
+    array_target.write_text('[{"question":"q1","answer":"a1"},{"question":"q2","answer":"a2"}]', encoding="utf-8")
+    prepared = prepare_dataset_cache(array_target)
+    records = list(iter_dataset_records(str(prepared), str(tmp_path)))
+    assert [record["fields"]["question"] for record in records] == ["q1", "q2"]
+    csv_target = root / "rows.csv"
+    csv_target.write_text("question,answer\nq1,a1\n\nq2,a2\n", encoding="utf-8")
+    prepared = prepare_dataset_cache(csv_target)
+    records = list(iter_dataset_records(str(prepared), str(tmp_path)))
+    assert [record["fields"]["question"] for record in records] == ["q1", "q2"]

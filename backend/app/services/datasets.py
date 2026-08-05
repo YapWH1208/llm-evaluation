@@ -104,6 +104,15 @@ def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, .
         raise DatasetError(str(error)) from error
 
 
+def _host_not_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
+    """Apply the deployment host policy to one redirect hop (empty = allow all)."""
+
+    if not allowed_hosts or host is None:
+        return False
+    normalized = host.lower().rstrip(".")
+    return not any(normalized == item or normalized.endswith(f".{item}") for item in allowed_hosts)
+
+
 def dataset_source_suffix(source_url: str) -> str:
     suffix = Path(urlparse(source_url).path).suffix.lower()
     return suffix if suffix in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"} else ".bin"
@@ -116,12 +125,9 @@ def write_dataset_source(
     on_chunk: Callable[[], None] | None = None,
     *,
     max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
+    allowed_hosts: tuple[str, ...] = (),
 ) -> str:
-    """Stream a configured source to a temporary file and return its SHA-256 digest.
-
-    Redirects are followed only after every hop passes the same outbound URL
-    validation as the original source, so no unvalidated destination is ever
-    contacted and the redirect body is never written to disk.
+    """Redirects are followed only after every hop passes the same outbound URL and host-policy validation as the original source, so no unvalidated destination is ever contacted and the redirect body is never written to disk.
     """
 
     digest = hashlib.sha256()
@@ -142,6 +148,8 @@ def write_dataset_source(
                     current = urljoin(current, location)
                     if urlparse(current).scheme != "https":
                         raise DatasetError("Dataset redirects must use HTTPS.")
+                    if _host_not_allowed(urlparse(current).hostname, allowed_hosts):
+                        raise DatasetError("Dataset redirect target is not allowed by the configured network policy.")
                     if urlparse(current).hostname != source_host:
                         hop_headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
                     continue
@@ -263,6 +271,16 @@ def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
 
 
 def _indexable_record_numbers(path: Path) -> Iterator[int]:
+    if path.suffix.lower() == ".json":
+        value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if isinstance(value, dict):
+            yield 1
+            return
+        if isinstance(value, list):
+            for number in range(1, len(value) + 1):
+                yield number
+            return
+        raise DatasetError("Dataset JSON sources must be an object or an array of objects.")
     if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
         yield 1
         return
@@ -321,6 +339,7 @@ def download_dataset(
             headers,
             ensure_not_paused,
             max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
+            allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
         )
         dataset.status = DatasetStatus.VERIFYING.value; session.commit()
         if dataset.checksum and dataset.checksum.lower() != actual_checksum:

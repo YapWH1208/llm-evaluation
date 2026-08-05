@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import io
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -123,12 +122,19 @@ def _read_json_record(source_file: Path, record_number: int) -> dict[str, object
 
 def _read_delimited_record(source_file: Path, record_number: int, *, delimiter: str) -> dict[str, object] | None:
     with source_file.open("r", encoding="utf-8", errors="replace", newline="") as source:
-        reader = csv.DictReader(io.StringIO(source.read()), delimiter=delimiter)
-        rows = list(reader)
-    row_index = record_number - 2  # record 1 is the header line
-    if not 0 <= row_index < len(rows):
-        return None
-    return dict(rows[row_index])
+        reader = csv.reader(source, delimiter=delimiter)
+        header: list[str] | None = None
+        previous_end = 0
+        for raw_row in reader:
+            if header is None:
+                header = raw_row
+                previous_end = reader.line_num
+                continue
+            row_start = previous_end + 1
+            if row_start <= record_number <= reader.line_num:
+                return dict(zip(header, raw_row)) if header else None
+            previous_end = reader.line_num
+    return None
 
 
 def _read_text_record(source_file: Path, record_number: int) -> dict[str, object] | None:
