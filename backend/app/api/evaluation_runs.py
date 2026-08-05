@@ -18,6 +18,7 @@ from app.db.models import HumanReview, JudgeAssessment, Report
 from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
+from app.services.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
 from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
@@ -28,8 +29,10 @@ from app.services.mongo_run_executor import (
     build_mongo_run_summary,
     clone_mongo_run,
     create_mongo_custom_multimodal_run,
+    create_mongo_dataset_run,
     create_mongo_benchmark_run,
     preflight_mongo_benchmark_run,
+    preflight_mongo_dataset_run,
     rerun_mongo_benchmark,
     execute_mongo_queued_run,
     retry_failed_mongo_samples,
@@ -66,6 +69,16 @@ class CustomMultimodalRunCreate(BaseModel):
     messages: list[dict[str, Any]]
     reference_answer: Annotated[str, Field(min_length=1, max_length=10000)]
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
+
+
+class DatasetRunCreate(BaseModel):
+    model_endpoint_id: str
+    dataset_version_id: str
+    prompt_package_id: str | None = None
+    reference_field: Annotated[str, Field(min_length=1, max_length=255)]
+    sample_limit: Annotated[int, Field(ge=1, le=10_000)] = 100
+    max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
+    request_body_override: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvaluationRunResponse(BaseModel):
@@ -289,6 +302,80 @@ def create_custom_run(
     except CustomRunError as error:
         status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
         raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/dataset", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
+def create_dataset_evaluation_run(
+    payload: DatasetRunCreate,
+    request: Request,
+    session: SessionDependency,
+) -> EvaluationRun | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        try:
+            return create_mongo_dataset_run(
+                store,
+                data_root=request.app.state.settings.data_root,
+                model_endpoint_id=payload.model_endpoint_id,
+                dataset_version_id=payload.dataset_version_id,
+                prompt_package_id=payload.prompt_package_id,
+                reference_field=payload.reference_field,
+                sample_limit=payload.sample_limit,
+                request_body_override=payload.request_body_override,
+                created_by=getattr(request.state, "actor_id", None),
+                max_concurrency=payload.max_concurrency,
+            )
+        except MongoRunExecutionError as error:
+            status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."} else status.HTTP_409_CONFLICT
+            raise HTTPException(status_code=status_code, detail=str(error)) from error
+    assert session is not None
+    try:
+        return create_dataset_run(
+            session,
+            data_root=request.app.state.settings.data_root,
+            model_endpoint_id=payload.model_endpoint_id,
+            dataset_version_id=payload.dataset_version_id,
+            prompt_package_id=payload.prompt_package_id,
+            reference_field=payload.reference_field,
+            sample_limit=payload.sample_limit,
+            request_body_override=payload.request_body_override,
+            created_by=getattr(request.state, "actor_id", None),
+            max_concurrency=payload.max_concurrency,
+        )
+    except DatasetRunError as error:
+        status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."} else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post("/dataset/preflight", response_model=EvaluationRunPreflightResponse)
+def preflight_dataset_evaluation_run(
+    payload: DatasetRunCreate,
+    request: Request,
+    session: SessionDependency,
+) -> dict[str, object]:
+    store = get_document_store(request)
+    if store is not None:
+        return preflight_mongo_dataset_run(
+            store,
+            data_root=request.app.state.settings.data_root,
+            model_endpoint_id=payload.model_endpoint_id,
+            dataset_version_id=payload.dataset_version_id,
+            prompt_package_id=payload.prompt_package_id,
+            reference_field=payload.reference_field,
+            sample_limit=payload.sample_limit,
+            request_body_override=payload.request_body_override,
+        )
+    assert session is not None
+    return preflight_dataset_run(
+        session,
+        data_root=request.app.state.settings.data_root,
+        model_endpoint_id=payload.model_endpoint_id,
+        dataset_version_id=payload.dataset_version_id,
+        prompt_package_id=payload.prompt_package_id,
+        reference_field=payload.reference_field,
+        sample_limit=payload.sample_limit,
+        request_body_override=payload.request_body_override,
+    )
 
 
 @router.get("", response_model=list[EvaluationRunResponse])
