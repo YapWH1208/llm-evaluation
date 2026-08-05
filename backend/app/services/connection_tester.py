@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -15,7 +16,7 @@ from app.services.outbound_network import (
     read_bounded_response,
     validate_outbound_url,
 )
-from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, provider_headers
+from app.services.provider_headers import PROTECTED_REQUEST_FIELDS, is_sensitive_body_key, provider_headers
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +61,7 @@ class OpenAIChatCompletionsConnectionTester:
                     headers=provider_headers(endpoint, api_key),
                     json=test_request.body,
                 ) as response:
-                    read_bounded_response(response, max_bytes=self._max_response_bytes)
+                    body = read_bounded_response(response, max_bytes=self._max_response_bytes)
                     status_code = response.status_code
                     is_error = response.is_error
         except OutboundNetworkError as error:
@@ -81,6 +82,15 @@ class OpenAIChatCompletionsConnectionTester:
                 status_code,
             )
 
+        try:
+            payload = json.loads(body)
+        except (ValueError, TypeError):
+            if body.strip():
+                return ConnectionTestResult(False, "Provider returned a non-JSON response.", status_code)
+            payload = None
+        if payload is not None and not isinstance(payload, dict):
+            return ConnectionTestResult(False, "Provider returned an unexpected response payload.", status_code)
+
         return ConnectionTestResult(True, "Connection succeeded.", status_code)
 
     @staticmethod
@@ -88,7 +98,7 @@ class OpenAIChatCompletionsConnectionTester:
         allowed_defaults = {
             key: value
             for key, value in (endpoint.default_request_body or {}).items()
-            if key not in PROTECTED_REQUEST_FIELDS
+            if key not in PROTECTED_REQUEST_FIELDS and not is_sensitive_body_key(key)
         }
         if _protocol_profile(endpoint) == "openai_responses":
             return {

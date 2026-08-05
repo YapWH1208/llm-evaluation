@@ -37,7 +37,40 @@ ProtocolProfile = Literal[
 ]
 
 
-def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
+def _connection_fields_changed(payload: object, update_values: dict[str, Any], current: object, *, mongo: bool) -> bool:
+    """True when a connection-affecting field's value actually changed.
+
+    The status reset must fire on value changes, not on field presence: an
+    idempotent re-save with identical values must not take the endpoint out
+    of service.  A non-None ``api_key`` in the payload always counts as a
+    change because it re-encrypts a new secret.
+    """
+
+    connection_fields = {
+        "api_key",
+        "base_url",
+        "model_name",
+        "protocol_profile",
+        "custom_headers",
+        "default_request_body",
+        "timeout_seconds",
+    }
+    if "api_key" in payload.model_fields_set and payload.api_key is not None:
+        return True
+    for field in connection_fields.intersection(payload.model_fields_set):
+        if field == "api_key":
+            continue
+        new_value = update_values.get(field)
+        if new_value is None:
+            continue
+        current_value = current.get(field) if mongo else getattr(current, field, None)
+        if new_value != current_value:
+            return True
+    return False
+
+
+def _validate_loopback_profile(
+    base_url: str, protocol_profile: str) -> None:
     hostname = urlparse(base_url).hostname
     if hostname is None:
         return
@@ -453,15 +486,6 @@ def update_model_endpoint(
     session: SessionDependency,
     cipher: CipherDependency,
 ) -> ModelEndpoint | dict[str, Any]:
-    connection_fields = {
-        "api_key",
-        "base_url",
-        "model_name",
-        "protocol_profile",
-        "custom_headers",
-        "default_request_body",
-        "timeout_seconds",
-    }
     nullable_fields = {
         "api_key_max_concurrency",
         "requests_per_second",
@@ -492,7 +516,7 @@ def update_model_endpoint(
             update_values["encrypted_api_key"] = cipher.encrypt(api_key)
             update_values["api_key_mask"] = mask_secret(api_key)
             update_values["api_key_fingerprint"] = _api_key_fingerprint(api_key)
-        if connection_fields.intersection(payload.model_fields_set):
+        if _connection_fields_changed(payload, update_values, existing, mongo=True):
             update_values.update(
                 {
                     "status": EndpointStatus.UNVERIFIED.value,
@@ -515,6 +539,8 @@ def update_model_endpoint(
     except ValueError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
 
+    connection_changed = _connection_fields_changed(payload, update_values, endpoint, mongo=False)
+
     for field, value in update_values.items():
         setattr(endpoint, field, value)
 
@@ -524,7 +550,7 @@ def update_model_endpoint(
         endpoint.api_key_mask = mask_secret(api_key)
         endpoint.api_key_fingerprint = _api_key_fingerprint(api_key)
 
-    if connection_fields.intersection(payload.model_fields_set):
+    if connection_changed:
         endpoint.status = EndpointStatus.UNVERIFIED.value
         endpoint.last_tested_at = None
         endpoint.last_connection_error = None

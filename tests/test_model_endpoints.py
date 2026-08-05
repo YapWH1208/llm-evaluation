@@ -179,3 +179,36 @@ def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) ->
 
     assert response.status_code == 422
     assert "protected fields" in response.json()["detail"][0]["msg"]
+
+
+def test_endpoint_patch_with_unchanged_connection_fields_keeps_status(tmp_path: Path) -> None:
+    from app.services.connection_tester import ConnectionTestResult
+
+    class SuccessfulTester:
+        def test(self, endpoint, api_key: str) -> ConnectionTestResult:
+            assert api_key == "test-secret-key"
+            return ConnectionTestResult(True, "Connection succeeded.", 200)
+
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}",
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
+        )
+        endpoint_id = created.json()["id"]
+        assert client.post(f"/api/v1/model-endpoints/{endpoint_id}/connection-test").status_code == 200
+        assert client.get(f"/api/v1/model-endpoints/{endpoint_id}").json()["status"] == "available"
+
+        unchanged = client.patch(f"/api/v1/model-endpoints/{endpoint_id}", json={"base_url": "https://models.example.test/v1"})
+        assert unchanged.status_code == 200
+        assert unchanged.json()["status"] == "available"
+
+        changed = client.patch(f"/api/v1/model-endpoints/{endpoint_id}", json={"base_url": "https://other.example.test/v1"})
+        assert changed.status_code == 200
+        assert changed.json()["status"] == "unverified"
