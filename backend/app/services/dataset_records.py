@@ -98,7 +98,10 @@ def _read_jsonl_record(source_file: Path, record_number: int) -> dict[str, objec
             current += 1
             if current != record_number:
                 continue
-            value = json.loads(line)
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise DatasetRecordError(f"Dataset JSONL record could not be parsed: {error}") from error
             if not isinstance(value, dict):
                 raise DatasetRecordError("Dataset JSONL records must be JSON objects.")
             return value
@@ -106,7 +109,10 @@ def _read_jsonl_record(source_file: Path, record_number: int) -> dict[str, objec
 
 
 def _read_json_record(source_file: Path, record_number: int) -> dict[str, object] | None:
-    value = json.loads(source_file.read_text(encoding="utf-8", errors="replace"))
+    try:
+        value = json.loads(source_file.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError as error:
+        raise DatasetRecordError(f"Dataset JSON source could not be parsed: {error}") from error
     if isinstance(value, dict):
         return value
     if not isinstance(value, list):
@@ -120,20 +126,34 @@ def _read_json_record(source_file: Path, record_number: int) -> dict[str, object
     return record
 
 
-def _read_delimited_record(source_file: Path, record_number: int, *, delimiter: str) -> dict[str, object] | None:
+def iter_delimited_rows(source_file: Path, *, delimiter: str) -> Iterator[tuple[int, dict[str, str]]]:
+    """Yield ``(physical_start_line, fields)`` for each logical CSV/TSV data row.
+
+    The header is the first non-empty row and is not yielded.  Blank lines are
+    skipped.  A quoted field spanning several physical lines yields exactly one
+    row whose start line is the line of its first field, so the sample index
+    and the reader agree on record numbering.
+    """
+
     with source_file.open("r", encoding="utf-8", errors="replace", newline="") as source:
         reader = csv.reader(source, delimiter=delimiter)
         header: list[str] | None = None
         previous_end = 0
         for raw_row in reader:
+            row_start = previous_end + 1
+            previous_end = reader.line_num
+            if not raw_row:
+                continue
             if header is None:
                 header = raw_row
-                previous_end = reader.line_num
                 continue
-            row_start = previous_end + 1
-            if row_start <= record_number <= reader.line_num:
-                return dict(zip(header, raw_row)) if header else None
-            previous_end = reader.line_num
+            yield row_start, dict(zip(header, raw_row))
+
+
+def _read_delimited_record(source_file: Path, record_number: int, *, delimiter: str) -> dict[str, object] | None:
+    for start_line, fields in iter_delimited_rows(source_file, delimiter=delimiter):
+        if start_line == record_number:
+            return dict(fields)
     return None
 
 

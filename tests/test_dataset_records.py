@@ -94,3 +94,40 @@ def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) 
     prepared = prepare_dataset_cache(csv_target)
     records = list(iter_dataset_records(str(prepared), str(tmp_path)))
     assert [record["fields"]["question"] for record in records] == ["q1", "q2"]
+
+
+def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tmp_path: Path) -> None:
+    from app.services.datasets import prepare_dataset_cache
+
+    root = tmp_path / "datasets" / "demo" / "1" / "main"
+    root.mkdir(parents=True)
+    csv_target = root / "rows.csv"
+    csv_target.write_text('question,answer\nq1,"line one\nline two"\nq2,a2\n', encoding="utf-8")
+    prepared = prepare_dataset_cache(csv_target)
+    records = list(iter_dataset_records(str(prepared), str(tmp_path)))
+    assert len(records) == 2
+    assert records[0]["fields"]["question"] == "q1"
+    assert records[0]["fields"]["answer"].replace("\r\n", "\n") == "line one\nline two"
+    assert records[1]["fields"]["question"] == "q2"
+
+
+def test_dataset_preparation_rejects_malformed_json(tmp_path: Path) -> None:
+    from app.services.datasets import DatasetError, prepare_dataset_cache
+
+    root = tmp_path / "datasets" / "demo" / "1" / "main"
+    root.mkdir(parents=True)
+    bad = root / "broken.json"
+    bad.write_text('{"question": "q1"', encoding="utf-8")
+    with pytest.raises(DatasetError, match="could not be parsed"):
+        prepare_dataset_cache(bad)
+
+
+def test_dataset_records_rejects_malformed_jsonl(tmp_path: Path) -> None:
+    prepared_path = _write_prepared(
+        tmp_path,
+        "dataset.jsonl",
+        b"{not json}\n",
+        [{"source": "dataset.jsonl", "record_number": 1}],
+    )
+    with pytest.raises(DatasetRecordError, match="could not be parsed"):
+        list(iter_dataset_records(prepared_path, str(tmp_path / "data")))

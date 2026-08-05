@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
+from app.services.dataset_records import iter_delimited_rows
 from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
@@ -272,7 +273,10 @@ def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
 
 def _indexable_record_numbers(path: Path) -> Iterator[int]:
     if path.suffix.lower() == ".json":
-        value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        try:
+            value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (json.JSONDecodeError, OSError) as error:
+            raise DatasetError(f"Dataset JSON source could not be parsed: {error}") from error
         if isinstance(value, dict):
             yield 1
             return
@@ -281,6 +285,11 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
                 yield number
             return
         raise DatasetError("Dataset JSON sources must be an object or an array of objects.")
+    if path.suffix.lower() in {".csv", ".tsv"}:
+        delimiter = "," if path.suffix.lower() == ".csv" else "\t"
+        for start_line, _fields in iter_delimited_rows(path, delimiter=delimiter):
+            yield start_line
+        return
     if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
         yield 1
         return

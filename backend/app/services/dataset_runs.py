@@ -357,7 +357,7 @@ def _build_dataset_samples(
                 prompt=prompt,
                 reference_answer=str(reference),
                 metadata={"source": entry["source"], "record_number": str(entry["record_number"]), "dataset": dataset_id},
-                messages=tuple(_build_record_messages(fields, prompt_package, prompt)),
+                messages=tuple(_build_record_messages(prompt_package, prompt)),
             )
         )
     return samples, skipped
@@ -380,7 +380,6 @@ def _render_record_prompt(fields: dict[str, object], prompt_package: PromptPacka
 
 
 def _build_record_messages(
-    fields: dict[str, object],
     prompt_package: PromptPackage | None,
     rendered_prompt: str,
 ) -> list[dict[str, object]]:
