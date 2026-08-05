@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
 from app.db import ModelEndpoint
-from app.services.model_executor import _endpoint_url, _extract_prediction
+from app.services.model_executor import _endpoint_url
 from app.services.outbound_network import (
     OutboundNetworkError,
     OutboundRedirectError,
@@ -26,6 +25,15 @@ class ConnectionTestResult:
     provider_status_code: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ConnectionTestRequest:
+    """The credential-free provider request sent by a connection test."""
+
+    method: str
+    url: str
+    body: dict[str, object]
+
+
 class ConnectionTester(Protocol):
     def test(self, endpoint: ModelEndpoint, api_key: str) -> ConnectionTestResult: ...
 
@@ -38,10 +46,9 @@ class OpenAIChatCompletionsConnectionTester:
         self._max_response_bytes = max_response_bytes
 
     def test(self, endpoint: ModelEndpoint, api_key: str) -> ConnectionTestResult:
-        request_body = self._build_request_body(endpoint)
+        test_request = build_connection_test_request(endpoint)
         try:
-            endpoint_url = _endpoint_url(endpoint)
-            addresses = validate_outbound_url(endpoint_url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
+            addresses = validate_outbound_url(test_request.url, allow_loopback=_protocol_profile(endpoint) == "ollama_chat")
             with httpx.Client(
                 timeout=endpoint.timeout_seconds,
                 follow_redirects=False,
@@ -49,11 +56,11 @@ class OpenAIChatCompletionsConnectionTester:
             ) as client:
                 with client.stream(
                     "POST",
-                    endpoint_url,
+                    test_request.url,
                     headers=provider_headers(endpoint, api_key),
-                    json=request_body,
+                    json=test_request.body,
                 ) as response:
-                    body = read_bounded_response(response, max_bytes=self._max_response_bytes)
+                    read_bounded_response(response, max_bytes=self._max_response_bytes)
                     status_code = response.status_code
                     is_error = response.is_error
         except OutboundNetworkError as error:
@@ -71,22 +78,6 @@ class OpenAIChatCompletionsConnectionTester:
             return ConnectionTestResult(
                 False,
                 f"Provider returned HTTP {status_code}.",
-                status_code,
-            )
-
-        try:
-            payload = json.loads(body)
-        except ValueError:
-            return ConnectionTestResult(
-                False,
-                "Provider returned a non-JSON response.",
-                status_code,
-            )
-
-        if not isinstance(payload, dict) or not _has_expected_response_shape(endpoint, payload):
-            return ConnectionTestResult(
-                False,
-                "Provider returned an unexpected response payload.",
                 status_code,
             )
 
@@ -149,8 +140,11 @@ def _protocol_profile(endpoint: ModelEndpoint) -> str:
     return str(getattr(endpoint, "protocol_profile", None) or "openai_chat_completions")
 
 
-def _has_expected_response_shape(endpoint: ModelEndpoint, payload: dict[str, object]) -> bool:
-    try:
-        return bool(_extract_prediction(payload, _protocol_profile(endpoint)))
-    except (IndexError, KeyError, TypeError, ValueError):
-        return False
+def build_connection_test_request(endpoint: ModelEndpoint) -> ConnectionTestRequest:
+    """Build the exact safe request body used to verify provider connectivity."""
+
+    return ConnectionTestRequest(
+        method="POST",
+        url=_endpoint_url(endpoint),
+        body=OpenAIChatCompletionsConnectionTester._build_request_body(endpoint),
+    )

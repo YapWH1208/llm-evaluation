@@ -76,6 +76,22 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
+def test_connection_probe_accepts_a_successful_provider_response_without_evaluation_payload() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Provider-specific response",
+        base_url="https://models.example.test/v1",
+        model_name="test-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
+
+    result = OpenAIChatCompletionsConnectionTester(
+        httpx.MockTransport(lambda _request: httpx.Response(200, json={"status": "ok", "request_id": "provider-123"}))
+    ).test(endpoint, "secret")
+
+    assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
+
+
 def test_connection_probe_adapts_anthropic_messages_shape() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url == "https://models.example.test/v1/messages"
@@ -157,6 +173,17 @@ def test_connection_probe_route_persists_a_safe_status(tmp_path: Path) -> None:
             "message": "Connection succeeded.",
             "provider_status_code": 200,
             "tested_at": probe.json()["tested_at"],
+            "request": {
+                "method": "POST",
+                "url": "https://models.example.test/v1/chat/completions",
+                "body": {
+                    "model": "example-model",
+                    "messages": [{"role": "user", "content": "Respond with the single word OK."}],
+                    "temperature": 0,
+                    "max_tokens": 8,
+                    "stream": False,
+                },
+            },
         }
 
         with app.state.database.get_session() as session:

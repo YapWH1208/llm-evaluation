@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
-from app.db import ModelEndpoint
+from app.db import EndpointStatus, ModelEndpoint
 from app.main import create_app
 
 
@@ -54,12 +54,13 @@ def test_model_endpoint_crud_encrypts_the_api_key(tmp_path: Path) -> None:
 
         updated = client.patch(
             f"/api/v1/model-endpoints/{endpoint_id}",
-            json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000},
+            json={"api_key": "replacement-secret", "tokens_per_minute": 9000, "output_tokens_per_minute": 4000, "requests_per_second": None},
         )
         assert updated.status_code == 200
         assert updated.json()["api_key_mask"] == "\u2022\u2022\u2022\u2022cret"
         assert updated.json()["tokens_per_minute"] == 9000
         assert updated.json()["output_tokens_per_minute"] == 4000
+        assert updated.json()["requests_per_second"] is None
 
         with app.state.database.get_session() as session:
             stored = session.scalar(select(ModelEndpoint).where(ModelEndpoint.id == endpoint_id))
@@ -98,9 +99,16 @@ def test_model_endpoint_persists_supported_protocol_profile(tmp_path: Path) -> N
         assert response.status_code == 201
         endpoint = response.json()
         assert endpoint["protocol_profile"] == "openai_responses"
+        with app.state.database.get_session() as session:
+            stored = session.get(ModelEndpoint, endpoint["id"])
+            assert stored is not None
+            stored.status = EndpointStatus.AVAILABLE.value
+            session.commit()
         updated = client.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"protocol_profile": "openai_chat_completions"})
         assert updated.status_code == 200
         assert updated.json()["protocol_profile"] == "openai_chat_completions"
+        assert updated.json()["status"] == "unverified"
+        assert updated.json()["last_tested_at"] is None
 
 
 def test_model_endpoint_accepts_all_built_in_provider_protocol_profiles(tmp_path: Path) -> None:
