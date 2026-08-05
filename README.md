@@ -47,6 +47,12 @@ python -m app.cli database validate
 
 Set `LLE_DATABASE_INIT_MODE` to `auto_migrate` (default), `preview`, or `validate`. Set `LLE_DATABASE_BACKUP_BEFORE_MIGRATE=true` to create a consistent SQLite backup in `data/backups` before pending migrations run.
 
+## Evaluation workflow
+
+A step-by-step guide from dataset registration through scored evaluation runs
+(including Hugging Face `hf://` sources) lives in
+[docs/evaluation-workflow.md](docs/evaluation-workflow.md).
+
 ## PostgreSQL team deployment
 
 ```powershell
