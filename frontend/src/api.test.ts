@@ -46,4 +46,13 @@ describe("authenticated browser transport", () => {
       headers: { "X-Report-Password": "share-password" },
     });
   });
+
+  it("creates a dataset evaluation run", async () => {
+    api.setBearerToken("");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: "run-1", benchmark_id: "dataset-evaluation", total_samples: 2, status: "queued" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const body = { model_endpoint_id: "ep-1", dataset_version_id: "ds-1", reference_field: "answer", sample_limit: 100 };
+    const run = await api.createDatasetRun(body);
+    expect(run.id).toBe("run-1");
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/evaluation-runs/dataset", expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
+  });
 });

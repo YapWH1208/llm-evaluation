@@ -6,6 +6,8 @@ export type Endpoint = {
   protocol_profile: "openai_chat_completions" | "openai_responses" | "anthropic_messages" | "gemini_generate_content" | "azure_openai_chat_completions" | "ollama_chat" | "custom_http_json";
   api_key_mask: string;
   custom_headers: Record<string, string>;
+  default_request_body: Record<string, unknown>;
+  timeout_seconds: number;
   status: "unverified" | "available" | "unavailable";
   max_concurrency: number;
   requests_per_second: number | null;
@@ -20,6 +22,15 @@ export type Endpoint = {
   notes: string | null;
   last_connection_error: string | null;
   api_key_max_concurrency: number | null;
+};
+
+export type ConnectionTest = {
+  success: boolean;
+  status: Endpoint["status"];
+  message: string;
+  provider_status_code: number | null;
+  tested_at: string;
+  request: { method: "POST"; url: string; body: Record<string, unknown> };
 };
 
 export type EvaluationRun = {
@@ -252,11 +263,14 @@ export const api = {
   setBearerToken: (token: string) => { bearerToken = token.trim(); if (bearerToken) window.sessionStorage.setItem("lle-api-token", bearerToken); else window.sessionStorage.removeItem("lle-api-token"); },
   listEndpoints: () => request<Endpoint[]>("/model-endpoints"),
   createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
-  testEndpoint: (endpointId: string) => request<{ success: boolean; status: Endpoint["status"]; message: string }>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
+  updateEndpoint: (endpointId: string, body: Record<string, unknown>) => request<Endpoint>(`/model-endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  testEndpoint: (endpointId: string) => request<ConnectionTest>(`/model-endpoints/${endpointId}/connection-test`, { method: "POST" }),
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
   createRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null, benchmarkId = "text-quick-check", benchmarkVersion = "1.0.0") => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency, benchmark_id: benchmarkId, benchmark_version: benchmarkVersion }) }),
   validateRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null, benchmarkId = "text-quick-check", benchmarkVersion = "1.0.0") => request<RunPreflight>("/evaluation-runs/validate", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency, benchmark_id: benchmarkId, benchmark_version: benchmarkVersion }) }),
   createCustomMultimodalRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/custom-multimodal", { method: "POST", body: JSON.stringify(body) }),
+  createDatasetRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/dataset", { method: "POST", body: JSON.stringify(body) }),
+  validateDatasetRun: (body: Record<string, unknown>) => request<RunPreflight>("/evaluation-runs/dataset/preflight", { method: "POST", body: JSON.stringify(body) }),
   executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
   pauseRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/pause`, { method: "POST" }),
   resumeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/resume`, { method: "POST" }),

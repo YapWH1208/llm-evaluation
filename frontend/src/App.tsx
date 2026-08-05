@@ -51,6 +51,7 @@ const initialEndpoint = {
   tags: "",
   notes: "",
   default_request_body: "{}",
+  timeout_seconds: "60",
   max_concurrency: "1",
   api_key_max_concurrency: "",
   requests_per_second: "",
@@ -62,6 +63,7 @@ const initialEndpoint = {
 const initialPrompt = { name: "", version: "1", prompt_type: "user_custom", system_message: "", user_template: "{{ question }}", few_shot_examples: "[]", output_format: "{}", response_parser: "{}", scoring_rule: "{}", change_log: "" };
 const initialDataset = { dataset_id: "", version: "1", revision: "default", source_url: "", checksum: "", credential_binding_id: "", license_text: "" };
 const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
+const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", reference_field: "", sample_limit: "100", model_endpoint_id: "" };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
@@ -144,7 +146,7 @@ function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
 }
 
 export default function App() {
-  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent, locale, setLocale } = useTranslation();
+  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent, locale, setLocale, t } = useTranslation();
   const [view, setView] = useState<View>("dashboard");
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
   const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
@@ -171,8 +173,11 @@ export default function App() {
   const [comparisonRunA, setComparisonRunA] = useState("");
   const [comparisonRunB, setComparisonRunB] = useState("");
   const [form, setForm] = useState(initialEndpoint);
+  const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
+  const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
   const [promptForm, setPromptForm] = useState(initialPrompt);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
+  const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
   const [suiteForm, setSuiteForm] = useState(initialSuite);
   const [reviewForm, setReviewForm] = useState(initialReview);
   const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
@@ -248,6 +253,37 @@ export default function App() {
     showNotice("Unable to reach the evaluation service.");
   }
 
+  function editEndpoint(endpoint: Endpoint) {
+    setEditingEndpointId(endpoint.id);
+    setForm({
+      display_name: endpoint.display_name,
+      base_url: endpoint.base_url,
+      model_name: endpoint.model_name,
+      protocol_profile: endpoint.protocol_profile,
+      api_key: "",
+      custom_headers: JSON.stringify(endpoint.custom_headers, null, 2),
+      default_request_body: JSON.stringify(endpoint.default_request_body, null, 2),
+      timeout_seconds: String(endpoint.timeout_seconds),
+      max_concurrency: String(endpoint.max_concurrency),
+      api_key_max_concurrency: endpoint.api_key_max_concurrency === null ? "" : String(endpoint.api_key_max_concurrency),
+      requests_per_second: endpoint.requests_per_second === null ? "" : String(endpoint.requests_per_second),
+      requests_per_minute: endpoint.requests_per_minute === null ? "" : String(endpoint.requests_per_minute),
+      tokens_per_minute: endpoint.tokens_per_minute === null ? "" : String(endpoint.tokens_per_minute),
+      input_tokens_per_minute: endpoint.input_tokens_per_minute === null ? "" : String(endpoint.input_tokens_per_minute),
+      output_tokens_per_minute: endpoint.output_tokens_per_minute === null ? "" : String(endpoint.output_tokens_per_minute),
+      input_cost_per_million: endpoint.input_cost_per_million === null ? "" : String(endpoint.input_cost_per_million),
+      output_cost_per_million: endpoint.output_cost_per_million === null ? "" : String(endpoint.output_cost_per_million),
+      currency: endpoint.currency,
+      tags: endpoint.tags.join(", "),
+      notes: endpoint.notes ?? "",
+    });
+  }
+
+  function cancelEndpointEdit() {
+    setEditingEndpointId(null);
+    setForm(initialEndpoint);
+  }
+
   async function createEndpoint(event: FormEvent) {
     event.preventDefault();
     setBusy("endpoint");
@@ -260,12 +296,13 @@ export default function App() {
       if (!customHeaders || Array.isArray(customHeaders) || typeof customHeaders !== "object") {
         throw new Error("Custom headers must be a JSON object.");
       }
-      await api.createEndpoint({
+      const endpointPayload: Record<string, unknown> = {
         ...form,
         default_request_body: defaultRequestBody,
         custom_headers: customHeaders,
         tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
         notes: form.notes || null,
+        timeout_seconds: Number(form.timeout_seconds),
         input_cost_per_million: optionalNumber(form.input_cost_per_million),
         output_cost_per_million: optionalNumber(form.output_cost_per_million),
         max_concurrency: Number(form.max_concurrency),
@@ -276,9 +313,20 @@ export default function App() {
         input_tokens_per_minute: optionalNumber(form.input_tokens_per_minute),
         output_tokens_per_minute: optionalNumber(form.output_tokens_per_minute),
         currency: form.currency.toUpperCase(),
-      });
-      setForm(initialEndpoint);
-      showNotice("Endpoint saved. Test its connection before starting a run.");
+      };
+      if (editingEndpointId) {
+        if (!form.api_key.trim()) delete endpointPayload.api_key;
+        await api.updateEndpoint(editingEndpointId, endpointPayload);
+        setTestRequests((current) => {
+          const { [editingEndpointId]: _removed, ...remaining } = current;
+          return remaining;
+        });
+        showNotice("Model configuration saved. Test its connection before starting a run.");
+      } else {
+        await api.createEndpoint(endpointPayload);
+        showNotice("Endpoint saved. Test its connection before starting a run.");
+      }
+      cancelEndpointEdit();
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -287,6 +335,7 @@ export default function App() {
     setBusy(`test-${id}`);
     try {
       const result = await api.testEndpoint(id);
+      setTestRequests((current) => ({ ...current, [id]: result.request }));
       setNotice(result.message);
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -485,6 +534,26 @@ export default function App() {
     try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list, default_request_body: parseJsonObject(suiteForm.default_request_body, "Suite default request body"), default_prompt_overrides: parseJsonObject(suiteForm.default_prompt_overrides, "Suite default prompt overrides"), weight_configuration: parseJsonObject(suiteForm.weight_configuration, "Suite weight configuration") }); setSuiteForm(initialSuite); showNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function queueDatasetRun() {
+    setBusy("dataset-run");
+    try {
+      await api.createDatasetRun({
+        model_endpoint_id: datasetRunForm.model_endpoint_id,
+        dataset_version_id: datasetRunForm.dataset_version_id,
+        prompt_package_id: datasetRunForm.prompt_package_id || null,
+        reference_field: datasetRunForm.reference_field,
+        sample_limit: Number(datasetRunForm.sample_limit) || 100,
+      });
+      setNotice(t("datasetRun.queued"));
+      setDatasetRunForm(initialDatasetRun);
+      await refresh();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function queueSuite(suiteId: string, endpointId: string) {
     setBusy(`suite-${suiteId}`);
     try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency)); showNotice("{{count}} suite run(s) queued.", { count: nextRuns.length }); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
@@ -651,20 +720,20 @@ export default function App() {
       {view === "models" && <>
         <section className="grid two">
           <article className="panel">
-            <h2>Add model endpoint</h2>
+            <h2>{editingEndpointId ? "Edit model endpoint" : "Add model endpoint"}</h2>
             <form onSubmit={createEndpoint} className="form">
               <label>Display name<input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="My local model" /></label>
               <label>Base URL<input required type="url" value={form.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} placeholder="https://provider.example/v1" /></label>
               <label>Model name<input required value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value })} placeholder="model-id" /></label>
               <label>Protocol profile<select value={form.protocol_profile} onChange={(event) => setForm({ ...form, protocol_profile: event.target.value as Endpoint["protocol_profile"] })}><option value="openai_chat_completions">OpenAI-compatible Chat Completions</option><option value="openai_responses">OpenAI-compatible Responses API</option><option value="anthropic_messages">Anthropic Messages</option><option value="gemini_generate_content">Gemini GenerateContent</option><option value="azure_openai_chat_completions">Azure OpenAI Chat Completions</option><option value="ollama_chat">Ollama Chat</option><option value="custom_http_json">Custom HTTP JSON</option></select></label>
-              <label>API key<input required={form.protocol_profile !== "ollama_chat"} type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder={form.protocol_profile === "ollama_chat" ? "Optional for a local Ollama service" : "Stored encrypted"} /></label>
+              <label>API key<input required={!editingEndpointId && form.protocol_profile !== "ollama_chat"} type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder={editingEndpointId ? "Leave blank to keep the encrypted key" : form.protocol_profile === "ollama_chat" ? "Optional for a local Ollama service" : "Stored encrypted"} /></label>
               <label>Custom headers (JSON)<textarea value={form.custom_headers} onChange={(event) => setForm({ ...form, custom_headers: event.target.value })} spellCheck={false} placeholder='{"X-Provider-Project":"project-id"}' /></label>
               <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
-              <div className="field-row"><label>Endpoint concurrency<input required type="number" min="1" max="1000" value={form.max_concurrency} onChange={(event) => setForm({ ...form, max_concurrency: event.target.value })} /></label><label>Shared API-key concurrency<input type="number" min="1" max="1000" value={form.api_key_max_concurrency} onChange={(event) => setForm({ ...form, api_key_max_concurrency: event.target.value })} placeholder="Unlimited" /></label><label>Requests / minute<input type="number" min="1" value={form.requests_per_minute} onChange={(event) => setForm({ ...form, requests_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Tokens / minute<input type="number" min="1" value={form.tokens_per_minute} onChange={(event) => setForm({ ...form, tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
+              <div className="field-row"><label>Timeout (seconds)<input required type="number" min="1" max="600" value={form.timeout_seconds} onChange={(event) => setForm({ ...form, timeout_seconds: event.target.value })} /></label><label>Endpoint concurrency<input required type="number" min="1" max="1000" value={form.max_concurrency} onChange={(event) => setForm({ ...form, max_concurrency: event.target.value })} /></label><label>Shared API-key concurrency<input type="number" min="1" max="1000" value={form.api_key_max_concurrency} onChange={(event) => setForm({ ...form, api_key_max_concurrency: event.target.value })} placeholder="Unlimited" /></label><label>Requests / minute<input type="number" min="1" value={form.requests_per_minute} onChange={(event) => setForm({ ...form, requests_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Tokens / minute<input type="number" min="1" value={form.tokens_per_minute} onChange={(event) => setForm({ ...form, tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
               <div className="field-row"><label>Requests / second<input type="number" min="1" value={form.requests_per_second} onChange={(event) => setForm({ ...form, requests_per_second: event.target.value })} placeholder="Unlimited" /></label><label>Input tokens / minute<input type="number" min="1" value={form.input_tokens_per_minute} onChange={(event) => setForm({ ...form, input_tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Output tokens / minute<input type="number" min="1" value={form.output_tokens_per_minute} onChange={(event) => setForm({ ...form, output_tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
               <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>
               <label>Tags (comma-separated)<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="production, vision" /></label><label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
-              <button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : "Save encrypted endpoint"}</button>
+              <div className="actions"><button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : editingEndpointId ? "Save model configuration" : "Save encrypted endpoint"}</button>{editingEndpointId && <button type="button" className="secondary" onClick={cancelEndpointEdit}>Cancel edit</button>}</div>
             </form>
           </article>
           <article className="panel">
@@ -680,7 +749,8 @@ export default function App() {
           {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : <div className="cards">{endpoints.map((endpoint) => <article className="card" key={endpoint.id}>
             <div data-i18n-preserve><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p><p className="muted">{endpoint.base_url}</p></div>
             <div className="split"><span className={`badge ${endpoint.status}`}>{endpoint.status}</span><span className="muted">{endpoint.max_concurrency} endpoint / {endpoint.api_key_max_concurrency ?? "∞"} shared-key concurrent · {money(endpoint.input_cost_per_million, endpoint.currency)} in / 1M</span></div>
-            <div className="actions"><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue selected benchmark</button></div>
+            <div className="actions"><button className="secondary" onClick={() => editEndpoint(endpoint)}>Edit configuration</button><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue selected benchmark</button></div>
+            {testRequests[endpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[endpoint.id].method} {testRequests[endpoint.id].url}</p><pre>{JSON.stringify(testRequests[endpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
             {capabilities[endpoint.id] && <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}>{item.capability_key}<select value={item.user_declared_status} disabled={busy === `declare-${endpoint.id}-${item.capability_key}`} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div>}
           </article>)}</div>}
         </section>
@@ -707,6 +777,7 @@ export default function App() {
 
       {view === "runs" && <>
         <section className="panel"><div className="section-title"><h2>Run preflight</h2><span>Validate compatibility and estimate work without creating a queue entry.</span></div><div className="actions">{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button className="secondary" key={endpoint.id} disabled={busy === `preflight-${endpoint.id}`} onClick={() => void preflightRun(endpoint.id)}>{busy === `preflight-${endpoint.id}` ? "Checking…" : <>Preflight <span data-i18n-preserve>{endpoint.display_name}</span></>}</button>)}</div></section>
+        <section className="panel"><h2>{t("datasetRun.title")}</h2><form onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }} className="form"><label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, dataset_version_id: event.target.value })}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label><label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value })}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label><label>{t("datasetRun.referenceField")}<input required value={datasetRunForm.reference_field} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, reference_field: event.target.value })} placeholder={t("datasetRun.referenceFieldHint")} /></label><label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value })} /></label><label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value })}><option value="">—</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label><button className="primary" disabled={busy === "dataset-run"}>{t("datasetRun.queue")}</button></form></section>
         <section className="panel"><div className="section-title"><h2>Evaluation runs</h2><span>{runs.length} total</span></div>{runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : <div className="run-list">{runs.map((run) => <article className={`run ${selectedRun === run.id ? "selected" : ""}`} key={run.id}><button className="run-summary" onClick={() => void selectRun(run.id)}><strong data-i18n-preserve>{run.benchmark_id} v{run.benchmark_version}</strong><span><span data-i18n-preserve>{run.status} · {run.completed_samples}/{run.total_samples}</span> samples · {formatDate(run.created_at)}</span></button><div className="actions"><button className="secondary" onClick={() => void selectRun(run.id)}>Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)}>Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")}>Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")}>Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")}>Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")}>Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")}>Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")}>Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")}>Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")}>Cancel</button>}</div></article>)}</div>}</section>
         {selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
       </>}
