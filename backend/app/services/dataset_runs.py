@@ -203,7 +203,10 @@ def create_dataset_run(
     )
     session.add(benchmark_task)
     session.flush()
-    shards = _split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint)
+    try:
+        shards = _split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint)
+    except RunCreationError as error:
+        raise DatasetRunError(str(error)) from error
     for shard_index, shard_samples in enumerate(shards, start=1):
         task = TaskUnit(
             run_id=run.id,
@@ -288,7 +291,7 @@ def preflight_dataset_run(
             )
             if not samples:
                 issues.append(f"None of the first {sample_limit} records contain the reference field {reference_field!r}.")
-        except DatasetRecordError as error:
+        except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))
     if endpoint is not None and endpoint.status == EndpointStatus.AVAILABLE.value:
         compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
