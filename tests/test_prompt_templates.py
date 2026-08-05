@@ -1,9 +1,11 @@
+import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
+from app.services.prompt_templates import PromptTemplateError, render_template
 
 
 class SuccessfulTester:
@@ -45,3 +47,13 @@ def test_prompt_packages_validate_variables_and_snapshot_nonstandard_flags(tmp_p
         assert flags == {"is_standard": False, "flags": ["non_standard_prompt", "modified_system_message", "custom_few_shot"]}
         attempt = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()[0]
         assert "2 + 2" in attempt["input_snapshot"]["messages"][-1]["content"]
+
+
+def test_render_template_accepts_extra_variables() -> None:
+    rendered = render_template("Rate: {{star}}/5", {"star": "4"}, extra_variables=frozenset({"star"}))
+    assert rendered == "Rate: 4/5"
+
+
+def test_render_template_still_rejects_unknown_variables_without_extra_variables() -> None:
+    with pytest.raises(PromptTemplateError, match="star"):
+        render_template("Rate: {{star}}/5", {"star": "4"})
