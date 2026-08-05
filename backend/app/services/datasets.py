@@ -7,7 +7,7 @@ import shutil
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urljoin, urlparse
 from uuid import uuid4
 
 import httpx
@@ -29,6 +29,7 @@ class DatasetDownloadPaused(DatasetError):
 
 MAX_PREPARED_ARCHIVE_FILES = 10_000
 MAX_PREPARED_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_DOWNLOAD_REDIRECTS = 5
 
 
 def resolve_dataset_source(
@@ -116,30 +117,50 @@ def write_dataset_source(
     *,
     max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
 ) -> str:
-    """Stream a configured source to a temporary file and return its SHA-256 digest."""
+    """Stream a configured source to a temporary file and return its SHA-256 digest.
+
+    Redirects are followed only after every hop passes the same outbound URL
+    validation as the original source, so no unvalidated destination is ever
+    contacted and the redirect body is never written to disk.
+    """
 
     digest = hashlib.sha256()
-    try:
-        addresses = validate_outbound_url(source)
-    except OutboundNetworkError as error:
-        raise DatasetError(str(error)) from error
-    with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
-        with client.stream("GET", source, headers=headers) as response:
-            response.raise_for_status()
-            content_length = response.headers.get("content-length")
-            if content_length and content_length.isdigit() and int(content_length) > max_bytes:
-                raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-            written = 0
-            with target.open("wb") as output_file:
-                for chunk in response.iter_bytes():
-                    written += len(chunk)
-                    if written > max_bytes:
-                        raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
-                    output_file.write(chunk)
-                    digest.update(chunk)
-                    if on_chunk:
-                        on_chunk()
-    return digest.hexdigest()
+    current = source
+    source_host = urlparse(source).hostname
+    hop_headers = headers
+    for _hop in range(MAX_DOWNLOAD_REDIRECTS + 1):
+        try:
+            addresses = validate_outbound_url(current)
+        except OutboundNetworkError as error:
+            raise DatasetError(str(error)) from error
+        with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
+            with client.stream("GET", current, headers=hop_headers) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise DatasetError("Dataset source redirected without a Location header.")
+                    current = urljoin(current, location)
+                    if urlparse(current).scheme != "https":
+                        raise DatasetError("Dataset redirects must use HTTPS.")
+                    if urlparse(current).hostname != source_host:
+                        hop_headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
+                    continue
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+                    raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                written = 0
+                with target.open("wb") as output_file:
+                    for chunk in response.iter_bytes():
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                        output_file.write(chunk)
+                        digest.update(chunk)
+                        if on_chunk:
+                            on_chunk()
+                return digest.hexdigest()
+    raise DatasetError(f"Dataset source redirected more than {MAX_DOWNLOAD_REDIRECTS} times.")
 
 
 def prepare_dataset_cache(target: Path) -> Path:
@@ -316,7 +337,17 @@ def download_dataset(
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPStatusError, DatasetError) as error:
-        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in str(error) or getattr(getattr(error, "response", None), "status_code", 0) in {401, 403}) else DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
+        message = str(error)
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+        if status_code == 404:
+            message = f"{message} The repository or file may not exist; check the owner/repository name and revision."
+        elif status_code in {401, 403}:
+            message = (
+                f"{message} Hugging Face requires authentication for this source "
+                "(private or gated repository), or the repository is not a public dataset."
+            )
+        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in message or status_code in {401, 403}) else DatasetStatus.FAILED.value
+        dataset.error_message = message[:500]
         session.commit()
         raise DatasetError(str(error)) from error
     except (httpx.HTTPError, OSError) as error:

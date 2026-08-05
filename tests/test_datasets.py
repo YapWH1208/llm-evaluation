@@ -128,3 +128,75 @@ def test_dataset_preparation_rejects_archive_path_traversal(tmp_path: Path) -> N
         output.writestr("../outside.jsonl", '{"question":"unsafe"}\n')
     with pytest.raises(DatasetError, match="unsafe file path"):
         prepare_dataset_cache(archive)
+
+
+def _redirect_transport(monkeypatch: pytest.MonkeyPatch, handler, *, extra_public_hosts: tuple[str, ...] = ()) -> None:
+    public = ("datasets.example.test",) + extra_public_hosts
+    monkeypatch.setattr(
+        "app.services.outbound_network.getaddrinfo",
+        lambda host, *_args, **_kwargs: [(None, None, None, None, (("93.184.216.34", 0) if host in public else ("127.0.0.1", 0)))],
+    )
+    monkeypatch.setattr(
+        "app.services.datasets.pinned_outbound_transport",
+        lambda *_args, **_kwargs: httpx.MockTransport(handler),
+    )
+
+
+def test_dataset_download_follows_validated_redirects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(307, headers={"location": "https://datasets.example.test/final.jsonl"})
+        return httpx.Response(200, content=b'{"question":"q","answer":"a"}\n')
+    _redirect_transport(monkeypatch, handler)
+    digest = write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
+    assert digest == hashlib.sha256(b'{"question":"q","answer":"a"}\n').hexdigest()
+    assert (tmp_path / "out.jsonl").read_bytes() == b'{"question":"q","answer":"a"}\n'
+    assert calls == ["https://datasets.example.test/start.jsonl", "https://datasets.example.test/final.jsonl"]
+
+
+def test_dataset_download_rejects_redirect_to_private_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(307, headers={"location": "https://127.0.0.1/secret.jsonl"})
+    _redirect_transport(monkeypatch, handler)
+    with pytest.raises(DatasetError, match="private or restricted"):
+        write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
+
+
+def test_dataset_download_rejects_redirect_without_location_and_hop_loops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_location(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(307)
+    _redirect_transport(monkeypatch, no_location)
+    with pytest.raises(DatasetError, match="without a Location header"):
+        write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
+
+    def loop(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(307, headers={"location": str(request.url)})
+    _redirect_transport(monkeypatch, loop)
+    with pytest.raises(DatasetError, match="redirected more than 5 times"):
+        write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
+
+
+def test_dataset_download_enforces_byte_limit_after_redirects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "final" in str(request.url):
+            return httpx.Response(200, content=b"123456789")
+        return httpx.Response(307, headers={"location": "https://datasets.example.test/final.jsonl"})
+    _redirect_transport(monkeypatch, handler)
+    with pytest.raises(DatasetError, match="byte limit"):
+        write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {}, max_bytes=6)
+
+
+def test_dataset_download_does_not_forward_authorization_across_hosts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, str]] = []
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.headers))
+        if "final" in str(request.url):
+            return httpx.Response(200, content=b"ok")
+        return httpx.Response(307, headers={"location": "https://cdn.example.test/final.jsonl"})
+    _redirect_transport(monkeypatch, handler, extra_public_hosts=("cdn.example.test",))
+    write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {"Authorization": "Bearer secret"})
+    assert any(key.lower() == "authorization" for key in seen[0])
+    assert not any(key.lower() == "authorization" for key in seen[1])
+    assert (tmp_path / "out.jsonl").read_bytes() == b"ok"
