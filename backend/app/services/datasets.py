@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
@@ -287,8 +288,11 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
         raise DatasetError("Dataset JSON sources must be an object or an array of objects.")
     if path.suffix.lower() in {".csv", ".tsv"}:
         delimiter = "," if path.suffix.lower() == ".csv" else "\t"
-        for start_line, _fields in iter_delimited_rows(path, delimiter=delimiter):
-            yield start_line
+        try:
+            for start_line, _fields in iter_delimited_rows(path, delimiter=delimiter):
+                yield start_line
+        except (csv.Error, OSError) as error:
+            raise DatasetError(f"Dataset delimited source could not be parsed: {error}") from error
         return
     if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
         yield 1

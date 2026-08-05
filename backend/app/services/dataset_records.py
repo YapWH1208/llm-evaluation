@@ -136,7 +136,7 @@ def iter_delimited_rows(source_file: Path, *, delimiter: str) -> Iterator[tuple[
     """
 
     with source_file.open("r", encoding="utf-8", errors="replace", newline="") as source:
-        reader = csv.reader(source, delimiter=delimiter)
+        reader = csv.reader(source, delimiter=delimiter, strict=True)
         header: list[str] | None = None
         previous_end = 0
         for raw_row in reader:
@@ -151,9 +151,12 @@ def iter_delimited_rows(source_file: Path, *, delimiter: str) -> Iterator[tuple[
 
 
 def _read_delimited_record(source_file: Path, record_number: int, *, delimiter: str) -> dict[str, object] | None:
-    for start_line, fields in iter_delimited_rows(source_file, delimiter=delimiter):
-        if start_line == record_number:
-            return dict(fields)
+    try:
+        for start_line, fields in iter_delimited_rows(source_file, delimiter=delimiter):
+            if start_line == record_number:
+                return dict(fields)
+    except csv.Error as error:
+        raise DatasetRecordError(f"Dataset delimited source could not be parsed: {error}") from error
     return None
 
 
