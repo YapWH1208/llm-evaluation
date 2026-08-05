@@ -101,6 +101,7 @@ def download_mongo_dataset(
             headers,
             ensure_not_paused,
             max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
+            allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
         )
         store.update_document("dataset_versions", dataset_id, {"status": "verifying"})
         expected_checksum = dataset.get("checksum")

@@ -29,7 +29,9 @@ def iter_dataset_records(
 
     prepared = _prepared_root(prepared_path, data_root)
     manifest = json.loads((prepared / "manifest.json").read_text(encoding="utf-8"))
-    index_path = prepared / str(manifest.get("index_path", "sample-index.jsonl"))
+    index_path = (prepared / str(manifest.get("index_path", "sample-index.jsonl"))).resolve()
+    if not index_path.is_relative_to(prepared.resolve()):
+        raise DatasetRecordError("Dataset sample index path escapes the prepared cache.")
     source_root = prepared / "source"
     if not index_path.is_file():
         raise DatasetRecordError("Dataset sample index is missing from the prepared cache.")

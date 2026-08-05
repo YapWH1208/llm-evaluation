@@ -142,3 +142,14 @@ def test_dataset_preparation_rejects_malformed_csv(tmp_path: Path) -> None:
     bad.write_text("question,answer\nq1,\"unclosed\n", encoding="utf-8")
     with pytest.raises(DatasetError, match="could not be parsed"):
         prepare_dataset_cache(bad)
+
+
+def test_dataset_records_rejects_escaping_index_path(tmp_path: Path) -> None:
+    prepared = tmp_path / "data" / "datasets" / "demo" / "1" / "main" / "prepared"
+    source_root = prepared / "source"
+    source_root.mkdir(parents=True)
+    (source_root / "dataset.jsonl").write_bytes(b'{"question":"q1","answer":"a1"}\n')
+    (prepared / "manifest.json").write_text(
+        json.dumps({"format": "lle.sample-index/v1", "source_files": ["dataset.jsonl"], "record_count": 1, "index_path": "../../../outside-index"}), encoding="utf-8")
+    with pytest.raises(DatasetRecordError, match="escapes"):
+        list(iter_dataset_records(str(prepared / "manifest.json"), str(tmp_path / "data")))
