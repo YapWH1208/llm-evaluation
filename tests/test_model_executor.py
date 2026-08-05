@@ -330,3 +330,12 @@ def test_executor_posts_generic_chat_json_to_custom_http_endpoint() -> None:
     result = OpenAIChatCompletionsExecutor(httpx.MockTransport(handler)).execute(endpoint, "secret", {"messages": [{"role": "user", "content": "Hello"}]})
     assert result.success is True
     assert result.prediction == "OK"
+
+
+def test_request_body_resolution_filters_sensitive_default_keys() -> None:
+    from app.services.model_executor import _allowed_defaults
+
+    allowed = _allowed_defaults({"api_key": "stashed", "secret_token": "stashed-token", "temperature": 0.5})
+    assert "api_key" not in allowed
+    assert "secret_token" not in allowed
+    assert allowed["temperature"] == 0.5
