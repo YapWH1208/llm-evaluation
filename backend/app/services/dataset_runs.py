@@ -1,0 +1,376 @@
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.benchmarks.registry import BenchmarkSample
+from app.db.models import (
+    DatasetStatus,
+    DatasetVersion,
+    EndpointStatus,
+    EvaluationRun,
+    ModelEndpoint,
+    PromptPackage,
+    RunStatus,
+    SampleAttempt,
+    TaskStatus,
+    TaskType,
+    TaskUnit,
+)
+from app.services.dataset_records import DatasetRecordError, iter_dataset_records
+from app.services.evaluation_runs import (
+    RunCreationError,
+    _build_sample_messages,
+    _capability_compatibility,
+    _estimate_sample_tokens,
+    _request_body_evidence,
+    _split_samples_for_endpoint_budget,
+)
+from app.services.prompt_templates import PromptTemplateError, render_template
+from app.services.scoring import ScoringError, validate_scoring_rule
+
+
+class DatasetRunError(ValueError):
+    pass
+
+
+DATASET_RUN_BENCHMARK_ID = "dataset-evaluation"
+DATASET_RUN_BENCHMARK_VERSION = "1.0.0"
+DATASET_RUN_DEFAULT_SAMPLE_LIMIT = 100
+
+_FIXED_TEMPLATE_KEYS = {
+    "question": "",
+    "choices": "",
+    "context": "",
+    "image": "",
+    "audio": "",
+    "video": "",
+    "language": "",
+    "output_schema": "",
+}
+
+_DATASET_RUN_MANIFEST: dict[str, object] = {
+    "benchmark_id": DATASET_RUN_BENCHMARK_ID,
+    "version": DATASET_RUN_BENCHMARK_VERSION,
+    "display_name": "Dataset Evaluation",
+    "description": "Records of a registered dataset evaluated through a prompt template.",
+    "pack": "user",
+    "modalities": ["text"],
+    "input_modalities": ["text"],
+    "output_modality": "text",
+    "required_capabilities": ["text_input"],
+    "recommended_capabilities": ["text_input"],
+    "capability_categories": ["text_input"],
+    "datasets": [],
+    "license": "User-registered dataset; license state recorded on the dataset version.",
+    "estimated_download_bytes": 0,
+    "sample_count": 0,
+    "prompt_version": "dataset/1.0.0",
+    "scorer_type": "exact_match",
+    "scoring": {"type": "exact_match"},
+    "languages": ["en"],
+    "shard_size": 50,
+    "analysis_schema": {"dimensions": ["capability", "language", "difficulty", "modality"], "version": "1.0.0"},
+}
+
+
+def create_dataset_run(
+    session: Session,
+    *,
+    model_endpoint_id: str,
+    dataset_version_id: str,
+    prompt_package_id: str | None,
+    reference_field: str,
+    sample_limit: int,
+    request_body_override: dict[str, object] | None = None,
+    created_by: str | None = None,
+    max_concurrency: int | None = None,
+    data_root: str,
+) -> EvaluationRun:
+    endpoint = session.get(ModelEndpoint, model_endpoint_id)
+    if endpoint is None:
+        raise DatasetRunError("Model endpoint not found.")
+    if endpoint.status != EndpointStatus.AVAILABLE.value:
+        raise DatasetRunError("Model endpoint must pass a connection test before scheduling a run.")
+    dataset = session.get(DatasetVersion, dataset_version_id)
+    if dataset is None:
+        raise DatasetRunError("Dataset version not found.")
+    if dataset.status != DatasetStatus.READY.value or not dataset.prepared_path:
+        raise DatasetRunError(
+            f"Dataset {dataset.dataset_id} v{dataset.version} is not ready; download and verify it before running."
+        )
+    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
+        raise DatasetRunError("Prompt package not found.")
+    if not reference_field.strip():
+        raise DatasetRunError("A reference field is required.")
+    try:
+        samples, skipped = _build_dataset_samples(
+            prepared_path=dataset.prepared_path,
+            data_root=data_root,
+            sample_limit=sample_limit,
+            reference_field=reference_field.strip(),
+            prompt_package=prompt_package,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+        )
+    except DatasetRecordError as error:
+        raise DatasetRunError(str(error)) from error
+    if not samples:
+        raise DatasetRunError(
+            f"None of the first {sample_limit} records contain the reference field {reference_field!r}; "
+            "check the field name or register a different dataset."
+        )
+    compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
+    if compatibility["unsupported"]:
+        raise DatasetRunError(
+            "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
+        )
+    scoring_rule = dict(prompt_package.scoring_rule) if prompt_package and isinstance(prompt_package.scoring_rule, dict) and prompt_package.scoring_rule else {"type": "exact_match"}
+    try:
+        validate_scoring_rule(scoring_rule)
+    except ScoringError as error:
+        raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
+    request_body_evidence = _request_body_evidence(
+        endpoint=endpoint,
+        benchmark_manifest=_DATASET_RUN_MANIFEST,
+        suite_snapshot=None,
+        request_body_override=request_body_override,
+    )
+    frozen_datasets = [{
+        "dataset_id": dataset.dataset_id,
+        "version": dataset.version,
+        "revision": dataset.revision,
+        "dataset_version_id": dataset.id,
+    }]
+    snapshot = {
+        "benchmark": {"id": DATASET_RUN_BENCHMARK_ID, "version": DATASET_RUN_BENCHMARK_VERSION, "source": "user", "manifest": _DATASET_RUN_MANIFEST},
+        "endpoint": {
+            "id": endpoint.id,
+            "base_url": endpoint.base_url,
+            "model_name": endpoint.model_name,
+            "protocol_profile": endpoint.protocol_profile,
+            "default_request_body": endpoint.default_request_body,
+            "timeout_seconds": endpoint.timeout_seconds,
+            "custom_headers": endpoint.custom_headers,
+            "input_cost_per_million": endpoint.input_cost_per_million,
+            "output_cost_per_million": endpoint.output_cost_per_million,
+        },
+        "datasets": frozen_datasets,
+        "dataset_version": {"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision},
+        "reference_field": reference_field.strip(),
+        "sample_limit": sample_limit,
+        "skipped_records": skipped,
+        "sample_ids": [sample.sample_id for sample in samples],
+        "capability_compatibility": compatibility,
+        "prompt_package": (
+            {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
+             "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
+             "few_shot_examples": prompt_package.few_shot_examples, "scoring_rule": prompt_package.scoring_rule}
+            if prompt_package else None
+        ),
+        "request_body_evidence": request_body_evidence,
+    }
+    run = EvaluationRun(
+        model_endpoint_id=endpoint.id,
+        prompt_package_id=prompt_package.id if prompt_package else None,
+        created_by=created_by,
+        max_concurrency=max_concurrency,
+        benchmark_id=DATASET_RUN_BENCHMARK_ID,
+        benchmark_version=DATASET_RUN_BENCHMARK_VERSION,
+        configuration_snapshot=snapshot,
+        status=RunStatus.QUEUED.value,
+        total_samples=len(samples),
+    )
+    session.add(run)
+    session.flush()
+    dataset_task = TaskUnit(
+        run_id=run.id,
+        task_type=TaskType.DATASET_PREPARATION.value,
+        payload={"datasets": frozen_datasets, "prepared_inline": False},
+        status=TaskStatus.PENDING.value,
+    )
+    session.add(dataset_task)
+    session.flush()
+    benchmark_task = TaskUnit(
+        run_id=run.id,
+        parent_task_id=dataset_task.id,
+        task_type=TaskType.BENCHMARK.value,
+        payload={"benchmark_id": DATASET_RUN_BENCHMARK_ID, "benchmark_version": DATASET_RUN_BENCHMARK_VERSION, "planned_samples": len(samples)},
+        status=TaskStatus.PENDING.value,
+    )
+    session.add(benchmark_task)
+    session.flush()
+    shards = _split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint)
+    for shard_index, shard_samples in enumerate(shards, start=1):
+        task = TaskUnit(
+            run_id=run.id,
+            parent_task_id=benchmark_task.id,
+            task_type=TaskType.EVALUATION_SHARD.value,
+            payload={
+                "sample_ids": [sample.sample_id for sample in shard_samples],
+                "estimated_request_count": len(shard_samples),
+                "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                "sample_token_estimates": {sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples},
+                "shard_index": shard_index,
+                "shard_count": len(shards),
+                "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+            },
+            status=TaskStatus.PENDING.value,
+        )
+        session.add(task)
+        session.flush()
+        session.add_all(
+            [
+                SampleAttempt(
+                    run_id=run.id,
+                    task_id=task.id,
+                    sample_id=sample.sample_id,
+                    input_snapshot={
+                        "messages": _build_sample_messages(sample, None),
+                        "modality": "text",
+                        "metadata": dict(sample.metadata),
+                        "request_body_evidence": request_body_evidence,
+                    },
+                    reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                )
+                for sample in shard_samples
+            ]
+        )
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def preflight_dataset_run(
+    session: Session,
+    *,
+    model_endpoint_id: str,
+    dataset_version_id: str,
+    prompt_package_id: str | None,
+    reference_field: str,
+    sample_limit: int,
+    request_body_override: dict[str, object] | None = None,
+    data_root: str,
+) -> dict[str, object]:
+    """Preview dataset-run readiness and cost without persisting anything."""
+
+    issues: list[str] = []
+    endpoint = session.get(ModelEndpoint, model_endpoint_id)
+    if endpoint is None:
+        issues.append("Model endpoint not found.")
+    elif endpoint.status != EndpointStatus.AVAILABLE.value:
+        issues.append("Model endpoint must pass a connection test before scheduling a run.")
+    dataset = session.get(DatasetVersion, dataset_version_id)
+    if dataset is None:
+        issues.append("Dataset version not found.")
+    elif dataset.status != DatasetStatus.READY.value or not dataset.prepared_path:
+        issues.append(f"Dataset {dataset.dataset_id} v{dataset.version} is not ready; download and verify it first.")
+    if prompt_package_id and session.get(PromptPackage, prompt_package_id) is None:
+        issues.append("Prompt package not found.")
+    if not reference_field.strip():
+        issues.append("A reference field is required.")
+    samples: list[BenchmarkSample] = []
+    datasets: list[dict[str, object]] = []
+    if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
+        datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": False})
+        try:
+            samples, skipped = _build_dataset_samples(
+                prepared_path=dataset.prepared_path,
+                data_root=data_root,
+                sample_limit=sample_limit,
+                reference_field=reference_field.strip(),
+                prompt_package=session.get(PromptPackage, prompt_package_id) if prompt_package_id else None,
+                dataset_id=dataset.dataset_id,
+                dataset_version=dataset.version,
+            )
+            if not samples:
+                issues.append(f"None of the first {sample_limit} records contain the reference field {reference_field!r}.")
+        except DatasetRecordError as error:
+            issues.append(str(error))
+    if endpoint is not None and endpoint.status == EndpointStatus.AVAILABLE.value:
+        compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
+        if compatibility["unsupported"]:
+            issues.append("Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"]))
+    else:
+        compatibility = {"required": ["text_input"], "unsupported": [], "unverified": []}
+    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
+    estimated_output_tokens = len(samples) * 64
+    estimated_cost = (
+        ((estimated_input_tokens * endpoint.input_cost_per_million) + (estimated_output_tokens * endpoint.output_cost_per_million)) / 1_000_000
+        if endpoint is not None and endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
+        else None
+    )
+    return {
+        "can_queue": not issues,
+        "issues": issues,
+        "sample_count": len(samples),
+        "estimated_requests": len(samples),
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost": estimated_cost,
+        "currency": endpoint.currency if endpoint is not None else None,
+        "compatibility": compatibility,
+        "datasets": datasets,
+        "request_body_evidence": (
+            _request_body_evidence(endpoint=endpoint, benchmark_manifest=_DATASET_RUN_MANIFEST, suite_snapshot=None, request_body_override=request_body_override)
+            if endpoint is not None else None
+        ),
+    }
+
+
+def _build_dataset_samples(
+    *,
+    prepared_path: str,
+    data_root: str,
+    sample_limit: int,
+    reference_field: str,
+    prompt_package: PromptPackage | None,
+    dataset_id: str,
+    dataset_version: str,
+) -> tuple[list[BenchmarkSample], int]:
+    """Materialize up to ``sample_limit`` usable records as benchmark samples.
+
+    Records missing the reference field, or that render no prompt, are counted
+    as skipped.  The prompt is fully rendered here (template applied with the
+    record fields), so callers must pass ``None`` as the prompt package when
+    building attempt messages to avoid double rendering.
+    """
+
+    samples: list[BenchmarkSample] = []
+    skipped = 0
+    for entry in iter_dataset_records(prepared_path, data_root, limit=sample_limit):
+        fields = {str(key): value for key, value in entry["fields"].items()}
+        reference = fields.get(reference_field)
+        prompt = _render_record_prompt(fields, prompt_package)
+        if reference is None or prompt is None:
+            skipped += 1
+            continue
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"{dataset_id}:{dataset_version}:{entry['source']}#{entry['record_number']}",
+                prompt=prompt,
+                reference_answer=str(reference),
+                metadata={"source": entry["source"], "record_number": str(entry["record_number"]), "dataset": dataset_id},
+                messages=({"role": "user", "content": prompt},),
+            )
+        )
+    return samples, skipped
+
+
+def _render_record_prompt(fields: dict[str, object], prompt_package: PromptPackage | None) -> str | None:
+    if prompt_package is not None:
+        try:
+            return render_template(
+                prompt_package.user_template,
+                {**_FIXED_TEMPLATE_KEYS, **fields},
+                extra_variables=frozenset(fields),
+            )
+        except PromptTemplateError as error:
+            raise DatasetRunError(str(error)) from error
+    for value in fields.values():
+        if isinstance(value, str) and value:
+            return value
+    return None
