@@ -731,7 +731,24 @@ def test_worker_claim_honors_system_and_worker_concurrency_limits(tmp_path: Path
         assert client.post("/api/v1/workers/claim", json={"worker_id":"worker-b"}).json() is None
 
 
-def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path) -> None:
+class _FixedNow:
+    """Deterministic clock for rate-window tests: every claim shares one second.
+
+    Pinned to now + 1 hour so real-clock lease checks in the executor (which
+    use their own unpatched ``datetime``) still see the lease as valid while
+    the patched claim path sees one fixed second.
+    """
+
+    fixed: datetime = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    @classmethod
+    def now(cls, tz: object = None) -> datetime:
+        del tz
+        return cls.fixed
+
+
+def test_worker_claim_honors_rps_and_directional_token_budgets(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.setattr("app.services.task_queue.datetime", _FixedNow)
     rps_app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rps.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")), connection_tester=SuccessfulTester())
     with TestClient(rps_app) as client:
         endpoint = client.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model","max_concurrency":3,"requests_per_second":1}).json()
@@ -771,7 +788,8 @@ def test_token_limited_runs_split_shards_before_admission(tmp_path: Path) -> Non
             assert all(task.payload["estimated_token_count"] <= 100 for task in shards)
 
 
-def test_low_rps_runs_split_requests_and_continue_when_the_next_window_opens(tmp_path: Path) -> None:
+def test_low_rps_runs_split_requests_and_continue_when_the_next_window_opens(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.setattr("app.services.task_queue.datetime", _FixedNow)
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'rps-continuation.db'}", secret_encryption_key=Fernet.generate_key().decode()),
         connection_tester=SuccessfulTester(),
