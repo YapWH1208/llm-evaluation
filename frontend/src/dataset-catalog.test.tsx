@@ -72,11 +72,55 @@ describe("dataset catalog", () => {
     expect(update).toHaveBeenCalledWith("ds-1", expect.objectContaining({ dataset_id: "renamed" }));
   }, 10_000);
 
+  it("converts cleared optional fields to null when saving edits", async () => {
+    const update = vi.spyOn(api, "updateDataset").mockResolvedValue({ ...readyDataset });
+    vi.spyOn(api, "listDatasets").mockResolvedValue([readyDataset]);
+    const { user } = await renderApp();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(update).toHaveBeenCalledWith("ds-1", expect.objectContaining({
+      dataset_id: "demo",
+      version: "1",
+      revision: "default",
+      source_url: null,
+      checksum: "abc",
+      credential_binding_id: null,
+      license_text: null,
+      input_field: "question",
+      reference_field: "answer",
+    }));
+  }, 10_000);
+
+  it("disables the preview button while the preview request is in flight", async () => {
+    let resolvePreview!: () => void;
+    const pending = new Promise<void>((resolve) => { resolvePreview = resolve; });
+    vi.spyOn(api, "previewDataset").mockReturnValue(pending as never);
+    const { user } = await renderApp();
+    const button = screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement;
+    await user.click(button);
+    expect(button.disabled).toBe(true);
+    resolvePreview();
+    await waitFor(() => expect(button.disabled).toBe(false));
+  }, 10_000);
+
   it("deletes a dataset after confirmation", async () => {
     const remove = vi.spyOn(api, "deleteDataset").mockResolvedValue({ ...readyDataset });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(remove).toHaveBeenCalledWith("ds-1");
+  }, 10_000);
+
+  it("disables the delete button while the delete request is in flight", async () => {
+    let resolveDelete!: () => void;
+    const pending = new Promise<void>((resolve) => { resolveDelete = resolve; });
+    vi.spyOn(api, "deleteDataset").mockReturnValue(pending as never);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { user } = await renderApp();
+    const button = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
+    await user.click(button);
+    expect(button.disabled).toBe(true);
+    resolveDelete();
+    await waitFor(() => expect(button.disabled).toBe(false));
   }, 10_000);
 });

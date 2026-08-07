@@ -38,6 +38,18 @@ describe("StaticCopy", () => {
     expect(screen.getAllByText("available")).toHaveLength(2);
   });
 
+  it("translates dataset catalog notices and the preview fallback copy", () => {
+    window.localStorage.setItem("lle-locale", "fr");
+    render(<LocaleProvider><StaticCopy>
+      <p>Dataset version updated.</p>
+      <p>Dataset version deleted.</p>
+      <p>Preview unavailable.</p>
+    </StaticCopy></LocaleProvider>);
+    expect(screen.getByText("Version du jeu de données mise à jour.")).toBeTruthy();
+    expect(screen.getByText("Version du jeu de données supprimée.")).toBeTruthy();
+    expect(screen.getByText("Aperçu indisponible.")).toBeTruthy();
+  });
+
   it("preserves dynamic values that collide with client copy and translates protocol labels", async () => {
     window.localStorage.setItem("lle-locale", "fr");
     const user = userEvent.setup();

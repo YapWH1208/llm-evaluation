@@ -5,10 +5,13 @@ from pathlib import Path
 import zipfile
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.core.config import DatasetCredentialBinding, Settings
+from app.db.mongo import MongoDocumentStore
 from app.main import create_app
 from app.services.datasets import DatasetError, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
+from tests.test_mongo_document_store import FakeClient
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
     app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
@@ -254,6 +257,33 @@ def test_dataset_preview_requires_a_ready_dataset_and_caps_the_limit(tmp_path: P
         assert missing.status_code == 404
         oversized = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=999")
         assert oversized.status_code == 422
+
+
+def test_dataset_preview_reports_a_corrupt_prepared_cache_instead_of_a_server_error(tmp_path: Path) -> None:
+    content = b'{"question":"what is 2 + 2?","answer":"4"}\n'
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "corrupt", "version": "1"}).json()
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        prepared = Path(uploaded.json()["prepared_path"]).parent
+        manifest = json.loads((prepared / "manifest.json").read_text(encoding="utf-8"))
+        index = prepared / str(manifest.get("index_path", "sample-index.jsonl"))
+        index.unlink()
+        preview = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert preview.status_code == 409
+        assert "preview" in preview.json()["detail"]
+
+
+def test_mongodb_dataset_update_and_delete_of_missing_version_return_404(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        missing_update = api.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
+        assert missing_update.status_code == 404
+        missing_delete = api.delete("/api/v1/datasets/does-not-exist")
+        assert missing_delete.status_code == 404
 
 
 def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -> None:

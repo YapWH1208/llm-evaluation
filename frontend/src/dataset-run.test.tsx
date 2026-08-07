@@ -74,4 +74,31 @@ describe("dataset evaluation run", () => {
       sample_limit: 100,
     });
   }, 10_000);
+
+  it("clears a stale reference field when switching to a dataset without defaults", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listEndpoints").mockResolvedValue([{ id: "ep-1", display_name: "Test model", status: "available" }] as never);
+    vi.spyOn(api, "listRuns").mockResolvedValue([]);
+    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
+    vi.spyOn(api, "listDatasets").mockResolvedValue([
+      { id: "ds-1", dataset_id: "demo", version: "1", status: "ready", reference_field: "expected" },
+      { id: "ds-2", dataset_id: "other", version: "1", status: "ready" },
+    ] as never);
+    vi.spyOn(api, "listSuites").mockResolvedValue([]);
+    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
+    vi.spyOn(api, "listTasks").mockResolvedValue([]);
+    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
+    vi.spyOn(api, "listUsers").mockResolvedValue([]);
+    vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
+    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+
+    render(<LocaleProvider><App /></LocaleProvider>);
+    await user.click(screen.getByRole("button", { name: "Runs" }));
+    await user.selectOptions(screen.getByLabelText("Dataset"), "ds-1");
+    const input = screen.getByLabelText("Reference field") as HTMLInputElement;
+    expect(input.value).toBe("expected");
+    await user.selectOptions(screen.getByLabelText("Dataset"), "ds-2");
+    expect(input.value).toBe("");
+  }, 10_000);
 });

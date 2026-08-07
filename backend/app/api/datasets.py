@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
+from app.services.dataset_records import DatasetRecordError
 from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, delete_dataset, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
 from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, delete_mongo_dataset, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
 
@@ -131,13 +132,18 @@ def preview_dataset_version(dataset_version_id: str, request: Request, session: 
         ready = dataset.status == "ready" and prepared_path is not None
     if not ready:
         raise HTTPException(409, "Dataset is not ready; download and verify it before previewing.")
-    return preview_dataset_records(str(prepared_path), request.app.state.settings.data_root, limit=limit)
+    try:
+        return preview_dataset_records(str(prepared_path), request.app.state.settings.data_root, limit=limit)
+    except DatasetRecordError as error:
+        raise HTTPException(409, f"Dataset preview is unavailable: {error}") from error
 
 
 @router.put("/{dataset_version_id}", response_model=DatasetResponse)
 def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, request: Request, session: SessionDependency) -> DatasetVersion | dict:
     _validate_dataset_registration(payload, request)
     store = get_document_store(request)
+    if store is not None and store.get_document("dataset_versions", dataset_version_id) is None:
+        raise HTTPException(404, "Dataset version not found")
     try:
         if store is not None:
             return update_mongo_dataset(store, dataset_version_id, payload.model_dump())
@@ -238,6 +244,8 @@ def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:S
 @router.delete("/{dataset_version_id}", response_model=DatasetResponse)
 def delete_dataset_version(dataset_version_id: str, request: Request, session: SessionDependency) -> DatasetVersion | dict:
     store = get_document_store(request)
+    if store is not None and store.get_document("dataset_versions", dataset_version_id) is None:
+        raise HTTPException(404, "Dataset version not found")
     try:
         if store is not None:
             return delete_mongo_dataset(store, dataset_version_id, request.app.state.settings.data_root)

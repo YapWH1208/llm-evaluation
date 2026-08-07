@@ -4,6 +4,23 @@ All notable changes to the LLM/SLM Evaluation Platform are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Catalog edits no longer fail with 422 when optional fields are left empty;
+  they are sent as `null` like the registration form does.
+- Switching datasets in the run form clears a stale reference field prefill
+  instead of silently carrying the previous dataset's default.
+- Dataset version update/delete on the MongoDB store return 404 for a missing
+  version, matching the relational store.
+- Dataset preview reports 409 instead of a 500 when the prepared cache is
+  corrupt or incomplete.
+- Dataset catalog preview and delete buttons are disabled while their request
+  is in flight.
+- New dataset catalog notices and the preview fallback copy are translated
+  for non-English locales.
+
 ## 0.2.0 — 2026-08-07
 
 ### Added
