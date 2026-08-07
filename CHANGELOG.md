@@ -8,6 +8,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Dataset versions can declare optional input and reference field defaults,
+  and the catalog gains preview, edit, and delete actions (delete is blocked
+  while a run references the revision).
+- New in-app usage guide view walking through the evaluation workflow.
 - Initial release of the platform (version `0.1.0`).
 
 ## 0.1.0 — 2026-08-05
