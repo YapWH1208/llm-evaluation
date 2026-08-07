@@ -30,13 +30,14 @@ import {
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
+import { Guide } from "./components/Guide";
 import { localeIds, localeNames, reportCopy, type Locale } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
 import { StaticCopy } from "./i18n/StaticCopy";
 import "./evidence.css";
 
-type View = "dashboard" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
+type View = "dashboard" | "guide" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
 const initialEndpoint = {
   base_url: "",
@@ -731,6 +732,7 @@ export default function App() {
       <StaticCopy>
 
       {view === "dashboard" && <OverviewDashboard dashboard={dashboard} endpoints={endpoints} runs={runs} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
+      {view === "guide" && <Guide />}
 
       {view === "models" && <>
         <section className="grid two">
