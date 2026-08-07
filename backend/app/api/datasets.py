@@ -12,8 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
-from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, delete_dataset, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
+from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, delete_mongo_dataset, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
@@ -233,6 +233,18 @@ def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:S
         assert session is not None
         return clear_dataset_cache(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
     except DatasetError as error: raise HTTPException(409,str(error)) from error
+
+
+@router.delete("/{dataset_version_id}", response_model=DatasetResponse)
+def delete_dataset_version(dataset_version_id: str, request: Request, session: SessionDependency) -> DatasetVersion | dict:
+    store = get_document_store(request)
+    try:
+        if store is not None:
+            return delete_mongo_dataset(store, dataset_version_id, request.app.state.settings.data_root)
+        assert session is not None
+        return delete_dataset(session, get_dataset_or_404(session, dataset_version_id), request.app.state.settings.data_root)
+    except DatasetError as error:
+        raise HTTPException(409, str(error)) from error
 
 
 def _decode_upload(value: str) -> bytes:

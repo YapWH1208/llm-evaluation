@@ -133,7 +133,7 @@ def clear_mongo_dataset_cache(store: MongoDocumentStore, dataset_id: str, data_r
         snapshot = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
         descriptors = snapshot.get("datasets") if isinstance(snapshot, dict) else None
         if isinstance(descriptors, list) and any(isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_id for descriptor in descriptors):
-            raise DatasetError("Dataset cache cannot be cleared while an evaluation run references this revision.")
+            raise DatasetError("Dataset cannot be cleared or deleted while an evaluation run references this revision.")
     local_path = dataset.get("local_path")
     if isinstance(local_path, str) and local_path:
         root = (Path(data_root).resolve() / "datasets").resolve()
@@ -209,6 +209,30 @@ def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: di
     updated = store.update_document("dataset_versions", dataset_id, values)
     assert updated is not None
     return updated
+
+
+def delete_mongo_dataset(store: MongoDocumentStore, dataset_id: str, data_root: str) -> dict[str, Any]:
+    dataset = _get_dataset(store, dataset_id)
+    for run in store.list_documents("evaluation_runs"):
+        snapshot = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
+        descriptors = snapshot.get("datasets") if isinstance(snapshot, dict) else None
+        if isinstance(descriptors, list) and any(isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_id for descriptor in descriptors):
+            raise DatasetError("Dataset cannot be cleared or deleted while an evaluation run references this revision.")
+    if dataset.get("status") in {"downloading", "preparing", "verifying", "removing"}:
+        raise DatasetError("Dataset cannot be deleted while it is downloading or preparing.")
+    local_path = dataset.get("local_path")
+    if isinstance(local_path, str) and local_path:
+        root = (Path(data_root).resolve() / "datasets").resolve()
+        target = Path(local_path).resolve()
+        if not target.is_relative_to(root):
+            raise DatasetError("Dataset cache path is outside the configured dataset root.")
+        target.unlink(missing_ok=True)
+    clear_prepared_dataset_cache(dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None, data_root)
+    upload_dir = (Path(data_root).resolve() / "datasets" / "uploads" / dataset_id).resolve()
+    if upload_dir.is_relative_to((Path(data_root).resolve() / "datasets").resolve()):
+        shutil.rmtree(upload_dir, ignore_errors=True)
+    store.delete_document("dataset_versions", dataset_id)
+    return dataset
 
 
 def _get_dataset(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:

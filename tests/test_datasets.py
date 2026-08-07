@@ -278,3 +278,56 @@ def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -
         assert bad_source.status_code == 422
         missing = client.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
         assert missing.status_code == 404
+
+
+def test_dataset_delete_removes_registration_and_cache_but_guards_referenced_versions(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "doomed", "version": "1"}).json()
+        content = b'{"question":"q?","answer":"a"}\n'
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        deleted = client.delete(f"/api/v1/datasets/{created['id']}")
+        assert deleted.status_code == 200
+        listed = client.get("/api/v1/datasets").json()
+        assert all(item["id"] != created["id"] for item in listed)
+        gone = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert gone.status_code == 404
+        missing = client.delete("/api/v1/datasets/does-not-exist")
+        assert missing.status_code == 404
+
+
+def test_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "referenced", "version": "1"}).json()
+        content = b'{"question":"q?","answer":"a"}\n'
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        session = app.state.database.get_session()
+        try:
+            from app.db.models import DatasetVersion, EvaluationRun, ModelEndpoint
+            session.add(ModelEndpoint(
+                id="endpoint-x", display_name="test", base_url="https://models.example.test/v1",
+                model_name="example-model", encrypted_api_key="not-a-real-key", api_key_mask="not-a-real-key",
+            ))
+            session.flush()
+            dataset = session.get(DatasetVersion, created["id"])
+            assert dataset is not None
+            session.add(EvaluationRun(
+                model_endpoint_id="endpoint-x",
+                benchmark_id="dataset-evaluation",
+                benchmark_version="1",
+                configuration_snapshot={"datasets": [{"dataset_version_id": created["id"]}]},
+                status="completed",
+                total_samples=1,
+            ))
+            session.commit()
+        finally:
+            session.close()
+    with TestClient(app) as client:
+        blocked = client.delete(f"/api/v1/datasets/{created['id']}")
+        assert blocked.status_code == 409
+        assert "references this revision" in blocked.json()["detail"]
+        listed = client.get("/api/v1/datasets").json()
+        assert any(item["id"] == created["id"] for item in listed)
