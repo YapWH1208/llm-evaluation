@@ -208,3 +208,19 @@ def test_dataset_download_rejects_redirect_outside_allowed_hosts(tmp_path: Path,
     _redirect_transport(monkeypatch, handler, extra_public_hosts=("cdn.example.test",))
     with pytest.raises(DatasetError, match="not allowed"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {}, allowed_hosts=("datasets.example.test",))
+
+
+def test_dataset_create_and_response_carry_input_and_reference_fields(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={
+            "dataset_id": "fields", "version": "1",
+            "input_field": "question", "reference_field": "answer",
+        })
+        assert created.status_code == 201
+        body = created.json()
+        assert body["input_field"] == "question"
+        assert body["reference_field"] == "answer"
+        listed = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
+        assert listed[body["id"]]["input_field"] == "question"
+        assert listed[body["id"]]["reference_field"] == "answer"

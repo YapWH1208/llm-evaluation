@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
     dataset_id: str = Field(min_length=1, max_length=128); version: str = Field(min_length=1, max_length=64)
     revision: str = "default"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
+    input_field: str | None = None; reference_field: str | None = None
     credential_binding_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
     credential_env_var: str | None = None
 
@@ -29,6 +30,14 @@ class DatasetCreate(BaseModel):
                 "credential_env_var is no longer accepted. Configure an administrator-owned "
                 "credential_binding_id instead."
             )
+        if self.input_field is not None and not self.input_field.strip():
+            raise ValueError("input_field must not be blank when provided.")
+        if self.reference_field is not None and not self.reference_field.strip():
+            raise ValueError("reference_field must not be blank when provided.")
+        if self.input_field is not None:
+            self.input_field = self.input_field.strip()
+        if self.reference_field is not None:
+            self.reference_field = self.reference_field.strip()
         return self
 
 
@@ -36,7 +45,7 @@ class DatasetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str; dataset_id: str; version: str; revision: str; source_url: str | None; credential_binding_id: str | None
     checksum: str | None; local_path: str | None; prepared_path: str | None = None; size_bytes: int | None = None; license_text: str | None
-    license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
+    license_accepted_at: datetime | None; input_field: str | None = None; reference_field: str | None = None; status: str; error_message: str | None; created_at: datetime
 
 
 class DatasetUpload(BaseModel):

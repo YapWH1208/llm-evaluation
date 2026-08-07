@@ -692,6 +692,8 @@ def _register_mongo_declared_dataset(
             "prepared_path": None,
             "size_bytes": None,
             "license_accepted_at": None,
+            "input_field": None,
+            "reference_field": None,
             "status": "license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded",
             "error_message": None,
             "created_at": _utc_now(),

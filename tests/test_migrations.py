@@ -38,7 +38,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == list(range(2, 24))
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 25))
     database.initialize()
     database.initialize()
 
@@ -51,11 +51,11 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     judge_columns = {column["name"] for column in inspect(database.engine).get_columns("judge_assessments")}
     assert {"comparison_sample_attempt_id", "answer_order", "swap_test_group_id", "selected_answer"} <= judge_columns
     dataset_columns = {column["name"] for column in inspect(database.engine).get_columns("dataset_versions")}
-    assert {"size_bytes", "prepared_path", "credential_binding_id"} <= dataset_columns
+    assert {"size_bytes", "prepared_path", "credential_binding_id", "input_field", "reference_field"} <= dataset_columns
     report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
     assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 24
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -113,6 +113,9 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         password_limit_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 23))
         assert password_limit_migration is not None
         assert password_limit_migration.migration_id == "20260730_add_report_share_password_limits"
+        field_default_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 24))
+        assert field_default_migration is not None
+        assert field_default_migration.migration_id == "20260807_add_dataset_field_defaults"
     assert database.migration_preview() == ()
     database.dispose()
 
@@ -127,7 +130,7 @@ def test_initialize_backfills_a_missing_legacy_migration_ledger_before_upgrading
     validation = database.initialize()
     assert validation.is_valid
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 23
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 24
         applied_versions = list(session.scalars(select(SchemaMigration.version).order_by(SchemaMigration.version)))
     assert applied_versions == [migration.version for migration in MIGRATIONS]
     assert database.initialize("validate").is_valid
