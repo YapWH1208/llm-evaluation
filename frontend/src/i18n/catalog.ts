@@ -33,6 +33,12 @@ const en = {
   "datasetRun.nonReadyHint": "Only ready datasets are listed. Download and verify other versions first.",
   "datasetRun.queue": "Queue dataset run",
   "datasetRun.queued": "Dataset evaluation run queued.",
+  "datasetRun.inputField": "Input field",
+  "datasetRegister.title": "Register dataset version",
+  "datasetRegister.inputField": "Input field",
+  "datasetRegister.referenceField": "Reference (output) field",
+  "datasetRegister.inputFieldHint": "Optional record field used as the prompt input",
+  "datasetRegister.referenceFieldHint": "Optional record field holding the expected answer",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -58,6 +64,12 @@ const zhCN: TranslationCatalog = {
   "datasetRun.nonReadyHint": "仅列出已就绪的数据集。请先下载并验证其他版本。",
   "datasetRun.queue": "将数据集评测加入队列",
   "datasetRun.queued": "数据集评测已加入队列。",
+  "datasetRun.inputField": "输入字段",
+  "datasetRegister.title": "注册数据集版本",
+  "datasetRegister.inputField": "输入字段",
+  "datasetRegister.referenceField": "参考答案（输出）字段",
+  "datasetRegister.inputFieldHint": "可选：用作提示词输入的记录字段",
+  "datasetRegister.referenceFieldHint": "可选：保存预期答案的记录字段",
 };
 
 const fr: TranslationCatalog = {
@@ -80,6 +92,12 @@ const fr: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Seuls les jeux de données prêts sont répertoriés. Téléchargez et vérifiez d’abord les autres versions.",
   "datasetRun.queue": "Mettre l’évaluation du jeu de données en file",
   "datasetRun.queued": "Évaluation du jeu de données mise en file.",
+  "datasetRun.inputField": "Champ d’entrée",
+  "datasetRegister.title": "Enregistrer une version de jeu de données",
+  "datasetRegister.inputField": "Champ d’entrée",
+  "datasetRegister.referenceField": "Champ de référence (sortie)",
+  "datasetRegister.inputFieldHint": "Champ d’enregistrement facultatif utilisé comme entrée du prompt",
+  "datasetRegister.referenceFieldHint": "Champ d’enregistrement facultatif contenant la réponse attendue",
 };
 
 const de: TranslationCatalog = {
@@ -102,6 +120,12 @@ const de: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Nur bereite Datensätze werden aufgelistet. Laden Sie andere Versionen zuerst herunter und prüfen Sie sie.",
   "datasetRun.queue": "Datensatz-Evaluierung einreihen",
   "datasetRun.queued": "Datensatz-Evaluierung in die Warteschlange eingereiht.",
+  "datasetRun.inputField": "Eingabefeld",
+  "datasetRegister.title": "Datensatzversion registrieren",
+  "datasetRegister.inputField": "Eingabefeld",
+  "datasetRegister.referenceField": "Referenzfeld (Ausgabe)",
+  "datasetRegister.inputFieldHint": "Optionaler Datensatzfeld als Prompt-Eingabe",
+  "datasetRegister.referenceFieldHint": "Optionaler Datensatzfeld mit der erwarteten Antwort",
 };
 
 const ru: TranslationCatalog = {
@@ -124,6 +148,12 @@ const ru: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Перечислены только готовые наборы данных. Сначала загрузите и проверьте другие версии.",
   "datasetRun.queue": "Поставить оценку набора данных в очередь",
   "datasetRun.queued": "Оценка набора данных поставлена в очередь.",
+  "datasetRun.inputField": "Поле ввода",
+  "datasetRegister.title": "Регистрация версии набора данных",
+  "datasetRegister.inputField": "Поле ввода",
+  "datasetRegister.referenceField": "Поле эталонного ответа (вывод)",
+  "datasetRegister.inputFieldHint": "Необязательное поле записи, используемое как вход промпта",
+  "datasetRegister.referenceFieldHint": "Необязательное поле записи с ожидаемым ответом",
 };
 
 const ja: TranslationCatalog = {
@@ -146,6 +176,12 @@ const ja: TranslationCatalog = {
   "datasetRun.nonReadyHint": "準備ができたデータセットのみが表示されます。他のバージョンを先にダウンロードして検証してください。",
   "datasetRun.queue": "データセット評価をキューに入れる",
   "datasetRun.queued": "データセット評価がキューに入りました。",
+  "datasetRun.inputField": "入力フィールド",
+  "datasetRegister.title": "データセット バージョンの登録",
+  "datasetRegister.inputField": "入力フィールド",
+  "datasetRegister.referenceField": "参照フィールド（出力）",
+  "datasetRegister.inputFieldHint": "プロンプト入力として使用するレコード フィールド（省略可能）",
+  "datasetRegister.referenceFieldHint": "期待される回答を保持するレコード フィールド（省略可能）",
 };
 
 const ko: TranslationCatalog = {
@@ -168,6 +204,12 @@ const ko: TranslationCatalog = {
   "datasetRun.nonReadyHint": "준비된 데이터 세트만 나열됩니다. 다른 버전을 먼저 다운로드하여 확인하세요.",
   "datasetRun.queue": "데이터 세트 평가 대기열에 추가",
   "datasetRun.queued": "데이터 세트 평가가 대기열에 추가되었습니다.",
+  "datasetRun.inputField": "입력 필드",
+  "datasetRegister.title": "데이터 세트 버전 등록",
+  "datasetRegister.inputField": "입력 필드",
+  "datasetRegister.referenceField": "참조 필드(출력)",
+  "datasetRegister.inputFieldHint": "프롬프트 입력으로 사용되는 레코드 필드(선택 사항)",
+  "datasetRegister.referenceFieldHint": "예상 답변이 포함된 레코드 필드(선택 사항)",
 };
 
 const ms: TranslationCatalog = {
@@ -190,6 +232,12 @@ const ms: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Hanya set data yang sedia disenaraikan. Muat turun dan sahkan versi lain dahulu.",
   "datasetRun.queue": "Letakkan penilaian set data dalam baris",
   "datasetRun.queued": "Penilaian set data telah dimasukkan ke dalam baris.",
+  "datasetRun.inputField": "Medan input",
+  "datasetRegister.title": "Daftar versi set data",
+  "datasetRegister.inputField": "Medan input",
+  "datasetRegister.referenceField": "Medan rujukan (output)",
+  "datasetRegister.inputFieldHint": "Medan rekod pilihan yang digunakan sebagai input prom",
+  "datasetRegister.referenceFieldHint": "Medan rekod pilihan yang mengandungi jawapan yang dijangkakan",
 };
 
 export const catalogs: Record<Locale, TranslationCatalog> = { en, "zh-CN": zhCN, fr, de, ru, ja, ko, ms };
