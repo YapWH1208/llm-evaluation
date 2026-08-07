@@ -756,3 +756,41 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         agreement = api.get(f"/api/v1/reviews/sample/{attempt['id']}/agreement")
         assert agreement.json()["status"] == "needs_adjudication"
         assert api.get("/api/v1/audit-events").status_code == 200
+
+
+def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/datasets", json={"dataset_id": "m", "version": "1", "input_field": "q", "reference_field": "a"})
+        assert created.status_code == 201
+        body = created.json()
+        assert body["input_field"] == "q"
+        updated = api.put(f"/api/v1/datasets/{body['id']}", json={"dataset_id": "m2", "version": "2", "revision": "default"})
+        assert updated.status_code == 200
+        assert updated.json()["dataset_id"] == "m2"
+        deleted = api.delete(f"/api/v1/datasets/{body['id']}")
+        assert deleted.status_code == 200
+        assert api.get("/api/v1/datasets").json() == []
+
+
+def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        created = api.post("/api/v1/datasets", json={"dataset_id": "guarded", "version": "1"}).json()
+        app.state.document_store.insert_document("evaluation_runs", {
+            "model_endpoint_id": "endpoint-x",
+            "benchmark_id": "dataset-evaluation",
+            "benchmark_version": "1",
+            "configuration_snapshot": {"datasets": [{"dataset_version_id": created["id"]}]},
+            "status": "completed",
+            "total_samples": 1,
+        })
+        blocked = api.delete(f"/api/v1/datasets/{created['id']}")
+        assert blocked.status_code == 409
+        assert "references this revision" in blocked.json()["detail"]
+        listed = api.get("/api/v1/datasets").json()
+        assert any(item["id"] == created["id"] for item in listed)
