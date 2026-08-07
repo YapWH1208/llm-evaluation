@@ -224,3 +224,33 @@ def test_dataset_create_and_response_carry_input_and_reference_fields(tmp_path: 
         listed = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
         assert listed[body["id"]]["input_field"] == "question"
         assert listed[body["id"]]["reference_field"] == "answer"
+
+
+def test_dataset_preview_returns_first_rows_from_the_prepared_cache(tmp_path: Path) -> None:
+    content = b'{"question":"what is 2 + 2?","answer":"4"}\n{"question":"what is 3 + 3?","answer":"6"}\n{"question":"what is 4 + 4?","answer":"8"}\n'
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "preview", "version": "1"}).json()
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        preview = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert preview.status_code == 200
+        body = preview.json()
+        assert body["fields"] == ["question", "answer"]
+        assert len(body["rows"]) == 3
+        assert body["rows"][0] == {"question": "what is 2 + 2?", "answer": "4"}
+        limited = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=1")
+        assert len(limited.json()["rows"]) == 1
+
+
+def test_dataset_preview_requires_a_ready_dataset_and_caps_the_limit(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "notready", "version": "1"}).json()
+        blocked = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert blocked.status_code == 409
+        assert "not ready" in blocked.json()["detail"]
+        missing = client.get("/api/v1/datasets/does-not-exist/preview")
+        assert missing.status_code == 404
+        oversized = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=999")
+        assert oversized.status_code == 422

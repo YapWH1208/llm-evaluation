@@ -5,14 +5,14 @@ from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, store_uploaded_dataset, validate_dataset_cache
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, validate_dataset_cache
 from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, validate_mongo_dataset_cache
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
@@ -72,6 +72,11 @@ class DatasetDiskUsage(BaseModel):
     cache_bytes: int
     available_bytes: int
     total_bytes: int
+
+
+class DatasetPreviewResponse(BaseModel):
+    fields: list[str]
+    rows: list[dict[str, str]]
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state,"document_store",None) is not None:
         yield None
@@ -108,6 +113,25 @@ def list_datasets(request:Request,session:SessionDependency)->list[DatasetVersio
 @router.get("/disk-usage", response_model=DatasetDiskUsage)
 def get_dataset_disk_usage(request: Request) -> dict[str, int | str]:
     return mongo_dataset_disk_usage(request.app.state.settings.data_root) if get_document_store(request) is not None else dataset_disk_usage(request.app.state.settings.data_root)
+
+
+@router.get("/{dataset_version_id}/preview", response_model=DatasetPreviewResponse)
+def preview_dataset_version(dataset_version_id: str, request: Request, session: SessionDependency, limit: int = Query(default=5, ge=1, le=50)) -> dict[str, object]:
+    store = get_document_store(request)
+    if store is not None:
+        dataset = store.get_document("dataset_versions", dataset_version_id)
+        if dataset is None:
+            raise HTTPException(404, "Dataset version not found")
+        prepared_path = dataset.get("prepared_path")
+        ready = dataset.get("status") == "ready" and isinstance(prepared_path, str)
+    else:
+        assert session is not None
+        dataset = get_dataset_or_404(session, dataset_version_id)
+        prepared_path = dataset.prepared_path
+        ready = dataset.status == "ready" and prepared_path is not None
+    if not ready:
+        raise HTTPException(409, "Dataset is not ready; download and verify it before previewing.")
+    return preview_dataset_records(str(prepared_path), request.app.state.settings.data_root, limit=limit)
 @router.post("/{dataset_version_id}/accept-license",response_model=DatasetResponse)
 def accept_dataset_license(dataset_version_id:str,request:Request,session:SessionDependency)->DatasetVersion|dict:
     store=get_document_store(request)

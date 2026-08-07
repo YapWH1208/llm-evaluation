@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
-from app.services.dataset_records import iter_delimited_rows
+from app.services.dataset_records import iter_dataset_records, iter_delimited_rows
 from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
@@ -459,6 +459,30 @@ def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: st
     dataset.error_message = None
     session.commit(); session.refresh(dataset)
     return dataset
+
+
+def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -> dict[str, object]:
+    fields: list[str] = []
+    seen: set[str] = set()
+    rows: list[dict[str, str]] = []
+    for record in iter_dataset_records(prepared_path, data_root, limit=limit):
+        raw_fields = record["fields"]
+        if not isinstance(raw_fields, dict):
+            continue
+        for key in raw_fields:
+            if key not in seen:
+                seen.add(key)
+                fields.append(key)
+        rows.append({str(key): _stringify_preview_value(value) for key, value in raw_fields.items()})
+    return {"fields": fields, "rows": rows}
+
+
+def _stringify_preview_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
 def _ensure_dataset_is_not_referenced(session: Session, dataset_version_id: str) -> None:
