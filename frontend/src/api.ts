@@ -146,6 +146,8 @@ export type Dataset = {
   license_accepted_at: string | null;
   status: string;
   error_message: string | null;
+  input_field: string | null;
+  reference_field: string | null;
 };
 export type EvaluationSuite = { id: string; name: string; description: string | null; benchmark_list: Array<Record<string, unknown>>; default_prompt_overrides: Record<string, unknown>; default_request_body: Record<string, unknown>; weight_configuration: Record<string, unknown>; version: string; created_by: string | null; created_at: string };
 
@@ -302,6 +304,9 @@ export const api = {
   createSuite: (body: Record<string, unknown>) => request<EvaluationSuite>("/evaluation-suites", { method: "POST", body: JSON.stringify(body) }),
   createSuiteRuns: (suiteId: string, modelEndpointId: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<EvaluationRun[]>(`/evaluation-suites/${suiteId}/runs`, { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
+  previewDataset: (datasetId: string, limit = 5) => request<{ fields: string[]; rows: Array<Record<string, string>> }>(`/datasets/${datasetId}/preview?limit=${limit}`),
+  updateDataset: (datasetId: string, body: Record<string, unknown>) => request<Dataset>(`/datasets/${datasetId}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}`, { method: "DELETE" }),
   acceptDatasetLicense: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/accept-license`, { method: "POST" }),
   downloadDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/download`, { method: "POST" }),
   retryDataset: (datasetId: string) => request<Dataset>(`/datasets/${datasetId}/retry`, { method: "POST" }),
