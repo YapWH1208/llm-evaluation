@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
@@ -475,6 +476,25 @@ def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -
                 fields.append(key)
         rows.append({str(key): _stringify_preview_value(value) for key, value in raw_fields.items()})
     return {"fields": fields, "rows": rows}
+
+
+def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None) -> DatasetVersion:
+    dataset.dataset_id = dataset_id
+    dataset.version = version
+    dataset.revision = revision
+    dataset.source_url = source_url
+    dataset.checksum = checksum
+    dataset.license_text = license_text
+    dataset.credential_binding_id = credential_binding_id
+    dataset.input_field = input_field
+    dataset.reference_field = reference_field
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise DatasetError("Dataset revision already exists.") from error
+    session.refresh(dataset)
+    return dataset
 
 
 def _stringify_preview_value(value: object) -> str:

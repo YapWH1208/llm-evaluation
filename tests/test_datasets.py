@@ -254,3 +254,27 @@ def test_dataset_preview_requires_a_ready_dataset_and_caps_the_limit(tmp_path: P
         assert missing.status_code == 404
         oversized = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=999")
         assert oversized.status_code == 422
+
+
+def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        first = client.post("/api/v1/datasets", json={"dataset_id": "dup", "version": "1"}).json()
+        second = client.post("/api/v1/datasets", json={"dataset_id": "target", "version": "1"}).json()
+        updated = client.put(f"/api/v1/datasets/{second['id']}", json={
+            "dataset_id": "renamed", "version": "2", "revision": "fixed",
+            "input_field": "prompt", "reference_field": "expected",
+        })
+        assert updated.status_code == 200
+        body = updated.json()
+        assert body["dataset_id"] == "renamed"
+        assert body["version"] == "2"
+        assert body["revision"] == "fixed"
+        assert body["input_field"] == "prompt"
+        assert body["reference_field"] == "expected"
+        conflicting = client.put(f"/api/v1/datasets/{second['id']}", json={"dataset_id": "dup", "version": "1", "revision": "default"})
+        assert conflicting.status_code == 409
+        bad_source = client.put(f"/api/v1/datasets/{second['id']}", json={"dataset_id": "renamed", "version": "2", "revision": "fixed", "source_url": "file:///tmp/x.jsonl"})
+        assert bad_source.status_code == 422
+        missing = client.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
+        assert missing.status_code == 404

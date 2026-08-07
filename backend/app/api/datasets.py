@@ -12,8 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, validate_dataset_cache
-from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, validate_mongo_dataset_cache
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
+from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
@@ -132,6 +132,19 @@ def preview_dataset_version(dataset_version_id: str, request: Request, session: 
     if not ready:
         raise HTTPException(409, "Dataset is not ready; download and verify it before previewing.")
     return preview_dataset_records(str(prepared_path), request.app.state.settings.data_root, limit=limit)
+
+
+@router.put("/{dataset_version_id}", response_model=DatasetResponse)
+def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, request: Request, session: SessionDependency) -> DatasetVersion | dict:
+    _validate_dataset_registration(payload, request)
+    store = get_document_store(request)
+    try:
+        if store is not None:
+            return update_mongo_dataset(store, dataset_version_id, payload.model_dump())
+        assert session is not None
+        return update_dataset(session, get_dataset_or_404(session, dataset_version_id), **payload.model_dump(exclude={"credential_env_var"}))
+    except DatasetError as error:
+        raise HTTPException(409, str(error)) from error
 @router.post("/{dataset_version_id}/accept-license",response_model=DatasetResponse)
 def accept_dataset_license(dataset_version_id:str,request:Request,session:SessionDependency)->DatasetVersion|dict:
     store=get_document_store(request)

@@ -188,6 +188,29 @@ def mongo_dataset_disk_usage(data_root: str) -> dict[str, int | str]:
     return dataset_disk_usage(data_root)
 
 
+def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    _get_dataset(store, dataset_id)
+    values = {
+        "dataset_id": payload["dataset_id"],
+        "version": payload["version"],
+        "revision": payload["revision"],
+        "source_url": payload.get("source_url"),
+        "checksum": payload.get("checksum"),
+        "license_text": payload.get("license_text"),
+        "credential_binding_id": payload.get("credential_binding_id"),
+        "input_field": payload.get("input_field"),
+        "reference_field": payload.get("reference_field"),
+    }
+    duplicates = store.list_documents("dataset_versions", query={
+        "dataset_id": values["dataset_id"], "version": values["version"], "revision": values["revision"],
+    })
+    if any(str(item.get("id")) != dataset_id for item in duplicates):
+        raise DatasetError("Dataset revision already exists.")
+    updated = store.update_document("dataset_versions", dataset_id, values)
+    assert updated is not None
+    return updated
+
+
 def _get_dataset(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
     dataset = store.get_document("dataset_versions", dataset_id)
     if dataset is None:
