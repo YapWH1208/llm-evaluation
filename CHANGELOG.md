@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- The evaluation dashboard now surfaces live quality, model/benchmark comparisons,
+  latency, cost, error signals, recent runs, and system readiness in a compact,
+  responsive analytics workspace for light and dark themes.
+
 ### Fixed
 
 - Catalog edits no longer fail with 422 when optional fields are left empty;
