@@ -731,7 +731,7 @@ export default function App() {
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard dashboard={dashboard} endpoints={endpoints} runs={runs} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
+      {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
       {view === "guide" && <Guide />}
 
       {view === "models" && <>

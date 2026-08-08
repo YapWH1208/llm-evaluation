@@ -48,26 +48,28 @@ function MetricValue({ label, value }: { label: string; value: string }) {
 
 function TrendEvidenceTable({ formatters, labels, points }: VisualizationProps) {
   return (
-    <table className="sr-only">
-      <thead>
-        <tr>
-          <th>{labels.model}</th>
-          <th>{labels.benchmark}</th>
-          <th>{labels.accuracy}</th>
-          <th>{labels.successRate}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {points.map((point) => (
-          <tr key={point.runId}>
-            <td>{point.modelName}</td>
-            <td>{point.benchmarkLabel}</td>
-            <td>{formatters.percent(point.accuracy)}</td>
-            <td>{formatters.percent(point.successRate)}</td>
+    <div className="sr-only">
+      <table>
+        <thead>
+          <tr>
+            <th>{labels.model}</th>
+            <th>{labels.benchmark}</th>
+            <th>{labels.accuracy}</th>
+            <th>{labels.successRate}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {points.map((point) => (
+            <tr key={point.runId}>
+              <td>{point.modelName}</td>
+              <td>{point.benchmarkLabel}</td>
+              <td>{formatters.percent(point.accuracy)}</td>
+              <td>{formatters.percent(point.successRate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

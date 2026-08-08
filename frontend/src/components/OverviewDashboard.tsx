@@ -1,11 +1,15 @@
-import type { Dashboard, Endpoint, EvaluationRun, Task } from "../api";
+import type { AnalyticsMatrix, Dashboard, Endpoint, EvaluationRun, SystemHealth, Task } from "../api";
+import { buildDashboardAnalytics, buildRecentRunRows, type DashboardAnalyticsPoint, type RecentRunRow } from "../dashboard/analytics";
 import type { View } from "../dashboard/navigation";
-import { overviewCopy } from "../i18n/catalog";
+import { overviewCopy, type OverviewCopy } from "../i18n/catalog";
 import { useTranslation } from "../i18n/LocaleProvider";
+import { EfficiencySignals, EvaluationTrendChart, type DashboardVisualizationFormatters, type DashboardVisualizationLabels } from "./DashboardVisualizations";
 import "./overview-dashboard.css";
 
 type OverviewDashboardProps = {
   dashboard: Dashboard | null;
+  analytics: AnalyticsMatrix | null;
+  systemHealth: SystemHealth | null;
   endpoints: Endpoint[];
   runs: EvaluationRun[];
   tasks: Task[];
@@ -13,98 +17,241 @@ type OverviewDashboardProps = {
   onOpenView: (view: View) => void;
 };
 
-const terminalRunStatuses = new Set(["completed", "completed_with_errors", "cancelled", "failed"]);
+type Metric = {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+};
+
+type ReadinessItem = {
+  id: string;
+  label: string;
+  detail: string;
+  attention: boolean;
+  view: View;
+};
 
 function interpolate(template: string, values: Record<string, number | string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => String(values[key] ?? ""));
 }
 
-function MetricCard({ label, value, detail }: { label: string; value: string | number; detail: string }) {
-  return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
+function MetricCard({ metric }: { metric: Metric }) {
+  return (
+    <article className="dashboard-kpi">
+      <span>{metric.label}</span>
+      <strong>{metric.value}</strong>
+      <small>{metric.detail}</small>
+    </article>
+  );
 }
 
-export function OverviewDashboard({ dashboard, endpoints, runs, tasks, onInspectRun, onOpenView }: OverviewDashboardProps) {
+function ComparisonTable({ copy, formatters, points }: { copy: OverviewCopy; formatters: DashboardVisualizationFormatters; points: DashboardAnalyticsPoint[] }) {
+  if (points.length === 0) return <p className="dashboard-empty">{copy.noHistory}</p>;
+
+  return (
+    <div className="table-scroll">
+      <table className="dashboard-table">
+        <thead>
+          <tr>
+            <th>{copy.model}</th>
+            <th>{copy.benchmark}</th>
+            <th>{copy.sampleCount}</th>
+            <th>{copy.accuracy}</th>
+            <th>{copy.latency}</th>
+            <th>{copy.cost}</th>
+            <th>{copy.errorRate}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((point) => (
+            <tr key={point.runId}>
+              <td data-i18n-preserve title={point.modelName}>{point.modelName}</td>
+              <td data-i18n-preserve title={point.benchmarkLabel}>{point.benchmarkLabel}</td>
+              <td>{point.sampleCount}</td>
+              <td>{formatters.percent(point.accuracy)}</td>
+              <td>{formatters.latency(point.averageLatencyMs)}</td>
+              <td>{formatters.cost(point.estimatedCost, point.currency)}</td>
+              <td className={point.errorRate !== null && point.errorRate > 0 ? "metric-danger" : undefined}>{formatters.percent(point.errorRate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RecentEvaluationsTable({ copy, formatDate, formatters, onInspectRun, rows }: { copy: OverviewCopy; formatDate: (value: string | null | undefined) => string; formatters: DashboardVisualizationFormatters; onInspectRun: (runId: string) => void; rows: RecentRunRow[] }) {
+  if (rows.length === 0) return <p className="dashboard-empty">{copy.noHistory}</p>;
+
+  return (
+    <div className="table-scroll">
+      <table className="dashboard-table dashboard-table--runs">
+        <thead>
+          <tr>
+            <th>{copy.recentEvaluations}</th>
+            <th>{copy.model}</th>
+            <th>{copy.progress}</th>
+            <th>{copy.accuracy}</th>
+            <th>{copy.p95Latency}</th>
+            <th>{copy.started}</th>
+            <th aria-label={copy.inspect} />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const progress = row.run.total_samples > 0 ? row.run.completed_samples / row.run.total_samples : null;
+            return (
+              <tr key={row.run.id}>
+                <td>
+                  <span className={`badge ${row.run.status}`}>{row.run.status}</span>
+                  <strong data-i18n-preserve title={`${row.run.benchmark_id} · v${row.run.benchmark_version}`}>{row.run.benchmark_id}</strong>
+                </td>
+                <td data-i18n-preserve title={row.modelName}>{row.modelName}</td>
+                <td>{formatters.percent(progress)}</td>
+                <td>{formatters.percent(row.accuracy)}</td>
+                <td>{formatters.latency(row.averageLatencyMs)}</td>
+                <td>{formatDate(row.run.started_at ?? row.run.created_at)}</td>
+                <td><button aria-label={`${copy.inspect} ${row.run.id}`} className="secondary table-action" onClick={() => onInspectRun(row.run.id)} type="button">{copy.inspect}</button></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReadinessGrid({ copy, items, onOpenView }: { copy: OverviewCopy; items: ReadinessItem[]; onOpenView: (view: View) => void }) {
+  return (
+    <div className="readiness-grid">
+      {items.map((item) => (
+        <article className={item.attention ? "readiness-item is-attention" : "readiness-item"} key={item.id}>
+          <span aria-hidden="true" className="status-dot" />
+          <div>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </div>
+          <button className="secondary" onClick={() => onOpenView(item.view)} type="button">{copy.manage}</button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export function OverviewDashboard({ analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenView }: OverviewDashboardProps) {
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = overviewCopy[locale];
-  const activeRuns = runs.filter((run) => !terminalRunStatuses.has(run.status)).slice(0, 4);
+  const analyticsPoints = buildDashboardAnalytics(runs, analytics);
+  const recentRows = buildRecentRunRows(runs, endpoints, analytics);
   const activeTasks = tasks.filter((task) => ["pending", "leased", "running", "retry_scheduled"].includes(task.status));
   const verifiedEndpoints = endpoints.filter((endpoint) => endpoint.status === "available");
-  const formatCost = (costs: Record<string, number>) => Object.entries(costs).map(([currency, value]) => formatCurrency(value, currency, 4)).join(" · ") || "--";
+  const formatters: DashboardVisualizationFormatters = {
+    percent: (value) => value === null ? "--" : formatPercent(value),
+    latency: (value) => value === null ? "--" : `${formatNumber(value)} ms`,
+    cost: (value, currency) => value === null ? "--" : formatCurrency(value, currency, 4),
+  };
+  const visualizationLabels: DashboardVisualizationLabels = {
+    accuracy: copy.accuracy,
+    successRate: copy.successRate,
+    evaluationTrend: copy.evaluationTrend,
+    latency: copy.latency,
+    cost: copy.cost,
+    errorRate: copy.errorRate,
+    limitedHistory: copy.limitedHistory,
+    noHistory: copy.noHistory,
+    model: copy.model,
+    benchmark: copy.benchmark,
+    unknownValue: copy.unknownValue,
+  };
 
   if (!dashboard) {
-    return <section className="panel overview-unavailable" aria-label={copy.unavailableRegion}>
-      <div>
-        <p className="eyebrow">{copy.currentWork}</p>
-        <h2>{copy.unavailableTitle}</h2>
-        <p className="empty">{copy.unavailableDescription}</p>
-      </div>
-      <div className="overview-actions">
-        <button onClick={() => onOpenView("models")}>{copy.configureModel}</button>
-        <button className="secondary" onClick={() => onOpenView("runs")}>{copy.openRuns}</button>
-      </div>
-    </section>;
+    return (
+      <section className="overview-dashboard" aria-labelledby="dashboard-title">
+        <DashboardHeader copy={copy} onOpenView={onOpenView} />
+        <section className="dashboard-panel overview-unavailable" aria-label={copy.unavailableRegion}>
+          <div>
+            <p className="eyebrow">{copy.currentWork}</p>
+            <h2>{copy.unavailableTitle}</h2>
+            <p className="dashboard-empty">{copy.unavailableDescription}</p>
+          </div>
+          <div className="overview-actions">
+            <button onClick={() => onOpenView("models")} type="button">{copy.configureModel}</button>
+            <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.openRuns}</button>
+          </div>
+        </section>
+      </section>
+    );
   }
 
-  return <div className="overview-dashboard">
-    <section className="overview-hero" aria-label={copy.operations}>
+  const successfulRate = dashboard.quality.samples.total > 0 ? dashboard.quality.samples.successful / dashboard.quality.samples.total : null;
+  const costMetrics = Object.entries(dashboard.api.estimated_cost_by_currency).map(([currency, value]) => ({
+    id: `cost-${currency}`,
+    label: `${copy.cost} · ${currency}`,
+    value: formatters.cost(value, currency),
+    detail: copy.completedEvidence,
+  }));
+  const kpis: Metric[] = [
+    { id: "accuracy", label: copy.accuracy, value: formatters.percent(dashboard.quality.samples.accuracy), detail: interpolate(copy.successful, { successful: dashboard.quality.samples.successful, total: dashboard.quality.samples.total }) },
+    { id: "success", label: copy.successRate, value: formatters.percent(successfulRate), detail: interpolate(copy.successful, { successful: dashboard.quality.samples.successful, total: dashboard.quality.samples.total }) },
+    { id: "latency", label: copy.p95Latency, value: formatters.latency(dashboard.quality.latency_ms.p95), detail: interpolate(copy.measured, { count: dashboard.quality.latency_ms.measured_samples }) },
+    ...costMetrics,
+    { id: "errors", label: copy.apiErrors, value: formatters.percent(dashboard.api.request_error_rate), detail: interpolate(copy.requests, { count: dashboard.quality.errors.api_errors }) },
+  ];
+  const systemReady = systemHealth?.status === "healthy" && systemHealth.database_connected;
+  const readinessItems: ReadinessItem[] = [
+    { id: "system", label: copy.systemReadiness, detail: systemReady ? copy.operational : copy.attentionNeeded, attention: !systemReady, view: "settings" },
+    { id: "endpoints", label: copy.modelEndpoints, detail: dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel, attention: dashboard.endpoints.available === 0, view: "models" },
+    { id: "datasets", label: copy.evaluationData, detail: dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset, attention: dashboard.datasets.ready === 0, view: "datasets" },
+    { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "queue" },
+    { id: "workers", label: copy.workers, detail: formatNumber(dashboard.workers.active), attention: dashboard.workers.active === 0 && activeTasks.length > 0, view: "workers" },
+  ];
+
+  return (
+    <section className="overview-dashboard" aria-labelledby="dashboard-title">
+      <DashboardHeader copy={copy} onOpenView={onOpenView} />
+      <section className="overview-kpis" aria-labelledby="performance-summary-title">
+        <h2 className="sr-only" id="performance-summary-title">{copy.performanceSummary}</h2>
+        {kpis.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
+      </section>
+      <div className="overview-analytics-grid">
+        <section className="dashboard-panel dashboard-panel--trend" aria-labelledby="evaluation-trend-title">
+          <div className="dashboard-panel__heading"><h2 id="evaluation-trend-title">{copy.evaluationTrend}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
+          <EvaluationTrendChart formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
+        </section>
+        <section className="dashboard-panel dashboard-panel--comparison" aria-labelledby="comparison-title">
+          <div className="dashboard-panel__heading"><h2 id="comparison-title">{copy.modelBenchmarkComparison}</h2><button className="secondary" onClick={() => onOpenView("compare")} type="button">{copy.openAnalysis}</button></div>
+          <ComparisonTable copy={copy} formatters={formatters} points={analyticsPoints.slice(-6).reverse()} />
+        </section>
+      </div>
+      <section className="dashboard-panel" aria-labelledby="efficiency-title">
+        <div className="dashboard-panel__heading"><h2 id="efficiency-title">{copy.latencyCostErrors}</h2></div>
+        <EfficiencySignals formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
+      </section>
+      <section className="dashboard-panel" aria-labelledby="recent-evaluations-title">
+        <div className="dashboard-panel__heading"><h2 id="recent-evaluations-title">{copy.recentEvaluations}</h2><button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button></div>
+        <RecentEvaluationsTable copy={copy} formatDate={(value) => value ? formatDate(value) : "--"} formatters={formatters} onInspectRun={onInspectRun} rows={recentRows} />
+      </section>
+      <section className="dashboard-panel" aria-labelledby="system-readiness-title">
+        <div className="dashboard-panel__heading"><h2 id="system-readiness-title">{copy.systemReadiness}</h2><span>{interpolate(copy.verified, { count: verifiedEndpoints.length })}</span></div>
+        <ReadinessGrid copy={copy} items={readinessItems} onOpenView={onOpenView} />
+      </section>
+    </section>
+  );
+}
+
+function DashboardHeader({ copy, onOpenView }: { copy: OverviewCopy; onOpenView: (view: View) => void }) {
+  return (
+    <header className="overview-dashboard__header">
       <div>
-        <p className="eyebrow">{copy.operations}</p>
-        <h2>{copy.heroTitle}</h2>
-        <p>{copy.heroDescription}</p>
+        <p className="eyebrow">{copy.performanceSummary}</p>
+        <h1 id="dashboard-title">{copy.dashboardTitle}</h1>
+        <p>{copy.dashboardDescription}</p>
       </div>
-      <div className="overview-hero-actions">
-        <button onClick={() => onOpenView("runs")}>{copy.viewAllRuns}</button>
-        <button className="secondary" onClick={() => onOpenView("workspace")}>{copy.prepareWorkspace}</button>
+      <div className="overview-dashboard__actions">
+        <button onClick={() => onOpenView("workspace")} type="button">{copy.setupEvaluation}</button>
+        <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button>
       </div>
-    </section>
-
-    <section className="dashboard" aria-label={copy.operationalStatus}>
-      <MetricCard label={copy.activeRuns} value={dashboard.runs.active} detail={interpolate(copy.pendingLeased, { pending: dashboard.queue.pending, leased: dashboard.queue.leased })} />
-      <MetricCard label={copy.endpoints} value={`${dashboard.endpoints.available}/${dashboard.endpoints.total}`} detail={interpolate(copy.unavailable, { count: dashboard.endpoints.unavailable })} />
-      <MetricCard label={copy.workers} value={dashboard.workers.active} detail={interpolate(copy.activeQueueTasks, { count: activeTasks.length })} />
-      <MetricCard label={copy.estimatedCost} value={formatCost(dashboard.api.estimated_cost_by_currency)} detail={copy.completedEvidence} />
-    </section>
-
-    <section className="overview-grid">
-      <article className="panel overview-current-work">
-        <div className="section-title"><div><p className="eyebrow">{copy.currentWork}</p><h2>{copy.runsInProgress}</h2></div><button className="secondary" onClick={() => onOpenView("runs")}>{copy.openRuns}</button></div>
-        {activeRuns.length === 0 ? <div className="overview-empty"><strong>{copy.noActiveRuns}</strong><span>{copy.noActiveDescription}</span><button onClick={() => onOpenView("workspace")}>{copy.setupEvaluation}</button></div> : <div className="overview-run-list">
-          {activeRuns.map((run) => <button className="overview-run" key={run.id} onClick={() => onInspectRun(run.id)}>
-            <span className={`badge ${run.status}`}>{run.status}</span>
-            <strong data-i18n-preserve>{run.benchmark_id} <small>v{run.benchmark_version}</small></strong>
-            <span>{run.completed_samples}/{run.total_samples} {copy.samples}</span>
-            <span className="overview-run-link">{copy.inspect}</span>
-          </button>)}
-        </div>}
-      </article>
-
-      <article className="panel overview-readiness">
-        <div className="section-title"><div><p className="eyebrow">{copy.readiness}</p><h2>{copy.workspaceReady}</h2></div><span>{interpolate(copy.verified, { count: verifiedEndpoints.length })}</span></div>
-        <div className="overview-readiness-list">
-          <div><span className={`status-dot ${dashboard.endpoints.available > 0 ? "ready" : "attention"}`} /><div><strong>{copy.modelEndpoints}</strong><small>{dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel}</small></div><button className="secondary" onClick={() => onOpenView("models")}>{dashboard.endpoints.available > 0 ? copy.manage : copy.configure}</button></div>
-          <div><span className={`status-dot ${dashboard.datasets.ready > 0 ? "ready" : "attention"}`} /><div><strong>{copy.evaluationData}</strong><small>{dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset}</small></div><button className="secondary" onClick={() => onOpenView("datasets")}>{dashboard.datasets.ready > 0 ? copy.review : copy.addData}</button></div>
-          <div><span className={`status-dot ${dashboard.queue.pending === 0 ? "ready" : "attention"}`} /><div><strong>{copy.queuePressure}</strong><small>{dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending })}</small></div><button className="secondary" onClick={() => onOpenView("queue")}>{copy.inspectQueue}</button></div>
-        </div>
-      </article>
-    </section>
-
-    <section className="overview-grid overview-bottom-grid">
-      <article className="panel">
-        <div className="section-title"><div><p className="eyebrow">{copy.evaluationHealth}</p><h2>{copy.qualityAtGlance}</h2></div><button className="secondary" onClick={() => onOpenView("analysis")}>{copy.openAnalysis}</button></div>
-        <div className="metric-grid">
-          <MetricCard label={copy.accuracy} value={formatPercent(dashboard.quality.samples.accuracy)} detail={interpolate(copy.successful, { successful: dashboard.quality.samples.successful, total: dashboard.quality.samples.total })} />
-          <MetricCard label={copy.apiErrors} value={formatPercent(dashboard.api.request_error_rate)} detail={interpolate(copy.requests, { count: dashboard.quality.errors.api_errors })} />
-          <MetricCard label={copy.p95Latency} value={`${formatNumber(dashboard.quality.latency_ms.p95)} ms`} detail={interpolate(copy.measured, { count: dashboard.quality.latency_ms.measured_samples })} />
-          <MetricCard label={copy.tokens} value={formatNumber(dashboard.quality.tokens.total)} detail={interpolate(copy.inputOutput, { input: formatNumber(dashboard.quality.tokens.input), output: formatNumber(dashboard.quality.tokens.output) })} />
-        </div>
-      </article>
-
-      <article className="panel">
-        <div className="section-title"><div><p className="eyebrow">{copy.completedWork}</p><h2>{copy.recentRuns}</h2></div><span>{interpolate(copy.complete, { count: dashboard.runs.completed })}</span></div>
-        {dashboard.runs.recent_completed.length === 0 ? <div className="overview-empty"><strong>{copy.noCompleted}</strong><span>{copy.noCompletedDescription}</span><button className="secondary" onClick={() => onOpenView("runs")}>{copy.runHistory}</button></div> : <div className="recent-list">
-          {dashboard.runs.recent_completed.slice(0, 4).map((run) => <button key={run.id} className="recent-run" onClick={() => onInspectRun(run.id)}><span className={`badge ${run.status}`}>{run.status}</span><strong>{run.benchmark_id}</strong><span>{run.completed_samples}/{run.total_samples} {copy.samples} · {formatDate(run.completed_at)}</span></button>)}
-        </div>}
-      </article>
-    </section>
-  </div>;
+    </header>
+  );
 }
