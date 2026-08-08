@@ -43,7 +43,7 @@
 - Modify: `frontend/src/components/app-shell.test.tsx`
 - Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: Write failing tests for the reusable primitives and page-owned heading contract.**
+- [x] **Step 1: Write failing tests for the reusable primitives and page-owned heading contract.**
 
   Test one page header exposes the visible title plus its action region; test tab buttons advertise selection with `aria-selected` and invoke the supplied setter; test a panel’s label is programmatically associated with its content. Update the existing shell test to assert the non-Dashboard workspace no longer emits the generic duplicate heading.
 
@@ -60,13 +60,13 @@
   Run: `cd frontend && npm test -- --run src/components/workspace/workspace-primitives.test.tsx src/components/app-shell.test.tsx`
   Expected: failure because the primitives and shell contract do not exist.
 
-- [ ] **Step 2: Implement accessible, narrow primitives that reuse Dashboard tokens.**
+- [x] **Step 2: Implement accessible, narrow primitives that reuse Dashboard tokens.**
 
   Implement `PageHeader` with exactly one `h1`, optional eyebrow/status, and action slots. Implement `WorkspacePanel` with semantic heading markup and class variants (`default`, `muted`, `inset`). Implement `WorkspaceTabs` as a roving, button-based tab list with keyboard arrow/Home/End handling only if the component controls a visible pane; otherwise retain simple selected buttons and correct ARIA state. Add only scoped `.workspace-page` CSS, using `--surface`, `--raised`, `--border`, `--text`, `--muted`, `--primary`, the Dashboard radius, and its dense spacing rhythm.
 
   Update `AppShell` so non-Dashboard views rely on page-owned headings rather than its old generic heading. Keep the header/rail/navigation mechanics and Dashboard exception intact. Import page CSS once from the new primitive entry point or App, not from Dashboard CSS.
 
-- [ ] **Step 3: Verify primitives and protected Dashboard behavior.**
+- [x] **Step 3: Verify primitives and protected Dashboard behavior.**
 
   Run:
 
@@ -79,7 +79,7 @@
 
   In the browser inspect Dashboard light and dark after navigating away and back. Confirm: one Dashboard heading, no header overlap, unchanged five-cell KPI cadence, panels retain their original border/radius behavior, and narrow rail CSS is not modified.
 
-- [ ] **Step 4: Review and commit the foundation.**
+- [x] **Step 4: Review and commit the foundation.**
 
   Review `git diff --check`, `git diff -- frontend/src/App.tsx frontend/src/components/AppShell.tsx`, and selective status. Stage only Task 1 files. Commit:
 

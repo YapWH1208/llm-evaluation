@@ -1,0 +1,47 @@
+# Frontend workspace redesign execution log
+
+## 2026-08-08 — execution initialized
+
+- Approved requirement: redesign every non-Dashboard frontend view using the
+  existing Dashboard as the visual reference, without changing behavior.
+- Active goal: `Redesign every non-Dashboard frontend view to match the
+  existing Dashboard’s developer-tool design language while preserving all API
+  behavior, localization, light/dark themes, forms, configuration options, and
+  workflows.`
+- Branch: `agent/frontend-workspace-redesign`.
+- Workspace isolation check: this checkout is the primary worktree
+  (`git_dir == git_common`) on the already-created dedicated branch. Creating a
+  second worktree would require a redundant branch and would separate the
+  existing user-owned `.gitignore` change from the approved branch. The
+  repository branch policy therefore takes precedence; implementation proceeds
+  in this dedicated checkout with targeted staging.
+- Preserved user-owned state: `.gitignore` is modified before implementation;
+  it will not be edited, staged, restored, or committed.
+- CI inspection: `.github/workflows/ci.yml` already runs the required backend
+  tests plus `frontend` `npm ci`, `npm test -- --run`, and `npm run build`; no
+  CI change is needed.
+- Initial frontend verification was already green during planning: 14 Vitest
+  files / 47 tests and the frontend build. The Task 1 focused test will be
+  written and observed failing before presentation code is added.
+
+## 2026-08-08 — Task 1: shared page primitives
+
+- Red: added `workspace-primitives.test.tsx` and updated the shell heading
+  contract. Focused Vitest run failed as intended: the three primitive modules
+  did not exist and `AppShell` rendered the old `.workspace-page-heading` for
+  Models.
+- Green: added `PageHeader`, `WorkspacePanel`, `WorkspaceTabs`, and scoped
+  `workspace-pages.css`; removed the generic non-Dashboard heading from
+  `AppShell`. The primitives provide one page-owned h1, labelled panels,
+  selected keyboard tabs, responsive header stacking, and token-based focus
+  styling.
+- Focused verification: `npm test -- --run
+  src/components/workspace/workspace-primitives.test.tsx src/app-shell.test.tsx`
+  passed (2 files, 7 tests).
+- Broader verification: `npm test -- --run` passed (15 files, 50 tests) and
+  `npm run build` passed.
+- Browser checkpoint: Dashboard rendered at 1280px without horizontal overflow
+  in dark and light themes. It retained one `Dashboard` h1, no
+  `.workspace-page-heading`, a 232px rail, and a 52px top bar. The local API
+  was unavailable, so its existing failed-fetch fallback rendered; no layout
+  regression was observed.

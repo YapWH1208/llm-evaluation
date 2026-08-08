@@ -125,19 +125,6 @@ export function AppShell({
         </header>
 
         <main className="workspace-main">
-          {view !== "dashboard" && (
-            <section className="workspace-page-heading" aria-labelledby="workspace-page-title">
-              <div>
-                <p className="eyebrow">{copy.controlCenter}</p>
-                <h1 id="workspace-page-title">{navigation.items[currentItem.view].label}</h1>
-                <p>{navigation.items[currentItem.view].description}</p>
-              </div>
-              <div className="page-health" aria-label={healthLabel}>
-                <span className={systemHealth?.status === "healthy" ? "health-dot is-healthy" : "health-dot"} />
-                <span>{healthLabel}</span>
-              </div>
-            </section>
-          )}
           {notice && <button className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
           <div className="workspace-page-content">{children}</div>
         </main>

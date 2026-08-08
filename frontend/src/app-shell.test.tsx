@@ -48,7 +48,7 @@ describe("AppShell", () => {
     expect(props.onViewChange).not.toHaveBeenCalled();
   });
 
-  it("leaves the dashboard page heading to dashboard content while retaining contextual headings elsewhere", () => {
+  it("leaves page headings to view content instead of rendering a duplicate shell heading", () => {
     const { rerender } = render(
       <LocaleProvider>
         <AppShell
@@ -85,13 +85,13 @@ describe("AppShell", () => {
           onThemeToggle={vi.fn()}
           onViewChange={vi.fn()}
         >
-          <p>Models content</p>
+          <h1>Models</h1>
         </AppShell>
       </LocaleProvider>,
     );
 
-    expect(document.querySelector(".workspace-page-heading")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
+    expect(document.querySelector(".workspace-page-heading")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "Models" })).toHaveLength(1);
   });
 
   it("opens the responsive drawer and closes it after navigation", async () => {
