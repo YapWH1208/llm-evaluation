@@ -104,7 +104,7 @@ function RecentEvaluationsTable({ copy, formatDate, formatters, onInspectRun, ro
             return (
               <tr key={row.run.id}>
                 <td>
-                  <span className={`badge ${row.run.status}`}>{row.run.status}</span>
+                  <span className={`dashboard-status-badge ${row.run.status}`}>{row.run.status}</span>
                   <strong data-i18n-preserve title={`${row.run.benchmark_id} · v${row.run.benchmark_version}`}>{row.run.benchmark_id}</strong>
                 </td>
                 <td data-i18n-preserve title={row.modelName}>{row.modelName}</td>

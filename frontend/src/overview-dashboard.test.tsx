@@ -189,6 +189,7 @@ describe("OverviewDashboard", () => {
     expect(screen.getByText("Latency, cost & errors")).toBeVisible();
     expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
     expect(screen.getByRole("heading", { level: 2, name: "System readiness" })).toBeVisible();
+    expect(document.querySelector(".dashboard-status-badge.completed")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Inspect active-run" }));
     await user.click(screen.getAllByRole("button", { name: "Open analysis" })[0]);

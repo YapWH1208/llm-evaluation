@@ -209,7 +209,7 @@
   padding: .3rem .48rem;
 }
 
-.badge {
+.dashboard-status-badge {
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--text-muted);
@@ -222,13 +222,13 @@
   text-transform: uppercase;
 }
 
-.badge.completed { border-color: color-mix(in srgb, var(--success) 44%, var(--border)); color: var(--success); }
-.badge.running,
-.badge.pending,
-.badge.leased,
-.badge.retry_scheduled { border-color: color-mix(in srgb, var(--warning) 48%, var(--border)); color: var(--warning); }
-.badge.failed,
-.badge.cancelled { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
+.dashboard-status-badge.completed { border-color: color-mix(in srgb, var(--success) 44%, var(--border)); color: var(--success); }
+.dashboard-status-badge.running,
+.dashboard-status-badge.pending,
+.dashboard-status-badge.leased,
+.dashboard-status-badge.retry_scheduled { border-color: color-mix(in srgb, var(--warning) 48%, var(--border)); color: var(--warning); }
+.dashboard-status-badge.failed,
+.dashboard-status-badge.cancelled { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
 
 .readiness-grid {
   display: grid;
