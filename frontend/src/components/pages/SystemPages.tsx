@@ -134,6 +134,10 @@ export function SettingsPage({ apiToken, locale, onApiTokenChange, onClearToken,
   </div>;
 }
 
+export function openSharedReport(token: string, password: string) {
+  return api.openSharedReport(token, password);
+}
+
 export function SharedReportPage({ token }: { token: string }) {
   const { locale } = useTranslation();
   const copy = reportCopy[locale];
@@ -144,24 +148,5 @@ export function SharedReportPage({ token }: { token: string }) {
 
   useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
 
-  async function openReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      const nextUrl = await api.openSharedReport(token, password);
-      setReportUrl((currentUrl) => {
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-        return nextUrl;
-      });
-      setMessage(copy.readyMessage);
-    } catch (_error) {
-      setMessage(copy.unavailableMessage);
-    } finally {
-      setPassword("");
-      setBusy(false);
-    }
-  }
-
-  return <main className="shared-report"><section className="shared-report-panel"><p className="eyebrow">{copy.sharedReport}</p><h1>{copy.readOnlyAccess}</h1><p className="shared-report-intro">{copy.passwordSafety}</p><form className="form" onSubmit={openReport}><label>{copy.sharePassword}<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? copy.opening : copy.openReport}</button></form><p className={reportUrl ? "notice" : "shared-report-status"} aria-live="polite">{message}</p>{reportUrl && <div className="actions shared-report-actions"><a href={reportUrl} target="_blank" rel="noreferrer">{copy.openNewTab}</a><a href={reportUrl} download="evaluation-report">{copy.download}</a></div>}</section></main>;
+  return <main className="shared-report"><section className="shared-report-panel"><p className="eyebrow">{copy.sharedReport}</p><h1>{copy.readOnlyAccess}</h1><p className="shared-report-intro">{copy.passwordSafety}</p><form className="form" onSubmit={(event) => { event.preventDefault(); setBusy(true); setMessage(""); void openSharedReport(token, password).then((nextUrl) => { setReportUrl((currentUrl) => { if (currentUrl) URL.revokeObjectURL(currentUrl); return nextUrl; }); setMessage(copy.readyMessage); }).catch(() => setMessage(copy.unavailableMessage)).finally(() => { setPassword(""); setBusy(false); }); }}><label>{copy.sharePassword}<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? copy.opening : copy.openReport}</button></form><p className={reportUrl ? "notice" : "shared-report-status"} aria-live="polite">{message}</p>{reportUrl && <div className="actions shared-report-actions"><a href={reportUrl} target="_blank" rel="noreferrer">{copy.openNewTab}</a><a href={reportUrl} download="evaluation-report">{copy.download}</a></div>}</section></main>;
 }
