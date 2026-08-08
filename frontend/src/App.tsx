@@ -35,12 +35,15 @@ import { BenchmarksPage, DatasetsPage, SuitesPage } from "./components/pages/Cat
 import { CapabilitiesPage, ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
 import { AnalysisPage, ComparePage } from "./components/pages/InsightsPages";
 import { QueuePage, RunsPage, WorkersPage } from "./components/pages/OperationsPages";
+import { ReportsPage, ReviewsPage, SettingsPage, UsersPage } from "./components/pages/SystemPages";
 import { WorkspaceSetupPage } from "./components/pages/WorkspaceSetupPage";
-import { localeIds, localeNames, reportCopy, type Locale } from "./i18n/catalog";
+import { reportCopy } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
 import { StaticCopy } from "./i18n/StaticCopy";
 import "./evidence.css";
+
+export { SharedReportPage } from "./components/pages/SystemPages";
 
 type View = "dashboard" | "guide" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
@@ -797,13 +800,13 @@ export default function App() {
 
       {view === "compare" && <ComparePage busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmit={compareRuns} runA={comparisonRunA} runB={comparisonRunB} />}
 
-      {view === "reports" && <section className="panel"><h2>Reports</h2>{selectedRunInfo ? <><p>Generate a portable report for <strong>{selectedRunInfo.benchmark_id}</strong>, or download previous artifacts.</p><div className="comparison-form"><label>Report type<select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}><option value="single_model">Single-model complete</option><option value="multi_model_comparison">Multi-model comparison</option><option value="regression">Regression</option><option value="prompt_comparison">Prompt comparison</option><option value="benchmark">Benchmark</option><option value="reliability">Reliability</option><option value="cost">Cost</option><option value="human_review">Human review</option></select></label>{["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType) && <label>Related completed run<select value={relatedReportRunId} onChange={(event) => setRelatedReportRunId(event.target.value)}><option value="">Select run</option>{completedRuns.filter((run) => run.id !== selectedRunInfo.id).map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>}</div><div className="actions"><button onClick={() => void generateReport(selectedRunInfo.id, "html")}>Generate HTML</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "markdown")}>Generate Markdown</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "pdf")}>Generate PDF</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "json")}>Generate JSON</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "csv")}>Generate CSV</button><button className="secondary" onClick={() => void generateReport(selectedRunInfo.id, "parquet")}>Generate Parquet</button></div><ReportsTable reports={reports} onShare={shareReport} /></> : <p className="empty">Choose a run in the Runs page before generating a report.</p>}</section>}
+      {view === "reports" && <ReportsPage completedRuns={completedRuns} onGenerateReport={generateReport} onRelatedRunChange={setRelatedReportRunId} onReportTypeChange={setReportType} onSelectRun={(runId) => void selectRun(runId)} relatedRunId={relatedReportRunId} reportArtifacts={<ReportsTable reports={reports} onShare={shareReport} />} reportType={reportType} runs={runs} selectedRun={selectedRunInfo} />}
 
-      {view === "reviews" && <section className="panel"><div className="section-title"><h2>Human review</h2><span>Reviewer scores remain separate from deterministic and judge evidence.</span></div>{selectedRunInfo ? <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={[]} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} /> : <p className="empty">Select a run and sample from the Runs page to review it.</p>}</section>}
+      {view === "reviews" && <ReviewsPage attempts={attempts} onSelectAttempt={(attempt) => void openReview(attempt)} onSelectRun={(runId) => void selectRun(runId)} reviewDetail={selectedRunInfo ? <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={[]} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} /> : null} runs={runs} selectedAttempt={selectedAttempt} selectedRun={selectedRunInfo} />}
 
-      {view === "users" && <section className="grid two"><article className="panel"><h2>Create user</h2><form className="form" onSubmit={createUser}><label>Email<input required type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} /></label><label>Display name<input required value={userForm.display_name} onChange={(event) => setUserForm({ ...userForm, display_name: event.target.value })} /></label><label>Role<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}><option value="viewer">Viewer</option><option value="reviewer">Reviewer</option><option value="evaluator">Evaluator</option><option value="admin">Admin</option></select></label><label>User concurrency cap<input type="number" min="1" max="1000" value={userForm.max_concurrency} onChange={(event) => setUserForm({ ...userForm, max_concurrency: event.target.value })} placeholder="Unlimited" /></label><button disabled={busy === "user"}>Create API-token user</button></form></article><article className="panel"><h2>Users and audit trail</h2>{users.length === 0 ? <p className="empty">User administration needs an administrator bearer token when server authentication is enabled.</p> : <div className="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Cap</th><th>Status</th><th>Created</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td data-i18n-preserve>{user.display_name}<br /><small>{user.email}</small></td><td data-i18n-preserve>{user.role}</td><td data-i18n-preserve>{user.max_concurrency ?? "∞"}</td><td data-i18n-preserve>{user.status}</td><td>{formatDate(user.created_at)}</td></tr>)}</tbody></table></div>}<h3>Recent audit events</h3>{auditEvents.length === 0 ? <p className="empty">No events available.</p> : <div className="table-wrap"><table><thead><tr><th>Action</th><th>Entity</th><th>When</th></tr></thead><tbody>{auditEvents.slice(0, 12).map((event) => <tr key={event.id}><td data-i18n-preserve>{event.action}</td><td data-i18n-preserve>{event.entity_type}</td><td>{formatDate(event.created_at)}</td></tr>)}</tbody></table></div>}</article></section>}
+      {view === "users" && <UsersPage auditEvents={auditEvents} busy={busy} form={userForm} onFormChange={setUserForm} onSubmit={createUser} users={users} />}
 
-      {view === "settings" && <section className="grid two"><article className="panel"><h2>System settings</h2><p className="muted">Runtime settings are configured through the deployment environment; sensitive values never return to the browser.</p><dl><dt>Database</dt><dd>{systemHealth?.database ?? "Unavailable"} · {systemHealth?.database_connected ? "connected" : "unavailable"}</dd><dt>Schema version</dt><dd>{systemHealth?.schema_version ?? "--"}</dd><dt>Health</dt><dd>{systemHealth?.status ?? "Unavailable"}</dd><dt>Queue</dt><dd>{systemHealth ? `${systemHealth.queue.pending} pending · ${systemHealth.queue.active} active` : "--"}</dd><dt>Disk</dt><dd>{systemHealth ? `${display(systemHealth.disk.available_bytes)} free of ${display(systemHealth.disk.total_bytes)}` : "--"}</dd><dt>Theme</dt><dd>{theme}</dd></dl><label>Workspace language<select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}>{localeIds.map((localeId) => <option key={localeId} value={localeId}>{localeNames[localeId]}</option>)}</select></label><label>Administrator or user bearer token<input type="password" value={apiToken} onChange={(event) => setApiToken(event.target.value)} placeholder="Optional when server auth is enabled" /></label><div className="actions"><button onClick={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }}>Save token</button><button className="secondary" onClick={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }}>Clear token</button></div></article><article className="panel"><h2>SQLite operating guidance</h2><p>SQLite is suitable for local or small-team use. Use PostgreSQL or MongoDB for multi-process, distributed worker deployments; configure global worker ceilings with deployment environment settings.</p><button className="secondary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>Switch to {theme === "dark" ? "light" : "dark"} mode</button></article></section>}
+      {view === "settings" && <SettingsPage apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
   );
@@ -906,38 +909,6 @@ export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?
   }
 
   return reports.length === 0 ? <p className="empty">{copy.noArtifacts}</p> : <><section className="share-policy"><h3>{copy.readOnlyPolicy}</h3><div className="field-row"><label>{copy.expiresInDays}<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>{copy.optionalPassword}<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder={copy.passwordPlaceholder} /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> {copy.allowDownload}</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> {copy.shareRawEvidence}</label></div><p className="muted">{copy.policyDescription}</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">{copy.openShare}</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>{copy.format}</th><th>{copy.generated}</th><th>{copy.version}</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>{copy.download}</button><button className="secondary" onClick={() => void createShare(report)}>{copy.share}</button></div></td></tr>)}</tbody></table></div></>;
-}
-
-export function SharedReportPage({ token }: { token: string }) {
-  const { locale } = useTranslation();
-  const copy = reportCopy[locale];
-  const [password, setPassword] = useState("");
-  const [reportUrl, setReportUrl] = useState<string | null>(null);
-  const [message, setMessage] = useState(copy.initialMessage);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
-
-  async function openReport(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      const nextUrl = await api.openSharedReport(token, password);
-      setReportUrl((currentUrl) => {
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-        return nextUrl;
-      });
-      setMessage(copy.readyMessage);
-    } catch (_error) {
-      setMessage(copy.unavailableMessage);
-    } finally {
-      setPassword("");
-      setBusy(false);
-    }
-  }
-
-  return <main className="shared-report"><section className="panel"><p className="eyebrow">{copy.sharedReport}</p><h1>{copy.readOnlyAccess}</h1><p className="muted">{copy.passwordSafety}</p><form className="form" onSubmit={openReport}><label>{copy.sharePassword}<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? copy.opening : copy.openReport}</button></form><p className={reportUrl ? "notice" : "muted"} aria-live="polite">{message}</p>{reportUrl && <div className="actions"><a href={reportUrl} target="_blank" rel="noreferrer">{copy.openNewTab}</a><a href={reportUrl} download="evaluation-report">{copy.download}</a></div>}</section></main>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {
