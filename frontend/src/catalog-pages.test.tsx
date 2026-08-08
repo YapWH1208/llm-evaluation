@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Benchmark, Dataset, Endpoint, EvaluationSuite, api } from "./api";
-import { BenchmarksPage, DatasetsPage, SuitesPage } from "./components/pages/CatalogPages";
+import { benchmarkModalities, BenchmarksPage, datasetEditForm, datasetPrepareLabel, DatasetInspector, DatasetsPage, loadDatasetPreview, suiteBenchmarkList, SuitesPage } from "./components/pages/CatalogPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -102,6 +102,54 @@ function renderCatalogPage(page: React.ReactNode) {
 }
 
 describe("catalog workspace pages", () => {
+  it("formats benchmark modalities while retaining a fallback for manifests without a modality list", () => {
+    expect(benchmarkModalities(secondaryBenchmark)).toBe("text, code");
+    expect(benchmarkModalities({ ...benchmark, manifest: {} })).toBe("--");
+  });
+
+  it("creates an editable dataset form without converting absent metadata to strings", () => {
+    expect(datasetEditForm({ ...readyDataset, checksum: null, credential_binding_id: null, license_text: null, source_url: null })).toEqual(expect.objectContaining({ checksum: "", credential_binding_id: "", license_text: "", source_url: "" }));
+  });
+
+  it("selects the correct preparation action for license, retry, and fresh download states", () => {
+    expect(datasetPrepareLabel({ ...waitingDataset, license_text: "Terms" })).toBe("Accept license");
+    expect(datasetPrepareLabel(waitingDataset)).toBe("Retry download");
+    expect(datasetPrepareLabel({ ...waitingDataset, status: "registered" })).toBe("Download and verify");
+  });
+
+  it("loads the five-row dataset preview used by the selected inspector", async () => {
+    const preview = { fields: ["question"], rows: [{ question: "2 + 2" }] };
+    const previewRequest = vi.spyOn(api, "previewDataset").mockResolvedValue(preview);
+
+    await expect(loadDatasetPreview(readyDataset)).resolves.toEqual(preview);
+    expect(previewRequest).toHaveBeenCalledWith(readyDataset.id, 5);
+  });
+
+  it("keeps cache validation available in the selected dataset inspector", async () => {
+    const user = userEvent.setup();
+    const onValidate = vi.fn();
+    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={onValidate} preview={null} previewing={false} />);
+
+    expect(screen.getByText("SHA-256 a1b2c3d4…")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Validate cache" }));
+    expect(onValidate).toHaveBeenCalledWith(readyDataset);
+  });
+
+  it("renders selected preview rows after loading the dataset inspection sample", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });
+    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question"], rows: [{ question: "2 + 2" }] });
+    renderCatalogPage(<DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText("2 + 2")).toBeVisible();
+  });
+
+  it("formats the versioned benchmark composition shown for a suite", () => {
+    expect(suiteBenchmarkList(suite)).toBe("math-check@1");
+  });
+
   it("filters the benchmark registry while retaining the status action for matching data", async () => {
     const user = userEvent.setup();
     const onToggleStatus = vi.fn();

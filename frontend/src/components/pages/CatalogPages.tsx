@@ -15,7 +15,7 @@ type BenchmarksPageProps = {
   onToggleStatus: (benchmark: Benchmark) => void;
 };
 
-function benchmarkModalities(benchmark: Benchmark) {
+export function benchmarkModalities(benchmark: Benchmark) {
   const modalities = benchmark.manifest.modalities;
   return Array.isArray(modalities) ? modalities.map(String).join(", ") : "--";
 }
@@ -59,7 +59,7 @@ type DatasetsPageProps = {
 
 type DatasetPreview = { datasetId: string; fields: string[]; rows: Array<Record<string, string>> };
 
-function datasetEditForm(dataset: Dataset): Record<string, string> {
+export function datasetEditForm(dataset: Dataset): Record<string, string> {
   return {
     checksum: dataset.checksum ?? "",
     credential_binding_id: dataset.credential_binding_id ?? "",
@@ -73,9 +73,13 @@ function datasetEditForm(dataset: Dataset): Record<string, string> {
   };
 }
 
-function datasetPrepareLabel(dataset: Dataset) {
+export function datasetPrepareLabel(dataset: Dataset) {
   if (dataset.license_text && !dataset.license_accepted_at) return "Accept license";
   return dataset.status === "waiting" || dataset.status === "failed" ? "Retry download" : "Download and verify";
+}
+
+export async function loadDatasetPreview(dataset: Dataset) {
+  return api.previewDataset(dataset.id, 5);
 }
 
 export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspace, onPause, onPrepare, onUpdate, onUpload, onValidate }: DatasetsPageProps) {
@@ -91,20 +95,6 @@ export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspac
 
   useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [datasets]);
 
-  async function loadPreview(dataset: Dataset) {
-    setPreviewingId(dataset.id);
-    setPreviewError(null);
-    try {
-      const data = await api.previewDataset(dataset.id, 5);
-      setPreview({ datasetId: dataset.id, fields: data.fields, rows: data.rows });
-    } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : translateStaticTemplate(locale, "Preview unavailable."));
-      setPreview(null);
-    } finally {
-      setPreviewingId(null);
-    }
-  }
-
   return (
     <div className="workspace-page datasets-page">
       <PageHeader
@@ -119,7 +109,7 @@ export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspac
         <WorkspacePanel description="Select a source version to inspect its cache, metadata, and lifecycle actions." title="Dataset inventory" toolbar={<span className="workspace-count">{datasets.length} versions</span>}>
           <div className="workspace-inventory-list workspace-catalog-inventory">{datasets.map((dataset) => <button aria-pressed={selectedDataset?.id === dataset.id} className={selectedDataset?.id === dataset.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={dataset.id} onClick={() => setSelectedId(dataset.id)} type="button"><span data-i18n-preserve><strong>{dataset.dataset_id} v{dataset.version}</strong></span><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span><small data-i18n-preserve>{dataset.revision} · {dataset.source_url ? "source configured" : "local upload"}</small><span className="sr-only">Inspect {dataset.dataset_id} v{dataset.version}</span></button>)}</div>
         </WorkspacePanel>
-        {selectedDataset && <DatasetInspector busy={busy} dataset={selectedDataset} editForm={editForm} editing={editingId === selectedDataset.id} onClear={onClear} onDelete={onDelete} onEditForm={setEditForm} onPause={onPause} onPrepare={onPrepare} onStartEdit={() => { setEditingId(selectedDataset.id); setEditForm(datasetEditForm(selectedDataset)); }} onStopEdit={() => setEditingId(null)} onSubmitEdit={(event) => { event.preventDefault(); setEditingId(null); void onUpdate(selectedDataset, editForm); }} onUpload={onUpload} onValidate={onValidate} preview={preview?.datasetId === selectedDataset.id ? preview : null} previewing={previewingId === selectedDataset.id} onPreview={() => void loadPreview(selectedDataset)} />}
+        {selectedDataset && <DatasetInspector busy={busy} dataset={selectedDataset} editForm={editForm} editing={editingId === selectedDataset.id} onClear={onClear} onDelete={onDelete} onEditForm={setEditForm} onPause={onPause} onPrepare={onPrepare} onStartEdit={() => { setEditingId(selectedDataset.id); setEditForm(datasetEditForm(selectedDataset)); }} onStopEdit={() => setEditingId(null)} onSubmitEdit={(event) => { event.preventDefault(); setEditingId(null); void onUpdate(selectedDataset, editForm); }} onUpload={onUpload} onValidate={onValidate} preview={preview?.datasetId === selectedDataset.id ? preview : null} previewing={previewingId === selectedDataset.id} onPreview={() => { setPreviewingId(selectedDataset.id); setPreviewError(null); void loadDatasetPreview(selectedDataset).then((data) => setPreview({ datasetId: selectedDataset.id, fields: data.fields, rows: data.rows })).catch((error: unknown) => { setPreviewError(error instanceof Error ? error.message : translateStaticTemplate(locale, "Preview unavailable.")); setPreview(null); }).finally(() => setPreviewingId(null)); }} />}
       </div>}
     </div>
   );
@@ -145,7 +135,7 @@ type DatasetInspectorProps = {
   previewing: boolean;
 };
 
-function DatasetInspector({ busy, dataset, editForm, editing, onClear, onDelete, onEditForm, onPause, onPrepare, onPreview, onStartEdit, onStopEdit, onSubmitEdit, onUpload, onValidate, preview, previewing }: DatasetInspectorProps) {
+export function DatasetInspector({ busy, dataset, editForm, editing, onClear, onDelete, onEditForm, onPause, onPrepare, onPreview, onStartEdit, onStopEdit, onSubmitEdit, onUpload, onValidate, preview, previewing }: DatasetInspectorProps) {
   const { formatNumber: display } = useTranslation();
   return <WorkspacePanel className="workspace-dataset-inspector" title={<span data-i18n-preserve>{dataset.dataset_id} v{dataset.version}</span>} toolbar={<span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span>}>
     <div className="workspace-inspector-summary">
@@ -174,7 +164,7 @@ type SuitesPageProps = {
   suites: EvaluationSuite[];
 };
 
-function suiteBenchmarkList(suite: EvaluationSuite) {
+export function suiteBenchmarkList(suite: EvaluationSuite) {
   return suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ");
 }
 

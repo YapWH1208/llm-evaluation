@@ -128,3 +128,8 @@
 - Post-change Code Review Graph: 0 test gaps, risk score 0.30. The broad
   reported App impact is expected from the pre-existing controller coupling;
   the new page boundaries are directly exercised by the catalog tests.
+- Commit-hook follow-up: the graph requested direct seams for catalog display
+  helpers and the inspector. Added red/green coverage for modality formatting,
+  edit normalization, preparation labels, five-row previews, cache validation,
+  preview rendering, and suite composition. The follow-up graph reports 0
+  gaps (risk 0.35); the full frontend suite passes with 18 files / 70 tests.
