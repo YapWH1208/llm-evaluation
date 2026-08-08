@@ -58,7 +58,7 @@ export function AppShell({
         tabIndex={isNavigationOpen ? 0 : -1}
         type="button"
       />
-      <aside className={isNavigationOpen ? "sidebar is-open" : "sidebar"} data-testid="workspace-sidebar" id="workspace-navigation">
+      <aside className={isNavigationOpen ? "sidebar is-open" : "sidebar is-closed"} data-testid="workspace-sidebar" id="workspace-navigation">
         <div className="sidebar-brand">
           <span aria-hidden="true" className="brand-mark">E</span>
           <div>

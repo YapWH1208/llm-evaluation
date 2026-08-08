@@ -13,6 +13,13 @@ afterEach(() => {
 });
 
 describe("public report sharing", () => {
+  it("honors the saved light-theme preference without requiring the authenticated application shell", () => {
+    window.localStorage.setItem("lle-theme", "light");
+    render(<LocaleProvider><SharedReportPage token="public-token" /></LocaleProvider>);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
   it("keeps the discovery-token request scoped to the supplied public credentials", async () => {
     vi.spyOn(api, "openSharedReport").mockResolvedValue("blob:shared-report");
 

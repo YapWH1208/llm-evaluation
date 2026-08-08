@@ -99,12 +99,15 @@ describe("AppShell", () => {
     const props = renderShell();
     const sidebar = screen.getByTestId("workspace-sidebar");
 
+    expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(sidebar).toHaveClass("is-open");
+    expect(sidebar).not.toHaveClass("is-closed");
 
     await user.click(screen.getByRole("button", { name: "Models" }));
     expect(props.onViewChange).toHaveBeenCalledWith("models");
+    expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
   });
 

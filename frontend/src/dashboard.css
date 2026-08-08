@@ -269,12 +269,15 @@ textarea:focus-visible {
 
 @media (max-width: 960px) {
   .sidebar {
-    box-shadow: var(--shadow-popover, 0 12px 32px rgb(2 8 23 / .28));
+    box-shadow: none;
     transform: translateX(-105%);
     transition: transform .2s ease;
   }
 
-  .sidebar.is-open { transform: translateX(0); }
+  .sidebar.is-open {
+    box-shadow: var(--shadow-popover, 0 12px 32px rgb(2 8 23 / .28));
+    transform: translateX(0);
+  }
 
   .navigation-scrim {
     background: rgb(2 6 23 / .58);

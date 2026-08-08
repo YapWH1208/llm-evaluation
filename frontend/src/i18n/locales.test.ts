@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { catalogs, isLocale, localeIds, navigationCopy, overviewCopy, resolveLocale } from "./catalog";
-import { translateStaticTemplate } from "./operationalCopy";
+import { translateStaticTemplate, translateStaticText } from "./operationalCopy";
 
 const analyticsOverviewKeys = [
   "dashboardTitle",
@@ -59,6 +59,16 @@ describe("workspace locale catalog", () => {
     for (const locale of localeIds) {
       for (const key of analyticsOverviewKeys) {
         expect(overviewCopy[locale][key].trim(), `${locale}.${key}`).not.toBe("");
+      }
+    }
+  });
+
+  it("keeps redesigned workspace labels eligible for the static-copy bridge", () => {
+    const workspaceLabels = ["Report context", "Review context", "User inventory", "Application and storage", "Operating guidance"];
+
+    for (const locale of localeIds.filter((locale) => locale !== "en")) {
+      for (const label of workspaceLabels) {
+        expect(translateStaticText(locale, label), `${locale}: ${label}`).not.toBe(label);
       }
     }
   });

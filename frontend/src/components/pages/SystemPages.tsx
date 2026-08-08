@@ -146,6 +146,16 @@ export function SharedReportPage({ token }: { token: string }) {
   const [message, setMessage] = useState(copy.initialMessage);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const previousTheme = root.dataset.theme;
+    root.dataset.theme = window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark";
+    return () => {
+      if (previousTheme) root.dataset.theme = previousTheme;
+      else delete root.dataset.theme;
+    };
+  }, []);
+
   useEffect(() => () => { if (reportUrl) URL.revokeObjectURL(reportUrl); }, [reportUrl]);
 
   return <main className="shared-report"><section className="shared-report-panel"><p className="eyebrow">{copy.sharedReport}</p><h1>{copy.readOnlyAccess}</h1><p className="shared-report-intro">{copy.passwordSafety}</p><form className="form" onSubmit={(event) => { event.preventDefault(); setBusy(true); setMessage(""); void openSharedReport(token, password).then((nextUrl) => { setReportUrl((currentUrl) => { if (currentUrl) URL.revokeObjectURL(currentUrl); return nextUrl; }); setMessage(copy.readyMessage); }).catch(() => setMessage(copy.unavailableMessage)).finally(() => { setPassword(""); setBusy(false); }); }}><label>{copy.sharePassword}<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button disabled={busy}>{busy ? copy.opening : copy.openReport}</button></form><p className={reportUrl ? "notice" : "shared-report-status"} aria-live="polite">{message}</p>{reportUrl && <div className="actions shared-report-actions"><a href={reportUrl} target="_blank" rel="noreferrer">{copy.openNewTab}</a><a href={reportUrl} download="evaluation-report">{copy.download}</a></div>}</section></main>;

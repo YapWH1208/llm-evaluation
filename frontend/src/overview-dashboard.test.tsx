@@ -173,6 +173,13 @@ function renderOverview(overrides: Partial<React.ComponentProps<typeof OverviewD
 }
 
 describe("OverviewDashboard", () => {
+  it("retains the protected Overview structure instead of adopting a generic workspace-page wrapper", () => {
+    renderOverview();
+
+    expect(document.querySelector(".overview-dashboard")).toBeInTheDocument();
+    expect(document.querySelector(".overview-dashboard.workspace-page")).not.toBeInTheDocument();
+  });
+
   it("prioritizes live performance evidence and preserves run and insight actions", async () => {
     const user = userEvent.setup();
     const props = renderOverview();
