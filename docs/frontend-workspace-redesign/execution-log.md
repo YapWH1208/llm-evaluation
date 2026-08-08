@@ -45,3 +45,8 @@
   `.workspace-page-heading`, a 232px rail, and a 52px top bar. The local API
   was unavailable, so its existing failed-fetch fallback rendered; no layout
   regression was observed.
+- Commit: `430c3f2 feat: add workspace page primitives`.
+- Post-commit graph finding: the optional `moveFocus` helper in `WorkspaceTabs`
+  was not covered. It was not needed because this tab strip does not own a
+  visible tab panel, so the helper is removed in a focused follow-up rather
+  than retaining unrequired keyboard behavior.
