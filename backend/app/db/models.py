@@ -245,6 +245,8 @@ class DatasetVersion(Base):
     prepared_path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     license_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     license_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    input_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reference_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=DatasetStatus.NOT_DOWNLOADED.value)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

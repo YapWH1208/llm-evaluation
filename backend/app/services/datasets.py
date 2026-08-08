@@ -13,11 +13,12 @@ from uuid import uuid4
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
-from app.services.dataset_records import iter_delimited_rows
+from app.services.dataset_records import iter_dataset_records, iter_delimited_rows
 from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
@@ -461,6 +462,71 @@ def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: st
     return dataset
 
 
+def delete_dataset(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
+    _ensure_dataset_is_not_referenced(session, dataset.id)
+    if dataset.status in {
+        DatasetStatus.DOWNLOADING.value, DatasetStatus.PREPARING.value,
+        DatasetStatus.VERIFYING.value, DatasetStatus.REMOVING.value,
+    }:
+        raise DatasetError("Dataset cannot be deleted while it is downloading or preparing.")
+    if dataset.local_path:
+        root = (Path(data_root).resolve() / "datasets").resolve()
+        target = Path(dataset.local_path).resolve()
+        if not target.is_relative_to(root):
+            raise DatasetError("Dataset cache path is outside the configured dataset root.")
+        target.unlink(missing_ok=True)
+    clear_prepared_dataset_cache(dataset.prepared_path, data_root)
+    upload_dir = (Path(data_root).resolve() / "datasets" / "uploads" / dataset.id).resolve()
+    if upload_dir.is_relative_to((Path(data_root).resolve() / "datasets").resolve()):
+        shutil.rmtree(upload_dir, ignore_errors=True)
+    session.delete(dataset)
+    session.commit()
+    return dataset
+
+
+def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -> dict[str, object]:
+    fields: list[str] = []
+    seen: set[str] = set()
+    rows: list[dict[str, str]] = []
+    for record in iter_dataset_records(prepared_path, data_root, limit=limit):
+        raw_fields = record["fields"]
+        if not isinstance(raw_fields, dict):
+            continue
+        for key in raw_fields:
+            if key not in seen:
+                seen.add(key)
+                fields.append(key)
+        rows.append({str(key): _stringify_preview_value(value) for key, value in raw_fields.items()})
+    return {"fields": fields, "rows": rows}
+
+
+def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None) -> DatasetVersion:
+    dataset.dataset_id = dataset_id
+    dataset.version = version
+    dataset.revision = revision
+    dataset.source_url = source_url
+    dataset.checksum = checksum
+    dataset.license_text = license_text
+    dataset.credential_binding_id = credential_binding_id
+    dataset.input_field = input_field
+    dataset.reference_field = reference_field
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise DatasetError("Dataset revision already exists.") from error
+    session.refresh(dataset)
+    return dataset
+
+
+def _stringify_preview_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 def _ensure_dataset_is_not_referenced(session: Session, dataset_version_id: str) -> None:
     for run in session.scalars(select(EvaluationRun)):
         snapshot = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
@@ -469,7 +535,7 @@ def _ensure_dataset_is_not_referenced(session: Session, dataset_version_id: str)
             isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_version_id
             for descriptor in datasets
         ):
-            raise DatasetError("Dataset cache cannot be cleared while an evaluation run references this revision.")
+            raise DatasetError("Dataset cannot be cleared or deleted while an evaluation run references this revision.")
 
 
 def store_uploaded_dataset(

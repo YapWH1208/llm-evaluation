@@ -55,4 +55,21 @@ describe("authenticated browser transport", () => {
     expect(run.id).toBe("run-1");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/evaluation-runs/dataset", expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
   });
+
+  it("previews, updates, and deletes dataset versions", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ fields: ["q"], rows: [{ q: "?" }] }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ds-1", dataset_id: "x", version: "1", revision: "default", input_field: "q", reference_field: "a" }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ds-1" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const preview = await api.previewDataset("ds-1", 3);
+    expect(preview.rows).toEqual([{ q: "?" }]);
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1/preview?limit=3", expect.any(Object));
+
+    const updated = await api.updateDataset("ds-1", { dataset_id: "x", version: "1" });
+    expect(updated.input_field).toBe("q");
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1", expect.objectContaining({ method: "PUT", body: JSON.stringify({ dataset_id: "x", version: "1" }) }));
+
+    await api.deleteDataset("ds-1");
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1", expect.objectContaining({ method: "DELETE" }));
+  });
 });

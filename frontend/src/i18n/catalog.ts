@@ -33,6 +33,12 @@ const en = {
   "datasetRun.nonReadyHint": "Only ready datasets are listed. Download and verify other versions first.",
   "datasetRun.queue": "Queue dataset run",
   "datasetRun.queued": "Dataset evaluation run queued.",
+  "datasetRun.inputField": "Input field",
+  "datasetRegister.title": "Register dataset version",
+  "datasetRegister.inputField": "Input field",
+  "datasetRegister.referenceField": "Reference (output) field",
+  "datasetRegister.inputFieldHint": "Optional record field used as the prompt input",
+  "datasetRegister.referenceFieldHint": "Optional record field holding the expected answer",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -58,6 +64,12 @@ const zhCN: TranslationCatalog = {
   "datasetRun.nonReadyHint": "仅列出已就绪的数据集。请先下载并验证其他版本。",
   "datasetRun.queue": "将数据集评测加入队列",
   "datasetRun.queued": "数据集评测已加入队列。",
+  "datasetRun.inputField": "输入字段",
+  "datasetRegister.title": "注册数据集版本",
+  "datasetRegister.inputField": "输入字段",
+  "datasetRegister.referenceField": "参考答案（输出）字段",
+  "datasetRegister.inputFieldHint": "可选：用作提示词输入的记录字段",
+  "datasetRegister.referenceFieldHint": "可选：保存预期答案的记录字段",
 };
 
 const fr: TranslationCatalog = {
@@ -80,6 +92,12 @@ const fr: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Seuls les jeux de données prêts sont répertoriés. Téléchargez et vérifiez d’abord les autres versions.",
   "datasetRun.queue": "Mettre l’évaluation du jeu de données en file",
   "datasetRun.queued": "Évaluation du jeu de données mise en file.",
+  "datasetRun.inputField": "Champ d’entrée",
+  "datasetRegister.title": "Enregistrer une version de jeu de données",
+  "datasetRegister.inputField": "Champ d’entrée",
+  "datasetRegister.referenceField": "Champ de référence (sortie)",
+  "datasetRegister.inputFieldHint": "Champ d’enregistrement facultatif utilisé comme entrée du prompt",
+  "datasetRegister.referenceFieldHint": "Champ d’enregistrement facultatif contenant la réponse attendue",
 };
 
 const de: TranslationCatalog = {
@@ -102,6 +120,12 @@ const de: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Nur bereite Datensätze werden aufgelistet. Laden Sie andere Versionen zuerst herunter und prüfen Sie sie.",
   "datasetRun.queue": "Datensatz-Evaluierung einreihen",
   "datasetRun.queued": "Datensatz-Evaluierung in die Warteschlange eingereiht.",
+  "datasetRun.inputField": "Eingabefeld",
+  "datasetRegister.title": "Datensatzversion registrieren",
+  "datasetRegister.inputField": "Eingabefeld",
+  "datasetRegister.referenceField": "Referenzfeld (Ausgabe)",
+  "datasetRegister.inputFieldHint": "Optionaler Datensatzfeld als Prompt-Eingabe",
+  "datasetRegister.referenceFieldHint": "Optionaler Datensatzfeld mit der erwarteten Antwort",
 };
 
 const ru: TranslationCatalog = {
@@ -124,6 +148,12 @@ const ru: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Перечислены только готовые наборы данных. Сначала загрузите и проверьте другие версии.",
   "datasetRun.queue": "Поставить оценку набора данных в очередь",
   "datasetRun.queued": "Оценка набора данных поставлена в очередь.",
+  "datasetRun.inputField": "Поле ввода",
+  "datasetRegister.title": "Регистрация версии набора данных",
+  "datasetRegister.inputField": "Поле ввода",
+  "datasetRegister.referenceField": "Поле эталонного ответа (вывод)",
+  "datasetRegister.inputFieldHint": "Необязательное поле записи, используемое как вход промпта",
+  "datasetRegister.referenceFieldHint": "Необязательное поле записи с ожидаемым ответом",
 };
 
 const ja: TranslationCatalog = {
@@ -146,6 +176,12 @@ const ja: TranslationCatalog = {
   "datasetRun.nonReadyHint": "準備ができたデータセットのみが表示されます。他のバージョンを先にダウンロードして検証してください。",
   "datasetRun.queue": "データセット評価をキューに入れる",
   "datasetRun.queued": "データセット評価がキューに入りました。",
+  "datasetRun.inputField": "入力フィールド",
+  "datasetRegister.title": "データセット バージョンの登録",
+  "datasetRegister.inputField": "入力フィールド",
+  "datasetRegister.referenceField": "参照フィールド（出力）",
+  "datasetRegister.inputFieldHint": "プロンプト入力として使用するレコード フィールド（省略可能）",
+  "datasetRegister.referenceFieldHint": "期待される回答を保持するレコード フィールド（省略可能）",
 };
 
 const ko: TranslationCatalog = {
@@ -168,6 +204,12 @@ const ko: TranslationCatalog = {
   "datasetRun.nonReadyHint": "준비된 데이터 세트만 나열됩니다. 다른 버전을 먼저 다운로드하여 확인하세요.",
   "datasetRun.queue": "데이터 세트 평가 대기열에 추가",
   "datasetRun.queued": "데이터 세트 평가가 대기열에 추가되었습니다.",
+  "datasetRun.inputField": "입력 필드",
+  "datasetRegister.title": "데이터 세트 버전 등록",
+  "datasetRegister.inputField": "입력 필드",
+  "datasetRegister.referenceField": "참조 필드(출력)",
+  "datasetRegister.inputFieldHint": "프롬프트 입력으로 사용되는 레코드 필드(선택 사항)",
+  "datasetRegister.referenceFieldHint": "예상 답변이 포함된 레코드 필드(선택 사항)",
 };
 
 const ms: TranslationCatalog = {
@@ -190,6 +232,12 @@ const ms: TranslationCatalog = {
   "datasetRun.nonReadyHint": "Hanya set data yang sedia disenaraikan. Muat turun dan sahkan versi lain dahulu.",
   "datasetRun.queue": "Letakkan penilaian set data dalam baris",
   "datasetRun.queued": "Penilaian set data telah dimasukkan ke dalam baris.",
+  "datasetRun.inputField": "Medan input",
+  "datasetRegister.title": "Daftar versi set data",
+  "datasetRegister.inputField": "Medan input",
+  "datasetRegister.referenceField": "Medan rujukan (output)",
+  "datasetRegister.inputFieldHint": "Medan rekod pilihan yang digunakan sebagai input prom",
+  "datasetRegister.referenceFieldHint": "Medan rekod pilihan yang mengandungi jawapan yang dijangkakan",
 };
 
 export const catalogs: Record<Locale, TranslationCatalog> = { en, "zh-CN": zhCN, fr, de, ru, ja, ko, ms };
@@ -202,7 +250,7 @@ export function resolveLocale(value: string | null | undefined): Locale {
   return isLocale(value) ? value : "en";
 }
 
-export const workspaceViews = ["dashboard", "models", "capabilities", "workspace", "benchmarks", "datasets", "suites", "runs", "queue", "workers", "analysis", "compare", "reports", "reviews", "users", "settings"] as const;
+export const workspaceViews = ["dashboard", "guide", "models", "capabilities", "workspace", "benchmarks", "datasets", "suites", "runs", "queue", "workers", "analysis", "compare", "reports", "reviews", "users", "settings"] as const;
 export type WorkspaceView = typeof workspaceViews[number];
 export type NavigationGroupId = "overview" | "configure" | "operations" | "insights" | "system";
 
@@ -220,28 +268,28 @@ function navigation(groups: [string, string, string, string, string], items: Arr
 
 export const navigationCopy: Record<Locale, NavigationCopy> = {
   en: navigation(["Overview", "Configure", "Operations", "Insights", "System"], [
-    ["Dashboard", "Operational status and recent work"], ["Models", "Endpoints and run defaults"], ["Capabilities", "Detection and declarations"], ["Workspace", "Prompts, assets, and setup"], ["Benchmarks", "Benchmark registry"], ["Datasets", "Versioned data sources"], ["Suites", "Reusable evaluation suites"], ["Runs", "Execution, results, and evidence"], ["Task queue", "Priorities and pending work"], ["Workers", "Leases and active workers"], ["Analysis", "Capability and trend evidence"], ["Compare", "Run-to-run comparisons"], ["Reports", "Exports and shared artifacts"], ["Human review", "Review and adjudication"], ["Users", "Users and audit activity"], ["Settings", "Health, access, and preferences"],
+    ["Dashboard", "Operational status and recent work"], ["Guide", "Step-by-step usage walkthrough"], ["Models", "Endpoints and run defaults"], ["Capabilities", "Detection and declarations"], ["Workspace", "Prompts, assets, and setup"], ["Benchmarks", "Benchmark registry"], ["Datasets", "Versioned data sources"], ["Suites", "Reusable evaluation suites"], ["Runs", "Execution, results, and evidence"], ["Task queue", "Priorities and pending work"], ["Workers", "Leases and active workers"], ["Analysis", "Capability and trend evidence"], ["Compare", "Run-to-run comparisons"], ["Reports", "Exports and shared artifacts"], ["Human review", "Review and adjudication"], ["Users", "Users and audit activity"], ["Settings", "Health, access, and preferences"],
   ]),
   "zh-CN": navigation(["概览", "配置", "运营", "洞察", "系统"], [
-    ["仪表盘", "运行状态和近期工作"], ["模型", "端点和运行默认值"], ["能力", "检测与声明"], ["工作区", "提示词、资产与设置"], ["基准", "评测基准注册表"], ["数据集", "版本化数据源"], ["套件", "可复用的评测套件"], ["运行", "执行、结果与证据"], ["任务队列", "优先级与待处理工作"], ["工作节点", "租约和活动工作节点"], ["分析", "能力与趋势证据"], ["对比", "运行之间的对比"], ["报告", "导出和共享工件"], ["人工审核", "审核与裁决"], ["用户", "用户和审计活动"], ["设置", "运行状况、访问和偏好设置"],
+    ["仪表盘", "运行状态和近期工作"], ["指南", "分步使用说明"], ["模型", "端点和运行默认值"], ["能力", "检测与声明"], ["工作区", "提示词、资产与设置"], ["基准", "评测基准注册表"], ["数据集", "版本化数据源"], ["套件", "可复用的评测套件"], ["运行", "执行、结果与证据"], ["任务队列", "优先级与待处理工作"], ["工作节点", "租约和活动工作节点"], ["分析", "能力与趋势证据"], ["对比", "运行之间的对比"], ["报告", "导出和共享工件"], ["人工审核", "审核与裁决"], ["用户", "用户和审计活动"], ["设置", "运行状况、访问和偏好设置"],
   ]),
   fr: navigation(["Aperçu", "Configuration", "Opérations", "Analyses", "Système"], [
-    ["Tableau de bord", "État opérationnel et travaux récents"], ["Modèles", "Points de terminaison et paramètres d’exécution"], ["Capacités", "Détection et déclarations"], ["Espace de travail", "Prompts, ressources et configuration"], ["Référentiels", "Registre des référentiels"], ["Jeux de données", "Sources de données versionnées"], ["Suites", "Suites d’évaluation réutilisables"], ["Exécutions", "Exécution, résultats et preuves"], ["File d’attente", "Priorités et travail en attente"], ["Agents", "Baux et agents actifs"], ["Analyse", "Preuves de capacités et tendances"], ["Comparer", "Comparaisons entre exécutions"], ["Rapports", "Exports et artefacts partagés"], ["Révision humaine", "Révision et arbitrage"], ["Utilisateurs", "Utilisateurs et activité d’audit"], ["Paramètres", "État, accès et préférences"],
+    ["Tableau de bord", "État opérationnel et travaux récents"], ["Guide", "Parcours d’utilisation pas à pas"], ["Modèles", "Points de terminaison et paramètres d’exécution"], ["Capacités", "Détection et déclarations"], ["Espace de travail", "Prompts, ressources et configuration"], ["Référentiels", "Registre des référentiels"], ["Jeux de données", "Sources de données versionnées"], ["Suites", "Suites d’évaluation réutilisables"], ["Exécutions", "Exécution, résultats et preuves"], ["File d’attente", "Priorités et travail en attente"], ["Agents", "Baux et agents actifs"], ["Analyse", "Preuves de capacités et tendances"], ["Comparer", "Comparaisons entre exécutions"], ["Rapports", "Exports et artefacts partagés"], ["Révision humaine", "Révision et arbitrage"], ["Utilisateurs", "Utilisateurs et activité d’audit"], ["Paramètres", "État, accès et préférences"],
   ]),
   de: navigation(["Übersicht", "Konfiguration", "Betrieb", "Einblicke", "System"], [
-    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Modelle", "Endpunkte und Ausführungsstandards"], ["Fähigkeiten", "Erkennung und Deklarationen"], ["Arbeitsbereich", "Prompts, Assets und Einrichtung"], ["Benchmarks", "Benchmark-Register"], ["Datensätze", "Versionierte Datenquellen"], ["Suiten", "Wiederverwendbare Evaluierungssuiten"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Aufgabenwarteschlange", "Prioritäten und ausstehende Arbeit"], ["Worker", "Leases und aktive Worker"], ["Analyse", "Fähigkeits- und Trendnachweise"], ["Vergleichen", "Vergleiche zwischen Ausführungen"], ["Berichte", "Exporte und geteilte Artefakte"], ["Menschliche Prüfung", "Prüfung und Entscheidung"], ["Benutzer", "Benutzer und Auditaktivität"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
+    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Leitfaden", "Schritt-für-Schritt-Anleitung"], ["Modelle", "Endpunkte und Ausführungsstandards"], ["Fähigkeiten", "Erkennung und Deklarationen"], ["Arbeitsbereich", "Prompts, Assets und Einrichtung"], ["Benchmarks", "Benchmark-Register"], ["Datensätze", "Versionierte Datenquellen"], ["Suiten", "Wiederverwendbare Evaluierungssuiten"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Aufgabenwarteschlange", "Prioritäten und ausstehende Arbeit"], ["Worker", "Leases und aktive Worker"], ["Analyse", "Fähigkeits- und Trendnachweise"], ["Vergleichen", "Vergleiche zwischen Ausführungen"], ["Berichte", "Exporte und geteilte Artefakte"], ["Menschliche Prüfung", "Prüfung und Entscheidung"], ["Benutzer", "Benutzer und Auditaktivität"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
   ]),
   ru: navigation(["Обзор", "Настройка", "Операции", "Аналитика", "Система"], [
-    ["Панель", "Рабочее состояние и недавние задачи"], ["Модели", "Конечные точки и настройки запуска"], ["Возможности", "Обнаружение и объявления"], ["Рабочая область", "Промпты, ресурсы и настройка"], ["Бенчмарки", "Реестр бенчмарков"], ["Наборы данных", "Версионируемые источники данных"], ["Наборы", "Повторно используемые наборы оценки"], ["Запуски", "Выполнение, результаты и доказательства"], ["Очередь задач", "Приоритеты и ожидающая работа"], ["Рабочие узлы", "Аренды и активные рабочие узлы"], ["Анализ", "Доказательства возможностей и трендов"], ["Сравнение", "Сравнения запусков"], ["Отчёты", "Экспорт и общие артефакты"], ["Проверка человеком", "Проверка и арбитраж"], ["Пользователи", "Пользователи и аудит"], ["Настройки", "Состояние, доступ и предпочтения"],
+    ["Панель", "Рабочее состояние и недавние задачи"], ["Руководство", "Пошаговое руководство по использованию"], ["Модели", "Конечные точки и настройки запуска"], ["Возможности", "Обнаружение и объявления"], ["Рабочая область", "Промпты, ресурсы и настройка"], ["Бенчмарки", "Реестр бенчмарков"], ["Наборы данных", "Версионируемые источники данных"], ["Наборы", "Повторно используемые наборы оценки"], ["Запуски", "Выполнение, результаты и доказательства"], ["Очередь задач", "Приоритеты и ожидающая работа"], ["Рабочие узлы", "Аренды и активные рабочие узлы"], ["Анализ", "Доказательства возможностей и трендов"], ["Сравнение", "Сравнения запусков"], ["Отчёты", "Экспорт и общие артефакты"], ["Проверка человеком", "Проверка и арбитраж"], ["Пользователи", "Пользователи и аудит"], ["Настройки", "Состояние, доступ и предпочтения"],
   ]),
   ja: navigation(["概要", "設定", "運用", "分析情報", "システム"], [
-    ["ダッシュボード", "運用状況と最近の作業"], ["モデル", "エンドポイントと実行の既定値"], ["機能", "検出と宣言"], ["ワークスペース", "プロンプト、アセット、設定"], ["ベンチマーク", "ベンチマーク レジストリ"], ["データセット", "バージョン管理されたデータソース"], ["スイート", "再利用可能な評価スイート"], ["実行", "実行、結果、証拠"], ["タスク キュー", "優先順位と保留中の作業"], ["ワーカー", "リースとアクティブなワーカー"], ["分析", "機能と傾向の証拠"], ["比較", "実行間の比較"], ["レポート", "エクスポートと共有アーティファクト"], ["人によるレビュー", "レビューと裁定"], ["ユーザー", "ユーザーと監査アクティビティ"], ["設定", "状態、アクセス、設定"],
+    ["ダッシュボード", "運用状況と最近の作業"], ["ガイド", "ステップバイステップの使い方"], ["モデル", "エンドポイントと実行の既定値"], ["機能", "検出と宣言"], ["ワークスペース", "プロンプト、アセット、設定"], ["ベンチマーク", "ベンチマーク レジストリ"], ["データセット", "バージョン管理されたデータソース"], ["スイート", "再利用可能な評価スイート"], ["実行", "実行、結果、証拠"], ["タスク キュー", "優先順位と保留中の作業"], ["ワーカー", "リースとアクティブなワーカー"], ["分析", "機能と傾向の証拠"], ["比較", "実行間の比較"], ["レポート", "エクスポートと共有アーティファクト"], ["人によるレビュー", "レビューと裁定"], ["ユーザー", "ユーザーと監査アクティビティ"], ["設定", "状態、アクセス、設定"],
   ]),
   ko: navigation(["개요", "구성", "운영", "인사이트", "시스템"], [
-    ["대시보드", "운영 상태 및 최근 작업"], ["모델", "엔드포인트 및 실행 기본값"], ["기능", "감지 및 선언"], ["작업 공간", "프롬프트, 자산 및 설정"], ["벤치마크", "벤치마크 레지스트리"], ["데이터 세트", "버전 관리 데이터 원본"], ["스위트", "재사용 가능한 평가 스위트"], ["실행", "실행, 결과 및 증거"], ["작업 대기열", "우선순위 및 대기 중인 작업"], ["워커", "리스 및 활성 워커"], ["분석", "기능 및 추세 증거"], ["비교", "실행 간 비교"], ["보고서", "내보내기 및 공유 아티팩트"], ["사람 검토", "검토 및 조정"], ["사용자", "사용자 및 감사 활동"], ["설정", "상태, 액세스 및 기본 설정"],
+    ["대시보드", "운영 상태 및 최근 작업"], ["가이드", "단계별 사용 안내"], ["모델", "엔드포인트 및 실행 기본값"], ["기능", "감지 및 선언"], ["작업 공간", "프롬프트, 자산 및 설정"], ["벤치마크", "벤치마크 레지스트리"], ["데이터 세트", "버전 관리 데이터 원본"], ["스위트", "재사용 가능한 평가 스위트"], ["실행", "실행, 결과 및 증거"], ["작업 대기열", "우선순위 및 대기 중인 작업"], ["워커", "리스 및 활성 워커"], ["분석", "기능 및 추세 증거"], ["비교", "실행 간 비교"], ["보고서", "내보내기 및 공유 아티팩트"], ["사람 검토", "검토 및 조정"], ["사용자", "사용자 및 감사 활동"], ["설정", "상태, 액세스 및 기본 설정"],
   ]),
   ms: navigation(["Gambaran keseluruhan", "Konfigurasi", "Operasi", "Wawasan", "Sistem"], [
-    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Model", "Titik akhir dan lalai pelaksanaan"], ["Keupayaan", "Pengesanan dan pengisytiharan"], ["Ruang kerja", "Prom, aset dan persediaan"], ["Penanda aras", "Daftar penanda aras"], ["Set data", "Sumber data berversi"], ["Suite", "Suite penilaian boleh guna semula"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Baris tugas", "Keutamaan dan kerja menunggu"], ["Pekerja", "Pajakan dan pekerja aktif"], ["Analisis", "Bukti keupayaan dan aliran"], ["Bandingkan", "Perbandingan antara larian"], ["Laporan", "Eksport dan artifak dikongsi"], ["Semakan manusia", "Semakan dan pengadilan"], ["Pengguna", "Pengguna dan aktiviti audit"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
+    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Panduan", "Panduan penggunaan langkah demi langkah"], ["Model", "Titik akhir dan lalai pelaksanaan"], ["Keupayaan", "Pengesanan dan pengisytiharan"], ["Ruang kerja", "Prom, aset dan persediaan"], ["Penanda aras", "Daftar penanda aras"], ["Set data", "Sumber data berversi"], ["Suite", "Suite penilaian boleh guna semula"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Baris tugas", "Keutamaan dan kerja menunggu"], ["Pekerja", "Pajakan dan pekerja aktif"], ["Analisis", "Bukti keupayaan dan aliran"], ["Bandingkan", "Perbandingan antara larian"], ["Laporan", "Eksport dan artifak dikongsi"], ["Semakan manusia", "Semakan dan pengadilan"], ["Pengguna", "Pengguna dan aktiviti audit"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
   ]),
 };
 

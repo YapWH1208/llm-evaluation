@@ -51,6 +51,13 @@ checksum is calculated and recorded after the first verified download. If the
 dataset is gated or private, supply the administrator-configured
 **credential binding ID** (never a raw token; see Troubleshooting below).
 
+Registered versions can declare an optional **input field** and **reference
+(output) field** used as run defaults; the run form still allows per-run
+overrides. Ready datasets expose a **Preview** action that shows the first
+five rows of the prepared cache, plus **Edit** and **Delete** actions.
+Deleting is blocked while an evaluation run references the revision or while
+the download is in progress.
+
 ## 3. Accept the license, then download and verify
 
 If the registered dataset carries license text, its status is

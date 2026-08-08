@@ -172,6 +172,11 @@ def _upgrade_v23_report_share_password_limits(_connection: Connection) -> None:
     """The ORM creates the additive durable report-share password limiter table."""
 
 
+def _upgrade_v24_dataset_field_defaults(connection: Connection) -> None:
+    _add_column_if_missing(connection, "dataset_versions", "input_field", "input_field VARCHAR(255)")
+    _add_column_if_missing(connection, "dataset_versions", "reference_field", "reference_field VARCHAR(255)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -304,6 +309,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260730_add_report_share_password_limits",
         description="Add durable, expiring per-client failed-password windows for public report shares.",
         upgrade=_upgrade_v23_report_share_password_limits,
+    ),
+    Migration(
+        version=24,
+        migration_id="20260807_add_dataset_field_defaults",
+        description="Add optional input and reference field defaults to dataset versions.",
+        upgrade=_upgrade_v24_dataset_field_defaults,
     ),
 )
 

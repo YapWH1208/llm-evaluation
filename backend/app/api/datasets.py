@@ -5,20 +5,22 @@ from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, download_dataset, pause_dataset_download, store_uploaded_dataset, validate_dataset_cache
-from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, validate_mongo_dataset_cache
+from app.services.dataset_records import DatasetRecordError
+from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, delete_dataset, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
+from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, delete_mongo_dataset, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
     dataset_id: str = Field(min_length=1, max_length=128); version: str = Field(min_length=1, max_length=64)
     revision: str = "default"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
+    input_field: str | None = None; reference_field: str | None = None
     credential_binding_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
     credential_env_var: str | None = None
 
@@ -29,6 +31,14 @@ class DatasetCreate(BaseModel):
                 "credential_env_var is no longer accepted. Configure an administrator-owned "
                 "credential_binding_id instead."
             )
+        if self.input_field is not None and not self.input_field.strip():
+            raise ValueError("input_field must not be blank when provided.")
+        if self.reference_field is not None and not self.reference_field.strip():
+            raise ValueError("reference_field must not be blank when provided.")
+        if self.input_field is not None:
+            self.input_field = self.input_field.strip()
+        if self.reference_field is not None:
+            self.reference_field = self.reference_field.strip()
         return self
 
 
@@ -36,7 +46,7 @@ class DatasetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str; dataset_id: str; version: str; revision: str; source_url: str | None; credential_binding_id: str | None
     checksum: str | None; local_path: str | None; prepared_path: str | None = None; size_bytes: int | None = None; license_text: str | None
-    license_accepted_at: datetime | None; status: str; error_message: str | None; created_at: datetime
+    license_accepted_at: datetime | None; input_field: str | None = None; reference_field: str | None = None; status: str; error_message: str | None; created_at: datetime
 
 
 class DatasetUpload(BaseModel):
@@ -63,6 +73,11 @@ class DatasetDiskUsage(BaseModel):
     cache_bytes: int
     available_bytes: int
     total_bytes: int
+
+
+class DatasetPreviewResponse(BaseModel):
+    fields: list[str]
+    rows: list[dict[str, str]]
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state,"document_store",None) is not None:
         yield None
@@ -99,6 +114,43 @@ def list_datasets(request:Request,session:SessionDependency)->list[DatasetVersio
 @router.get("/disk-usage", response_model=DatasetDiskUsage)
 def get_dataset_disk_usage(request: Request) -> dict[str, int | str]:
     return mongo_dataset_disk_usage(request.app.state.settings.data_root) if get_document_store(request) is not None else dataset_disk_usage(request.app.state.settings.data_root)
+
+
+@router.get("/{dataset_version_id}/preview", response_model=DatasetPreviewResponse)
+def preview_dataset_version(dataset_version_id: str, request: Request, session: SessionDependency, limit: int = Query(default=5, ge=1, le=50)) -> dict[str, object]:
+    store = get_document_store(request)
+    if store is not None:
+        dataset = store.get_document("dataset_versions", dataset_version_id)
+        if dataset is None:
+            raise HTTPException(404, "Dataset version not found")
+        prepared_path = dataset.get("prepared_path")
+        ready = dataset.get("status") == "ready" and isinstance(prepared_path, str)
+    else:
+        assert session is not None
+        dataset = get_dataset_or_404(session, dataset_version_id)
+        prepared_path = dataset.prepared_path
+        ready = dataset.status == "ready" and prepared_path is not None
+    if not ready:
+        raise HTTPException(409, "Dataset is not ready; download and verify it before previewing.")
+    try:
+        return preview_dataset_records(str(prepared_path), request.app.state.settings.data_root, limit=limit)
+    except DatasetRecordError as error:
+        raise HTTPException(409, f"Dataset preview is unavailable: {error}") from error
+
+
+@router.put("/{dataset_version_id}", response_model=DatasetResponse)
+def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, request: Request, session: SessionDependency) -> DatasetVersion | dict:
+    _validate_dataset_registration(payload, request)
+    store = get_document_store(request)
+    if store is not None and store.get_document("dataset_versions", dataset_version_id) is None:
+        raise HTTPException(404, "Dataset version not found")
+    try:
+        if store is not None:
+            return update_mongo_dataset(store, dataset_version_id, payload.model_dump())
+        assert session is not None
+        return update_dataset(session, get_dataset_or_404(session, dataset_version_id), **payload.model_dump(exclude={"credential_env_var"}))
+    except DatasetError as error:
+        raise HTTPException(409, str(error)) from error
 @router.post("/{dataset_version_id}/accept-license",response_model=DatasetResponse)
 def accept_dataset_license(dataset_version_id:str,request:Request,session:SessionDependency)->DatasetVersion|dict:
     store=get_document_store(request)
@@ -187,6 +239,20 @@ def clear_dataset_version_cache(dataset_version_id:str,request:Request,session:S
         assert session is not None
         return clear_dataset_cache(session,get_dataset_or_404(session,dataset_version_id),request.app.state.settings.data_root)
     except DatasetError as error: raise HTTPException(409,str(error)) from error
+
+
+@router.delete("/{dataset_version_id}", response_model=DatasetResponse)
+def delete_dataset_version(dataset_version_id: str, request: Request, session: SessionDependency) -> DatasetVersion | dict:
+    store = get_document_store(request)
+    if store is not None and store.get_document("dataset_versions", dataset_version_id) is None:
+        raise HTTPException(404, "Dataset version not found")
+    try:
+        if store is not None:
+            return delete_mongo_dataset(store, dataset_version_id, request.app.state.settings.data_root)
+        assert session is not None
+        return delete_dataset(session, get_dataset_or_404(session, dataset_version_id), request.app.state.settings.data_root)
+    except DatasetError as error:
+        raise HTTPException(409, str(error)) from error
 
 
 def _decode_upload(value: str) -> bytes:

@@ -5,10 +5,13 @@ from pathlib import Path
 import zipfile
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.core.config import DatasetCredentialBinding, Settings
+from app.db.mongo import MongoDocumentStore
 from app.main import create_app
 from app.services.datasets import DatasetError, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
+from tests.test_mongo_document_store import FakeClient
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
     app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
@@ -208,3 +211,153 @@ def test_dataset_download_rejects_redirect_outside_allowed_hosts(tmp_path: Path,
     _redirect_transport(monkeypatch, handler, extra_public_hosts=("cdn.example.test",))
     with pytest.raises(DatasetError, match="not allowed"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {}, allowed_hosts=("datasets.example.test",))
+
+
+def test_dataset_create_and_response_carry_input_and_reference_fields(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={
+            "dataset_id": "fields", "version": "1",
+            "input_field": "question", "reference_field": "answer",
+        })
+        assert created.status_code == 201
+        body = created.json()
+        assert body["input_field"] == "question"
+        assert body["reference_field"] == "answer"
+        listed = {item["id"]: item for item in client.get("/api/v1/datasets").json()}
+        assert listed[body["id"]]["input_field"] == "question"
+        assert listed[body["id"]]["reference_field"] == "answer"
+
+
+def test_dataset_preview_returns_first_rows_from_the_prepared_cache(tmp_path: Path) -> None:
+    content = b'{"question":"what is 2 + 2?","answer":"4"}\n{"question":"what is 3 + 3?","answer":"6"}\n{"question":"what is 4 + 4?","answer":"8"}\n'
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "preview", "version": "1"}).json()
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        preview = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert preview.status_code == 200
+        body = preview.json()
+        assert body["fields"] == ["question", "answer"]
+        assert len(body["rows"]) == 3
+        assert body["rows"][0] == {"question": "what is 2 + 2?", "answer": "4"}
+        limited = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=1")
+        assert len(limited.json()["rows"]) == 1
+
+
+def test_dataset_preview_requires_a_ready_dataset_and_caps_the_limit(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "notready", "version": "1"}).json()
+        blocked = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert blocked.status_code == 409
+        assert "not ready" in blocked.json()["detail"]
+        missing = client.get("/api/v1/datasets/does-not-exist/preview")
+        assert missing.status_code == 404
+        oversized = client.get(f"/api/v1/datasets/{created['id']}/preview?limit=999")
+        assert oversized.status_code == 422
+
+
+def test_dataset_preview_reports_a_corrupt_prepared_cache_instead_of_a_server_error(tmp_path: Path) -> None:
+    content = b'{"question":"what is 2 + 2?","answer":"4"}\n'
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "corrupt", "version": "1"}).json()
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        prepared = Path(uploaded.json()["prepared_path"]).parent
+        manifest = json.loads((prepared / "manifest.json").read_text(encoding="utf-8"))
+        index = prepared / str(manifest.get("index_path", "sample-index.jsonl"))
+        index.unlink()
+        preview = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert preview.status_code == 409
+        assert "preview" in preview.json()["detail"]
+
+
+def test_mongodb_dataset_update_and_delete_of_missing_version_return_404(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+    with TestClient(app) as api:
+        missing_update = api.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
+        assert missing_update.status_code == 404
+        missing_delete = api.delete("/api/v1/datasets/does-not-exist")
+        assert missing_delete.status_code == 404
+
+
+def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        first = client.post("/api/v1/datasets", json={"dataset_id": "dup", "version": "1"}).json()
+        second = client.post("/api/v1/datasets", json={"dataset_id": "target", "version": "1"}).json()
+        updated = client.put(f"/api/v1/datasets/{second['id']}", json={
+            "dataset_id": "renamed", "version": "2", "revision": "fixed",
+            "input_field": "prompt", "reference_field": "expected",
+        })
+        assert updated.status_code == 200
+        body = updated.json()
+        assert body["dataset_id"] == "renamed"
+        assert body["version"] == "2"
+        assert body["revision"] == "fixed"
+        assert body["input_field"] == "prompt"
+        assert body["reference_field"] == "expected"
+        conflicting = client.put(f"/api/v1/datasets/{second['id']}", json={"dataset_id": "dup", "version": "1", "revision": "default"})
+        assert conflicting.status_code == 409
+        bad_source = client.put(f"/api/v1/datasets/{second['id']}", json={"dataset_id": "renamed", "version": "2", "revision": "fixed", "source_url": "file:///tmp/x.jsonl"})
+        assert bad_source.status_code == 422
+        missing = client.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
+        assert missing.status_code == 404
+
+
+def test_dataset_delete_removes_registration_and_cache_but_guards_referenced_versions(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "doomed", "version": "1"}).json()
+        content = b'{"question":"q?","answer":"a"}\n'
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        deleted = client.delete(f"/api/v1/datasets/{created['id']}")
+        assert deleted.status_code == 200
+        listed = client.get("/api/v1/datasets").json()
+        assert all(item["id"] != created["id"] for item in listed)
+        gone = client.get(f"/api/v1/datasets/{created['id']}/preview")
+        assert gone.status_code == 404
+        missing = client.delete("/api/v1/datasets/does-not-exist")
+        assert missing.status_code == 404
+
+
+def test_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={"dataset_id": "referenced", "version": "1"}).json()
+        content = b'{"question":"q?","answer":"a"}\n'
+        uploaded = client.post(f"/api/v1/datasets/{created['id']}/upload", json={"filename": "rows.jsonl", "base64_data": base64.b64encode(content).decode("ascii")})
+        assert uploaded.status_code == 200
+        session = app.state.database.get_session()
+        try:
+            from app.db.models import DatasetVersion, EvaluationRun, ModelEndpoint
+            session.add(ModelEndpoint(
+                id="endpoint-x", display_name="test", base_url="https://models.example.test/v1",
+                model_name="example-model", encrypted_api_key="not-a-real-key", api_key_mask="not-a-real-key",
+            ))
+            session.flush()
+            dataset = session.get(DatasetVersion, created["id"])
+            assert dataset is not None
+            session.add(EvaluationRun(
+                model_endpoint_id="endpoint-x",
+                benchmark_id="dataset-evaluation",
+                benchmark_version="1",
+                configuration_snapshot={"datasets": [{"dataset_version_id": created["id"]}]},
+                status="completed",
+                total_samples=1,
+            ))
+            session.commit()
+        finally:
+            session.close()
+    with TestClient(app) as client:
+        blocked = client.delete(f"/api/v1/datasets/{created['id']}")
+        assert blocked.status_code == 409
+        assert "references this revision" in blocked.json()["detail"]
+        listed = client.get("/api/v1/datasets").json()
+        assert any(item["id"] == created["id"] for item in listed)

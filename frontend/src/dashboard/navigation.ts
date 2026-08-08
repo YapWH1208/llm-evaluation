@@ -13,7 +13,7 @@ export type NavigationGroup = {
 };
 
 export const navigationGroups: NavigationGroup[] = [
-  { id: "overview", items: [{ view: "dashboard", glyph: "⌂" }] },
+  { id: "overview", items: [{ view: "dashboard", glyph: "⌂" }, { view: "guide", glyph: "?" }] },
   { id: "configure", items: [
     { view: "models", glyph: "◌" }, { view: "capabilities", glyph: "✦" }, { view: "workspace", glyph: "◫" }, { view: "benchmarks", glyph: "▤" }, { view: "datasets", glyph: "▥" }, { view: "suites", glyph: "◷" },
   ] },
