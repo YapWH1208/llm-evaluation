@@ -283,11 +283,11 @@
 - Modify: `frontend/src/shared-report.test.tsx`
 - Modify: `frontend/src/i18n/operationalCopy.ts` or `frontend/src/i18n/catalog.ts` and all locale entries only when necessary
 
-- [ ] **Step 1: Write failing context-selection and administration tests.**
+- [x] **Step 1: Write failing context-selection and administration tests.**
 
   Test Reports exposes an on-page run selector then keeps `ReportsTable` export/share paths intact. Test Reviews has on-page run/sample selection and preserves `JudgeWorkflow` submissions/validation. Test Users retains user creation, roles, update/delete controls, and audit content. Test Settings keeps every configuration input, secret masking/help, save/reset behavior, and status message. Keep the shared-report discovery token flow and all loading/error/not-found/success states under test.
 
-- [ ] **Step 2: Extract context-aware reporting/review pages.**
+- [x] **Step 2: Extract context-aware reporting/review pages.**
 
   - `ReportsPage`: run-context selector above the existing report table and share/export actions; clear no-run/no-report states.
   - `ReviewsPage`: run/sample context bar above existing review/editor workflow and evidence inspector.
@@ -295,11 +295,11 @@
   - `SettingsPage`: category navigation or groups (application, storage, execution, security) while retaining every existing option in its correct form/control.
   - `SharedReportPage`: retain standalone discovery-token behavior; refine panel density, headings, status hierarchy, and theme styling without bringing authenticated navigation into the public page.
 
-- [ ] **Step 3: Run a complete administration/report workflow check.**
+- [x] **Step 3: Run a complete administration/report workflow check.**
 
   Run focused/full frontend tests and build. Browser inspect Reports, Reviews, Users, Settings, and `/shared-reports/discovery-token` in both themes. Confirm hidden-prior-selection problems are resolved by visible selection controls, forms retain labels and help/error text, and shared report needs no authenticated shell.
 
-- [ ] **Step 4: Commit the reporting and administration group.**
+- [x] **Step 4: Commit the reporting and administration group.**
 
   ```text
   feat: redesign reporting review and administration views
@@ -318,15 +318,15 @@
 - Modify: `frontend/src/CHANGELOG.md` or root `CHANGELOG.md` according to actual repository location
 - Create or modify narrow/responsive tests adjacent to the affected page components
 
-- [ ] **Step 1: Add failing regression tests for the final cross-cutting contract.**
+- [x] **Step 1: Add failing regression tests for the final cross-cutting contract.**
 
   Add coverage for a narrow class/container or layout modifier where it prevents a specific fixed-width regression. Add locale-parity coverage only through the existing test conventions. Include one regression test that confirms Dashboard uses its protected Overview structure rather than the generic workspace root.
 
-- [ ] **Step 2: Apply measured refinements.**
+- [x] **Step 2: Apply measured refinements.**
 
   Inspect browser findings and correct only observed spacing, alignment, density, contrast, horizontal overflow, focus visibility, and reduced-motion defects. Preserve the theme variable system; do not add hardcoded light/dark color duplicates when a semantic token works. Before removing old CSS, run `rg` for every candidate selector and leave it in place if any consumer remains.
 
-- [ ] **Step 3: Run full technical and visual verification.**
+- [x] **Step 3: Run full technical and visual verification.**
 
   ```bash
   cd frontend
@@ -347,7 +347,7 @@
 
   Retry the mobile viewport capability. If unavailable, document the concrete failed capability and substitute narrow-layout verification rather than claiming device screenshot coverage.
 
-- [ ] **Step 4: Update user-facing change record and create final commits.**
+- [x] **Step 4: Update user-facing change record and create final commits.**
 
   Add a concise Unreleased CHANGELOG entry covering the unified workspace visual redesign. Selectively stage only task-owned files, scan staged diffs for credentials/secrets, and commit:
 
@@ -360,12 +360,12 @@
 
 ## Final handoff checklist
 
-- [ ] Confirm every target view is represented by a page component or intentionally retained focused helper inside a redesigned page shell.
-- [ ] Confirm Dashboard remains visually and structurally protected.
-- [ ] Confirm API requests, callbacks, form fields/defaults, and localization behavior did not change.
-- [ ] Confirm accessibility basics: one `h1` per page, semantic form labels, tab state/keyboard access, focus visibility, contextual status text, and non-color state cues.
-- [ ] Confirm theme variables drive light/dark behavior and tables/forms/inspectors remain readable.
-- [ ] Confirm browser theme inspection after every logical group and explicit responsive evidence or documented viewport limitation.
-- [ ] Confirm frontend tests, build, backend tests, final Code Review Graph, diff check, and status review have actual recorded results.
-- [ ] Confirm only intended files are committed; `.gitignore` remains user-owned and uncommitted.
+- [x] Confirm every target view is represented by a page component or intentionally retained focused helper inside a redesigned page shell.
+- [x] Confirm Dashboard remains visually and structurally protected.
+- [x] Confirm API requests, callbacks, form fields/defaults, and localization behavior did not change.
+- [x] Confirm accessibility basics: one `h1` per page, semantic form labels, tab state/keyboard access, focus visibility, contextual status text, and non-color state cues.
+- [x] Confirm theme variables drive light/dark behavior and tables/forms/inspectors remain readable.
+- [x] Confirm browser theme inspection after every logical group and explicit responsive evidence or documented viewport limitation.
+- [x] Confirm frontend tests, build, backend tests, final Code Review Graph, diff check, and status review have actual recorded results.
+- [x] Confirm only intended files are committed; `.gitignore` remains user-owned and uncommitted.
 - [ ] Prepare a concise completion report with lifecycle, plan/goal status, commit list, Code Review Graph findings, validation evidence, limitations, and no remote publication.

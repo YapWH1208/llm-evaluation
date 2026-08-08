@@ -11,6 +11,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The evaluation dashboard now surfaces live quality, model/benchmark comparisons,
   latency, cost, error signals, recent runs, and system readiness in a compact,
   responsive analytics workspace for light and dark themes.
+- Every remaining workspace view now uses the same compact evaluation-tool visual
+  language, including page-owned context selection for reports and reviews,
+  dense operational inspectors, responsive administration panels, and standalone
+  shared reports that honor the saved light/dark preference.
 
 ### Fixed
 
