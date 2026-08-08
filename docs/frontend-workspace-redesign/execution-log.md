@@ -77,3 +77,7 @@
 - Post-commit graph follow-up: direct coverage is being added for the Guide
   callback and controlled Models editor update after the graph identified those
   presentation helpers as insufficiently mapped by the original page tests.
+- Second graph follow-up: extracted the pure `updateEndpointForm` helper and
+  exported the capability declaration renderer so their behaviors have direct
+  tests. The red run failed for the absent exports; the focused six-test suite
+  and frontend build then passed.

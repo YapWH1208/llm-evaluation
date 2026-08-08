@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Benchmark, Capability, Endpoint, PromptPackage } from "./api";
 import { Guide } from "./components/Guide";
-import { CapabilitiesPage, EndpointForm, ModelsPage } from "./components/pages/EndpointPages";
+import { CapabilitiesPage, CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
 
 afterEach(cleanup);
 
@@ -94,6 +94,10 @@ function StatefulModelsPage() {
 }
 
 describe("configure workspace pages", () => {
+  it("updates only the named endpoint form field", () => {
+    expect(updateEndpointForm(form, "display_name", "Staging")).toEqual(expect.objectContaining({ display_name: "Staging", model_name: "" }));
+  });
+
   it("keeps the endpoint editor fields and inventory actions connected", async () => {
     const user = userEvent.setup();
     const props = modelProps();
@@ -135,6 +139,14 @@ describe("configure workspace pages", () => {
     expect(onDeclare).toHaveBeenCalledWith(secondEndpoint.id, capability, "supported");
     expect(screen.getByText("Detected: supported")).toBeVisible();
     expect(screen.getByText("Effective: supported")).toBeVisible();
+  });
+
+  it("shows detected and effective state beside each declaration control", () => {
+    render(<CapabilityDeclarations busy={null} capabilities={[capability]} endpointId={endpoint.id} onDeclare={vi.fn()} />);
+
+    expect(screen.getByText("Detected: supported")).toBeVisible();
+    expect(screen.getByText("Effective: supported")).toBeVisible();
+    expect(screen.getByLabelText("vision declaration")).toHaveValue("unknown");
   });
 
   it("routes an actionable guide step through the supplied view callback", async () => {
