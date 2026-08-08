@@ -330,10 +330,40 @@ export type OverviewCopy = {
   queuePressure: string; noWorkWaiting: string; taskNeedsCapacity: string; tasksNeedCapacity: string; inspectQueue: string;
   evaluationHealth: string; qualityAtGlance: string; openAnalysis: string; accuracy: string; successful: string; apiErrors: string; requests: string; p95Latency: string; measured: string; tokens: string; inputOutput: string;
   completedWork: string; recentRuns: string; complete: string; noCompleted: string; noCompletedDescription: string; runHistory: string;
+  dashboardTitle: string; dashboardDescription: string; performanceSummary: string; successRate: string; evaluationTrend: string; limitedHistory: string; noHistory: string;
+  modelBenchmarkComparison: string; model: string; benchmark: string; sampleCount: string; latencyCostErrors: string; latency: string; cost: string; errorRate: string;
+  recentEvaluations: string; progress: string; started: string; systemReadiness: string; operational: string; attentionNeeded: string; unknownValue: string;
 };
 
-export const overviewCopy: Record<Locale, OverviewCopy> = {
-  en: { unavailableRegion: "Operational overview unavailable", unavailableTitle: "Operational signals are loading", unavailableDescription: "The workspace is still reachable. Configure a model or inspect your evaluation runs while live status becomes available.", configureModel: "Configure a model", openRuns: "Open runs", operations: "Evaluation operations", heroTitle: "Keep every evaluation moving", heroDescription: "Monitor current work, verify capacity, and act on the next setup step from one place.", viewAllRuns: "View all runs", prepareWorkspace: "Prepare workspace", operationalStatus: "Operational status", activeRuns: "Active runs", endpoints: "Endpoints", workers: "Workers", estimatedCost: "Estimated cost", pendingLeased: "{{pending}} pending · {{leased}} leased", unavailable: "{{count}} unavailable", activeQueueTasks: "{{count}} active queue tasks", completedEvidence: "completed run evidence", currentWork: "Current work", runsInProgress: "Runs in progress", noActiveRuns: "No active runs", noActiveDescription: "Start from a verified endpoint, benchmark, and dataset.", setupEvaluation: "Set up an evaluation", samples: "samples", inspect: "Inspect", readiness: "Readiness", workspaceReady: "Keep the workspace ready", verified: "{{count}} verified", modelEndpoints: "Model endpoints", availableForEvaluation: "{{count}} available for evaluation", verifyModel: "Verify a model before queueing work", manage: "Manage", configure: "Configure", evaluationData: "Evaluation data", readyDataset: "{{count}} ready dataset", readyDatasets: "{{count}} ready datasets", registerDataset: "Register a dataset to start a benchmark", review: "Review", addData: "Add data", queuePressure: "Queue pressure", noWorkWaiting: "No work is waiting", taskNeedsCapacity: "{{count}} task needs capacity", tasksNeedCapacity: "{{count}} tasks need capacity", inspectQueue: "Inspect queue", evaluationHealth: "Evaluation health", qualityAtGlance: "Quality at a glance", openAnalysis: "Open analysis", accuracy: "Accuracy", successful: "{{successful}}/{{total}} successful", apiErrors: "API errors", requests: "{{count}} requests", p95Latency: "P95 latency", measured: "{{count}} measured", tokens: "Tokens", inputOutput: "{{input}} in / {{output}} out", completedWork: "Completed work", recentRuns: "Recent runs", complete: "{{count}} complete", noCompleted: "No completed runs yet", noCompletedDescription: "Results will appear here after the first evaluation finishes.", runHistory: "See run history" },
+type AnalyticsOverviewCopy = Pick<OverviewCopy,
+  | "dashboardTitle"
+  | "dashboardDescription"
+  | "performanceSummary"
+  | "successRate"
+  | "evaluationTrend"
+  | "limitedHistory"
+  | "noHistory"
+  | "modelBenchmarkComparison"
+  | "model"
+  | "benchmark"
+  | "sampleCount"
+  | "latencyCostErrors"
+  | "latency"
+  | "cost"
+  | "errorRate"
+  | "recentEvaluations"
+  | "progress"
+  | "started"
+  | "systemReadiness"
+  | "operational"
+  | "attentionNeeded"
+  | "unknownValue"
+>;
+
+type OverviewCopyBase = Omit<OverviewCopy, keyof AnalyticsOverviewCopy> & Partial<AnalyticsOverviewCopy>;
+
+const overviewCopyBase: Record<Locale, OverviewCopyBase> = {
+  en: { unavailableRegion: "Operational overview unavailable", unavailableTitle: "Operational signals are loading", unavailableDescription: "The workspace is still reachable. Configure a model or inspect your evaluation runs while live status becomes available.", configureModel: "Configure a model", openRuns: "Open runs", operations: "Evaluation operations", heroTitle: "Keep every evaluation moving", heroDescription: "Monitor current work, verify capacity, and act on the next setup step from one place.", viewAllRuns: "View all runs", prepareWorkspace: "Prepare workspace", operationalStatus: "Operational status", activeRuns: "Active runs", endpoints: "Endpoints", workers: "Workers", estimatedCost: "Estimated cost", pendingLeased: "{{pending}} pending · {{leased}} leased", unavailable: "{{count}} unavailable", activeQueueTasks: "{{count}} active queue tasks", completedEvidence: "completed run evidence", currentWork: "Current work", runsInProgress: "Runs in progress", noActiveRuns: "No active runs", noActiveDescription: "Start from a verified endpoint, benchmark, and dataset.", setupEvaluation: "Set up an evaluation", samples: "samples", inspect: "Inspect", readiness: "Readiness", workspaceReady: "Keep the workspace ready", verified: "{{count}} verified", modelEndpoints: "Model endpoints", availableForEvaluation: "{{count}} available for evaluation", verifyModel: "Verify a model before queueing work", manage: "Manage", configure: "Configure", evaluationData: "Evaluation data", readyDataset: "{{count}} ready dataset", readyDatasets: "{{count}} ready datasets", registerDataset: "Register a dataset to start a benchmark", review: "Review", addData: "Add data", queuePressure: "Queue pressure", noWorkWaiting: "No work is waiting", taskNeedsCapacity: "{{count}} task needs capacity", tasksNeedCapacity: "{{count}} tasks need capacity", inspectQueue: "Inspect queue", evaluationHealth: "Evaluation health", qualityAtGlance: "Quality at a glance", openAnalysis: "Open analysis", accuracy: "Accuracy", successful: "{{successful}}/{{total}} successful", apiErrors: "API errors", requests: "{{count}} requests", p95Latency: "P95 latency", measured: "{{count}} measured", tokens: "Tokens", inputOutput: "{{input}} in / {{output}} out", completedWork: "Completed work", recentRuns: "Recent runs", complete: "{{count}} complete", noCompleted: "No completed runs yet", noCompletedDescription: "Results will appear here after the first evaluation finishes.", runHistory: "See run history", dashboardTitle: "Dashboard", dashboardDescription: "Track evaluation quality, model behavior, and operational readiness from live evidence.", performanceSummary: "Performance summary", successRate: "Success rate", evaluationTrend: "Evaluation trend", limitedHistory: "More completed runs are needed to show a trend.", noHistory: "Evaluation history is not available yet.", modelBenchmarkComparison: "Model / benchmark comparison", model: "Model", benchmark: "Benchmark", sampleCount: "Samples", latencyCostErrors: "Latency, cost & errors", latency: "Latency", cost: "Cost", errorRate: "Error rate", recentEvaluations: "Recent evaluations", progress: "Progress", started: "Started", systemReadiness: "System readiness", operational: "Operational", attentionNeeded: "Attention needed", unknownValue: "Not available" },
   "zh-CN": { unavailableRegion: "运营概览不可用", unavailableTitle: "正在加载运营信号", unavailableDescription: "工作区仍可访问。实时状态可用前，您可以配置模型或查看评测运行。", configureModel: "配置模型", openRuns: "打开运行", operations: "评测运营", heroTitle: "让每次评测持续推进", heroDescription: "在一处监控当前工作、确认容量并执行下一步设置。", viewAllRuns: "查看所有运行", prepareWorkspace: "准备工作区", operationalStatus: "运营状态", activeRuns: "活动运行", endpoints: "端点", workers: "工作节点", estimatedCost: "预估成本", pendingLeased: "{{pending}} 个待处理 · {{leased}} 个已租用", unavailable: "{{count}} 个不可用", activeQueueTasks: "{{count}} 个活动队列任务", completedEvidence: "已完成运行证据", currentWork: "当前工作", runsInProgress: "正在运行", noActiveRuns: "没有活动运行", noActiveDescription: "从已验证的端点、基准和数据集开始。", setupEvaluation: "设置评测", samples: "个样本", inspect: "查看", readiness: "就绪情况", workspaceReady: "保持工作区就绪", verified: "已验证 {{count}} 个", modelEndpoints: "模型端点", availableForEvaluation: "{{count}} 个可用于评测", verifyModel: "在排队工作前验证模型", manage: "管理", configure: "配置", evaluationData: "评测数据", readyDataset: "{{count}} 个就绪数据集", readyDatasets: "{{count}} 个就绪数据集", registerDataset: "注册数据集以开始基准评测", review: "查看", addData: "添加数据", queuePressure: "队列压力", noWorkWaiting: "没有等待中的工作", taskNeedsCapacity: "{{count}} 个任务需要容量", tasksNeedCapacity: "{{count}} 个任务需要容量", inspectQueue: "查看队列", evaluationHealth: "评测健康度", qualityAtGlance: "质量概览", openAnalysis: "打开分析", accuracy: "准确率", successful: "成功 {{successful}}/{{total}}", apiErrors: "API 错误", requests: "{{count}} 次请求", p95Latency: "P95 延迟", measured: "测量 {{count}} 次", tokens: "令牌", inputOutput: "输入 {{input}} / 输出 {{output}}", completedWork: "已完成工作", recentRuns: "近期运行", complete: "已完成 {{count}} 个", noCompleted: "尚无已完成运行", noCompletedDescription: "首次评测完成后，结果将显示在这里。", runHistory: "查看运行历史" },
   fr: { unavailableRegion: "Aperçu opérationnel indisponible", unavailableTitle: "Chargement des signaux opérationnels", unavailableDescription: "L’espace de travail reste accessible. Configurez un modèle ou inspectez vos évaluations pendant le chargement de l’état en direct.", configureModel: "Configurer un modèle", openRuns: "Ouvrir les exécutions", operations: "Opérations d’évaluation", heroTitle: "Faites avancer chaque évaluation", heroDescription: "Suivez le travail en cours, vérifiez la capacité et lancez la prochaine étape depuis un seul endroit.", viewAllRuns: "Voir toutes les exécutions", prepareWorkspace: "Préparer l’espace de travail", operationalStatus: "État opérationnel", activeRuns: "Exécutions actives", endpoints: "Points de terminaison", workers: "Agents", estimatedCost: "Coût estimé", pendingLeased: "{{pending}} en attente · {{leased}} louées", unavailable: "{{count}} indisponibles", activeQueueTasks: "{{count}} tâches actives", completedEvidence: "preuves d’exécutions terminées", currentWork: "Travail en cours", runsInProgress: "Exécutions en cours", noActiveRuns: "Aucune exécution active", noActiveDescription: "Commencez avec un point de terminaison, un référentiel et un jeu de données vérifiés.", setupEvaluation: "Configurer une évaluation", samples: "échantillons", inspect: "Inspecter", readiness: "Préparation", workspaceReady: "Préparez l’espace de travail", verified: "{{count}} vérifiés", modelEndpoints: "Points de terminaison de modèle", availableForEvaluation: "{{count}} disponibles pour l’évaluation", verifyModel: "Vérifiez un modèle avant de mettre du travail en file", manage: "Gérer", configure: "Configurer", evaluationData: "Données d’évaluation", readyDataset: "{{count}} jeu de données prêt", readyDatasets: "{{count}} jeux de données prêts", registerDataset: "Enregistrez un jeu de données pour lancer un référentiel", review: "Examiner", addData: "Ajouter des données", queuePressure: "Pression de la file", noWorkWaiting: "Aucun travail n’attend", taskNeedsCapacity: "{{count}} tâche nécessite de la capacité", tasksNeedCapacity: "{{count}} tâches nécessitent de la capacité", inspectQueue: "Inspecter la file", evaluationHealth: "Santé de l’évaluation", qualityAtGlance: "Qualité en un coup d’œil", openAnalysis: "Ouvrir l’analyse", accuracy: "Précision", successful: "{{successful}}/{{total}} réussies", apiErrors: "Erreurs API", requests: "{{count}} requêtes", p95Latency: "Latence P95", measured: "{{count}} mesurées", tokens: "Jetons", inputOutput: "{{input}} entrée / {{output}} sortie", completedWork: "Travail terminé", recentRuns: "Exécutions récentes", complete: "{{count}} terminées", noCompleted: "Aucune exécution terminée", noCompletedDescription: "Les résultats apparaîtront ici après la première évaluation.", runHistory: "Voir l’historique" },
   de: { unavailableRegion: "Betriebsübersicht nicht verfügbar", unavailableTitle: "Betriebssignale werden geladen", unavailableDescription: "Der Arbeitsbereich ist weiterhin erreichbar. Konfigurieren Sie ein Modell oder prüfen Sie Ausführungen, während der Live-Status geladen wird.", configureModel: "Modell konfigurieren", openRuns: "Ausführungen öffnen", operations: "Evaluierungsbetrieb", heroTitle: "Jede Evaluierung voranbringen", heroDescription: "Überwachen Sie aktuelle Arbeit, prüfen Sie Kapazität und führen Sie den nächsten Einrichtungsschritt an einem Ort aus.", viewAllRuns: "Alle Ausführungen anzeigen", prepareWorkspace: "Arbeitsbereich vorbereiten", operationalStatus: "Betriebsstatus", activeRuns: "Aktive Ausführungen", endpoints: "Endpunkte", workers: "Worker", estimatedCost: "Geschätzte Kosten", pendingLeased: "{{pending}} ausstehend · {{leased}} geleast", unavailable: "{{count}} nicht verfügbar", activeQueueTasks: "{{count}} aktive Warteschlangenaufgaben", completedEvidence: "Nachweise abgeschlossener Ausführungen", currentWork: "Aktuelle Arbeit", runsInProgress: "Laufende Ausführungen", noActiveRuns: "Keine aktiven Ausführungen", noActiveDescription: "Beginnen Sie mit einem verifizierten Endpunkt, Benchmark und Datensatz.", setupEvaluation: "Evaluierung einrichten", samples: "Beispiele", inspect: "Prüfen", readiness: "Bereitschaft", workspaceReady: "Arbeitsbereich bereithalten", verified: "{{count}} verifiziert", modelEndpoints: "Modellendpunkte", availableForEvaluation: "{{count}} für Evaluierung verfügbar", verifyModel: "Verifizieren Sie ein Modell vor dem Einreihen", manage: "Verwalten", configure: "Konfigurieren", evaluationData: "Evaluierungsdaten", readyDataset: "{{count}} bereiter Datensatz", readyDatasets: "{{count}} bereite Datensätze", registerDataset: "Registrieren Sie einen Datensatz für einen Benchmark", review: "Prüfen", addData: "Daten hinzufügen", queuePressure: "Warteschlangendruck", noWorkWaiting: "Keine Arbeit wartet", taskNeedsCapacity: "{{count}} Aufgabe benötigt Kapazität", tasksNeedCapacity: "{{count}} Aufgaben benötigen Kapazität", inspectQueue: "Warteschlange prüfen", evaluationHealth: "Evaluierungszustand", qualityAtGlance: "Qualität auf einen Blick", openAnalysis: "Analyse öffnen", accuracy: "Genauigkeit", successful: "{{successful}}/{{total}} erfolgreich", apiErrors: "API-Fehler", requests: "{{count}} Anfragen", p95Latency: "P95-Latenz", measured: "{{count}} gemessen", tokens: "Token", inputOutput: "{{input}} ein / {{output}} aus", completedWork: "Abgeschlossene Arbeit", recentRuns: "Letzte Ausführungen", complete: "{{count}} abgeschlossen", noCompleted: "Noch keine abgeschlossenen Ausführungen", noCompletedDescription: "Ergebnisse erscheinen hier nach der ersten abgeschlossenen Evaluierung.", runHistory: "Ausführungsverlauf anzeigen" },
@@ -341,6 +371,212 @@ export const overviewCopy: Record<Locale, OverviewCopy> = {
   ja: { unavailableRegion: "運用概要を利用できません", unavailableTitle: "運用シグナルを読み込んでいます", unavailableDescription: "ワークスペースには引き続きアクセスできます。ライブ状態が利用可能になるまで、モデルの設定または評価実行の確認を行えます。", configureModel: "モデルを設定", openRuns: "実行を開く", operations: "評価運用", heroTitle: "すべての評価を前進させる", heroDescription: "現在の作業を監視し、容量を確認して、次の設定操作を一か所から実行します。", viewAllRuns: "すべての実行を表示", prepareWorkspace: "ワークスペースを準備", operationalStatus: "運用状況", activeRuns: "アクティブな実行", endpoints: "エンドポイント", workers: "ワーカー", estimatedCost: "推定コスト", pendingLeased: "保留 {{pending}} · リース {{leased}}", unavailable: "{{count}} 利用不可", activeQueueTasks: "アクティブなキュー タスク {{count}}", completedEvidence: "完了した実行の証拠", currentWork: "現在の作業", runsInProgress: "進行中の実行", noActiveRuns: "アクティブな実行はありません", noActiveDescription: "検証済みのエンドポイント、ベンチマーク、データセットから開始します。", setupEvaluation: "評価を設定", samples: "サンプル", inspect: "確認", readiness: "準備状況", workspaceReady: "ワークスペースを準備済みに保つ", verified: "{{count}} 検証済み", modelEndpoints: "モデル エンドポイント", availableForEvaluation: "{{count}} 件を評価に使用可能", verifyModel: "作業をキューに入れる前にモデルを検証します", manage: "管理", configure: "設定", evaluationData: "評価データ", readyDataset: "準備済みデータセット {{count}} 件", readyDatasets: "準備済みデータセット {{count}} 件", registerDataset: "ベンチマークを開始するにはデータセットを登録します", review: "確認", addData: "データを追加", queuePressure: "キューの負荷", noWorkWaiting: "待機中の作業はありません", taskNeedsCapacity: "{{count}} 件のタスクに容量が必要", tasksNeedCapacity: "{{count}} 件のタスクに容量が必要", inspectQueue: "キューを確認", evaluationHealth: "評価の健全性", qualityAtGlance: "品質の概要", openAnalysis: "分析を開く", accuracy: "正確性", successful: "{{successful}}/{{total}} 成功", apiErrors: "API エラー", requests: "{{count}} リクエスト", p95Latency: "P95 レイテンシ", measured: "{{count}} 件を測定", tokens: "トークン", inputOutput: "入力 {{input}} / 出力 {{output}}", completedWork: "完了した作業", recentRuns: "最近の実行", complete: "{{count}} 件完了", noCompleted: "完了した実行はまだありません", noCompletedDescription: "最初の評価が完了すると、結果がここに表示されます。", runHistory: "実行履歴を表示" },
   ko: { unavailableRegion: "운영 개요를 사용할 수 없음", unavailableTitle: "운영 신호를 불러오는 중", unavailableDescription: "작업 공간에는 계속 접근할 수 있습니다. 실시간 상태를 사용할 수 있을 때까지 모델을 구성하거나 평가 실행을 확인하세요.", configureModel: "모델 구성", openRuns: "실행 열기", operations: "평가 운영", heroTitle: "모든 평가를 계속 진행하세요", heroDescription: "현재 작업을 모니터링하고 용량을 확인한 후 다음 설정 단계를 한 곳에서 수행합니다.", viewAllRuns: "모든 실행 보기", prepareWorkspace: "작업 공간 준비", operationalStatus: "운영 상태", activeRuns: "활성 실행", endpoints: "엔드포인트", workers: "워커", estimatedCost: "예상 비용", pendingLeased: "대기 {{pending}} · 임대 {{leased}}", unavailable: "{{count}}개 사용 불가", activeQueueTasks: "활성 대기열 작업 {{count}}개", completedEvidence: "완료된 실행 증거", currentWork: "현재 작업", runsInProgress: "진행 중인 실행", noActiveRuns: "활성 실행이 없습니다", noActiveDescription: "확인된 엔드포인트, 벤치마크 및 데이터 세트에서 시작하세요.", setupEvaluation: "평가 설정", samples: "샘플", inspect: "검사", readiness: "준비 상태", workspaceReady: "작업 공간을 준비 상태로 유지", verified: "{{count}}개 확인됨", modelEndpoints: "모델 엔드포인트", availableForEvaluation: "{{count}}개를 평가에 사용할 수 있음", verifyModel: "작업을 대기열에 넣기 전에 모델을 확인하세요", manage: "관리", configure: "구성", evaluationData: "평가 데이터", readyDataset: "준비된 데이터 세트 {{count}}개", readyDatasets: "준비된 데이터 세트 {{count}}개", registerDataset: "벤치마크를 시작하려면 데이터 세트를 등록하세요", review: "검토", addData: "데이터 추가", queuePressure: "대기열 압력", noWorkWaiting: "대기 중인 작업이 없습니다", taskNeedsCapacity: "작업 {{count}}개에 용량이 필요함", tasksNeedCapacity: "작업 {{count}}개에 용량이 필요함", inspectQueue: "대기열 검사", evaluationHealth: "평가 상태", qualityAtGlance: "한눈에 보는 품질", openAnalysis: "분석 열기", accuracy: "정확도", successful: "{{successful}}/{{total}}개 성공", apiErrors: "API 오류", requests: "요청 {{count}}개", p95Latency: "P95 지연 시간", measured: "{{count}}개 측정", tokens: "토큰", inputOutput: "입력 {{input}} / 출력 {{output}}", completedWork: "완료된 작업", recentRuns: "최근 실행", complete: "{{count}}개 완료", noCompleted: "완료된 실행이 아직 없습니다", noCompletedDescription: "첫 번째 평가가 끝나면 결과가 여기에 표시됩니다.", runHistory: "실행 기록 보기" },
   ms: { unavailableRegion: "Gambaran operasi tidak tersedia", unavailableTitle: "Memuatkan isyarat operasi", unavailableDescription: "Ruang kerja masih boleh dicapai. Konfigurasikan model atau periksa larian penilaian sementara status langsung tersedia.", configureModel: "Konfigurasi model", openRuns: "Buka larian", operations: "Operasi penilaian", heroTitle: "Pastikan setiap penilaian bergerak", heroDescription: "Pantau kerja semasa, sahkan kapasiti dan lakukan langkah persediaan seterusnya dari satu tempat.", viewAllRuns: "Lihat semua larian", prepareWorkspace: "Sediakan ruang kerja", operationalStatus: "Status operasi", activeRuns: "Larian aktif", endpoints: "Titik akhir", workers: "Pekerja", estimatedCost: "Kos anggaran", pendingLeased: "{{pending}} menunggu · {{leased}} dipajak", unavailable: "{{count}} tidak tersedia", activeQueueTasks: "{{count}} tugas baris aktif", completedEvidence: "bukti larian selesai", currentWork: "Kerja semasa", runsInProgress: "Larian sedang berjalan", noActiveRuns: "Tiada larian aktif", noActiveDescription: "Mulakan dengan titik akhir, penanda aras dan set data yang disahkan.", setupEvaluation: "Sediakan penilaian", samples: "sampel", inspect: "Periksa", readiness: "Kesediaan", workspaceReady: "Pastikan ruang kerja sedia", verified: "{{count}} disahkan", modelEndpoints: "Titik akhir model", availableForEvaluation: "{{count}} tersedia untuk penilaian", verifyModel: "Sahkan model sebelum memasukkan kerja ke baris", manage: "Urus", configure: "Konfigurasi", evaluationData: "Data penilaian", readyDataset: "{{count}} set data sedia", readyDatasets: "{{count}} set data sedia", registerDataset: "Daftarkan set data untuk memulakan penanda aras", review: "Semak", addData: "Tambah data", queuePressure: "Tekanan baris", noWorkWaiting: "Tiada kerja menunggu", taskNeedsCapacity: "{{count}} tugas memerlukan kapasiti", tasksNeedCapacity: "{{count}} tugas memerlukan kapasiti", inspectQueue: "Periksa baris", evaluationHealth: "Kesihatan penilaian", qualityAtGlance: "Kualiti sepintas lalu", openAnalysis: "Buka analisis", accuracy: "Ketepatan", successful: "{{successful}}/{{total}} berjaya", apiErrors: "Ralat API", requests: "{{count}} permintaan", p95Latency: "Kependaman P95", measured: "{{count}} diukur", tokens: "Token", inputOutput: "{{input}} masuk / {{output}} keluar", completedWork: "Kerja selesai", recentRuns: "Larian terkini", complete: "{{count}} selesai", noCompleted: "Belum ada larian selesai", noCompletedDescription: "Hasil akan muncul di sini selepas penilaian pertama selesai.", runHistory: "Lihat sejarah larian" },
+};
+
+const analyticsOverviewCopy: Record<Locale, AnalyticsOverviewCopy> = {
+  en: {
+    dashboardTitle: "Dashboard",
+    dashboardDescription: "Track evaluation quality, model behavior, and operational readiness from live evidence.",
+    performanceSummary: "Performance summary",
+    successRate: "Success rate",
+    evaluationTrend: "Evaluation trend",
+    limitedHistory: "More completed runs are needed to show a trend.",
+    noHistory: "Evaluation history is not available yet.",
+    modelBenchmarkComparison: "Model / benchmark comparison",
+    model: "Model",
+    benchmark: "Benchmark",
+    sampleCount: "Samples",
+    latencyCostErrors: "Latency, cost & errors",
+    latency: "Latency",
+    cost: "Cost",
+    errorRate: "Error rate",
+    recentEvaluations: "Recent evaluations",
+    progress: "Progress",
+    started: "Started",
+    systemReadiness: "System readiness",
+    operational: "Operational",
+    attentionNeeded: "Attention needed",
+    unknownValue: "Not available",
+  },
+  "zh-CN": {
+    dashboardTitle: "仪表板",
+    dashboardDescription: "基于实时评测证据跟踪质量、模型表现和运营就绪情况。",
+    performanceSummary: "性能摘要",
+    successRate: "成功率",
+    evaluationTrend: "评测趋势",
+    limitedHistory: "需要更多已完成运行才能显示趋势。",
+    noHistory: "暂无评测历史。",
+    modelBenchmarkComparison: "模型 / 基准比较",
+    model: "模型",
+    benchmark: "基准",
+    sampleCount: "样本数",
+    latencyCostErrors: "延迟、成本和错误",
+    latency: "延迟",
+    cost: "成本",
+    errorRate: "错误率",
+    recentEvaluations: "近期评测",
+    progress: "进度",
+    started: "开始时间",
+    systemReadiness: "系统就绪情况",
+    operational: "运行正常",
+    attentionNeeded: "需要关注",
+    unknownValue: "不可用",
+  },
+  fr: {
+    dashboardTitle: "Tableau de bord",
+    dashboardDescription: "Suivez la qualité des évaluations, le comportement des modèles et la préparation opérationnelle à partir de preuves en direct.",
+    performanceSummary: "Synthèse des performances",
+    successRate: "Taux de réussite",
+    evaluationTrend: "Tendance des évaluations",
+    limitedHistory: "D’autres exécutions terminées sont nécessaires pour afficher une tendance.",
+    noHistory: "L’historique des évaluations n’est pas encore disponible.",
+    modelBenchmarkComparison: "Comparaison modèle / référentiel",
+    model: "Modèle",
+    benchmark: "Référentiel",
+    sampleCount: "Échantillons",
+    latencyCostErrors: "Latence, coût et erreurs",
+    latency: "Latence",
+    cost: "Coût",
+    errorRate: "Taux d’erreur",
+    recentEvaluations: "Évaluations récentes",
+    progress: "Progression",
+    started: "Démarrée",
+    systemReadiness: "Préparation du système",
+    operational: "Opérationnel",
+    attentionNeeded: "Attention requise",
+    unknownValue: "Indisponible",
+  },
+  de: {
+    dashboardTitle: "Dashboard",
+    dashboardDescription: "Verfolgen Sie Evaluierungsqualität, Modellverhalten und Betriebsbereitschaft anhand aktueller Evidenz.",
+    performanceSummary: "Leistungsübersicht",
+    successRate: "Erfolgsrate",
+    evaluationTrend: "Evaluierungstrend",
+    limitedHistory: "Für einen Trend sind weitere abgeschlossene Ausführungen erforderlich.",
+    noHistory: "Der Evaluierungsverlauf ist noch nicht verfügbar.",
+    modelBenchmarkComparison: "Modell-/Benchmark-Vergleich",
+    model: "Modell",
+    benchmark: "Benchmark",
+    sampleCount: "Stichproben",
+    latencyCostErrors: "Latenz, Kosten und Fehler",
+    latency: "Latenz",
+    cost: "Kosten",
+    errorRate: "Fehlerrate",
+    recentEvaluations: "Letzte Evaluierungen",
+    progress: "Fortschritt",
+    started: "Gestartet",
+    systemReadiness: "Systembereitschaft",
+    operational: "Betriebsbereit",
+    attentionNeeded: "Handlungsbedarf",
+    unknownValue: "Nicht verfügbar",
+  },
+  ru: {
+    dashboardTitle: "Панель",
+    dashboardDescription: "Отслеживайте качество оценок, поведение моделей и операционную готовность по текущим данным.",
+    performanceSummary: "Сводка показателей",
+    successRate: "Доля успешных",
+    evaluationTrend: "Динамика оценок",
+    limitedHistory: "Для графика нужны дополнительные завершённые запуски.",
+    noHistory: "История оценок пока недоступна.",
+    modelBenchmarkComparison: "Сравнение модели и бенчмарка",
+    model: "Модель",
+    benchmark: "Бенчмарк",
+    sampleCount: "Образцы",
+    latencyCostErrors: "Задержка, стоимость и ошибки",
+    latency: "Задержка",
+    cost: "Стоимость",
+    errorRate: "Доля ошибок",
+    recentEvaluations: "Недавние оценки",
+    progress: "Ход выполнения",
+    started: "Запущено",
+    systemReadiness: "Готовность системы",
+    operational: "Работает",
+    attentionNeeded: "Требует внимания",
+    unknownValue: "Недоступно",
+  },
+  ja: {
+    dashboardTitle: "ダッシュボード",
+    dashboardDescription: "最新の証拠から評価品質、モデルの挙動、運用準備状況を追跡します。",
+    performanceSummary: "パフォーマンス概要",
+    successRate: "成功率",
+    evaluationTrend: "評価トレンド",
+    limitedHistory: "トレンド表示には、さらに完了した実行が必要です。",
+    noHistory: "評価履歴はまだありません。",
+    modelBenchmarkComparison: "モデル / ベンチマーク比較",
+    model: "モデル",
+    benchmark: "ベンチマーク",
+    sampleCount: "サンプル数",
+    latencyCostErrors: "レイテンシ、コスト、エラー",
+    latency: "レイテンシ",
+    cost: "コスト",
+    errorRate: "エラー率",
+    recentEvaluations: "最近の評価",
+    progress: "進行状況",
+    started: "開始",
+    systemReadiness: "システム準備状況",
+    operational: "稼働中",
+    attentionNeeded: "要確認",
+    unknownValue: "利用不可",
+  },
+  ko: {
+    dashboardTitle: "대시보드",
+    dashboardDescription: "실시간 증거로 평가 품질, 모델 동작 및 운영 준비 상태를 추적합니다.",
+    performanceSummary: "성능 요약",
+    successRate: "성공률",
+    evaluationTrend: "평가 추이",
+    limitedHistory: "추이를 표시하려면 완료된 실행이 더 필요합니다.",
+    noHistory: "아직 평가 기록이 없습니다.",
+    modelBenchmarkComparison: "모델 / 벤치마크 비교",
+    model: "모델",
+    benchmark: "벤치마크",
+    sampleCount: "샘플 수",
+    latencyCostErrors: "지연 시간, 비용 및 오류",
+    latency: "지연 시간",
+    cost: "비용",
+    errorRate: "오류율",
+    recentEvaluations: "최근 평가",
+    progress: "진행률",
+    started: "시작됨",
+    systemReadiness: "시스템 준비 상태",
+    operational: "정상",
+    attentionNeeded: "확인 필요",
+    unknownValue: "사용할 수 없음",
+  },
+  ms: {
+    dashboardTitle: "Papan pemuka",
+    dashboardDescription: "Jejaki kualiti penilaian, tingkah laku model dan kesediaan operasi daripada bukti langsung.",
+    performanceSummary: "Ringkasan prestasi",
+    successRate: "Kadar kejayaan",
+    evaluationTrend: "Trend penilaian",
+    limitedHistory: "Lebih banyak larian selesai diperlukan untuk memaparkan trend.",
+    noHistory: "Sejarah penilaian belum tersedia.",
+    modelBenchmarkComparison: "Perbandingan model / penanda aras",
+    model: "Model",
+    benchmark: "Penanda aras",
+    sampleCount: "Sampel",
+    latencyCostErrors: "Kependaman, kos dan ralat",
+    latency: "Kependaman",
+    cost: "Kos",
+    errorRate: "Kadar ralat",
+    recentEvaluations: "Penilaian terkini",
+    progress: "Kemajuan",
+    started: "Dimulakan",
+    systemReadiness: "Kesediaan sistem",
+    operational: "Beroperasi",
+    attentionNeeded: "Perlu perhatian",
+    unknownValue: "Tidak tersedia",
+  },
+};
+
+export const overviewCopy: Record<Locale, OverviewCopy> = {
+  en: { ...overviewCopyBase.en, ...analyticsOverviewCopy.en },
+  "zh-CN": { ...overviewCopyBase["zh-CN"], ...analyticsOverviewCopy["zh-CN"] },
+  fr: { ...overviewCopyBase.fr, ...analyticsOverviewCopy.fr },
+  de: { ...overviewCopyBase.de, ...analyticsOverviewCopy.de },
+  ru: { ...overviewCopyBase.ru, ...analyticsOverviewCopy.ru },
+  ja: { ...overviewCopyBase.ja, ...analyticsOverviewCopy.ja },
+  ko: { ...overviewCopyBase.ko, ...analyticsOverviewCopy.ko },
+  ms: { ...overviewCopyBase.ms, ...analyticsOverviewCopy.ms },
 };
 
 export type ReportCopy = {

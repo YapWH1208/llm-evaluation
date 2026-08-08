@@ -3,6 +3,31 @@ import { describe, expect, it } from "vitest";
 import { catalogs, isLocale, localeIds, navigationCopy, overviewCopy, resolveLocale } from "./catalog";
 import { translateStaticTemplate } from "./operationalCopy";
 
+const analyticsOverviewKeys = [
+  "dashboardTitle",
+  "dashboardDescription",
+  "performanceSummary",
+  "successRate",
+  "evaluationTrend",
+  "limitedHistory",
+  "noHistory",
+  "modelBenchmarkComparison",
+  "model",
+  "benchmark",
+  "sampleCount",
+  "latencyCostErrors",
+  "latency",
+  "cost",
+  "errorRate",
+  "recentEvaluations",
+  "progress",
+  "started",
+  "systemReadiness",
+  "operational",
+  "attentionNeeded",
+  "unknownValue",
+] as const;
+
 describe("workspace locale catalog", () => {
   it("ships the requested locales with the complete English key set", () => {
     expect(localeIds).toEqual(["en", "zh-CN", "fr", "de", "ru", "ja", "ko", "ms"]);
@@ -28,5 +53,13 @@ describe("workspace locale catalog", () => {
     expect(translateStaticTemplate("fr", "configured")).toBe("configuré");
     expect(translateStaticTemplate("ja", "{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: "benchmark-a" })).toContain("benchmark-a");
     expect(translateStaticTemplate("ja", "{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: "benchmark-a" })).not.toContain("queued");
+  });
+
+  it("provides non-empty analytics dashboard terminology in every shipped locale", () => {
+    for (const locale of localeIds) {
+      for (const key of analyticsOverviewKeys) {
+        expect(overviewCopy[locale][key].trim(), `${locale}.${key}`).not.toBe("");
+      }
+    }
   });
 });
