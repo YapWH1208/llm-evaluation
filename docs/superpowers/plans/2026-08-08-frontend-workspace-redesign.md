@@ -218,11 +218,11 @@
 - Create: `frontend/src/operations-pages.test.tsx`
 - Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: Write failing tests for operation selection and actions.**
+- [x] **Step 1: Write failing tests for operation selection and actions.**
 
   Test Runs keeps selected-run state and invokes the existing refresh/cancel/retry/navigation callbacks through the new list/inspector layout. Test Queue preserves priority/status columns and operational controls. Test Workers retains all worker diagnostics and shows an explanatory diagnostic empty state when no worker is registered.
 
-- [ ] **Step 2: Implement the operations workspace.**
+- [x] **Step 2: Implement the operations workspace.**
 
   - `RunsPage`: compact run list on the left and the existing `RunDetail` in an inspector on the right; responsive stack at small widths.
   - `QueuePage`: operational toolbar / quick filter region above the existing dense queue table. Preserve refresh, concurrency, cancellation, sorting, and status semantics.
@@ -230,7 +230,7 @@
 
   Ensure destructive/cancel controls retain their existing confirmation/disabled behavior and use visual danger treatment only as an additional cue.
 
-- [ ] **Step 3: Validate action safety and operations density.**
+- [x] **Step 3: Validate action safety and operations density.**
 
   Run focused/full tests and build. Browser inspect a live or seeded Runs state, Queue, and Workers in both themes. Verify run detail never appears without a corresponding selected list item, status colors have text/icon context, controls remain reachable by keyboard, and tables do not collapse into unreadable card walls.
 

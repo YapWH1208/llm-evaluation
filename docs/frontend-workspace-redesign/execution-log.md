@@ -133,3 +133,26 @@
   edit normalization, preparation labels, five-row previews, cache validation,
   preview rendering, and suite composition. The follow-up graph reports 0
   gaps (risk 0.35); the full frontend suite passes with 18 files / 70 tests.
+
+## Task 5 — Runs, Queue, and Workers
+
+- Red: added operations workspace tests before the page module existed. The
+  focused run failed because `OperationsPages` could not be resolved.
+- Green: extracted `RunsPage`, `QueuePage`, `VirtualTaskQueue`, and
+  `WorkersPage`. The App remains the sole owner of run selection, refresh
+  subscriptions, lifecycle actions, API calls, concurrency edits, and task
+  priority updates; the new components only provide the workspace structure
+  and local filtering.
+- Runs now separates preflight/launch controls from a persistent searchable
+  inventory and selected inspector. Queue retains virtualization and priority
+  controls behind a compact filter bar. Workers show lease/capacity cards when
+  active and system-health-aware queue diagnostics when idle.
+- Verification: focused operations and dataset-run tests, the full frontend
+  suite (19 files / 73 tests), the production build, and `git diff --check`
+  all passed. The browser review covered Runs, Queue, and Workers empty states
+  in dark and light themes. The local API was unavailable, so populated visual
+  states are covered by the component and App integration tests; the 390px
+  Workers viewport check had no horizontal overflow.
+- Post-change Code Review Graph: 0 test gaps, risk score 0.35. Its broad App
+  impact is the known controller boundary; the new operations components are
+  directly exercised by their focused tests.
