@@ -12,7 +12,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> = {}) {
+function renderShell({ children = <p>Workspace content</p>, ...overrides }: Partial<React.ComponentProps<typeof AppShell>> = {}) {
   const props = {
     completedRunCount: 12,
     locale: "en" as const,
@@ -26,7 +26,7 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> =
     onViewChange: vi.fn(),
     ...overrides,
   };
-  render(<LocaleProvider><AppShell {...props}><p>Workspace content</p></AppShell></LocaleProvider>);
+  render(<LocaleProvider><AppShell {...props}>{children}</AppShell></LocaleProvider>);
   return props;
 }
 
@@ -37,13 +37,61 @@ describe("AppShell", () => {
     for (const group of navigationGroups) {
       expect(screen.getByRole("region", { name: navigationCopy.en.groups[group.id] })).toBeVisible();
       for (const item of group.items) {
-        expect(screen.getByRole("button", { name: navigationCopy.en.items[item.view].label })).toBeVisible();
+        const button = screen.getByRole("button", { name: navigationCopy.en.items[item.view].label });
+        expect(button).toBeVisible();
+        expect(button.querySelector(`[data-navigation-icon="${item.view}"]`)).toHaveAttribute("aria-hidden", "true");
       }
     }
 
     expect(screen.getByRole("button", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("12", { selector: "strong" })).toBeVisible();
     expect(props.onViewChange).not.toHaveBeenCalled();
+  });
+
+  it("leaves the dashboard page heading to dashboard content while retaining contextual headings elsewhere", () => {
+    const { rerender } = render(
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice={null}
+          systemHealth={null}
+          theme="dark"
+          view="dashboard"
+          onDismissNotice={vi.fn()}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <h1>Dashboard</h1>
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(document.querySelector(".workspace-page-heading")).not.toBeInTheDocument();
+
+    rerender(
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice={null}
+          systemHealth={null}
+          theme="dark"
+          view="models"
+          onDismissNotice={vi.fn()}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <p>Models content</p>
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    expect(document.querySelector(".workspace-page-heading")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
   });
 
   it("opens the responsive drawer and closes it after navigation", async () => {

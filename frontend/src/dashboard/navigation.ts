@@ -4,7 +4,6 @@ export type View = WorkspaceView;
 
 export type NavigationItem = {
   view: View;
-  glyph: string;
 };
 
 export type NavigationGroup = {
@@ -13,13 +12,13 @@ export type NavigationGroup = {
 };
 
 export const navigationGroups: NavigationGroup[] = [
-  { id: "overview", items: [{ view: "dashboard", glyph: "⌂" }, { view: "guide", glyph: "?" }] },
+  { id: "overview", items: [{ view: "dashboard" }, { view: "guide" }] },
   { id: "configure", items: [
-    { view: "models", glyph: "◌" }, { view: "capabilities", glyph: "✦" }, { view: "workspace", glyph: "◫" }, { view: "benchmarks", glyph: "▤" }, { view: "datasets", glyph: "▥" }, { view: "suites", glyph: "◷" },
+    { view: "models" }, { view: "capabilities" }, { view: "workspace" }, { view: "benchmarks" }, { view: "datasets" }, { view: "suites" },
   ] },
-  { id: "operations", items: [{ view: "runs", glyph: "▶" }, { view: "queue", glyph: "≋" }, { view: "workers", glyph: "◉" }] },
-  { id: "insights", items: [{ view: "analysis", glyph: "◒" }, { view: "compare", glyph: "⇄" }, { view: "reports", glyph: "▱" }, { view: "reviews", glyph: "✓" }] },
-  { id: "system", items: [{ view: "users", glyph: "◍" }, { view: "settings", glyph: "⚙" }] },
+  { id: "operations", items: [{ view: "runs" }, { view: "queue" }, { view: "workers" }] },
+  { id: "insights", items: [{ view: "analysis" }, { view: "compare" }, { view: "reports" }, { view: "reviews" }] },
+  { id: "system", items: [{ view: "users" }, { view: "settings" }] },
 ];
 
 export const navigationItems = navigationGroups.flatMap((group) => group.items);
