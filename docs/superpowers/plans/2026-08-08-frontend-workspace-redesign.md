@@ -265,7 +265,7 @@
 
   Run focused/full tests and build. Browser inspect Analysis and Compare in light/dark. Verify tab focus visibility, active-state contrast, result alignment, empty directions, and no visual-only information that lacks text context.
 
-- [ ] **Step 4: Commit insights pages.**
+- [x] **Step 4: Commit insights pages.**
 
   ```text
   feat: redesign analysis and comparison views

@@ -177,3 +177,6 @@
   in light/dark, and a 390px Compare layout with no horizontal overflow. The
   local API was unavailable; populated investigation states are directly
   covered by deterministic component fixtures.
+- Commit-hook follow-up: directly covered capability-bar selection, heatmap
+  breakdown rendering, and comparison evidence. The updated graph reports 0
+  gaps (risk 0.30); focused insight tests and the production build pass.

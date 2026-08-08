@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AnalyticsMatrix, Comparison, EvaluationRun } from "./api";
-import { AnalysisPage, ComparePage } from "./components/pages/InsightsPages";
+import { AnalysisPage, CapabilityChart, ComparePage, ComparisonEvidence, HeatmapBreakdown } from "./components/pages/InsightsPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(cleanup);
@@ -54,6 +54,21 @@ const analytics = {
   },
 } as AnalyticsMatrix;
 
+const capabilityCell = {
+  model_endpoint_id: "model-a",
+  capability: "reasoning",
+  accuracy: .8,
+  success_rate: .85,
+  error_rate: .15,
+  average_latency_ms: 250,
+  estimated_cost: .04,
+  sample_count: 10,
+  confidence_interval: null,
+  baseline_score: null,
+  delta: null,
+  run_count: 1,
+} as AnalyticsMatrix["capability_matrix"][number];
+
 const comparison = {
   run_a: "run-a",
   run_b: "run-b",
@@ -70,6 +85,28 @@ function renderInsightsPage(page: React.ReactNode) {
 }
 
 describe("insight workspace pages", () => {
+  it("keeps capability-chart selection available through keyboard-reachable result bars", async () => {
+    const user = userEvent.setup();
+    renderInsightsPage(<CapabilityChart cells={[capabilityCell]} />);
+
+    await user.click(screen.getByRole("button", { name: "model-a reasoning: 80%" }));
+    expect(screen.getByText(/Selected reasoning: 80% accuracy across 10 samples/)).toBeVisible();
+  });
+
+  it("renders the selected heatmap evidence as a directly inspectable breakdown", () => {
+    renderInsightsPage(<HeatmapBreakdown cells={[languageCell]} dimension="Model × language" />);
+
+    expect(screen.getByRole("heading", { name: "Model × language breakdown" })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "English" })).toBeVisible();
+  });
+
+  it("presents comparison evidence independently from the source selector state", () => {
+    renderInsightsPage(<ComparisonEvidence comparison={comparison} loading={false} />);
+
+    expect(screen.getByText(/math-check v1/)).toBeVisible();
+    expect(screen.getByRole("cell", { name: "8%" })).toBeVisible();
+  });
+
   it("switches analysis dimensions while keeping the supplied evidence table synchronized", async () => {
     const user = userEvent.setup();
     renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={vi.fn().mockResolvedValue(analytics)} />);

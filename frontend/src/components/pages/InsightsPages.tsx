@@ -29,11 +29,6 @@ export function AnalysisPage({ analytics, completedRuns, onSelectBaseline }: Ana
   const [dimension, setDimension] = useState<AnalysisDimension>("model_benchmark");
   useEffect(() => { setMatrix(analytics); setBaselineRunId(analytics?.baseline_run_id ?? ""); }, [analytics]);
 
-  async function selectBaseline(value: string) {
-    setBaselineRunId(value);
-    setMatrix(await onSelectBaseline(value));
-  }
-
   const cells = matrix?.heatmaps[dimension] ?? [];
   const selectedDimension = analysisDimensions.find((item) => item.id === dimension) ?? analysisDimensions[0];
 
@@ -41,7 +36,7 @@ export function AnalysisPage({ analytics, completedRuns, onSelectBaseline }: Ana
     <PageHeader description="Investigate supplied quality, reliability, latency, and cost evidence across evaluation dimensions." eyebrow="Insights" status={<>{matrix ? `${cells.length} ${selectedDimension.label.toLowerCase()} cells` : "Loading analysis"}</>} title="Analysis" />
     {!matrix ? <WorkspacePanel description="The analysis matrix is loading from the evaluation service." title="Analysis matrix"><p className="empty">Loading analysis matrix...</p></WorkspacePanel> : <>
       <WorkspacePanel className="workspace-analysis-context" description="The selected baseline applies to every evidence cell and delta shown below." title="Analysis context">
-        <label className="workspace-filter-control">Baseline run<select onChange={(event) => void selectBaseline(event.target.value)} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
+        <label className="workspace-filter-control">Baseline run<select onChange={(event) => { const runId = event.target.value; setBaselineRunId(runId); void onSelectBaseline(runId).then(setMatrix); }} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
       </WorkspacePanel>
       <WorkspaceTabs onChange={setDimension} tabs={analysisDimensions} value={dimension} />
       <div className="workspace-insights-grid">
@@ -52,7 +47,7 @@ export function AnalysisPage({ analytics, completedRuns, onSelectBaseline }: Ana
   </div>;
 }
 
-function CapabilityChart({ cells }: { cells: AnalyticsMatrix["capability_matrix"] }) {
+export function CapabilityChart({ cells }: { cells: AnalyticsMatrix["capability_matrix"] }) {
   const { formatPercent: percent } = useTranslation();
   const entries = cells.filter((cell) => cell.accuracy !== null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -63,7 +58,7 @@ function CapabilityChart({ cells }: { cells: AnalyticsMatrix["capability_matrix"
   </WorkspacePanel>;
 }
 
-function HeatmapBreakdown({ cells, dimension }: { cells: AnalyticsCell[]; dimension: string }) {
+export function HeatmapBreakdown({ cells, dimension }: { cells: AnalyticsCell[]; dimension: string }) {
   const { formatCurrency: money, formatNumber: display, formatPercent: percent } = useTranslation();
   return <WorkspacePanel className="workspace-analysis-breakdown" description="Every row retains source counts, confidence interval, performance, reliability, latency, and cost context." title={`${dimension} breakdown`} toolbar={<span className="workspace-count">{cells.length} cells</span>}>
     {cells.length === 0 ? <p className="empty">Complete runs to populate this analysis.</p> : <div className="table-wrap workspace-dense-table"><table><thead><tr><th>Row</th><th>Column</th><th>Score</th><th>Samples / 95% CI</th><th>Baseline / Δ</th><th>Errors</th><th>Latency</th><th>Cost</th></tr></thead><tbody>{cells.map((cell) => <tr key={`${cell.x_key}-${cell.y_key}`}><td>{cell.x_label}</td><td>{cell.y_label}</td><td>{percent(cell.score)}</td><td>{cell.sample_count} · {cell.confidence_interval ? `${percent(cell.confidence_interval.lower)}–${percent(cell.confidence_interval.upper)}` : "--"}</td><td>{cell.baseline_score === null ? "--" : `${percent(cell.baseline_score)} / ${percent(cell.delta)}`}</td><td>{percent(cell.error_rate)}</td><td>{display(cell.average_latency_ms)} ms</td><td>{money(cell.estimated_cost, cell.currency)}</td></tr>)}</tbody></table></div>}
@@ -92,7 +87,7 @@ export function ComparePage({ busy, comparison, completedRuns, onRunAChange, onR
   </div>;
 }
 
-function ComparisonEvidence({ comparison, loading }: { comparison: Comparison | null; loading: boolean }) {
+export function ComparisonEvidence({ comparison, loading }: { comparison: Comparison | null; loading: boolean }) {
   const { formatNumber: display, formatPercent: percent } = useTranslation();
   if (!comparison) return <WorkspacePanel description="Select two source runs and compare them to expose shared-sample outcomes and metric deltas." title="Comparison evidence"><p className="empty">{loading ? "Comparing selected runs..." : "Choose two completed runs to begin an evidence-backed comparison."}</p></WorkspacePanel>;
   const metrics = [
