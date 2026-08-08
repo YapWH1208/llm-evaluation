@@ -74,3 +74,6 @@
   Viewport override successfully rendered Models at 390×844px in dark theme:
   it used one 364px content track with no horizontal overflow. The temporary
   override was reset afterwards.
+- Post-commit graph follow-up: direct coverage is being added for the Guide
+  callback and controlled Models editor update after the graph identified those
+  presentation helpers as insufficiently mapped by the original page tests.

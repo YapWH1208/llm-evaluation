@@ -1,8 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Benchmark, Capability, Endpoint, PromptPackage } from "./api";
+import { Guide } from "./components/Guide";
 import { CapabilitiesPage, EndpointForm, ModelsPage } from "./components/pages/EndpointPages";
 
 afterEach(cleanup);
@@ -86,6 +88,11 @@ function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> 
   };
 }
 
+function StatefulModelsPage() {
+  const [currentForm, setCurrentForm] = useState(form);
+  return <ModelsPage {...modelProps({ form: currentForm, onFormChange: setCurrentForm })} />;
+}
+
 describe("configure workspace pages", () => {
   it("keeps the endpoint editor fields and inventory actions connected", async () => {
     const user = userEvent.setup();
@@ -106,6 +113,15 @@ describe("configure workspace pages", () => {
     expect(props.onProbe).toHaveBeenCalledWith(endpoint.id);
   });
 
+  it("keeps an editor change visible through the controlled form state", async () => {
+    const user = userEvent.setup();
+    render(<StatefulModelsPage />);
+
+    await user.type(screen.getByLabelText("Display name"), "Staging");
+
+    expect(screen.getByLabelText("Display name")).toHaveValue("Staging");
+  });
+
   it("uses an endpoint selection inspector while preserving capability declarations", async () => {
     const user = userEvent.setup();
     const onDeclare = vi.fn();
@@ -119,5 +135,15 @@ describe("configure workspace pages", () => {
     expect(onDeclare).toHaveBeenCalledWith(secondEndpoint.id, capability, "supported");
     expect(screen.getByText("Detected: supported")).toBeVisible();
     expect(screen.getByText("Effective: supported")).toBeVisible();
+  });
+
+  it("routes an actionable guide step through the supplied view callback", async () => {
+    const user = userEvent.setup();
+    const onOpenView = vi.fn();
+    render(<Guide onOpenView={onOpenView} />);
+
+    await user.click(screen.getByRole("button", { name: "Open Models" }));
+
+    expect(onOpenView).toHaveBeenCalledWith("models");
   });
 });
