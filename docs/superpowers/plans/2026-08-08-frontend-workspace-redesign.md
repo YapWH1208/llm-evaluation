@@ -250,18 +250,18 @@
 - Create: `frontend/src/insights-pages.test.tsx`
 - Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: Write failing tests for dimension and comparison selection.**
+- [x] **Step 1: Write failing tests for dimension and comparison selection.**
 
   Test Analysis exposes all existing dimensions/statistical sections through tabs or a segmented control and preserves the current selected/available summary. Test Compare retains both source selections, validation/error behavior, submit callback, and result presentation states.
 
-- [ ] **Step 2: Compose page-specific investigation layouts.**
+- [x] **Step 2: Compose page-specific investigation layouts.**
 
   - `AnalysisPage`: page header and run context, local dimension switcher, summary metrics/plot section, and synchronized breakdown table. Existing analysis calculations and helper components remain unchanged.
   - `ComparePage`: side-by-side source selection surface with an explicit comparison action, followed by empty/loading/error/result states. Keep all existing comparison fields and result values; only restructure their framing and visual hierarchy.
 
   Do not introduce chart libraries or client-side derived calculations. Make every visual summary available in a textual/table representation already supplied by the app.
 
-- [ ] **Step 3: Verify insights and comparable data states.**
+- [x] **Step 3: Verify insights and comparable data states.**
 
   Run focused/full tests and build. Browser inspect Analysis and Compare in light/dark. Verify tab focus visibility, active-state contrast, result alignment, empty directions, and no visual-only information that lacks text context.
 

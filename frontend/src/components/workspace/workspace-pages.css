@@ -568,6 +568,94 @@
   justify-items: start;
 }
 
+.workspace-analysis-context {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.workspace-analysis-context .workspace-filter-control select {
+  min-width: 16rem;
+}
+
+.workspace-insights-grid {
+  display: grid;
+  gap: .85rem;
+  min-width: 0;
+}
+
+.workspace-capability-chart,
+.workspace-analysis-breakdown,
+.workspace-comparison-evidence {
+  min-width: 0;
+}
+
+.workspace-analysis-breakdown .workspace-dense-table table,
+.workspace-comparison-evidence .workspace-dense-table table {
+  min-width: 48rem;
+}
+
+.workspace-compare-form {
+  align-items: end;
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+}
+
+.workspace-compare-form label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: .8rem;
+  font-weight: 700;
+  gap: .32rem;
+}
+
+.workspace-compare-versus {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+  border-radius: 999px;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: .68rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  letter-spacing: .08em;
+  min-width: 3.25rem;
+}
+
+.workspace-insight-metrics {
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: .85rem;
+}
+
+.workspace-insight-metrics article {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+  padding: .75rem;
+}
+
+.workspace-insight-metrics span,
+.workspace-insight-metrics small {
+  color: var(--text-muted);
+  font-size: .71rem;
+}
+
+.workspace-insight-metrics strong {
+  color: var(--text);
+  font-size: 1.18rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+
 
 @media (max-width: 42rem) {
   .workspace-page-header {
@@ -627,5 +715,26 @@
 
   .workspace-worker-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-analysis-context {
+    align-items: start;
+    display: grid;
+    gap: .65rem;
+  }
+
+  .workspace-analysis-context .workspace-filter-control,
+  .workspace-analysis-context .workspace-filter-control select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .workspace-compare-form,
+  .workspace-insight-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-compare-versus {
+    justify-self: start;
   }
 }

@@ -159,3 +159,21 @@
 - Commit-hook follow-up: added direct run-inventory and virtual-queue coverage
   for task priority editability. The follow-up graph reports 0 gaps (risk
   0.35); focused operations tests and the production build pass.
+
+## Task 6 — Analysis and Compare
+
+- Red: added insight workspace tests before `InsightsPages` existed. The
+  focused run failed at the missing module import.
+- Green: extracted `AnalysisPage` and `ComparePage`. The App retains the
+  analytics request and comparison-submit controller paths; the pages own only
+  local dimension/baseline selection presentation and source selection layout.
+- Analysis exposes one selected heatmap dimension at a time with the existing
+  capability chart and a synchronized evidence table. Compare now frames
+  source runs side by side and places existing outcomes, deltas, and the full
+  A/B table beneath an explicit comparison context.
+- Verification: the full frontend suite passed (20 files / 79 tests), the
+  production build and `git diff --check` passed, and the review graph reports
+  0 test gaps (risk 0.35). Browser review covered Analysis in light, Compare
+  in light/dark, and a 390px Compare layout with no horizontal overflow. The
+  local API was unavailable; populated investigation states are directly
+  covered by deterministic component fixtures.
