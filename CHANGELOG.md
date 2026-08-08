@@ -30,6 +30,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is in flight.
 - New dataset catalog notices and the preview fallback copy are translated
   for non-English locales.
+- Runs completed with errors now sort as finished work on the dashboard
+  instead of appearing above cleanly completed runs.
+- The virtualized task queue keeps rows rendered when a filter shrinks the
+  list while it is scrolled deep.
+- Switching review runs clears the previous run's sample list while the next
+  run's attempts load, so stale samples can no longer be selected.
+- Workspace filters, dataset lifecycle actions, suite queue controls, disk
+  usage, and audit/compare states are translated for non-English locales.
 
 ## 0.2.0 — 2026-08-07
 

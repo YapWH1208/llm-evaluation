@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -74,6 +74,21 @@ describe("operations workspace pages", () => {
     renderOperationsPage(<VirtualTaskQueue busy={null} onPriority={vi.fn().mockResolvedValue(undefined)} tasks={[runningTask]} />);
 
     expect(screen.getByRole("button", { name: "Raise priority for evaluate_sample" })).toBeDisabled();
+  });
+
+  it("keeps rows rendered when the queue shrinks while scrolled deep into a long list", () => {
+    const manyTasks = Array.from({ length: 200 }, (_, index) => ({ ...pendingTask, id: `task-${index}`, task_type: `job-${index}` }));
+    const { rerender } = renderOperationsPage(<VirtualTaskQueue busy={null} onPriority={vi.fn().mockResolvedValue(undefined)} tasks={manyTasks} />);
+
+    const viewport = document.querySelector(".virtual-table-viewport") as HTMLElement;
+    viewport.scrollTop = 200 * 52;
+    fireEvent.scroll(viewport);
+
+    expect(screen.getByText("job-199")).toBeVisible();
+
+    rerender(<LocaleProvider><VirtualTaskQueue busy={null} onPriority={vi.fn().mockResolvedValue(undefined)} tasks={manyTasks.slice(0, 3)} /></LocaleProvider>);
+
+    expect(screen.getByText("job-2")).toBeVisible();
   });
 
   it("keeps the selected run visible in the inventory and routes a new selection to the existing controller", async () => {

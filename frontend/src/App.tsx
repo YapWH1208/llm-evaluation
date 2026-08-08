@@ -450,6 +450,7 @@ export default function App() {
   async function selectRun(runId: string) {
     setSelectedRun(runId);
     setSelectedAttempt(null);
+    setAttempts([]);
     setReviewAgreement(null);
     try {
       const [nextAttempts, nextSummary, nextReports, nextLogs] = await Promise.all([

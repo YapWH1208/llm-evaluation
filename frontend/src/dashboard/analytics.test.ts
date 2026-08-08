@@ -146,6 +146,16 @@ describe("dashboard analytics projections", () => {
     expect(rows[2]).toMatchObject({ modelName: "analytics-old", errorRate: 0 });
   });
 
+  it("treats runs completed with errors as terminal instead of active in recent rows", () => {
+    const rows = buildRecentRunRows([
+      run({ id: "run-errors", status: "completed_with_errors", created_at: "2026-08-03T09:00:00Z", completed_at: "2026-08-03T10:00:00Z" }),
+      run({ id: "run-clean", created_at: "2026-08-04T09:00:00Z", completed_at: "2026-08-04T10:00:00Z" }),
+      run({ id: "run-running", status: "running", created_at: "2026-08-05T09:00:00Z", completed_at: null }),
+    ], [], null);
+
+    expect(rows.map((row) => row.run.id)).toEqual(["run-running", "run-clean", "run-errors"]);
+  });
+
   it("groups cost evidence by normalized currency without cross-currency totals", () => {
     const points = buildDashboardAnalytics([
       run({ id: "run-old", completed_at: "2026-08-02T10:00:00Z" }),

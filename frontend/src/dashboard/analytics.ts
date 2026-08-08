@@ -28,7 +28,7 @@ export type RecentRunRow = {
   sampleCount: number | null;
 };
 
-const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const TERMINAL_RUN_STATUSES = new Set(["completed", "completed_with_errors", "failed", "cancelled"]);
 
 function timestamp(run: EvaluationRun): string | null {
   return run.completed_at ?? run.started_at ?? run.created_at;

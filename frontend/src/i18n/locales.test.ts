@@ -64,7 +64,13 @@ describe("workspace locale catalog", () => {
   });
 
   it("keeps redesigned workspace labels eligible for the static-copy bridge", () => {
-    const workspaceLabels = ["Report context", "Review context", "User inventory", "Application and storage", "Operating guidance"];
+    const workspaceLabels = [
+      "Report context", "Review context", "User inventory", "Application and storage", "Operating guidance",
+      "Filter benchmarks", "Name, source, status…", "Find run", "Benchmark, status, or ID", "Run status", "No runs match the current filters.",
+      "Pause download", "Validate cache", "Clear cache", "Retry download", "Upload local revision",
+      "Benchmark composition", "Queue suite", "Uses each selected endpoint’s saved connection and capacity configuration.", "No available endpoints are ready to receive this suite.",
+      "Loading disk usage…", "No events available.", "Comparing…", "registered versions", "total runs", "tasks visible",
+    ];
 
     for (const locale of localeIds.filter((locale) => locale !== "en")) {
       for (const label of workspaceLabels) {
