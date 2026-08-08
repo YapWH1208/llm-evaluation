@@ -156,3 +156,6 @@
 - Post-change Code Review Graph: 0 test gaps, risk score 0.35. Its broad App
   impact is the known controller boundary; the new operations components are
   directly exercised by their focused tests.
+- Commit-hook follow-up: added direct run-inventory and virtual-queue coverage
+  for task priority editability. The follow-up graph reports 0 gaps (risk
+  0.35); focused operations tests and the production build pass.

@@ -15,7 +15,7 @@ type RunsPageProps = {
   selectedRunId: string | null;
 };
 
-function RunInventory({ onSelect, renderActions, runs, selectedRunId }: Omit<RunsPageProps, "inspector" | "launcher" | "preflight">) {
+export function RunInventory({ onSelect, renderActions, runs, selectedRunId }: Omit<RunsPageProps, "inspector" | "launcher" | "preflight">) {
   const { formatDate } = useTranslation();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -58,6 +58,10 @@ type QueuePageProps = {
   tasks: Task[];
 };
 
+export function editableTaskPriority(task: Task) {
+  return ["pending", "retry_scheduled"].includes(task.status);
+}
+
 export function QueuePage({ busy, onPriority, tasks }: QueuePageProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -87,8 +91,7 @@ export function VirtualTaskQueue({ busy, onPriority, tasks }: QueuePageProps) {
   const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 4);
   const end = Math.min(tasks.length, start + windowSize + 8);
   const visible = tasks.slice(start, end);
-  const editable = (task: Task) => ["pending", "retry_scheduled"].includes(task.status);
-  return <div className="table-wrap virtual-table-viewport workspace-queue-table" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}><table><thead><tr><th>Task</th><th>Parent</th><th>Run</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Worker</th><th>Created</th></tr></thead><tbody>{start > 0 && <tr aria-hidden="true"><td colSpan={8} className="virtual-spacer" style={{ height: start * rowHeight }} /></tr>}{visible.map((task) => <tr key={task.id}><td>{task.task_type}</td><td>{task.parent_task_id?.slice(0, 8) ?? "--"}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status.replaceAll("_", " ")}</span></td><td><div className="actions"><span>{task.priority}</span><button aria-label={`Lower priority for ${task.task_type}`} className="secondary" disabled={busy === `task-${task.id}` || !editable(task)} onClick={() => void onPriority(task, task.priority - 10)} type="button">-10</button><button aria-label={`Raise priority for ${task.task_type}`} disabled={busy === `task-${task.id}` || !editable(task)} onClick={() => void onPriority(task, task.priority + 10)} type="button">+10</button></div></td><td>{task.attempt_count}</td><td>{task.leased_by ?? "--"}</td><td>{formatDate(task.created_at)}</td></tr>)}{end < tasks.length && <tr aria-hidden="true"><td colSpan={8} className="virtual-spacer" style={{ height: (tasks.length - end) * rowHeight }} /></tr>}</tbody></table></div>;
+  return <div className="table-wrap virtual-table-viewport workspace-queue-table" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}><table><thead><tr><th>Task</th><th>Parent</th><th>Run</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Worker</th><th>Created</th></tr></thead><tbody>{start > 0 && <tr aria-hidden="true"><td colSpan={8} className="virtual-spacer" style={{ height: start * rowHeight }} /></tr>}{visible.map((task) => <tr key={task.id}><td>{task.task_type}</td><td>{task.parent_task_id?.slice(0, 8) ?? "--"}</td><td>{task.run_id.slice(0, 8)}</td><td><span className={`badge ${task.status}`}>{task.status.replaceAll("_", " ")}</span></td><td><div className="actions"><span>{task.priority}</span><button aria-label={`Lower priority for ${task.task_type}`} className="secondary" disabled={busy === `task-${task.id}` || !editableTaskPriority(task)} onClick={() => void onPriority(task, task.priority - 10)} type="button">-10</button><button aria-label={`Raise priority for ${task.task_type}`} disabled={busy === `task-${task.id}` || !editableTaskPriority(task)} onClick={() => void onPriority(task, task.priority + 10)} type="button">+10</button></div></td><td>{task.attempt_count}</td><td>{task.leased_by ?? "--"}</td><td>{formatDate(task.created_at)}</td></tr>)}{end < tasks.length && <tr aria-hidden="true"><td colSpan={8} className="virtual-spacer" style={{ height: (tasks.length - end) * rowHeight }} /></tr>}</tbody></table></div>;
 }
 
 type WorkersPageProps = {

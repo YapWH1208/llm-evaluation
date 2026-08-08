@@ -234,7 +234,7 @@
 
   Run focused/full tests and build. Browser inspect a live or seeded Runs state, Queue, and Workers in both themes. Verify run detail never appears without a corresponding selected list item, status colors have text/icon context, controls remain reachable by keyboard, and tables do not collapse into unreadable card walls.
 
-- [ ] **Step 4: Commit operations.**
+- [x] **Step 4: Commit operations.**
 
   ```text
   feat: redesign run operations workspace

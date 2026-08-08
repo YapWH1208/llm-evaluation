@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EvaluationRun, Task } from "./api";
-import { QueuePage, RunsPage, WorkersPage } from "./components/pages/OperationsPages";
+import { editableTaskPriority, QueuePage, RunInventory, RunsPage, VirtualTaskQueue, WorkersPage } from "./components/pages/OperationsPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
+
+afterEach(() => cleanup());
 
 const firstRun = {
   id: "run-1",
@@ -52,6 +54,28 @@ function renderOperationsPage(page: React.ReactNode) {
 }
 
 describe("operations workspace pages", () => {
+  it("keeps task priority changes available only for pending and scheduled retries", () => {
+    expect(editableTaskPriority(pendingTask)).toBe(true);
+    expect(editableTaskPriority({ ...pendingTask, status: "retry_scheduled" })).toBe(true);
+    expect(editableTaskPriority(runningTask)).toBe(false);
+  });
+
+  it("renders the run inventory as a standalone persistent selection surface", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderOperationsPage(<RunInventory onSelect={onSelect} renderActions={() => null} runs={[firstRun, secondRun]} selectedRunId={secondRun.id} />);
+
+    expect(screen.getByRole("button", { name: /code-check v1/i })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /math-check v1/i }));
+    expect(onSelect).toHaveBeenCalledWith(firstRun.id);
+  });
+
+  it("keeps non-editable priority controls disabled in the virtual queue", () => {
+    renderOperationsPage(<VirtualTaskQueue busy={null} onPriority={vi.fn().mockResolvedValue(undefined)} tasks={[runningTask]} />);
+
+    expect(screen.getByRole("button", { name: "Raise priority for evaluate_sample" })).toBeDisabled();
+  });
+
   it("keeps the selected run visible in the inventory and routes a new selection to the existing controller", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
