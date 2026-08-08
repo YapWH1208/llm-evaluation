@@ -186,11 +186,11 @@
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/workspace/forms.ts` when existing inferred dataset/suite form shapes need types
 
-- [ ] **Step 1: Write failing inventory and action tests.**
+- [x] **Step 1: Write failing inventory and action tests.**
 
   Test benchmark selection/filter controls retain the currently loaded data and action callbacks. Test Datasets exposes create/import/selection actions, preserves tags/metadata/evidence, and renders an inspector for the selected dataset without hiding the list. Test Suites offers a create action from its empty state and keeps any selected suite/run action.
 
-- [ ] **Step 2: Implement catalog-specific hierarchy.**
+- [x] **Step 2: Implement catalog-specific hierarchy.**
 
   - `BenchmarksPage`: page toolbar with current filters/actions, dense comparison table, visible loading/empty/error treatment, and drill-in link/button paths.
   - `DatasetsPage`: inventory list/table at left, selected dataset inspector at right, action bar above. Preserve current cards’ content and every import/edit/delete flow.
@@ -198,11 +198,11 @@
 
   Reuse semantic table markup where the content is tabular. Make long data cell values wrap or truncate with an accessible title/expanded inspector; do not rely on fixed-width overflow.
 
-- [ ] **Step 3: Browser-check dense data and empty states.**
+- [x] **Step 3: Browser-check dense data and empty states.**
 
   Run focused/full frontend tests and build. Inspect populated and empty paths where local data permits, light/dark themes, table header alignment, action priority, selection contrast, and narrow stacking. Verify no dataset metadata or suite action disappeared during extraction.
 
-- [ ] **Step 4: Commit catalog pages.**
+- [x] **Step 4: Commit catalog pages.**
 
   ```text
   feat: redesign benchmark dataset and suite catalogs

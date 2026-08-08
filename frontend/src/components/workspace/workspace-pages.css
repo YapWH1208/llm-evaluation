@@ -271,6 +271,145 @@
   gap: 1rem;
 }
 
+.workspace-split--catalog {
+  grid-template-columns: minmax(16rem, .52fr) minmax(0, 1fr);
+}
+
+.workspace-filter-control {
+  color: var(--text-muted);
+  display: grid;
+  font-size: .73rem;
+  font-weight: 700;
+  gap: .26rem;
+}
+
+.workspace-filter-control input {
+  min-width: 14rem;
+  width: 16rem;
+}
+
+.workspace-dense-table {
+  overflow-x: auto;
+}
+
+.workspace-dense-table table {
+  font-size: .78rem;
+  min-width: 42rem;
+}
+
+.workspace-dense-table th,
+.workspace-dense-table td {
+  padding: .58rem .7rem;
+  vertical-align: top;
+}
+
+.workspace-dense-table tbody tr:hover {
+  background: var(--surface-subtle);
+}
+
+.workspace-table-action {
+  font-size: .72rem;
+  padding: .34rem .54rem;
+}
+
+.workspace-table-detail {
+  color: var(--text-muted);
+  display: block;
+  font-size: .7rem;
+  margin-top: .14rem;
+  overflow-wrap: anywhere;
+}
+
+.workspace-catalog-inventory {
+  max-height: min(57vh, 41rem);
+  overflow-y: auto;
+  padding-right: .15rem;
+}
+
+.workspace-catalog-inventory .workspace-select-row {
+  align-items: flex-start;
+  display: grid;
+  gap: .42rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workspace-catalog-inventory .workspace-select-row small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.workspace-dataset-inspector,
+.workspace-suite-inspector {
+  display: grid;
+  gap: .9rem;
+}
+
+.workspace-inspector-summary {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: .36rem;
+  padding-bottom: .85rem;
+}
+
+.workspace-inspector-summary p {
+  color: var(--text-muted);
+  font-size: .78rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-inspector-summary .workspace-item-meta {
+  color: var(--text-subtle);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.workspace-preview-table {
+  margin: 0;
+}
+
+.workspace-preview-table h3,
+.workspace-suite-inspector h3 {
+  color: var(--text);
+  font-size: .78rem;
+  margin: 0;
+}
+
+.workspace-preview-table table {
+  font-size: .76rem;
+}
+
+.workspace-dataset-edit-form {
+  border-top: 1px solid var(--border);
+  padding-top: .9rem;
+}
+
+.workspace-dataset-actions {
+  border-top: 1px solid var(--border);
+  padding-top: .9rem;
+}
+
+.workspace-suite-queue {
+  align-items: start;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: .9rem;
+}
+
+.workspace-suite-queue h3,
+.workspace-suite-queue p {
+  margin: 0;
+}
+
+.workspace-suite-queue p {
+  font-size: .78rem;
+  margin-top: .2rem;
+}
+
 
 @media (max-width: 42rem) {
   .workspace-page-header {
@@ -288,6 +427,7 @@
 
   .workspace-split--models,
   .workspace-split--capabilities,
+  .workspace-split--catalog,
   .workspace-field-grid--two,
   .workspace-field-grid--three,
   .workspace-field-grid--five {
@@ -298,6 +438,19 @@
   .workspace-timeline li {
     align-items: flex-start;
     flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-filter-control input {
+    min-width: 0;
+    width: min(100%, 20rem);
+  }
+
+  .workspace-catalog-inventory {
+    max-height: none;
+  }
+
+  .workspace-suite-queue {
     grid-template-columns: 1fr;
   }
 }

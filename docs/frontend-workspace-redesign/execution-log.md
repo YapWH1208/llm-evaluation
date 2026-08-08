@@ -98,3 +98,33 @@
   in light theme. The active workbench mode showed exactly its intended setup
   region, Catalog retained both benchmark registry and dataset-cache panels,
   and all inspected modes had no horizontal overflow.
+
+## 2026-08-08 — Task 4: Benchmark, dataset, and suite catalogs
+
+- Red: `catalog-pages.test.tsx` first failed because `CatalogPages` did not
+  exist. It specifies a filtered benchmark action, persistent dataset
+  inventory/inspector selection, and suite builder/queue actions. A browser
+  finding added a second red regression: an empty dataset catalog must show one
+  clear registration action rather than competing header and panel controls.
+- Green: added typed `BenchmarksPage`, `DatasetsPage`, and `SuitesPage` with
+  Dashboard-token panels, compact headers, dense tables, master-detail
+  inspectors, and responsive stacking. `App.tsx` continues to own every API
+  call, confirmation, busy state, dataset lifecycle callback, and suite queue
+  operation; the extracted pages only arrange supplied state and actions.
+- The dataset inspector retains cache usage, revision/source/checksum/license
+  and field evidence, upload, prepare/pause/retry, validation, cache clear,
+  preview, editing, and deletion. Suites retain every available-endpoint queue
+  action; the empty state surfaces the existing Workspace suite builder.
+- Verification: the focused catalog and existing dataset lifecycle tests
+  passed. The full frontend suite passed (18 files, 63 tests), `npm run build`
+  passed, and `git diff --check` passed.
+- Browser review: Benchmark empty state in light theme, Dataset empty state in
+  dark theme, and Suite empty state in light theme rendered with the intended
+  compact hierarchy and one primary creation action. The 390×844 Suite layout
+  had `scrollWidth === viewportWidth` (390px) and preserved its mobile command
+  row. The local API server was unavailable, so browser data was empty; the
+  populated selection, filtering, and lifecycle states are covered by the
+  page and App integration tests.
+- Post-change Code Review Graph: 0 test gaps, risk score 0.30. The broad
+  reported App impact is expected from the pre-existing controller coupling;
+  the new page boundaries are directly exercised by the catalog tests.
