@@ -31,6 +31,7 @@ import {
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { Guide } from "./components/Guide";
+import { CapabilitiesPage, ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
 import { localeIds, localeNames, reportCopy, type Locale } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
@@ -39,7 +40,7 @@ import "./evidence.css";
 
 type View = "dashboard" | "guide" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
-const initialEndpoint = {
+const initialEndpoint: EndpointForm = {
   base_url: "",
   api_key: "",
   model_name: "",
@@ -732,48 +733,30 @@ export default function App() {
       <StaticCopy>
 
       {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
-      {view === "guide" && <Guide />}
+      {view === "guide" && <Guide onOpenView={setView} />}
 
-      {view === "models" && <>
-        <section className="grid two">
-          <article className="panel">
-            <h2>{editingEndpointId ? "Edit model endpoint" : "Add model endpoint"}</h2>
-            <form onSubmit={createEndpoint} className="form">
-              <label>Display name<input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="My local model" /></label>
-              <label>Base URL<input required type="url" value={form.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} placeholder="https://provider.example/v1" /></label>
-              <label>Model name<input required value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value })} placeholder="model-id" /></label>
-              <label>Protocol profile<select value={form.protocol_profile} onChange={(event) => setForm({ ...form, protocol_profile: event.target.value as Endpoint["protocol_profile"] })}><option value="openai_chat_completions">OpenAI-compatible Chat Completions</option><option value="openai_responses">OpenAI-compatible Responses API</option><option value="anthropic_messages">Anthropic Messages</option><option value="gemini_generate_content">Gemini GenerateContent</option><option value="azure_openai_chat_completions">Azure OpenAI Chat Completions</option><option value="ollama_chat">Ollama Chat</option><option value="custom_http_json">Custom HTTP JSON</option></select></label>
-              <label>API key<input required={!editingEndpointId && form.protocol_profile !== "ollama_chat"} type="password" value={form.api_key} onChange={(event) => setForm({ ...form, api_key: event.target.value })} placeholder={editingEndpointId ? "Leave blank to keep the encrypted key" : form.protocol_profile === "ollama_chat" ? "Optional for a local Ollama service" : "Stored encrypted"} /></label>
-              <label>Custom headers (JSON)<textarea value={form.custom_headers} onChange={(event) => setForm({ ...form, custom_headers: event.target.value })} spellCheck={false} placeholder='{"X-Provider-Project":"project-id"}' /></label>
-              <label>Default request body (JSON)<textarea value={form.default_request_body} onChange={(event) => setForm({ ...form, default_request_body: event.target.value })} spellCheck={false} /></label>
-              <div className="field-row"><label>Timeout (seconds)<input required type="number" min="1" max="600" value={form.timeout_seconds} onChange={(event) => setForm({ ...form, timeout_seconds: event.target.value })} /></label><label>Endpoint concurrency<input required type="number" min="1" max="1000" value={form.max_concurrency} onChange={(event) => setForm({ ...form, max_concurrency: event.target.value })} /></label><label>Shared API-key concurrency<input type="number" min="1" max="1000" value={form.api_key_max_concurrency} onChange={(event) => setForm({ ...form, api_key_max_concurrency: event.target.value })} placeholder="Unlimited" /></label><label>Requests / minute<input type="number" min="1" value={form.requests_per_minute} onChange={(event) => setForm({ ...form, requests_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Tokens / minute<input type="number" min="1" value={form.tokens_per_minute} onChange={(event) => setForm({ ...form, tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
-              <div className="field-row"><label>Requests / second<input type="number" min="1" value={form.requests_per_second} onChange={(event) => setForm({ ...form, requests_per_second: event.target.value })} placeholder="Unlimited" /></label><label>Input tokens / minute<input type="number" min="1" value={form.input_tokens_per_minute} onChange={(event) => setForm({ ...form, input_tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label><label>Output tokens / minute<input type="number" min="1" value={form.output_tokens_per_minute} onChange={(event) => setForm({ ...form, output_tokens_per_minute: event.target.value })} placeholder="Unlimited" /></label></div>
-              <div className="field-row"><label>Input / 1M tokens<input type="number" min="0" step="any" value={form.input_cost_per_million} onChange={(event) => setForm({ ...form, input_cost_per_million: event.target.value })} /></label><label>Output / 1M tokens<input type="number" min="0" step="any" value={form.output_cost_per_million} onChange={(event) => setForm({ ...form, output_cost_per_million: event.target.value })} /></label><label>Currency<input value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} maxLength={8} /></label></div>
-              <label>Tags (comma-separated)<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="production, vision" /></label><label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
-              <div className="actions"><button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : editingEndpointId ? "Save model configuration" : "Save encrypted endpoint"}</button>{editingEndpointId && <button type="button" className="secondary" onClick={cancelEndpointEdit}>Cancel edit</button>}</div>
-            </form>
-          </article>
-          <article className="panel">
-            <h2>Run configuration</h2>
-            <label className="select-label">Benchmark pack<select value={selectedBenchmark} onChange={(event) => setSelectedBenchmark(event.target.value)}>{benchmarks.filter((benchmark) => !["disabled", "deprecated", "broken"].includes(benchmark.status)).map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name} v{benchmark.version}</option>)}</select></label>
-            <label className="select-label">Prompt package for a new run<select value={selectedPromptId} onChange={(event) => setSelectedPromptId(event.target.value)}><option value="">Built-in benchmark prompt</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
-            <label>Run Request Body override (JSON)<textarea value={runRequestBody} onChange={(event) => setRunRequestBody(event.target.value)} spellCheck={false} placeholder='{"temperature":0}' /></label>
-            <label>Run concurrency cap<input type="number" min="1" max="1000" value={runMaxConcurrency} onChange={(event) => setRunMaxConcurrency(event.target.value)} placeholder="Use endpoint capacity" /></label>
-            <p className="muted">Connection tests and execution use the saved endpoint. The run override is merged after suite and benchmark defaults; benchmark-forced fields still win. API keys never return to the browser.</p>
-          </article>
-        </section>
-        <section className="panel"><div className="section-title"><h2>Models</h2><span>{endpoints.length} configured</span></div>
-          {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : <div className="cards">{endpoints.map((endpoint) => <article className="card" key={endpoint.id}>
-            <div data-i18n-preserve><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p><p className="muted">{endpoint.base_url}</p></div>
-            <div className="split"><span className={`badge ${endpoint.status}`}>{endpoint.status}</span><span className="muted">{endpoint.max_concurrency} endpoint / {endpoint.api_key_max_concurrency ?? "∞"} shared-key concurrent · {money(endpoint.input_cost_per_million, endpoint.currency)} in / 1M</span></div>
-            <div className="actions"><button className="secondary" onClick={() => editEndpoint(endpoint)}>Edit configuration</button><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => void testEndpoint(endpoint.id)}>Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => void createRun(endpoint.id)}>Queue selected benchmark</button></div>
-            {testRequests[endpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[endpoint.id].method} {testRequests[endpoint.id].url}</p><pre>{JSON.stringify(testRequests[endpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
-            {capabilities[endpoint.id] && <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}>{item.capability_key}<select value={item.user_declared_status} disabled={busy === `declare-${endpoint.id}-${item.capability_key}`} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div>}
-          </article>)}</div>}
-        </section>
-      </>}
+      {view === "models" && <ModelsPage
+        benchmarks={benchmarks}
+        busy={busy}
+        capabilities={capabilities}
+        editingEndpointId={editingEndpointId}
+        endpoints={endpoints}
+        form={form}
+        onCancelEdit={cancelEndpointEdit}
+        onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)}
+        onEdit={editEndpoint}
+        onFormChange={setForm}
+        onProbe={(endpointId) => void probeCapabilities(endpointId)}
+        onQueue={(endpointId) => void createRun(endpointId)}
+        onRunConfigChange={(config) => { setSelectedBenchmark(config.benchmark); setSelectedPromptId(config.promptId); setRunRequestBody(config.requestBody); setRunMaxConcurrency(config.maxConcurrency); }}
+        onSubmit={createEndpoint}
+        onTest={(endpointId) => void testEndpoint(endpointId)}
+        prompts={prompts}
+        runConfig={{ benchmark: selectedBenchmark, maxConcurrency: runMaxConcurrency, promptId: selectedPromptId, requestBody: runRequestBody }}
+        testRequests={testRequests}
+      />}
 
-      {view === "capabilities" && <section className="panel"><div className="section-title"><h2>Model capabilities</h2><span>Detection evidence and user declarations remain separate.</span></div>{endpoints.length === 0 ? <p className="empty">Add a model endpoint before probing capabilities.</p> : <div className="cards">{endpoints.map((endpoint) => <article className="card" key={endpoint.id}><h3 data-i18n-preserve>{endpoint.display_name}</h3><div className="actions"><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => void probeCapabilities(endpoint.id)}>Probe capabilities</button></div>{capabilities[endpoint.id] ? <div className="capability-list">{capabilities[endpoint.id].map((item) => <label key={item.id}><span data-i18n-preserve>{item.capability_key}</span><select value={item.user_declared_status} onChange={(event) => void declareCapability(endpoint.id, item, event.target.value as "supported" | "unsupported" | "unknown")}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select><small data-i18n-preserve>{item.auto_detection_status} · {item.effective_status}</small></label>)}</div> : <p className="muted">No probe result loaded yet.</p>}</article>)}</div>}</section>}
+      {view === "capabilities" && <CapabilitiesPage busy={busy} capabilities={capabilities} endpoints={endpoints} onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)} onProbe={(endpointId) => void probeCapabilities(endpointId)} />}
 
       {view === "benchmarks" && <section className="panel"><div className="section-title"><h2>Benchmarks</h2><span>{benchmarks.length} registered versions</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th><th>Modalities</th><th>Operation</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td data-i18n-preserve>{benchmark.display_name}</td><td data-i18n-preserve>{benchmark.version}</td><td data-i18n-preserve>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td><td data-i18n-preserve>{Array.isArray(benchmark.manifest.modalities) ? benchmark.manifest.modalities.join(", ") : "--"}</td><td>{["registered", "enabled", "disabled"].includes(benchmark.status) ? <button className="secondary" disabled={busy === `benchmark-${benchmark.id}`} onClick={() => void updateBenchmarkStatus(benchmark)}>{benchmark.status === "disabled" ? "Enable" : "Disable"}</button> : "Managed by pack"}</td></tr>)}</tbody></table></div></section>}
 

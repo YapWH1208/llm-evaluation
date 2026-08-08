@@ -105,7 +105,7 @@
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/i18n/operationalCopy.ts` or `frontend/src/i18n/catalog.ts` and all locale entries only if new fixed labels are needed
 
-- [ ] **Step 1: Capture the current workflows in failing render tests.**
+- [x] **Step 1: Capture the current workflows in failing render tests.**
 
   Test Guide renders its staged evaluation workflow and every existing route action. Test Models renders the existing endpoint inventory/form inputs, validation feedback, and save/cancel callback pathways. Test Capabilities keeps its model selector and rendered capability result state. Keep tests at the page boundary with mock props rather than mocking fetch inside the new components.
 
@@ -122,7 +122,7 @@
 
   Run the focused test; expect it to fail before the extracted page exists.
 
-- [ ] **Step 2: Extract typed presentation pages without changing controller behavior.**
+- [x] **Step 2: Extract typed presentation pages without changing controller behavior.**
 
   Move inferred endpoint form shapes and initialization into `frontend/src/workspace/forms.ts` if this makes prop boundaries explicit; preserve property names and defaults. Build:
 
@@ -132,11 +132,11 @@
 
   Use `PageHeader` + `WorkspacePanel` and descriptive page-root classes. Preserve `StaticCopy` treatment around existing static strings.
 
-- [ ] **Step 3: Verify both themes and visible workflow paths.**
+- [x] **Step 3: Verify both themes and visible workflow paths.**
 
   Run focused tests, full frontend tests, and build. Browser inspect Guide, Models (empty and configured state if available), and Capabilities in light/dark. Confirm endpoint form controls remain labeled, Guide action affordances are keyboard reachable, status/error messages remain visible, and no full-height blank panel displaces the active work.
 
-- [ ] **Step 4: Commit the configure group.**
+- [x] **Step 4: Commit the configure group.**
 
   Selectively stage Task 2 production, test, and required locale files; inspect staged diff and secret scan. Commit:
 

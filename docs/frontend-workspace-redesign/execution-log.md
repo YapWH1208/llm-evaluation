@@ -50,3 +50,27 @@
   was not covered. It was not needed because this tab strip does not own a
   visible tab panel, so the helper is removed in a focused follow-up rather
   than retaining unrequired keyboard behavior.
+
+## 2026-08-08 — Task 2: Guide, Models, and Capabilities
+
+- Red: `configure-pages.test.tsx` required a page-owned Models editor with its
+  inventory callbacks and a Capabilities selection inspector. The initial run
+  failed because `EndpointPages` did not exist. `guide.test.tsx` also failed
+  because the guide offered no direct `Open Models` action.
+- Green: added typed `ModelsPage` and `CapabilitiesPage` presentation
+  components. `App.tsx` still owns all endpoint/run configuration state and
+  passes the existing submit, test, capability-probe, declaration, and queue
+  callbacks through unchanged. The Guide now contains all seven steps and
+  direct existing-destination actions.
+- Visual refinement: added `align-items: start` to workspace split grids after
+  browser inspection showed the endpoint inventory panel stretching to the
+  editor height. The inventory now remains content-sized beside the form.
+- Verification: focused Configure tests passed; final `npm test -- --run`
+  passed (16 files, 52 tests), `npm run build` passed, and `git diff --check`
+  passed.
+- Browser review: Guide and Models were inspected in light theme; Models and
+  Capabilities were inspected in dark theme. Each page had one h1, no page
+  overflow, compact token-based panels, and reachable existing actions.
+  Viewport override successfully rendered Models at 390×844px in dark theme:
+  it used one 364px content track with no horizontal overflow. The temporary
+  override was reset afterwards.
