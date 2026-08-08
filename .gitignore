@@ -4,3 +4,6 @@
 /data
 /.vite
 reasonix.toml
+/.agents
+/.superdesign
+skills-lock.json
