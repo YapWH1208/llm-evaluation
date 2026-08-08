@@ -81,3 +81,20 @@
   exported the capability declaration renderer so their behaviors have direct
   tests. The red run failed for the absent exports; the focused six-test suite
   and frontend build then passed.
+
+## 2026-08-08 — Task 3: Workspace setup workbench
+
+- Red: `workspace-setup.test.tsx` first failed because `WorkspaceSetupPage`
+  did not exist, then failed because it did not accept the original setup
+  sections as children.
+- Green: created a four-mode (Inputs, Assets, Suites, Catalog) workbench. Its
+  legacy-section adapter keeps the existing five setup sections mounted and
+  uses `hidden` on inactive wrappers, preserving prompt, dataset, upload, and
+  suite form state rather than recreating it on each tab selection.
+- Targeted checks: Workspace, dataset-registration, and dataset-run tests
+  passed; the complete frontend suite passed (17 files, 58 tests), the build
+  passed, and `git diff --check` passed.
+- Browser review: Inputs and Assets rendered in dark theme; Catalog rendered
+  in light theme. The active workbench mode showed exactly its intended setup
+  region, Catalog retained both benchmark registry and dataset-cache panels,
+  and all inspected modes had no horizontal overflow.

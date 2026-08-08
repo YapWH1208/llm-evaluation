@@ -155,19 +155,19 @@
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/workspace/forms.ts`
 
-- [ ] **Step 1: Write failing tab/workflow preservation tests.**
+- [x] **Step 1: Write failing tab/workflow preservation tests.**
 
   Cover inputs, judgments, multimodal setup, and catalog/launch states. Assert switching tabs does not reset a caller-owned form object and that submit controls still call the original handlers. Test validation/error summaries remain associated with their inputs.
 
-- [ ] **Step 2: Extract the Workspace page into four local workbench tabs.**
+- [x] **Step 2: Extract the Workspace page into four local workbench tabs.**
 
   Use stable IDs (`inputs`, `judgments`, `multimodal`, `catalog`) and the existing current view selection. Place each existing form and catalog workflow inside its relevant pane; do not omit a conditional section because it is less common. On desktop, place concise progress/status context beside tab controls and use a secondary inspector where existing contextual help/data exists. On narrow screens, stack form sections and let the tab strip scroll horizontally rather than clipping controls.
 
-- [ ] **Step 3: Validate long-form usability.**
+- [x] **Step 3: Validate long-form usability.**
 
   Run focused/full frontend tests and build. Browser inspect the full Workspace page in both themes: tab switch, each form’s primary action, catalogue transition, validation state, and scroll alignment. Retry mobile viewport control; if unavailable, assert the narrow breakpoint has no fixed width/overflow trap with a DOM/CSS test and record the evidence.
 
-- [ ] **Step 4: Commit the Workspace workbench.**
+- [x] **Step 4: Commit the Workspace workbench.**
 
   Commit after review:
 
