@@ -167,4 +167,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("실행 인벤토리");
     expect(translateStaticText("ms", phrases[6])).toBe("Pilih petikan untuk memeriksa bukti kitar hayat dan artifak yang boleh dieksport.");
   });
+
+  it("renders run launch and queue guidance as complete phrases", () => {
+    const phrases = [
+      "Launch immutable evaluation snapshots, then inspect their operational and evidence trail.",
+      "Queue dataset evaluation",
+      "Choose an available dataset, prompt version, and endpoint for a new evaluation.",
+      "Selected run inspector",
+      "Select a run from the persistent inventory to open its summary, evidence, and lifecycle history.",
+      "Queue inventory",
+      "Virtualised rows keep high-volume queues responsive while retaining task-level operational controls.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("启动不可变的评测快照，然后检查其运行和证据轨迹。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Mettre l’évaluation du jeu de données en file");
+    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie einen verfügbaren Datensatz, eine Prompt-Version und einen Endpunkt für eine neue Evaluierung aus.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Проверка выбранного запуска");
+    expect(translateStaticText("ja", phrases[4])).toBe("永続的な一覧から実行を選択して、概要、証拠、ライフサイクル履歴を開きます。");
+    expect(translateStaticText("ko", phrases[5])).toBe("대기열 인벤토리");
+    expect(translateStaticText("ms", phrases[6])).toBe("Baris maya memastikan baris berjumlah tinggi responsif sambil mengekalkan kawalan operasi pada peringkat tugas.");
+  });
 });
