@@ -109,6 +109,29 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
     resolved, headers = resolve_dataset_source("hf://owner/repository/path/to/file.jsonl", "main", "huggingface", settings)
     assert resolved == "https://huggingface.co/datasets/owner/repository/resolve/main/path/to/file.jsonl"
     assert headers == {"Authorization": "Bearer test-token"}
+
+    canonical, _ = resolve_dataset_source(
+        "hf://datasets/owner/repository/path with spaces/file.jsonl",
+        "release/1",
+        None,
+        settings,
+    )
+    assert canonical == (
+        "https://huggingface.co/datasets/owner/repository/resolve/"
+        "release%2F1/path%20with%20spaces/file.jsonl"
+    )
+
+    for unsupported_type in ("models", "spaces"):
+        with pytest.raises(DatasetError, match=f"repository type {unsupported_type!r} is not supported"):
+            resolve_dataset_source(
+                f"hf://{unsupported_type}/owner/repository/file.jsonl",
+                "main",
+                None,
+                settings,
+            )
+
+    with pytest.raises(DatasetError, match="canonical dataset sources"):
+        resolve_dataset_source("hf://datasets/owner/repository", "main", None, settings)
     with pytest.raises(DatasetError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)
     with pytest.raises(DatasetError, match="not configured"):
@@ -157,6 +180,32 @@ def test_dataset_download_follows_validated_redirects(tmp_path: Path, monkeypatc
     assert digest == hashlib.sha256(b'{"question":"q","answer":"a"}\n').hexdigest()
     assert (tmp_path / "out.jsonl").read_bytes() == b'{"question":"q","answer":"a"}\n'
     assert calls == ["https://datasets.example.test/start.jsonl", "https://datasets.example.test/final.jsonl"]
+
+
+def test_hugging_face_dataset_download_follows_resolve_cache_redirect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(
+                307,
+                headers={"location": "/api/resolve-cache/datasets/owner/repository/revision/hello.txt"},
+            )
+        return httpx.Response(200, content=b"hello")
+
+    _redirect_transport(monkeypatch, handler, extra_public_hosts=("huggingface.co",))
+    source, _ = resolve_dataset_source("hf://datasets/owner/repository/hello.txt", "main", None)
+    digest = write_dataset_source(source, tmp_path / "hello.txt", {})
+
+    assert digest == hashlib.sha256(b"hello").hexdigest()
+    assert calls == [
+        "https://huggingface.co/datasets/owner/repository/resolve/main/hello.txt",
+        "https://huggingface.co/api/resolve-cache/datasets/owner/repository/revision/hello.txt",
+    ]
 
 
 def test_dataset_download_rejects_redirect_to_private_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -45,18 +45,35 @@ def resolve_dataset_source(
 
     parsed = urlparse(source_url)
     if parsed.scheme == "hf":
-        repository = parsed.netloc
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not repository or len(path_parts) < 2:
-            raise DatasetError("Hugging Face sources must use hf://owner/repository/path/to/file.")
-        repository = f"{repository}/{path_parts[0]}"
-        relative_path = "/".join(path_parts[1:])
+        if parsed.netloc in {"models", "spaces"}:
+            raise DatasetError(
+                f"Hugging Face repository type {parsed.netloc!r} is not supported; "
+                "dataset sources must use hf://datasets/owner/repository/path/to/file."
+            )
+        if parsed.netloc == "datasets":
+            if len(path_parts) < 3:
+                raise DatasetError(
+                    "Hugging Face canonical dataset sources must use "
+                    "hf://datasets/owner/repository/path/to/file."
+                )
+            repository = "/".join(path_parts[:2])
+            relative_path = "/".join(path_parts[2:])
+        else:
+            if not parsed.netloc or len(path_parts) < 2:
+                raise DatasetError(
+                    "Hugging Face sources must use hf://owner/repository/path/to/file "
+                    "or hf://datasets/owner/repository/path/to/file."
+                )
+            repository = f"{parsed.netloc}/{path_parts[0]}"
+            relative_path = "/".join(path_parts[1:])
         resolved = f"https://huggingface.co/datasets/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
     elif parsed.scheme == "https" and parsed.netloc:
         resolved = source_url
     else:
         raise DatasetError(
-            "Dataset source must be an HTTPS URL or hf://owner/repository/path. "
+            "Dataset source must be an HTTPS URL, hf://owner/repository/path, "
+            "or hf://datasets/owner/repository/path. "
             "Use the upload endpoint for local files."
         )
 
