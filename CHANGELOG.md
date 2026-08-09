@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## 0.3.0 — 2026-08-09
+
 ### Added
 
 - The Runs workspace now offers a compact shared endpoint/preflight context
@@ -76,6 +78,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Workspace tabs expose their tab panels to assistive technology, and the
   setup workbench maps inputs, assets, suites, and catalog panes by name
   instead of by section position.
+
+### Docs
+
+- The end-to-end evaluation workflow guide covers dataset quick-start runs
+  and handoff of prepared datasets from the catalog into the Runs workspace.
 
 ## 0.2.0 — 2026-08-07
 
