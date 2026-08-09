@@ -123,4 +123,39 @@ describe("dataset catalog", () => {
     resolveDelete();
     await waitFor(() => expect(button.disabled).toBe(false));
   }, 10_000);
+
+  it("hands a ready dataset to the Runs launcher without queueing automatically", async () => {
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2+2?", answer: "4" }],
+    });
+    const createDatasetRun = vi.spyOn(api, "createDatasetRun");
+    const { user } = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start evaluation" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
+    expect(screen.getByLabelText("Dataset")).toHaveValue(readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
+    expect(screen.getByLabelText("Reference field")).toHaveValue("answer");
+    expect(createDatasetRun).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("refreshes schema mapping when the same dataset is handed off again", async () => {
+    const preview = vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [],
+    });
+    const { user } = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Runs" }));
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
+    await user.click(screen.getByRole("button", { name: "Datasets" }));
+    await user.click(screen.getByRole("button", { name: "Start evaluation" }));
+
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Input field")).toHaveValue("question");
+    expect(screen.getByLabelText("Reference field")).toHaveValue("answer");
+  }, 10_000);
 });

@@ -413,7 +413,71 @@
   align-items: start;
   display: grid;
   gap: .85rem;
-  grid-template-columns: minmax(16rem, .52fr) minmax(0, 1.48fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-run-context-controls {
+  align-items: end;
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: minmax(14rem, 1fr) auto minmax(11rem, .55fr);
+}
+
+.workspace-run-context-controls > label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: .78rem;
+  gap: .3rem;
+}
+
+.workspace-preflight-actions {
+  flex-wrap: nowrap;
+}
+
+.workspace-preflight-state {
+  align-content: center;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: grid;
+  font-size: .75rem;
+  gap: .15rem;
+  min-height: 2.45rem;
+  padding: .45rem .65rem;
+}
+
+.workspace-preflight-state strong {
+  color: var(--text);
+}
+
+.workspace-preflight-state.is-ready {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+}
+
+.workspace-preflight-state.is-blocked {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+
+.workspace-run-launcher {
+  align-content: start;
+}
+
+.workspace-launch-note {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: .78rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: .65rem .7rem;
+}
+
+.workspace-modality-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
 }
 
 .workspace-operation-toolbar {
@@ -797,10 +861,15 @@
   .workspace-split--catalog,
   .workspace-split--runs,
   .workspace-run-launch-grid,
+  .workspace-run-context-controls,
   .workspace-field-grid--two,
   .workspace-field-grid--three,
   .workspace-field-grid--five {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-preflight-actions {
+    flex-wrap: wrap;
   }
 
   .workspace-capability-row,

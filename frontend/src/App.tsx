@@ -21,6 +21,7 @@ import {
   ReportType,
   Review,
   ReviewAgreement,
+  RunPreflight,
   RunSummary,
   RunLogEntry,
   SampleAttempt,
@@ -72,7 +73,7 @@ const initialEndpoint: EndpointForm = {
 const initialPrompt = { name: "", version: "1", prompt_type: "user_custom", system_message: "", user_template: "{{ question }}", few_shot_examples: "[]", output_format: "{}", response_parser: "{}", scoring_rule: "{}", change_log: "" };
 const initialDataset = { dataset_id: "", version: "1", revision: "default", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "" };
 const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
-const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", reference_field: "", sample_limit: "100", model_endpoint_id: "" };
+const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "" };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
@@ -187,6 +188,11 @@ export default function App() {
   const [promptForm, setPromptForm] = useState(initialPrompt);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
+  const [datasetRunFields, setDatasetRunFields] = useState<string[]>([]);
+  const [datasetRunFieldsError, setDatasetRunFieldsError] = useState<string | null>(null);
+  const [datasetRunFieldsLoading, setDatasetRunFieldsLoading] = useState(false);
+  const [datasetRunSchemaRequest, setDatasetRunSchemaRequest] = useState(0);
+  const [datasetHandoffId, setDatasetHandoffId] = useState<string | null>(null);
   const [suiteForm, setSuiteForm] = useState(initialSuite);
   const [reviewForm, setReviewForm] = useState(initialReview);
   const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
@@ -199,6 +205,9 @@ export default function App() {
   const [userForm, setUserForm] = useState(initialUser);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [selectedBenchmark, setSelectedBenchmark] = useState("text-quick-check@1.0.0");
+  const [selectedQuickStartBenchmark, setSelectedQuickStartBenchmark] = useState("text-quick-check@1.0.0");
+  const [quickStartSampleLimit, setQuickStartSampleLimit] = useState("3");
+  const [launchPreflight, setLaunchPreflight] = useState<{ kind: "quick-start" | "dataset"; result: RunPreflight } | null>(null);
   const [runRequestBody, setRunRequestBody] = useState("{}");
   const [runMaxConcurrency, setRunMaxConcurrency] = useState("");
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
@@ -234,6 +243,47 @@ export default function App() {
 
   const completedRuns = useMemo(() => runs.filter((run) => run.status.startsWith("completed")), [runs]);
   const selectedRunInfo = runs.find((run) => run.id === selectedRun) ?? null;
+  const availableEndpoints = useMemo(() => endpoints.filter((endpoint) => endpoint.status === "available"), [endpoints]);
+  const quickStartBenchmarks = useMemo(() => benchmarks.filter((benchmark) => benchmark.source === "builtin" && ["available", "enabled"].includes(benchmark.status)), [benchmarks]);
+  const selectedQuickStart = quickStartBenchmarks.find((benchmark) => `${benchmark.benchmark_id}@${benchmark.version}` === selectedQuickStartBenchmark) ?? quickStartBenchmarks[0] ?? null;
+  const selectedDatasetForRun = datasets.find((dataset) => dataset.id === datasetRunForm.dataset_version_id) ?? null;
+
+  useEffect(() => {
+    if (!selectedQuickStart) return;
+    const benchmarkKey = `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}`;
+    if (benchmarkKey !== selectedQuickStartBenchmark) setSelectedQuickStartBenchmark(benchmarkKey);
+    const manifestCount = Number(selectedQuickStart.manifest.sample_count);
+    setQuickStartSampleLimit(Number.isFinite(manifestCount) && manifestCount > 0 ? String(manifestCount) : "1");
+  }, [selectedQuickStart?.id]);
+
+  useEffect(() => {
+    const datasetId = datasetRunForm.dataset_version_id;
+    if (!datasetId) {
+      setDatasetRunFields([]);
+      setDatasetRunFieldsError(null);
+      setDatasetRunFieldsLoading(false);
+      return;
+    }
+    let disposed = false;
+    setDatasetRunFields([]);
+    setDatasetRunFieldsError(null);
+    setDatasetRunFieldsLoading(true);
+    void api.previewDataset(datasetId, 5).then((preview) => {
+      if (disposed) return;
+      const fields = Array.from(new Set(preview.fields.map(String).filter(Boolean)));
+      const dataset = datasets.find((item) => item.id === datasetId);
+      const inputField = dataset?.input_field && fields.includes(dataset.input_field) ? dataset.input_field : fields[0] ?? "";
+      const referenceField = dataset?.reference_field && fields.includes(dataset.reference_field) ? dataset.reference_field : fields.find((field) => field !== inputField) ?? fields[0] ?? "";
+      setDatasetRunFields(fields);
+      setDatasetRunFieldsError(fields.length === 0 ? t("runLauncher.schemaEmpty") : null);
+      setDatasetRunForm((current) => current.dataset_version_id === datasetId ? { ...current, input_field: inputField, reference_field: referenceField } : current);
+    }).catch((error: unknown) => {
+      if (disposed) return;
+      setDatasetRunFieldsError(error instanceof Error ? error.message : t("runLauncher.schemaEmpty"));
+      setDatasetRunForm((current) => current.dataset_version_id === datasetId ? { ...current, input_field: "", reference_field: "" } : current);
+    }).finally(() => { if (!disposed) setDatasetRunFieldsLoading(false); });
+    return () => { disposed = true; };
+  }, [datasetRunForm.dataset_version_id, datasetRunSchemaRequest, selectedDatasetForRun?.input_field, selectedDatasetForRun?.reference_field]);
 
   useEffect(() => {
     if (!selectedRun || !selectedRunInfo || !["queued", "running"].includes(selectedRunInfo.status)) return;
@@ -369,11 +419,13 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function preflightRun(endpointId: string) {
-    setBusy(`preflight-${endpointId}`);
+  async function preflightRun(endpointId: string, sampleLimit: number | null = null, benchmarkKey = selectedBenchmark) {
+    setLaunchPreflight(null);
+    setBusy("preflight-quick-start");
     try {
-      const [benchmarkId, benchmarkVersion] = selectedBenchmark.split("@", 2);
-      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
+      const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
+      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
+      setLaunchPreflight({ kind: "quick-start", result: preflight });
       const cost = preflight.estimated_cost === null ? translateStaticTemplate(locale, "cost not configured") : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
       showNotice(preflight.can_queue ? "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}." : "Preflight blocked: {{issues}}", preflight.can_queue
         ? { samples: preflight.sample_count, requests: preflight.estimated_requests, tokens: preflight.estimated_input_tokens + preflight.estimated_output_tokens, cost }
@@ -381,11 +433,11 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function createRun(endpointId: string) {
+  async function createRun(endpointId: string, sampleLimit: number | null = null, benchmarkKey = selectedBenchmark) {
     setBusy(`run-${endpointId}`);
     try {
-      const [benchmarkId, benchmarkVersion] = selectedBenchmark.split("@", 2);
-      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion);
+      const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
+      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       await selectRun(run.id);
       setView("runs");
       showNotice("{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: `${benchmarkId}@${benchmarkVersion}` });
@@ -551,17 +603,48 @@ export default function App() {
         model_endpoint_id: datasetRunForm.model_endpoint_id,
         dataset_version_id: datasetRunForm.dataset_version_id,
         prompt_package_id: datasetRunForm.prompt_package_id || null,
+        input_field: datasetRunForm.input_field,
         reference_field: datasetRunForm.reference_field,
         sample_limit: Number(datasetRunForm.sample_limit) || 100,
       });
       setNotice(t("datasetRun.queued"));
-      setDatasetRunForm(initialDatasetRun);
+      setDatasetRunForm({ ...initialDatasetRun, model_endpoint_id: datasetRunForm.model_endpoint_id });
+      setDatasetHandoffId(null);
       await refresh();
     } catch (error) {
       showError(error);
     } finally {
       setBusy(null);
     }
+  }
+
+  async function preflightDatasetRun() {
+    setLaunchPreflight(null);
+    setBusy("preflight-dataset");
+    try {
+      const result = await api.validateDatasetRun({
+        model_endpoint_id: datasetRunForm.model_endpoint_id,
+        dataset_version_id: datasetRunForm.dataset_version_id,
+        prompt_package_id: datasetRunForm.prompt_package_id || null,
+        input_field: datasetRunForm.input_field,
+        reference_field: datasetRunForm.reference_field,
+        sample_limit: Number(datasetRunForm.sample_limit) || 100,
+      });
+      setLaunchPreflight({ kind: "dataset", result });
+      showNotice(result.can_queue ? "Preflight ready: {{samples}} samples." : "Preflight blocked: {{issues}}", result.can_queue ? { samples: result.sample_count } : { issues: result.issues.join(" ") });
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startDatasetEvaluation(dataset: Dataset) {
+    setDatasetRunForm((current) => ({ ...current, dataset_version_id: dataset.id, input_field: "", reference_field: "" }));
+    setDatasetRunSchemaRequest((current) => current + 1);
+    setDatasetHandoffId(dataset.id);
+    setLaunchPreflight(null);
+    setView("runs");
   }
 
   async function queueSuite(suiteId: string, endpointId: string) {
@@ -768,7 +851,7 @@ export default function App() {
 
       {view === "benchmarks" && <BenchmarksPage benchmarks={benchmarks} busy={busy} onToggleStatus={(benchmark) => void updateBenchmarkStatus(benchmark)} />}
 
-      {view === "datasets" && <DatasetsPage busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onOpenWorkspace={() => setView("workspace")} onPause={pauseDataset} onPrepare={prepareDataset} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} />}
+      {view === "datasets" && <DatasetsPage busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onOpenWorkspace={() => setView("workspace")} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} />}
 
       {view === "suites" && <SuitesPage busy={busy} endpoints={endpoints} onOpenWorkspace={() => setView("workspace")} onQueue={(suiteId, endpointId) => void queueSuite(suiteId, endpointId)} suites={suites} />}
 
@@ -782,9 +865,34 @@ export default function App() {
 
       {view === "runs" && <RunsPage
         inspector={selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
-        launcher={<form className="form" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}><label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => { const next = event.target.value; const dataset = datasets.find((item) => item.id === next); setDatasetRunForm((current) => ({ ...current, dataset_version_id: next, reference_field: dataset?.reference_field ?? "" })); }}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>{(() => { const selected = datasets.find((item) => item.id === datasetRunForm.dataset_version_id); return selected?.input_field ? <p className="muted">{t("datasetRun.inputField")}: <span data-i18n-preserve>{selected.input_field}</span></p> : null; })()}{datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}<label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value })}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label><label>{t("datasetRun.referenceField")}<input required value={datasetRunForm.reference_field} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, reference_field: event.target.value })} placeholder={t("datasetRun.referenceFieldHint")} /></label><label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value })} /></label><label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value })}><option value="">—</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label><button className="primary" disabled={busy === "dataset-run"}>{t("datasetRun.queue")}</button></form>}
+        launcher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
+          <label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => { setDatasetHandoffId(null); setLaunchPreflight(null); setDatasetRunForm((current) => ({ ...current, dataset_version_id: event.target.value, input_field: "", reference_field: "" })); }}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>
+          {datasetHandoffId === datasetRunForm.dataset_version_id && <p className="workspace-launch-note">{t("runLauncher.datasetHandoff")}</p>}
+          {datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}
+          {datasetRunFieldsLoading && <p className="muted">{t("runLauncher.schemaLoading")}</p>}
+          {datasetRunFieldsError && <p className="error" role="alert" data-i18n-preserve>{datasetRunFieldsError}</p>}
+          <div className="workspace-field-grid workspace-field-grid--two">
+            <label>{t("datasetRun.inputField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0} required value={datasetRunForm.input_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, input_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
+            <label>{t("datasetRun.referenceField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0} required value={datasetRunForm.reference_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, reference_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
+          </div>
+          <label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value }); }}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
+          <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
+          <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || !datasetRunForm.input_field || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
+        </form>}
         onSelect={(runId) => void selectRun(runId)}
-        preflight={<div className="actions">{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button className="secondary" key={endpoint.id} disabled={busy === `preflight-${endpoint.id}`} onClick={() => void preflightRun(endpoint.id)} type="button">{busy === `preflight-${endpoint.id}` ? "Checking…" : <>Preflight <span data-i18n-preserve>{endpoint.display_name}</span></>}</button>)}</div>}
+        preflight={<div className="workspace-run-context-controls">
+          <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
+          <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || !datasetRunForm.dataset_version_id || !datasetRunForm.input_field || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
+          <div aria-live="polite" className={`workspace-preflight-state ${launchPreflight?.result.can_queue ? "is-ready" : launchPreflight ? "is-blocked" : ""}`} role="status"><strong>{busy === "preflight-quick-start" || busy === "preflight-dataset" ? t("runLauncher.checking") : launchPreflight?.result.can_queue ? t("runLauncher.ready") : launchPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{launchPreflight && !launchPreflight.result.can_queue && <span data-i18n-preserve>{launchPreflight.result.issues.join(" ")}</span>}</div>
+        </div>}
+        quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>
+          <label>{t("runLauncher.quickStartBenchmark")}<select aria-label={t("runLauncher.quickStartBenchmark")} required value={selectedQuickStart ? `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}` : ""} onChange={(event) => { const benchmark = quickStartBenchmarks.find((item) => `${item.benchmark_id}@${item.version}` === event.target.value); setSelectedQuickStartBenchmark(event.target.value); setQuickStartSampleLimit(String(Number(benchmark?.manifest.sample_count) || 1)); setLaunchPreflight(null); }}><option value="">—</option>{quickStartBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name}</option>)}</select></label>
+          {selectedQuickStart && <div className="workspace-modality-tags">{(Array.isArray(selectedQuickStart.manifest.modalities) ? selectedQuickStart.manifest.modalities : []).map((modality) => <span className="badge" data-i18n-preserve key={String(modality)}>{String(modality)}</span>)}</div>}
+          <label>{t("datasetRun.promptPackage")}<select value={selectedPromptId} onChange={(event) => { setSelectedPromptId(event.target.value); setLaunchPreflight(null); }}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
+          <label>{t("datasetRun.sampleLimit")}<input min={1} max={10000} required type="number" value={quickStartSampleLimit} onChange={(event) => { setQuickStartSampleLimit(event.target.value); setLaunchPreflight(null); }} /></label>
+          <p className="workspace-launch-note">{t("runLauncher.offlineHint")}</p>
+          <button className="primary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === `run-${datasetRunForm.model_endpoint_id}`}>{t("runLauncher.queueQuickStart")}</button>
+        </form>}
         renderActions={(run) => <><button className="secondary" onClick={() => void selectRun(run.id)} type="button">Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}</>}
         runs={runs}
         selectedRunId={selectedRun}
