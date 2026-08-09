@@ -127,4 +127,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 팩, 지원되는 모달리티 및 새 실행에 사용되는 가용성 상태를 검토합니다.");
     expect(translateStaticText("ms", phrases[6])).toBe("Urus versi sumber, data cache, lesen dan pemetaan medan sambil mengekalkan bukti set data yang dipilih dalam paparan.");
   });
+
+  it("renders dataset and suite guidance as complete phrases", () => {
+    const phrases = [
+      "No dataset versions",
+      "Register a dataset source from the Workspace catalog, then return here to prepare, validate, and inspect it.",
+      "Dataset inventory",
+      "Select a source version to inspect its cache, metadata, and lifecycle actions.",
+      "Open suite builder",
+      "Compose versioned benchmark sets and queue them on ready endpoints without losing the benchmark evidence behind each suite.",
+      "No evaluation suites",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("没有数据集版本");
+    expect(translateStaticText("fr", phrases[1])).toBe("Enregistrez une source de jeu de données depuis le catalogue de l’espace de travail, puis revenez ici pour la préparer, la valider et l’examiner.");
+    expect(translateStaticText("de", phrases[2])).toBe("Datensatzübersicht");
+    expect(translateStaticText("ru", phrases[3])).toBe("Выберите версию источника, чтобы изучить её кэш, метаданные и действия жизненного цикла.");
+    expect(translateStaticText("ja", phrases[4])).toBe("スイートビルダーを開く");
+    expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 세트를 구성하고 각 스위트의 벤치마크 증거를 유지한 채 준비된 엔드포인트에서 대기열에 추가합니다.");
+    expect(translateStaticText("ms", phrases[6])).toBe("Tiada set penilaian");
+  });
 });
