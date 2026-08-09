@@ -147,4 +147,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 세트를 구성하고 각 스위트의 벤치마크 증거를 유지한 채 준비된 엔드포인트에서 대기열에 추가합니다.");
     expect(translateStaticText("ms", phrases[6])).toBe("Tiada set penilaian");
   });
+
+  it("renders setup and run inventory guidance as complete phrases", () => {
+    const phrases = [
+      "Create a suite from the Workspace catalog to define versioned benchmark composition and default execution settings.",
+      "Suite inventory",
+      "Choose a versioned suite to inspect composition and queue it on an available endpoint.",
+      "Build versioned inputs, attach validated media, compose suites, and inspect the catalog without leaving setup.",
+      "4 workbench modes",
+      "Run inventory",
+      "Select a snapshot to inspect lifecycle evidence and exportable artifacts.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("从工作区目录创建套件，以定义版本化基准测试组合和默认执行设置。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Inventaire des suites");
+    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie eine versionierte Suite aus, um ihre Zusammensetzung zu prüfen und sie bei einem verfügbaren Endpunkt einzureihen.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Создавайте версионированные входные данные, прикрепляйте проверенные медиафайлы, составляйте наборы и изучайте каталог, не покидая настройку.");
+    expect(translateStaticText("ja", phrases[4])).toBe("4 つのワークベンチモード");
+    expect(translateStaticText("ko", phrases[5])).toBe("실행 인벤토리");
+    expect(translateStaticText("ms", phrases[6])).toBe("Pilih petikan untuk memeriksa bukti kitar hayat dan artifak yang boleh dieksport.");
+  });
 });
