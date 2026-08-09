@@ -107,4 +107,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", guidance[1])).toBe("필터는 이 인벤토리에만 적용되며 레지스트리 레코드와 운영 제어 기능은 로드된 카탈로그에서 계속 사용할 수 있습니다.");
     expect(translateStaticText("ms", guidance[2])).toBe("Pantau kerja beratur, utamakan tugas yang layak dan jejak setiap tugas kembali kepada larian tidak berubahnya.");
   });
+
+  it("renders endpoint and catalog guidance as complete phrases", () => {
+    const phrases = [
+      "Connection, rate-limit, and cost settings remain editable without exposing stored credentials.",
+      "These defaults are merged into a newly queued benchmark run without changing a saved endpoint.",
+      "Inspect detected capability evidence separately from the declarations used by run compatibility checks.",
+      "No endpoints available",
+      "Choose an endpoint to inspect its detection and declaration evidence.",
+      "Inspect versioned benchmark packs, their supported modalities, and the availability state used by new runs.",
+      "Manage source versions, cached data, licenses, and field mapping while keeping the selected dataset’s evidence in view.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("连接、速率限制和成本设置仍可编辑，同时不会暴露已存储的凭据。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Ces valeurs par défaut sont fusionnées dans une nouvelle exécution de benchmark mise en file sans modifier un point de terminaison enregistré.");
+    expect(translateStaticText("de", phrases[2])).toBe("Prüfen Sie erkannte Fähigkeitsnachweise getrennt von den Deklarationen, die von Kompatibilitätsprüfungen für Ausführungen verwendet werden.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Нет доступных конечных точек");
+    expect(translateStaticText("ja", phrases[4])).toBe("エンドポイントを選択して、その検出および宣言の証拠を確認します。");
+    expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 팩, 지원되는 모달리티 및 새 실행에 사용되는 가용성 상태를 검토합니다.");
+    expect(translateStaticText("ms", phrases[6])).toBe("Urus versi sumber, data cache, lesen dan pemetaan medan sambil mengekalkan bukti set data yang dipilih dalam paparan.");
+  });
 });
