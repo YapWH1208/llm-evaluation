@@ -8,6 +8,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The Runs workspace now offers a compact shared endpoint/preflight context
+  with separate quick-start and dataset launch cards. Quick start exposes the
+  small deterministic built-in text, image, audio, video, and multimodal
+  fixtures for offline smoke testing.
+- Ready datasets can hand off directly from the catalog to the Runs workspace,
+  where input and reference fields are selected from the prepared dataset
+  schema before preflight or queueing.
 - Dataset evaluation runs can explicitly select an input field; the chosen input
   and reference fields are frozen in the run snapshot, while clients that omit
   the input field retain the legacy first-string behavior.
@@ -21,6 +28,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Failed and other inactive, non-downloaded dataset registrations keep their
+  Edit and Delete actions even when no cache exists, while active download,
+  verification, preparation, and removal states suppress conflicting changes.
 - Canonical Hugging Face dataset URIs such as
   `hf://datasets/hf-internal-testing/textfolder/hello.txt` now resolve correctly,
   while the existing shorthand remains supported and unsupported repository types
