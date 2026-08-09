@@ -317,4 +317,12 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("증거 샘플 선택");
     expect(translateStaticText("ms", phrases[6])).toBe("Konteks semakan");
   });
+
+  it("renders review workflow guidance as complete phrases", () => {
+    expect(translateStaticText("zh-CN", "Choose the evaluation snapshot and sample before opening human or independent judge workflows.")).toBe("在打开人工或独立评审工作流前，选择评测快照和样本。");
+    expect(translateStaticText("fr", "Review run")).toBe("Exécution à examiner");
+    expect(translateStaticText("de", "Review sample")).toBe("Zu prüfende Stichprobe");
+    expect(translateStaticText("ru", "Select a run to begin a human or judge review.")).toBe("Выберите запуск, чтобы начать проверку человеком или судьёй.");
+    expect(translateStaticText("ja", "Human review workflow")).toBe("人によるレビューのワークフロー");
+  });
 });

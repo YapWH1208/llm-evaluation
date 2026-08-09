@@ -343,6 +343,7 @@ const words: Record<string, readonly string[]> = {
 const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
   en: {},
   "zh-CN": {
+    "Choose the evaluation snapshot and sample before opening human or independent judge workflows.": "在打开人工或独立评审工作流前，选择评测快照和样本。",
     "Overview": "概览", "Configure": "配置", "Catalog": "目录", "Operations": "运行", "Insights": "洞察", "Reporting": "报告", "Quality review": "质量审核", "Administration": "管理", "Evaluation workflow": "评测工作流",
     "OpenAI-compatible Chat Completions": "兼容 OpenAI 的聊天补全",
     "OpenAI-compatible Responses API": "兼容 OpenAI 的 Responses API",
@@ -353,6 +354,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "自定义 HTTP JSON",
   },
   fr: {
+    "Review run": "Exécution à examiner",
     "Overview": "Vue d’ensemble", "Configure": "Configurer", "Catalog": "Catalogue", "Operations": "Opérations", "Insights": "Analyses", "Reporting": "Rapports", "Quality review": "Revue qualité", "Administration": "Administration", "Evaluation workflow": "Flux de travail d’évaluation",
     "OpenAI-compatible Chat Completions": "Complétions de chat compatibles OpenAI",
     "OpenAI-compatible Responses API": "API Responses compatible OpenAI",
@@ -363,6 +365,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "JSON HTTP personnalisé",
   },
   de: {
+    "Review sample": "Zu prüfende Stichprobe",
     "Overview": "Übersicht", "Configure": "Konfigurieren", "Catalog": "Katalog", "Operations": "Betrieb", "Insights": "Erkenntnisse", "Reporting": "Berichte", "Quality review": "Qualitätsprüfung", "Administration": "Verwaltung", "Evaluation workflow": "Bewertungsablauf",
     "OpenAI-compatible Chat Completions": "OpenAI-kompatible Chat-Vervollständigungen",
     "OpenAI-compatible Responses API": "OpenAI-kompatible Responses-API",
@@ -373,6 +376,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Benutzerdefiniertes HTTP-JSON",
   },
   ru: {
+    "Select a run to begin a human or judge review.": "Выберите запуск, чтобы начать проверку человеком или судьёй.",
     "Overview": "Обзор", "Configure": "Настройка", "Catalog": "Каталог", "Operations": "Операции", "Insights": "Аналитика", "Reporting": "Отчёты", "Quality review": "Проверка качества", "Administration": "Администрирование", "Evaluation workflow": "Рабочий процесс оценки",
     "OpenAI-compatible Chat Completions": "Совместимые с OpenAI чат-завершения",
     "OpenAI-compatible Responses API": "Совместимый с OpenAI API Responses",
@@ -383,6 +387,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Пользовательский HTTP JSON",
   },
   ja: {
+    "Human review workflow": "人によるレビューのワークフロー",
     "Overview": "概要", "Configure": "設定", "Catalog": "カタログ", "Operations": "運用", "Insights": "インサイト", "Reporting": "レポート", "Quality review": "品質レビュー", "Administration": "管理", "Evaluation workflow": "評価ワークフロー",
     "OpenAI-compatible Chat Completions": "OpenAI 互換チャット補完",
     "OpenAI-compatible Responses API": "OpenAI 互換 Responses API",
