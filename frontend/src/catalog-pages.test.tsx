@@ -135,6 +135,44 @@ describe("catalog workspace pages", () => {
     expect(onValidate).toHaveBeenCalledWith(readyDataset);
   });
 
+  it("keeps edit and delete available for a failed dataset without a cache", async () => {
+    const user = userEvent.setup();
+    const failedDataset = {
+      ...waitingDataset,
+      error_message: "Source file not found.",
+      status: "failed",
+    };
+    const onDelete = vi.fn();
+    const onStartEdit = vi.fn();
+    renderCatalogPage(<DatasetInspector busy={null} dataset={failedDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={onDelete} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={onStartEdit} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(onStartEdit).toHaveBeenCalledOnce();
+    expect(onDelete).toHaveBeenCalledWith(failedDataset);
+    expect(screen.queryByRole("button", { name: "Validate cache" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses mutation actions while a dataset is actively preparing", () => {
+    renderCatalogPage(<DatasetInspector busy={null} dataset={{ ...waitingDataset, status: "preparing" }} editForm={datasetEditForm(waitingDataset)} editing onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download and verify" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+  });
+
+  it("starts an evaluation handoff for a ready dataset without queueing it", async () => {
+    const user = userEvent.setup();
+    const onStartEvaluation = vi.fn();
+    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStartEvaluation={onStartEvaluation} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Start evaluation" }));
+
+    expect(onStartEvaluation).toHaveBeenCalledWith(readyDataset);
+  });
+
   it("renders selected preview rows after loading the dataset inspection sample", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });

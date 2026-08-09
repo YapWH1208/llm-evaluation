@@ -10,6 +10,7 @@ type RunsPageProps = {
   launcher: ReactNode;
   onSelect: (runId: string) => void;
   preflight: ReactNode;
+  quickStartLauncher?: ReactNode;
   renderActions: (run: EvaluationRun) => ReactNode;
   runs: EvaluationRun[];
   selectedRunId: string | null;
@@ -37,13 +38,15 @@ export function RunInventory({ onSelect, renderActions, runs, selectedRunId }: O
   </WorkspacePanel>;
 }
 
-export function RunsPage({ inspector, launcher, onSelect, preflight, renderActions, runs, selectedRunId }: RunsPageProps) {
+export function RunsPage({ inspector, launcher, onSelect, preflight, quickStartLauncher, renderActions, runs, selectedRunId }: RunsPageProps) {
+  const { t } = useTranslation();
   const selectedVisible = runs.some((run) => run.id === selectedRunId);
   return <div className="workspace-page runs-page">
     <PageHeader description="Launch immutable evaluation snapshots, then inspect their operational and evidence trail." eyebrow="Operations" status={<>{runs.length} total runs</>} title="Runs" />
+    <WorkspacePanel className="workspace-run-context" description={t("runLauncher.contextDescription")} title={t("runLauncher.contextTitle")}>{preflight}</WorkspacePanel>
     <div className="workspace-run-launch-grid">
-      <WorkspacePanel description="Validate endpoint compatibility and capacity before a queue entry is created." title="Run preflight">{preflight}</WorkspacePanel>
-      <WorkspacePanel description="Choose an available dataset, prompt version, and endpoint for a new evaluation." title="Queue dataset evaluation">{launcher}</WorkspacePanel>
+      {quickStartLauncher && <WorkspacePanel description={t("runLauncher.quickStartDescription")} title={t("runLauncher.quickStartTitle")}>{quickStartLauncher}</WorkspacePanel>}
+      <WorkspacePanel description={t("runLauncher.datasetDescription")} title={t("datasetRun.title")}>{launcher}</WorkspacePanel>
     </div>
     <div className="workspace-split workspace-split--runs">
       <RunInventory onSelect={onSelect} renderActions={renderActions} runs={runs} selectedRunId={selectedRunId} />

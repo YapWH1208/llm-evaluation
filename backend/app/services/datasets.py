@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import zipfile
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from urllib.parse import quote, urljoin, urlparse
 from uuid import uuid4
@@ -33,6 +33,21 @@ class DatasetDownloadPaused(DatasetError):
 MAX_PREPARED_ARCHIVE_FILES = 10_000
 MAX_PREPARED_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_DOWNLOAD_REDIRECTS = 5
+MATERIAL_DATASET_SOURCE_FIELDS = (
+    "source_url",
+    "revision",
+    "checksum",
+    "license_text",
+    "credential_binding_id",
+)
+INACTIVE_DATASET_EDIT_RESET_STATUSES = frozenset({
+    DatasetStatus.NOT_DOWNLOADED.value,
+    DatasetStatus.UPDATE_AVAILABLE.value,
+    DatasetStatus.LICENSE_REQUIRED.value,
+    DatasetStatus.CREDENTIAL_REQUIRED.value,
+    DatasetStatus.CORRUPTED.value,
+    DatasetStatus.FAILED.value,
+})
 
 
 def resolve_dataset_source(
@@ -45,18 +60,25 @@ def resolve_dataset_source(
 
     parsed = urlparse(source_url)
     if parsed.scheme == "hf":
-        repository = parsed.netloc
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not repository or len(path_parts) < 2:
-            raise DatasetError("Hugging Face sources must use hf://owner/repository/path/to/file.")
-        repository = f"{repository}/{path_parts[0]}"
-        relative_path = "/".join(path_parts[1:])
+        if parsed.netloc == "datasets" and len(path_parts) >= 3:
+            repository = "/".join(path_parts[:2])
+            relative_path = "/".join(path_parts[2:])
+        else:
+            if not parsed.netloc or len(path_parts) < 2:
+                raise DatasetError(
+                    "Hugging Face sources must use hf://owner/repository/path/to/file "
+                    "or hf://datasets/owner/repository/path/to/file."
+                )
+            repository = f"{parsed.netloc}/{path_parts[0]}"
+            relative_path = "/".join(path_parts[1:])
         resolved = f"https://huggingface.co/datasets/{repository}/resolve/{quote(revision, safe='')}/{quote(relative_path, safe='/')}"
     elif parsed.scheme == "https" and parsed.netloc:
         resolved = source_url
     else:
         raise DatasetError(
-            "Dataset source must be an HTTPS URL or hf://owner/repository/path. "
+            "Dataset source must be an HTTPS URL, hf://owner/repository/path, "
+            "or hf://datasets/owner/repository/path. "
             "Use the upload endpoint for local files."
         )
 
@@ -501,15 +523,31 @@ def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -
 
 
 def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None) -> DatasetVersion:
-    dataset.dataset_id = dataset_id
-    dataset.version = version
-    dataset.revision = revision
-    dataset.source_url = source_url
-    dataset.checksum = checksum
-    dataset.license_text = license_text
-    dataset.credential_binding_id = credential_binding_id
-    dataset.input_field = input_field
-    dataset.reference_field = reference_field
+    values = {
+        "dataset_id": dataset_id,
+        "version": version,
+        "revision": revision,
+        "source_url": source_url,
+        "checksum": checksum,
+        "license_text": license_text,
+        "credential_binding_id": credential_binding_id,
+        "input_field": input_field,
+        "reference_field": reference_field,
+    }
+    current = {
+        field: getattr(dataset, field)
+        for field in (
+            *MATERIAL_DATASET_SOURCE_FIELDS,
+            "license_accepted_at",
+            "local_path",
+            "prepared_path",
+            "status",
+            "error_message",
+        )
+    }
+    values.update(dataset_edit_lifecycle_updates(current, values))
+    for field, value in values.items():
+        setattr(dataset, field, value)
     try:
         session.commit()
     except IntegrityError as error:
@@ -517,6 +555,38 @@ def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str
         raise DatasetError("Dataset revision already exists.") from error
     session.refresh(dataset)
     return dataset
+
+
+def dataset_edit_lifecycle_updates(
+    current: Mapping[str, object],
+    values: Mapping[str, object],
+) -> dict[str, object | None]:
+    """Reset stale inactive failures only after a material source correction."""
+
+    changed_fields = {
+        field
+        for field in MATERIAL_DATASET_SOURCE_FIELDS
+        if current.get(field) != values.get(field)
+    }
+    if (
+        not changed_fields
+        or current.get("local_path")
+        or current.get("prepared_path")
+        or current.get("status") not in INACTIVE_DATASET_EDIT_RESET_STATUSES
+    ):
+        return {}
+
+    lifecycle: dict[str, object | None] = {"error_message": None}
+    license_accepted_at = current.get("license_accepted_at")
+    if "license_text" in changed_fields:
+        license_accepted_at = None
+        lifecycle["license_accepted_at"] = None
+    lifecycle["status"] = (
+        DatasetStatus.LICENSE_REQUIRED.value
+        if values.get("license_text") and license_accepted_at is None
+        else DatasetStatus.NOT_DOWNLOADED.value
+    )
+    return lifecycle
 
 
 def _stringify_preview_value(value: object) -> str:

@@ -33,10 +33,12 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 ## Commands (repo root)
 
-- Backend tests: `python -m pytest -q` (pyproject.toml sets `pythonpath=["backend"]`). Single file: `python -m pytest tests/test_x.py -q`.
+- Install backend deps: `python -m pip install -e ".[dev]"` (editable install from repo root; `pythonpath=["backend"]` comes from pyproject.toml). No requirements.txt.
+- Backend tests: `python -m pytest -q` (config sets `pythonpath=["backend"]`, `testpaths=["tests"]`). Single file: `python -m pytest tests/test_x.py -q`.
 - Run API: `uvicorn app.main:app --app-dir backend --reload` (docs at `/docs` on port 8000).
 - DB CLI: `python -m app.cli database preview|initialize|validate` (migrations also run automatically at startup).
-- Frontend tests: `npm test -- --run` in `frontend/` — bare `npm test` is vitest **watch mode**.
+- Frontend deps/dev server: `npm ci` / `npm run dev` **inside `frontend/`** (vite, port 5173). Root `package-lock.json` is a stub — never `npm install` at repo root. Node 22 is what CI uses.
+- Frontend tests: `npm test -- --run` in `frontend/` — bare `npm test` is vitest **watch mode** (config lives in `vite.config.ts`: jsdom, `src/test-setup.ts`).
 - Frontend typecheck + build: `npm run build` (runs `tsc -b && vite build`). No lint script exists for either end.
 - One-command local launch: `quick-launch.sh` / `quick-launch.command` / `quick-launch.bat` (installs deps, starts both services, creates `data/.lle-secret-key` on first run).
 

@@ -8,9 +8,10 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.core.config import DatasetCredentialBinding, Settings
+from app.db.models import DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
-from app.services.datasets import DatasetError, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
+from app.services.datasets import DatasetError, dataset_edit_lifecycle_updates, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
 from tests.test_mongo_document_store import FakeClient
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
@@ -109,6 +110,45 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
     resolved, headers = resolve_dataset_source("hf://owner/repository/path/to/file.jsonl", "main", "huggingface", settings)
     assert resolved == "https://huggingface.co/datasets/owner/repository/resolve/main/path/to/file.jsonl"
     assert headers == {"Authorization": "Bearer test-token"}
+
+    canonical, _ = resolve_dataset_source(
+        "hf://datasets/owner/repository/path with spaces/file.jsonl",
+        "release/1",
+        None,
+        settings,
+    )
+    assert canonical == (
+        "https://huggingface.co/datasets/owner/repository/resolve/"
+        "release%2F1/path%20with%20spaces/file.jsonl"
+    )
+
+    owner_named_datasets, _ = resolve_dataset_source(
+        "hf://datasets/foo/file.jsonl",
+        "main",
+        None,
+        settings,
+    )
+    assert owner_named_datasets == "https://huggingface.co/datasets/datasets/foo/resolve/main/file.jsonl"
+    two_part_datasets, _ = resolve_dataset_source(
+        "hf://datasets/owner/repository",
+        "main",
+        None,
+        settings,
+    )
+    assert two_part_datasets == "https://huggingface.co/datasets/datasets/owner/resolve/main/repository"
+
+    for owner in ("models", "spaces"):
+        shorthand, _ = resolve_dataset_source(
+            f"hf://{owner}/owner/repository/file.jsonl",
+            "main",
+            None,
+            settings,
+        )
+        assert shorthand == (
+            f"https://huggingface.co/datasets/{owner}/owner/resolve/main/repository/file.jsonl"
+        )
+        with pytest.raises(DatasetError, match="hf://owner/repository/path"):
+            resolve_dataset_source(f"hf://{owner}/owner", "main", None, settings)
     with pytest.raises(DatasetError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)
     with pytest.raises(DatasetError, match="not configured"):
@@ -157,6 +197,32 @@ def test_dataset_download_follows_validated_redirects(tmp_path: Path, monkeypatc
     assert digest == hashlib.sha256(b'{"question":"q","answer":"a"}\n').hexdigest()
     assert (tmp_path / "out.jsonl").read_bytes() == b'{"question":"q","answer":"a"}\n'
     assert calls == ["https://datasets.example.test/start.jsonl", "https://datasets.example.test/final.jsonl"]
+
+
+def test_hugging_face_dataset_download_follows_resolve_cache_redirect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(
+                307,
+                headers={"location": "/api/resolve-cache/datasets/owner/repository/revision/hello.txt"},
+            )
+        return httpx.Response(200, content=b"hello")
+
+    _redirect_transport(monkeypatch, handler, extra_public_hosts=("huggingface.co",))
+    source, _ = resolve_dataset_source("hf://datasets/owner/repository/hello.txt", "main", None)
+    digest = write_dataset_source(source, tmp_path / "hello.txt", {})
+
+    assert digest == hashlib.sha256(b"hello").hexdigest()
+    assert calls == [
+        "https://huggingface.co/datasets/owner/repository/resolve/main/hello.txt",
+        "https://huggingface.co/api/resolve-cache/datasets/owner/repository/revision/hello.txt",
+    ]
 
 
 def test_dataset_download_rejects_redirect_to_private_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -308,6 +374,133 @@ def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -
         assert bad_source.status_code == 422
         missing = client.put("/api/v1/datasets/does-not-exist", json={"dataset_id": "x", "version": "1"})
         assert missing.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("field", "new_value", "expected_status"),
+    [
+        ("source_url", "https://datasets.example.test/corrected.jsonl", "not_downloaded"),
+        ("revision", "corrected", "not_downloaded"),
+        ("checksum", "a" * 64, "not_downloaded"),
+        ("license_text", "new terms", "license_required"),
+        ("credential_binding_id", "corrected-binding", "not_downloaded"),
+    ],
+)
+def test_inactive_dataset_material_edit_lifecycle_updates(
+    field: str,
+    new_value: str,
+    expected_status: str,
+) -> None:
+    current = {
+        "source_url": "https://datasets.example.test/broken.jsonl",
+        "revision": "main",
+        "checksum": None,
+        "license_text": None,
+        "credential_binding_id": None,
+        "license_accepted_at": "accepted",
+        "local_path": None,
+        "prepared_path": None,
+        "status": "failed",
+        "error_message": "download failed",
+    }
+    values = {key: current[key] for key in (
+        "source_url",
+        "revision",
+        "checksum",
+        "license_text",
+        "credential_binding_id",
+    )}
+    values[field] = new_value
+
+    updates = dataset_edit_lifecycle_updates(current, values)
+
+    assert updates["status"] == expected_status
+    assert updates["error_message"] is None
+    if field == "license_text":
+        assert updates["license_accepted_at"] is None
+
+
+def test_inactive_dataset_nonmaterial_or_cached_edit_preserves_lifecycle() -> None:
+    current = {
+        "source_url": "https://datasets.example.test/broken.jsonl",
+        "revision": "main",
+        "checksum": None,
+        "license_text": None,
+        "credential_binding_id": None,
+        "license_accepted_at": None,
+        "local_path": None,
+        "prepared_path": None,
+        "status": "failed",
+        "error_message": "download failed",
+    }
+    unchanged = {key: current[key] for key in (
+        "source_url",
+        "revision",
+        "checksum",
+        "license_text",
+        "credential_binding_id",
+    )}
+
+    assert dataset_edit_lifecycle_updates(current, unchanged) == {}
+    assert dataset_edit_lifecycle_updates({**current, "local_path": "/cached/data.jsonl"}, {
+        **unchanged,
+        "source_url": "https://datasets.example.test/corrected.jsonl",
+    }) == {}
+    assert dataset_edit_lifecycle_updates({**current, "status": "downloading"}, {
+        **unchanged,
+        "source_url": "https://datasets.example.test/corrected.jsonl",
+    }) == {}
+    assert dataset_edit_lifecycle_updates({**current, "status": "waiting"}, {
+        **unchanged,
+        "source_url": "https://datasets.example.test/corrected.jsonl",
+    }) == {}
+
+
+def test_relational_failed_dataset_source_correction_resets_stale_failure(tmp_path: Path) -> None:
+    app = create_app(Settings.local_development(
+        database_url=f"sqlite:///{tmp_path/'db.sqlite'}",
+        data_root=str(tmp_path / "data"),
+    ))
+    original_source = "https://datasets.example.test/broken.jsonl"
+    corrected_source = "https://datasets.example.test/corrected.jsonl"
+    with TestClient(app) as client:
+        created = client.post("/api/v1/datasets", json={
+            "dataset_id": "repairable",
+            "version": "1",
+            "source_url": original_source,
+        }).json()
+        with app.state.database.get_session() as session:
+            dataset = session.get(DatasetVersion, created["id"])
+            assert dataset is not None
+            dataset.status = "failed"
+            dataset.error_message = "old download failure"
+            session.commit()
+
+        corrected = client.put(f"/api/v1/datasets/{created['id']}", json={
+            "dataset_id": "repairable",
+            "version": "1",
+            "source_url": corrected_source,
+        })
+        assert corrected.status_code == 200
+        assert corrected.json()["status"] == "not_downloaded"
+        assert corrected.json()["error_message"] is None
+
+        with app.state.database.get_session() as session:
+            dataset = session.get(DatasetVersion, created["id"])
+            assert dataset is not None
+            dataset.status = "failed"
+            dataset.error_message = "new download failure"
+            session.commit()
+
+        metadata_only = client.put(f"/api/v1/datasets/{created['id']}", json={
+            "dataset_id": "repairable",
+            "version": "1",
+            "source_url": corrected_source,
+            "input_field": "prompt",
+        })
+        assert metadata_only.status_code == 200
+        assert metadata_only.json()["status"] == "failed"
+        assert metadata_only.json()["error_message"] == "new download failure"
 
 
 def test_dataset_delete_removes_registration_and_cache_but_guards_referenced_versions(tmp_path: Path) -> None:

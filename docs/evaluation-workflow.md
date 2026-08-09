@@ -35,12 +35,20 @@ Open the **Datasets** view and fill in the registration form:
 For a Hugging Face dataset, the source uses the `hf://` scheme:
 
 ```
-hf://owner/repository/path/to/file
+hf://datasets/owner/repository/path/to/file
 ```
 
+- The canonical form starts with the repository type, `datasets`. Existing
+  registrations using the shorter `hf://owner/repository/path/to/file` form
+  remain supported.
 - `hf://` refers to a Hugging Face **dataset** repository, so the path starts
   directly at the repository root — there is no `resolve/` segment and no
   `https://huggingface.co/datasets/` prefix.
+- The path must name a real repository file; Dataset Viewer split names are not
+  virtual folders. For example, the checked textfolder fixture is
+  `hf://datasets/hf-internal-testing/textfolder/hello.txt` (or shorthand
+  `hf://hf-internal-testing/textfolder/hello.txt`), not
+  `hf://hf-internal-testing/textfolder/train/hello.txt`.
 - The **revision** selects the branch, tag, or commit to resolve the file from
   (for example `main`).
 - HTTPS source URLs are also supported; local files are added through the
@@ -52,11 +60,18 @@ dataset is gated or private, supply the administrator-configured
 **credential binding ID** (never a raw token; see Troubleshooting below).
 
 Registered versions can declare an optional **input field** and **reference
-(output) field** used as run defaults; the run form still allows per-run
-overrides. Ready datasets expose a **Preview** action that shows the first
-five rows of the prepared cache, plus **Edit** and **Delete** actions.
-Deleting is blocked while an evaluation run references the revision or while
-the download is in progress.
+(output) field** used as run defaults; the run launcher reads the prepared
+schema and lets you select either field before queueing. Ready datasets expose
+a **Preview** action that shows the first five rows of the prepared cache, plus
+**Start evaluation**, **Edit**, and **Delete** actions. **Start evaluation**
+opens the Runs workspace with that dataset selected but does not queue anything.
+
+Failed, credential-blocked, corrupted, and other inactive registrations retain
+**Edit** and **Delete** even when no cache was created, so a source URL,
+revision, checksum, license, or credential binding can be corrected. Mutating
+actions are hidden while a version is actively downloading, verifying,
+preparing, or being removed. Deleting is also blocked while an evaluation run
+references the revision.
 
 ## 3. Accept the license, then download and verify
 
@@ -84,7 +99,19 @@ dataset card) or `credential_required`/`corrupted` where applicable; use
 instead — the uploaded file is checksum-verified and stored in the cache the
 same way.
 
-## 4. (Optional) Create a prompt package
+## 4. Quick start without a dataset
+
+For a first endpoint check, open **Runs**, choose an available endpoint in the
+shared **Launch context**, and use the **Quick start** card. Its selector lists
+only available built-in benchmarks. The registry includes small deterministic
+fixtures for text, image, silent audio, minimal video, and combined multimodal
+requests; they require no dataset download and remain available offline.
+
+Choose an optional prompt package and sample limit, run **Preflight quick
+start**, then queue the evaluation. Preflight checks endpoint compatibility and
+capacity without creating a run.
+
+## 5. (Optional) Create a prompt package
 
 If you want to control how each record is turned into a model prompt, create a
 prompt package from the workspace. The template uses `{{field}}` placeholders
@@ -96,32 +123,38 @@ Rate this review: {{review}}
 Return only the star count.
 ```
 
-When no prompt package is selected, the first non-empty string field of each
-record is used as the prompt. With a prompt package, records whose fields do
-not render a prompt are skipped.
+When no prompt package is selected, the run's selected **input field** is used
+as the prompt. API clients that omit `input_field` retain the legacy behavior
+of using the first non-empty string field. With a prompt package, the package
+template renders the prompt and the input field is ignored (and not recorded in
+the run snapshot); records whose fields do not render a prompt are skipped.
+The input and reference fields must name different columns.
 
-## 5. Queue a dataset evaluation run
+## 6. Queue a dataset evaluation run
 
-In the **Runs** view, open the dataset run form and configure:
+In the **Runs** view, choose the shared endpoint and configure the **Dataset
+evaluation** card:
 
 - **Dataset** — a dataset version with status `ready`.
+- **Input field** — selected from the fields read from the prepared dataset;
+  the saved dataset default is preselected when it still exists.
+- **Reference field** — also selected from the prepared schema. This field
+  holds the expected answer, for example `star`, and is frozen into the run
+  snapshot with the input selection.
 - **Prompt package** (optional) — the package whose template is rendered per
-  record; leave empty to use the first non-empty record field as the prompt.
-- **Reference field** — the record field holding the expected answer, for
-  example `star`. Each record's value for this field is the exact-match
-  reference the prediction is scored against (or the prompt package's scoring
-  when it defines one).
+  record; leave empty to use the selected input field directly.
 - **Sample limit** — how many records (1–10,000, default 100) to draw from the
   dataset.
-- **Endpoint** — any model endpoint with status `available`.
 
-The form queues the run directly; the backend validates it and returns clear
-errors when a check fails — for example a dataset version that is not `ready`,
-a reference field that matches no record field, or an endpoint that is not
-available. For scripted checks, the API additionally exposes
-`POST /api/v1/evaluation-runs/dataset/preflight`.
+Use **Preflight dataset** in the shared launch context to check the complete
+selection without creating a run. Queueing remains disabled while schema
+reading fails, either field is unresolved, or the input and reference fields
+are identical. The backend returns clear errors
+when a check fails — for example a dataset version that is not `ready`, a
+selected field that is absent, or an endpoint that is not available. Scripted
+checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.
 
-## 6. Watch and inspect
+## 7. Watch and inspect
 
 Track the run from the **Runs** view:
 
