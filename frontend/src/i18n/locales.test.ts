@@ -267,4 +267,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("비교 증거");
     expect(translateStaticText("ms", phrases[6])).toBe("Pilih dua larian sumber dan bandingkannya untuk mendedahkan hasil sampel dikongsi serta delta metrik.");
   });
+
+  it("renders report-source guidance as complete phrases", () => {
+    const phrases = [
+      "Choose two completed runs to begin an evidence-backed comparison.",
+      "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.",
+      "Report context",
+      "Select the run whose immutable evidence snapshot should anchor this report.",
+      "Report source run",
+      "Select a report source",
+      "Choose an evaluation run above to generate and manage its artifacts without returning to a separate page.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("选择两个已完成运行以开始有证据支持的比较。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Générez des artefacts d’évaluation portables, puis gérez leurs politiques de partage contrôlées en lecture seule.");
+    expect(translateStaticText("de", phrases[2])).toBe("Berichtskontext");
+    expect(translateStaticText("ru", phrases[3])).toBe("Выберите запуск, чей неизменяемый снимок доказательств должен служить основой для этого отчёта.");
+    expect(translateStaticText("ja", phrases[4])).toBe("レポートのソース実行");
+    expect(translateStaticText("ko", phrases[5])).toBe("보고서 소스 선택");
+    expect(translateStaticText("ms", phrases[6])).toBe("Pilih larian penilaian di atas untuk menjana dan mengurus artifaknya tanpa kembali ke halaman berasingan.");
+  });
 });
