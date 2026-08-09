@@ -227,4 +227,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("상태 신호를 사용할 수 없음");
     expect(translateStaticText("ms", phrases[6])).toBe("Pajakan pekerja aktif");
   });
+
+  it("renders lease-detail and analysis guidance as complete phrases", () => {
+    const phrases = [
+      "Lease expiry is recorded with each task so stalled workers can be diagnosed without altering queue state.",
+      "Investigate supplied quality, reliability, latency, and cost evidence across evaluation dimensions.",
+      "Loading analysis",
+      "Analysis matrix",
+      "The analysis matrix is loading from the evaluation service.",
+      "Analysis context",
+      "The selected baseline applies to every evidence cell and delta shown below.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("每项任务都会记录租约到期时间，因此可以诊断停滞的工作器而无需更改队列状态。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Examinez les preuves fournies de qualité, de fiabilité, de latence et de coût dans toutes les dimensions d’évaluation.");
+    expect(translateStaticText("de", phrases[2])).toBe("Analyse wird geladen");
+    expect(translateStaticText("ru", phrases[3])).toBe("Матрица анализа");
+    expect(translateStaticText("ja", phrases[4])).toBe("分析マトリクスを評価サービスから読み込んでいます。");
+    expect(translateStaticText("ko", phrases[5])).toBe("분석 컨텍스트");
+    expect(translateStaticText("ms", phrases[6])).toBe("Garis asas yang dipilih digunakan pada setiap sel bukti dan delta yang dipaparkan di bawah.");
+  });
 });
