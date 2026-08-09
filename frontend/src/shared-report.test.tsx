@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api, type Report } from "./api";
-import { ReportsTable, SharedReportPage } from "./App";
+import { ReportsTable } from "./App";
+import { openSharedReport, SharedReportPage } from "./components/pages/SystemPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -12,6 +13,20 @@ afterEach(() => {
 });
 
 describe("public report sharing", () => {
+  it("honors the saved light-theme preference without requiring the authenticated application shell", () => {
+    window.localStorage.setItem("lle-theme", "light");
+    render(<LocaleProvider><SharedReportPage token="public-token" /></LocaleProvider>);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("keeps the discovery-token request scoped to the supplied public credentials", async () => {
+    vi.spyOn(api, "openSharedReport").mockResolvedValue("blob:shared-report");
+
+    await expect(openSharedReport("public-token", "view-only-password")).resolves.toBe("blob:shared-report");
+    expect(api.openSharedReport).toHaveBeenCalledWith("public-token", "view-only-password");
+  });
+
   it("keeps the password out of browser storage and the URL after opening a report", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "openSharedReport").mockResolvedValue("blob:shared-report");

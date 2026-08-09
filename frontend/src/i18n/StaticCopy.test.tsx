@@ -28,13 +28,13 @@ describe("StaticCopy", () => {
     </StaticCopy></LocaleProvider>);
 
     expect(screen.getByRole("heading")).toHaveTextContent("Ajouter un point de terminaison de modèle");
-    expect(screen.getByLabelText("affichage nom")).toHaveAttribute("placeholder", "My local modèle");
+    expect(screen.getByLabelText("affichage nom")).toHaveAttribute("placeholder", "Mon modèle local");
     expect(screen.getAllByText("available")).toHaveLength(2);
     expect(screen.getByText("queued")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("switch-locale"));
     expect(screen.getByRole("heading")).toHaveTextContent("モデルエンドポイントを追加");
-    expect(screen.getByLabelText("表示 名前")).toHaveAttribute("placeholder", "My ローカル モデル");
+    expect(screen.getByLabelText("表示 名前")).toHaveAttribute("placeholder", "ローカル モデル");
     expect(screen.getAllByText("available")).toHaveLength(2);
   });
 

@@ -4,6 +4,7 @@ import { localeIds, localeNames, navigationCopy, shellCopy, type Locale } from "
 import { navigationGroupFor, navigationGroups, navigationItem, View } from "../dashboard/navigation";
 import { useTranslation } from "../i18n/LocaleProvider";
 import { SystemHealth } from "../api";
+import { MenuIcon, NavigationIcon } from "./NavigationIcon";
 import "../dashboard.css";
 
 type Theme = "dark" | "light";
@@ -41,7 +42,7 @@ export function AppShell({
   const currentGroup = navigationGroupFor(view);
   const copy = shellCopy[locale];
   const navigation = navigationCopy[locale];
-  const healthLabel = systemHealth?.status === "healthy" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
+  const healthLabel = systemHealth?.status === "ok" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
 
   function navigate(nextView: View) {
     onViewChange(nextView);
@@ -57,9 +58,9 @@ export function AppShell({
         tabIndex={isNavigationOpen ? 0 : -1}
         type="button"
       />
-      <aside className={isNavigationOpen ? "sidebar is-open" : "sidebar"} data-testid="workspace-sidebar" id="workspace-navigation">
+      <aside className={isNavigationOpen ? "sidebar is-open" : "sidebar is-closed"} data-testid="workspace-sidebar" id="workspace-navigation">
         <div className="sidebar-brand">
-          <span aria-hidden="true" className="brand-mark">LL</span>
+          <span aria-hidden="true" className="brand-mark">E</span>
           <div>
             <p>{copy.brand}</p>
             <strong>LLM / SLM</strong>
@@ -78,7 +79,7 @@ export function AppShell({
                   title={navigation.items[item.view].description}
                   type="button"
                 >
-                  <span aria-hidden="true" className="navigation-glyph">{item.glyph}</span>
+                  <NavigationIcon view={item.view} />
                   <span>{navigation.items[item.view].label}</span>
                 </button>
               ))}
@@ -86,7 +87,7 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span className={systemHealth?.status === "healthy" ? "health-dot is-healthy" : "health-dot"} />
+          <span className={systemHealth?.status === "ok" ? "health-dot is-healthy" : "health-dot"} />
           <span>{healthLabel}</span>
         </div>
       </aside>
@@ -102,7 +103,7 @@ export function AppShell({
               onClick={() => setIsNavigationOpen(true)}
               type="button"
             >
-              <span aria-hidden="true">☰</span>
+              <MenuIcon />
             </button>
             <div className="topbar-context">
               <p>{navigation.groups[currentGroup.id]}</p>
@@ -124,17 +125,6 @@ export function AppShell({
         </header>
 
         <main className="workspace-main">
-          <section className="workspace-page-heading" aria-labelledby="workspace-page-title">
-            <div>
-              <p className="eyebrow">{copy.controlCenter}</p>
-              <h1 id="workspace-page-title">{navigation.items[currentItem.view].label}</h1>
-              <p>{navigation.items[currentItem.view].description}</p>
-            </div>
-            <div className="page-health" aria-label={healthLabel}>
-              <span className={systemHealth?.status === "healthy" ? "health-dot is-healthy" : "health-dot"} />
-              <span>{healthLabel}</span>
-            </div>
-          </section>
           {notice && <button className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
           <div className="workspace-page-content">{children}</div>
         </main>

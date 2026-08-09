@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 describe("usage guide", () => {
-  it("opens the guide from navigation and shows the workflow steps", async () => {
+  it("opens the guide from navigation and routes workflow steps to their workspace", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
     vi.spyOn(api, "listRuns").mockResolvedValue([]);
@@ -31,5 +31,7 @@ describe("usage guide", () => {
     await user.click(screen.getByRole("button", { name: "Guide" }));
     expect(screen.getByRole("heading", { name: /How to use this workspace/i })).toBeTruthy();
     expect(screen.getByText(/1\. Add a model endpoint/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Open Models" }));
+    expect(screen.getByLabelText("Base URL")).toBeTruthy();
   }, 10_000);
 });

@@ -12,7 +12,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> = {}) {
+function renderShell({ children = <p>Workspace content</p>, ...overrides }: Partial<React.ComponentProps<typeof AppShell>> = {}) {
   const props = {
     completedRunCount: 12,
     locale: "en" as const,
@@ -26,7 +26,7 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof AppShell>> =
     onViewChange: vi.fn(),
     ...overrides,
   };
-  render(<LocaleProvider><AppShell {...props}><p>Workspace content</p></AppShell></LocaleProvider>);
+  render(<LocaleProvider><AppShell {...props}>{children}</AppShell></LocaleProvider>);
   return props;
 }
 
@@ -37,7 +37,9 @@ describe("AppShell", () => {
     for (const group of navigationGroups) {
       expect(screen.getByRole("region", { name: navigationCopy.en.groups[group.id] })).toBeVisible();
       for (const item of group.items) {
-        expect(screen.getByRole("button", { name: navigationCopy.en.items[item.view].label })).toBeVisible();
+        const button = screen.getByRole("button", { name: navigationCopy.en.items[item.view].label });
+        expect(button).toBeVisible();
+        expect(button.querySelector(`[data-navigation-icon="${item.view}"]`)).toHaveAttribute("aria-hidden", "true");
       }
     }
 
@@ -46,17 +48,66 @@ describe("AppShell", () => {
     expect(props.onViewChange).not.toHaveBeenCalled();
   });
 
+  it("leaves page headings to view content instead of rendering a duplicate shell heading", () => {
+    const { rerender } = render(
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice={null}
+          systemHealth={null}
+          theme="dark"
+          view="dashboard"
+          onDismissNotice={vi.fn()}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <h1>Dashboard</h1>
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(document.querySelector(".workspace-page-heading")).not.toBeInTheDocument();
+
+    rerender(
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice={null}
+          systemHealth={null}
+          theme="dark"
+          view="models"
+          onDismissNotice={vi.fn()}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <h1>Models</h1>
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    expect(document.querySelector(".workspace-page-heading")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "Models" })).toHaveLength(1);
+  });
+
   it("opens the responsive drawer and closes it after navigation", async () => {
     const user = userEvent.setup();
     const props = renderShell();
     const sidebar = screen.getByTestId("workspace-sidebar");
 
+    expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(sidebar).toHaveClass("is-open");
+    expect(sidebar).not.toHaveClass("is-closed");
 
     await user.click(screen.getByRole("button", { name: "Models" }));
     expect(props.onViewChange).toHaveBeenCalledWith("models");
+    expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
   });
 
@@ -71,5 +122,19 @@ describe("AppShell", () => {
     expect(props.onThemeToggle).toHaveBeenCalledOnce();
     expect(props.onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(props.onDismissNotice).toHaveBeenCalledOnce();
+  });
+
+  it("labels a healthy service from the deployed health response", () => {
+    renderShell({ systemHealth: { status: "ok", database: "sqlite", schema_version: 1, database_connected: true, disk: { available_bytes: 1024, total_bytes: 2048 }, queue: { pending: 0, active: 0 } } });
+
+    expect(screen.getByText("System healthy")).toBeVisible();
+    expect(document.querySelector(".health-dot")).toHaveClass("is-healthy");
+  });
+
+  it("reports an unknown service state while health has not responded", () => {
+    renderShell({ systemHealth: null });
+
+    expect(screen.getByText("System status unavailable")).toBeVisible();
+    expect(document.querySelector(".health-dot")).not.toHaveClass("is-healthy");
   });
 });
