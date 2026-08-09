@@ -808,6 +808,55 @@ def test_mongo_failed_dataset_source_correction_resets_stale_failure(tmp_path: P
         assert corrected.json()["error_message"] is None
 
 
+def test_mongo_dataset_run_uses_and_freezes_selected_input_field(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        document_store=store,
+    )
+    content = b'{"distractor":"wrong","question":"chosen","answer":"1"}\n'
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://models.example.test/v1",
+            "api_key": "secret",
+            "model_name": "model",
+        }).json()
+        assert api.post(
+            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
+        ).status_code == 200
+        dataset = api.post("/api/v1/datasets", json={
+            "dataset_id": "mongo-input-selection",
+            "version": "1",
+        }).json()
+        uploaded = api.post(f"/api/v1/datasets/{dataset['id']}/upload", json={
+            "filename": "samples.jsonl",
+            "base64_data": base64.b64encode(content).decode("ascii"),
+        })
+        assert uploaded.status_code == 200
+
+        created = api.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint["id"],
+            "dataset_version_id": dataset["id"],
+            "input_field": "question",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+
+        assert created.status_code == 201
+        run = created.json()
+        assert run["configuration_snapshot"]["input_field"] == "question"
+        assert run["configuration_snapshot"]["reference_field"] == "answer"
+        attempts = store.list_documents("sample_attempts", query={"run_id": run["id"]})
+        assert attempts[0]["input_snapshot"]["messages"][-1]["content"] == "chosen"
+
+
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
     client = FakeClient()
     settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())

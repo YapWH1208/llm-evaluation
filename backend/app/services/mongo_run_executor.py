@@ -30,6 +30,7 @@ from app.services.dataset_runs import (
     DATASET_RUN_BENCHMARK_VERSION,
     DatasetRunError,
     _build_dataset_samples,
+    _empty_dataset_samples_message,
 )
 from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
@@ -347,6 +348,7 @@ def create_mongo_dataset_run(
     prompt_package_id: str | None,
     reference_field: str,
     sample_limit: int,
+    input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
     created_by: str | None = None,
     max_concurrency: int | None = None,
@@ -366,11 +368,13 @@ def create_mongo_dataset_run(
         raise MongoRunExecutionError("Prompt package not found.")
     if not reference_field.strip():
         raise MongoRunExecutionError("A reference field is required.")
+    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
     try:
         samples, skipped = _build_dataset_samples(
             prepared_path=dataset["prepared_path"],
             data_root=data_root,
             sample_limit=sample_limit,
+            input_field=selected_input_field,
             reference_field=reference_field.strip(),
             prompt_package=_proxy(prompt_package) if prompt_package else None,
             dataset_id=dataset["dataset_id"],
@@ -379,10 +383,11 @@ def create_mongo_dataset_run(
     except (DatasetRecordError, DatasetRunError) as error:
         raise MongoRunExecutionError(str(error)) from error
     if not samples:
-        raise MongoRunExecutionError(
-            f"None of the first {sample_limit} records contain the reference field {reference_field!r}; "
-            "check the field name or register a different dataset."
-        )
+        raise MongoRunExecutionError(_empty_dataset_samples_message(
+            sample_limit=sample_limit,
+            input_field=selected_input_field,
+            reference_field=reference_field.strip(),
+        ))
     compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
     if compatibility["unsupported"]:
         raise MongoRunExecutionError(
@@ -421,6 +426,7 @@ def create_mongo_dataset_run(
         },
         "datasets": frozen_datasets,
         "dataset_version": {"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default")},
+        "input_field": selected_input_field,
         "reference_field": reference_field.strip(),
         "sample_limit": sample_limit,
         "skipped_records": skipped,
@@ -564,6 +570,7 @@ def preflight_mongo_dataset_run(
     prompt_package_id: str | None,
     reference_field: str,
     sample_limit: int,
+    input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
 ) -> dict[str, object]:
     issues: list[str] = []
@@ -581,6 +588,7 @@ def preflight_mongo_dataset_run(
         issues.append("Prompt package not found.")
     if not reference_field.strip():
         issues.append("A reference field is required.")
+    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
@@ -590,13 +598,18 @@ def preflight_mongo_dataset_run(
                 prepared_path=dataset["prepared_path"],
                 data_root=data_root,
                 sample_limit=sample_limit,
+                input_field=selected_input_field,
                 reference_field=reference_field.strip(),
                 prompt_package=_proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
                 dataset_id=dataset["dataset_id"],
                 dataset_version=dataset["version"],
             )
             if not samples:
-                issues.append(f"None of the first {sample_limit} records contain the reference field {reference_field!r}.")
+                issues.append(_empty_dataset_samples_message(
+                    sample_limit=sample_limit,
+                    input_field=selected_input_field,
+                    reference_field=reference_field.strip(),
+                ))
         except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))
     if endpoint is not None and endpoint.get("status") == "available":

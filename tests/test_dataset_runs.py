@@ -42,14 +42,18 @@ def _create_available_endpoint(client: TestClient) -> str:
     return endpoint_id
 
 
-def _register_ready_dataset(client: TestClient, dataset_id: str = "demo") -> dict[str, object]:
+def _register_ready_dataset(
+    client: TestClient,
+    dataset_id: str = "demo",
+    content: bytes | None = None,
+) -> dict[str, object]:
     created = client.post(
         "/api/v1/datasets",
         json={"dataset_id": dataset_id, "version": "1", "revision": "main"},
     )
     assert created.status_code == 201
     version_id = created.json()["id"]
-    content = b'{"question":"what is 2+2?","answer":"4"}\n{"question":"what is 3+3?","answer":"6"}\n'
+    content = content or b'{"question":"what is 2+2?","answer":"4"}\n{"question":"what is 3+3?","answer":"6"}\n'
     uploaded = client.post(
         f"/api/v1/datasets/{version_id}/upload",
         json={"filename": "examples.jsonl", "base64_data": base64.b64encode(content).decode("ascii")},
@@ -155,3 +159,76 @@ def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:
             json={"model_endpoint_id": endpoint_id, "dataset_version_id": dataset["id"], "reference_field": "", "sample_limit": 10},
         )
         assert missing_field.status_code == 422
+
+
+def test_dataset_run_uses_selected_input_field_and_preserves_legacy_fallback(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+    )
+    content = (
+        b'{"distractor":"wrong-one","question":"chosen-one","answer":"1"}\n'
+        b'{"distractor":"wrong-two","question":"chosen-two","answer":"2"}\n'
+    )
+    with TestClient(app) as client:
+        dataset = _register_ready_dataset(client, content=content)
+        endpoint_id = _create_available_endpoint(client)
+
+        selected = client.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "input_field": "question",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert selected.status_code == 201
+        selected_run = selected.json()
+        assert selected_run["configuration_snapshot"]["input_field"] == "question"
+        assert selected_run["configuration_snapshot"]["reference_field"] == "answer"
+        selected_attempts = client.get(
+            f"/api/v1/evaluation-runs/{selected_run['id']}/attempts"
+        ).json()
+        assert {
+            attempt["input_snapshot"]["messages"][-1]["content"]
+            for attempt in selected_attempts
+        } == {"chosen-one", "chosen-two"}
+
+        legacy = client.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert legacy.status_code == 201
+        assert legacy.json()["configuration_snapshot"]["input_field"] is None
+        legacy_attempts = client.get(
+            f"/api/v1/evaluation-runs/{legacy.json()['id']}/attempts"
+        ).json()
+        assert {
+            attempt["input_snapshot"]["messages"][-1]["content"]
+            for attempt in legacy_attempts
+        } == {"wrong-one", "wrong-two"}
+
+        bad_input = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "input_field": "missing",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert bad_input.status_code == 200
+        assert bad_input.json()["can_queue"] is False
+        assert any("input field 'missing'" in issue for issue in bad_input.json()["issues"])
+
+        blank_input = client.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "input_field": "",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert blank_input.status_code == 422

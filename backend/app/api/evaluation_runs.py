@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -75,10 +75,21 @@ class DatasetRunCreate(BaseModel):
     model_endpoint_id: str
     dataset_version_id: str
     prompt_package_id: str | None = None
+    input_field: Annotated[str, Field(min_length=1, max_length=255)] | None = None
     reference_field: Annotated[str, Field(min_length=1, max_length=255)]
     sample_limit: Annotated[int, Field(ge=1, le=10_000)] = 100
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     request_body_override: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("input_field", "reference_field")
+    @classmethod
+    def normalize_field_selection(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Dataset field selections must not be blank.")
+        return normalized
 
 
 class EvaluationRunResponse(BaseModel):
@@ -319,6 +330,7 @@ def create_dataset_evaluation_run(
                 model_endpoint_id=payload.model_endpoint_id,
                 dataset_version_id=payload.dataset_version_id,
                 prompt_package_id=payload.prompt_package_id,
+                input_field=payload.input_field,
                 reference_field=payload.reference_field,
                 sample_limit=payload.sample_limit,
                 request_body_override=payload.request_body_override,
@@ -336,6 +348,7 @@ def create_dataset_evaluation_run(
             model_endpoint_id=payload.model_endpoint_id,
             dataset_version_id=payload.dataset_version_id,
             prompt_package_id=payload.prompt_package_id,
+            input_field=payload.input_field,
             reference_field=payload.reference_field,
             sample_limit=payload.sample_limit,
             request_body_override=payload.request_body_override,
@@ -361,6 +374,7 @@ def preflight_dataset_evaluation_run(
             model_endpoint_id=payload.model_endpoint_id,
             dataset_version_id=payload.dataset_version_id,
             prompt_package_id=payload.prompt_package_id,
+            input_field=payload.input_field,
             reference_field=payload.reference_field,
             sample_limit=payload.sample_limit,
             request_body_override=payload.request_body_override,
@@ -372,6 +386,7 @@ def preflight_dataset_evaluation_run(
         model_endpoint_id=payload.model_endpoint_id,
         dataset_version_id=payload.dataset_version_id,
         prompt_package_id=payload.prompt_package_id,
+        input_field=payload.input_field,
         reference_field=payload.reference_field,
         sample_limit=payload.sample_limit,
         request_body_override=payload.request_body_override,
