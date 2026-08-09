@@ -775,6 +775,39 @@ def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:
         assert api.get("/api/v1/datasets").json() == []
 
 
+def test_mongo_failed_dataset_source_correction_resets_stale_failure(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(settings, document_store=store)
+    original_source = "https://datasets.example.test/broken.jsonl"
+    corrected_source = "https://datasets.example.test/corrected.jsonl"
+    with TestClient(app) as api:
+        created = api.post("/api/v1/datasets", json={
+            "dataset_id": "repairable-mongo",
+            "version": "1",
+            "source_url": original_source,
+        }).json()
+        store.update_document("dataset_versions", created["id"], {
+            "status": "failed",
+            "error_message": "old download failure",
+        })
+
+        corrected = api.put(f"/api/v1/datasets/{created['id']}", json={
+            "dataset_id": "repairable-mongo",
+            "version": "1",
+            "source_url": corrected_source,
+        })
+
+        assert corrected.status_code == 200
+        assert corrected.json()["status"] == "not_downloaded"
+        assert corrected.json()["error_message"] is None
+
+
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
     client = FakeClient()
     settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
