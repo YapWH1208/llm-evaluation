@@ -422,24 +422,52 @@ const redesignedWorkspacePhrases: Record<Locale, Record<string, string>> = {
   en: {},
   "zh-CN": {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "注册端点、验证连接，并让新运行的默认设置贴近其所管理的模型。",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "每个阶段都会打开现有的工作区目标，因此指南仍是一条可执行的路径，而非静态清单。",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "筛选条件仅影响此清单；加载的目录中仍可使用注册表记录及其操作控件。",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "监控排队工作、优先处理符合条件的任务，并将每项任务追溯到其不可变运行。",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "生成可移植的评测工件，然后管理其受控的只读共享策略。",
   },
   fr: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Enregistrez les points de terminaison, validez la connectivité et conservez les paramètres par défaut des nouvelles exécutions près des modèles qu’ils régissent.",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "Chaque étape ouvre la destination existante de l’espace de travail, de sorte que le guide reste un parcours actionnable plutôt qu’une liste statique.",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "Les filtres n’affectent que cet inventaire ; les entrées du registre et leurs contrôles opérationnels restent disponibles dans le catalogue chargé.",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "Surveillez le travail en file d’attente, priorisez les tâches éligibles et rattachez chacune à son exécution immuable.",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "Générez des artefacts d’évaluation portables, puis gérez leurs politiques de partage contrôlées en lecture seule.",
   },
   de: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Registrieren Sie Endpunkte, prüfen Sie die Verbindung und halten Sie die Standardwerte für neue Ausführungen bei den Modellen, für die sie gelten.",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "Jede Phase öffnet das vorhandene Arbeitsbereichsziel, sodass der Leitfaden ein umsetzbarer Ablauf statt einer statischen Checkliste bleibt.",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "Filter wirken sich nur auf diese Übersicht aus; Registereinträge und deren Betriebssteuerungen bleiben im geladenen Katalog verfügbar.",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "Überwachen Sie die wartende Arbeit, priorisieren Sie berechtigte Aufgaben und verfolgen Sie jede Aufgabe zu ihrem unveränderlichen Lauf zurück.",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "Erzeugen Sie portable Evaluierungsartefakte und verwalten Sie anschließend deren kontrollierte schreibgeschützte Freigaberichtlinien.",
   },
   ru: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Зарегистрируйте конечные точки, проверьте подключение и храните параметры по умолчанию для новых запусков рядом с моделями, которыми они управляют.",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "Каждый этап открывает существующий раздел рабочего пространства, поэтому руководство остаётся практическим маршрутом, а не статическим контрольным списком.",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "Фильтры влияют только на этот перечень; записи реестра и их рабочие элементы управления остаются доступными в загруженном каталоге.",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "Отслеживайте работу в очереди, расставляйте приоритеты для подходящих задач и прослеживайте каждую задачу до её неизменяемого запуска.",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "Создавайте переносимые артефакты оценки, а затем управляйте их контролируемыми политиками общего доступа только для чтения.",
   },
   ja: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "エンドポイントを登録して接続を検証し、新しい実行の既定値を対象モデルの近くに保ちます。",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "各段階で既存のワークスペース画面を開くため、このガイドは静的なチェックリストではなく実行可能な手順として機能します。",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "フィルターはこの一覧にのみ影響します。レジストリの記録とその運用コントロールは、読み込まれたカタログで引き続き利用できます。",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "キューに入った作業を監視し、対象のタスクに優先順位を付け、各タスクを不変の実行まで追跡します。",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "ポータブルな評価アーティファクトを生成し、その後、制御された読み取り専用の共有ポリシーを管理します。",
   },
   ko: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "엔드포인트를 등록하고 연결을 검증하며 새 실행의 기본값을 해당 모델 가까이에 유지합니다.",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "각 단계는 기존 작업 공간 대상을 열므로 가이드는 정적 체크리스트가 아니라 실행 가능한 경로로 유지됩니다.",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "필터는 이 인벤토리에만 적용되며 레지스트리 레코드와 운영 제어 기능은 로드된 카탈로그에서 계속 사용할 수 있습니다.",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "대기 중인 작업을 모니터링하고 적합한 작업의 우선순위를 정하며 각 작업을 불변 실행까지 추적합니다.",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "이식 가능한 평가 아티팩트를 생성한 다음 제어된 읽기 전용 공유 정책을 관리합니다.",
   },
   ms: {
     "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Daftarkan titik akhir, sahkan sambungan dan kekalkan lalai larian baharu berdekatan model yang ditadbirnya.",
+    "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.": "Setiap peringkat membuka destinasi ruang kerja sedia ada, jadi panduan kekal sebagai laluan boleh tindakan dan bukan senarai semak statik.",
+    "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.": "Penapis hanya mempengaruhi inventori ini; rekod pendaftaran dan kawalan operasinya kekal tersedia dalam katalog yang dimuatkan.",
+    "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.": "Pantau kerja beratur, utamakan tugas yang layak dan jejak setiap tugas kembali kepada larian tidak berubahnya.",
+    "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.": "Jana artifak penilaian mudah alih, kemudian urus dasar perkongsian terkawal baca sahaja.",
   },
 };
 

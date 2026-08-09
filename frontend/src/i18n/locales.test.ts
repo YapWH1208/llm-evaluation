@@ -90,4 +90,21 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", description)).toBe("엔드포인트를 등록하고 연결을 검증하며 새 실행의 기본값을 해당 모델 가까이에 유지합니다.");
     expect(translateStaticText("ms", description)).toBe("Daftarkan titik akhir, sahkan sambungan dan kekalkan lalai larian baharu berdekatan model yang ditadbirnya.");
   });
+
+  it("renders redesigned workspace guidance without falling back to isolated words", () => {
+    const guidance = [
+      "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.",
+      "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.",
+      "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.",
+      "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", guidance[0])).toBe("每个阶段都会打开现有的工作区目标，因此指南仍是一条可执行的路径，而非静态清单。");
+    expect(translateStaticText("fr", guidance[1])).toBe("Les filtres n’affectent que cet inventaire ; les entrées du registre et leurs contrôles opérationnels restent disponibles dans le catalogue chargé.");
+    expect(translateStaticText("de", guidance[2])).toBe("Überwachen Sie die wartende Arbeit, priorisieren Sie berechtigte Aufgaben und verfolgen Sie jede Aufgabe zu ihrem unveränderlichen Lauf zurück.");
+    expect(translateStaticText("ru", guidance[3])).toBe("Создавайте переносимые артефакты оценки, а затем управляйте их контролируемыми политиками общего доступа только для чтения.");
+    expect(translateStaticText("ja", guidance[0])).toBe("各段階で既存のワークスペース画面を開くため、このガイドは静的なチェックリストではなく実行可能な手順として機能します。");
+    expect(translateStaticText("ko", guidance[1])).toBe("필터는 이 인벤토리에만 적용되며 레지스트리 레코드와 운영 제어 기능은 로드된 카탈로그에서 계속 사용할 수 있습니다.");
+    expect(translateStaticText("ms", guidance[2])).toBe("Pantau kerja beratur, utamakan tugas yang layak dan jejak setiap tugas kembali kepada larian tidak berubahnya.");
+  });
 });
