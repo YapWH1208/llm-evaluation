@@ -247,4 +247,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("분석 컨텍스트");
     expect(translateStaticText("ms", phrases[6])).toBe("Garis asas yang dipilih digunakan pada setiap sel bukti dan delta yang dipaparkan di bawah.");
   });
+
+  it("renders comparison workspace guidance as complete phrases", () => {
+    const phrases = [
+      "Click or use Enter on a bar to inspect the supplied model-capability result.",
+      "Compare runs",
+      "Compare two completed runs from the same benchmark version and retain the complete evidence trail.",
+      "Comparison sources",
+      "Choose two distinct completed snapshots. Differences are always calculated as Run A minus Run B.",
+      "Comparison evidence",
+      "Select two source runs and compare them to expose shared-sample outcomes and metric deltas.",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("单击条形图或按 Enter 键以检查提供的模型能力结果。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Comparer les exécutions");
+    expect(translateStaticText("de", phrases[2])).toBe("Vergleichen Sie zwei abgeschlossene Ausführungen derselben Benchmark-Version und bewahren Sie die vollständige Nachweisspur auf.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Источники сравнения");
+    expect(translateStaticText("ja", phrases[4])).toBe("異なる完了済みスナップショットを 2 つ選択します。差分は常に実行 A から実行 B を引いて計算されます。");
+    expect(translateStaticText("ko", phrases[5])).toBe("비교 증거");
+    expect(translateStaticText("ms", phrases[6])).toBe("Pilih dua larian sumber dan bandingkannya untuk mendedahkan hasil sampel dikongsi serta delta metrik.");
+  });
 });
