@@ -35,12 +35,20 @@ Open the **Datasets** view and fill in the registration form:
 For a Hugging Face dataset, the source uses the `hf://` scheme:
 
 ```
-hf://owner/repository/path/to/file
+hf://datasets/owner/repository/path/to/file
 ```
 
+- The canonical form starts with the repository type, `datasets`. Existing
+  registrations using the shorter `hf://owner/repository/path/to/file` form
+  remain supported.
 - `hf://` refers to a Hugging Face **dataset** repository, so the path starts
   directly at the repository root — there is no `resolve/` segment and no
   `https://huggingface.co/datasets/` prefix.
+- The path must name a real repository file; Dataset Viewer split names are not
+  virtual folders. For example, the checked textfolder fixture is
+  `hf://datasets/hf-internal-testing/textfolder/hello.txt` (or shorthand
+  `hf://hf-internal-testing/textfolder/hello.txt`), not
+  `hf://hf-internal-testing/textfolder/train/hello.txt`.
 - The **revision** selects the branch, tag, or commit to resolve the file from
   (for example `main`).
 - HTTPS source URLs are also supported; local files are added through the
