@@ -287,4 +287,14 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("보고서 소스 선택");
     expect(translateStaticText("ms", phrases[6])).toBe("Pilih larian penilaian di atas untuk menjana dan mengurus artifaknya tanpa kembali ke halaman berasingan.");
   });
+
+  it("renders redesigned workspace navigation headers as complete phrases", () => {
+    expect(translateStaticText("zh-CN", "Overview")).toBe("概览");
+    expect(translateStaticText("fr", "Configure")).toBe("Configurer");
+    expect(translateStaticText("de", "Catalog")).toBe("Katalog");
+    expect(translateStaticText("ru", "Operations")).toBe("Операции");
+    expect(translateStaticText("ja", "Insights")).toBe("インサイト");
+    expect(translateStaticText("ko", "Reporting")).toBe("보고");
+    expect(translateStaticText("ms", "Quality review")).toBe("Semakan kualiti");
+  });
 });

@@ -343,6 +343,7 @@ const words: Record<string, readonly string[]> = {
 const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
   en: {},
   "zh-CN": {
+    "Overview": "概览", "Configure": "配置", "Catalog": "目录", "Operations": "运行", "Insights": "洞察", "Reporting": "报告", "Quality review": "质量审核", "Administration": "管理", "Evaluation workflow": "评测工作流",
     "OpenAI-compatible Chat Completions": "兼容 OpenAI 的聊天补全",
     "OpenAI-compatible Responses API": "兼容 OpenAI 的 Responses API",
     "Anthropic Messages": "Anthropic 消息 API",
@@ -352,6 +353,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "自定义 HTTP JSON",
   },
   fr: {
+    "Overview": "Vue d’ensemble", "Configure": "Configurer", "Catalog": "Catalogue", "Operations": "Opérations", "Insights": "Analyses", "Reporting": "Rapports", "Quality review": "Revue qualité", "Administration": "Administration", "Evaluation workflow": "Flux de travail d’évaluation",
     "OpenAI-compatible Chat Completions": "Complétions de chat compatibles OpenAI",
     "OpenAI-compatible Responses API": "API Responses compatible OpenAI",
     "Anthropic Messages": "Messages Anthropic",
@@ -361,6 +363,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "JSON HTTP personnalisé",
   },
   de: {
+    "Overview": "Übersicht", "Configure": "Konfigurieren", "Catalog": "Katalog", "Operations": "Betrieb", "Insights": "Erkenntnisse", "Reporting": "Berichte", "Quality review": "Qualitätsprüfung", "Administration": "Verwaltung", "Evaluation workflow": "Bewertungsablauf",
     "OpenAI-compatible Chat Completions": "OpenAI-kompatible Chat-Vervollständigungen",
     "OpenAI-compatible Responses API": "OpenAI-kompatible Responses-API",
     "Anthropic Messages": "Anthropic Messages",
@@ -370,6 +373,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Benutzerdefiniertes HTTP-JSON",
   },
   ru: {
+    "Overview": "Обзор", "Configure": "Настройка", "Catalog": "Каталог", "Operations": "Операции", "Insights": "Аналитика", "Reporting": "Отчёты", "Quality review": "Проверка качества", "Administration": "Администрирование", "Evaluation workflow": "Рабочий процесс оценки",
     "OpenAI-compatible Chat Completions": "Совместимые с OpenAI чат-завершения",
     "OpenAI-compatible Responses API": "Совместимый с OpenAI API Responses",
     "Anthropic Messages": "Сообщения Anthropic",
@@ -379,6 +383,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Пользовательский HTTP JSON",
   },
   ja: {
+    "Overview": "概要", "Configure": "設定", "Catalog": "カタログ", "Operations": "運用", "Insights": "インサイト", "Reporting": "レポート", "Quality review": "品質レビュー", "Administration": "管理", "Evaluation workflow": "評価ワークフロー",
     "OpenAI-compatible Chat Completions": "OpenAI 互換チャット補完",
     "OpenAI-compatible Responses API": "OpenAI 互換 Responses API",
     "Anthropic Messages": "Anthropic メッセージ API",
@@ -388,6 +393,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "カスタム HTTP JSON",
   },
   ko: {
+    "Overview": "개요", "Configure": "구성", "Catalog": "카탈로그", "Operations": "운영", "Insights": "인사이트", "Reporting": "보고", "Quality review": "품질 검토", "Administration": "관리", "Evaluation workflow": "평가 워크플로",
     "OpenAI-compatible Chat Completions": "OpenAI 호환 채팅 완성",
     "OpenAI-compatible Responses API": "OpenAI 호환 Responses API",
     "Anthropic Messages": "Anthropic 메시지 API",
@@ -397,6 +403,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "사용자 지정 HTTP JSON",
   },
   ms: {
+    "Overview": "Gambaran keseluruhan", "Configure": "Konfigurasi", "Catalog": "Katalog", "Operations": "Operasi", "Insights": "Cerapan", "Reporting": "Pelaporan", "Quality review": "Semakan kualiti", "Administration": "Pentadbiran", "Evaluation workflow": "Aliran kerja penilaian",
     "OpenAI-compatible Chat Completions": "Pelengkapan sembang serasi OpenAI",
     "OpenAI-compatible Responses API": "API Responses serasi OpenAI",
     "Anthropic Messages": "Mesej Anthropic",
