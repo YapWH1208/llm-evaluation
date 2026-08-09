@@ -333,4 +333,12 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ru", "Roles, rate ceilings, and status remain visible before issuing additional credentials.")).toBe("Роли, ограничения частоты и статус остаются видимыми перед выпуском дополнительных учётных данных.");
     expect(translateStaticText("ja", "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.")).toBe("最新の記録済み管理変更は、ユーザー作成値とは分けて監査証跡として保持されます。");
   });
+
+  it("renders settings and filter placeholders as complete phrases", () => {
+    expect(translateStaticText("zh-CN", "Access and preferences")).toBe("访问和偏好设置");
+    expect(translateStaticText("fr", "Operating guidance")).toBe("Guide d’utilisation");
+    expect(translateStaticText("de", "Name, source, status…")).toBe("Name, Quelle, Status…");
+    expect(translateStaticText("ru", "Benchmark, status, or ID")).toBe("Бенчмарк, статус или идентификатор");
+    expect(translateStaticText("ja", "total runs")).toBe("総実行数");
+  });
 });
