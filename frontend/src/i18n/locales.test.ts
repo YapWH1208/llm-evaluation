@@ -297,4 +297,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", "Reporting")).toBe("보고");
     expect(translateStaticText("ms", "Quality review")).toBe("Semakan kualiti");
   });
+
+  it("renders report-generation and review-entry guidance as complete phrases", () => {
+    const phrases = [
+      "Select a run to generate a portable report or inspect saved artifacts.",
+      "Generate report",
+      "Select the report shape, then generate the download format needed by the next review or handoff.",
+      "Download a generated artifact or create a scoped share link with explicit evidence and download controls.",
+      "Keep human scoring and judge assessments tied to the precise run snapshot and sample under review.",
+      "Select an evidence sample",
+      "Review context",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("选择一个运行以生成可移植报告或检查已保存的工件。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Générer le rapport");
+    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie die Berichtsform und erzeugen Sie anschließend das für die nächste Überprüfung oder Übergabe benötigte Downloadformat.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Скачайте созданный артефакт или создайте ограниченную ссылку общего доступа с явными элементами управления доказательствами и загрузкой.");
+    expect(translateStaticText("ja", phrases[4])).toBe("人による採点と判定者の評価を、確認中の正確な実行スナップショットとサンプルに結び付けます。");
+    expect(translateStaticText("ko", phrases[5])).toBe("증거 샘플 선택");
+    expect(translateStaticText("ms", phrases[6])).toBe("Konteks semakan");
+  });
 });
