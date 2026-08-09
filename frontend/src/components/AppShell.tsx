@@ -42,7 +42,7 @@ export function AppShell({
   const currentGroup = navigationGroupFor(view);
   const copy = shellCopy[locale];
   const navigation = navigationCopy[locale];
-  const healthLabel = systemHealth?.status === "healthy" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
+  const healthLabel = systemHealth?.status === "ok" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
 
   function navigate(nextView: View) {
     onViewChange(nextView);
@@ -87,7 +87,7 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span className={systemHealth?.status === "healthy" ? "health-dot is-healthy" : "health-dot"} />
+          <span className={systemHealth?.status === "ok" ? "health-dot is-healthy" : "health-dot"} />
           <span>{healthLabel}</span>
         </div>
       </aside>

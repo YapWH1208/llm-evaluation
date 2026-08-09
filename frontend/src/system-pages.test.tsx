@@ -53,6 +53,30 @@ describe("system workspace pages", () => {
     expect(screen.getByText("Judge and review workflow")).toBeVisible();
   });
 
+  it("offers only completed runs as report sources", () => {
+    const runningRun = { ...run, id: "run-running-99", status: "running" } as EvaluationRun;
+    renderPage(<ReportsPage completedRuns={[run, secondRun]} onGenerateReport={vi.fn()} onRelatedRunChange={vi.fn()} onReportTypeChange={vi.fn()} onSelectRun={vi.fn()} relatedRunId="" reportArtifacts={<div>Report artifact inventory</div>} reportType="single_model" runs={[run, secondRun, runningRun]} selectedRun={run} />);
+
+    expect(screen.queryByRole("option", { name: /· running/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /run-alph · completed/ })).toBeInTheDocument();
+  });
+
+  it("keeps report generation off until a completed source run is chosen", () => {
+    const runningRun = { ...run, id: "run-running-99", status: "running" } as EvaluationRun;
+    renderPage(<ReportsPage completedRuns={[run, secondRun]} onGenerateReport={vi.fn()} onRelatedRunChange={vi.fn()} onReportTypeChange={vi.fn()} onSelectRun={vi.fn()} relatedRunId="" reportArtifacts={<div>Report artifact inventory</div>} reportType="single_model" runs={[run, secondRun, runningRun]} selectedRun={runningRun} />);
+
+    expect(screen.queryByRole("button", { name: "Generate HTML" })).not.toBeInTheDocument();
+    expect(screen.getByText("Select a completed run to generate a portable report or inspect saved artifacts.")).toBeVisible();
+  });
+
+  it("offers only completed runs in the review selector", () => {
+    const runningRun = { ...run, id: "run-running-99", status: "running" } as EvaluationRun;
+    renderPage(<ReviewsPage attempts={[attempt]} onSelectAttempt={vi.fn()} onSelectRun={vi.fn()} reviewDetail={<div>Judge and review workflow</div>} runs={[run, secondRun, runningRun]} selectedAttempt={attempt} selectedRun={run} />);
+
+    expect(screen.queryByRole("option", { name: /· running/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /run-alph · completed/ })).toBeInTheDocument();
+  });
+
   it("keeps the user creation form, role choices, inventory, and audit evidence together", () => {
     const user = { id: "user-1", display_name: "Ada", email: "ada@example.test", role: "reviewer", status: "active", max_concurrency: 4, created_at: "2026-08-08T12:00:00Z" } as User;
     const audit = { id: "audit-1", action: "user.created", entity_type: "user", entity_id: user.id, actor_id: "admin", details: null, created_at: "2026-08-08T12:00:00Z" } as AuditEvent;

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -131,7 +131,7 @@ const analytics: AnalyticsMatrix = {
 };
 
 const systemHealth: SystemHealth = {
-  status: "healthy",
+  status: "ok",
   database: "sqlite",
   schema_version: 1,
   database_connected: true,
@@ -226,5 +226,36 @@ describe("OverviewDashboard", () => {
 
     expect(props.onOpenView).toHaveBeenNthCalledWith(1, "models");
     expect(props.onOpenView).toHaveBeenNthCalledWith(2, "runs");
+  });
+
+  it("keeps system readiness neutral while health is unknown", () => {
+    renderOverview({ systemHealth: null });
+
+    const grid = document.querySelector(".readiness-grid");
+    expect(grid).not.toBeNull();
+    const systemItem = within(grid as HTMLElement).getByText("Not available").closest("article");
+
+    expect(systemItem).not.toBeNull();
+    expect(systemItem).not.toHaveClass("is-attention");
+    expect(screen.queryByText("Attention needed")).not.toBeInTheDocument();
+  });
+
+  it("flags degraded system health for attention instead of leaving it neutral", () => {
+    renderOverview({ systemHealth: { ...systemHealth, status: "degraded", database_connected: false } });
+
+    const systemItem = screen.getByText("Attention needed").closest("article");
+
+    expect(systemItem).not.toBeNull();
+    expect(systemItem).toHaveClass("is-attention");
+  });
+
+  it("reports an operational system without raising attention", () => {
+    renderOverview();
+
+    const grid = document.querySelector(".readiness-grid");
+    const systemItem = within(grid as HTMLElement).getByText("Operational").closest("article");
+
+    expect(systemItem).not.toBeNull();
+    expect(systemItem).not.toHaveClass("is-attention");
   });
 });

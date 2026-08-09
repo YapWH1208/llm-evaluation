@@ -198,9 +198,9 @@ export function OverviewDashboard({ analytics, dashboard, endpoints, runs, syste
     ...costMetrics,
     { id: "errors", label: copy.apiErrors, value: formatters.percent(dashboard.api.request_error_rate), detail: interpolate(copy.requests, { count: dashboard.quality.errors.api_errors }) },
   ];
-  const systemReady = systemHealth?.status === "healthy" && systemHealth.database_connected;
+  const systemHealthState = systemHealth === null ? "unknown" : systemHealth.status === "ok" && systemHealth.database_connected ? "ready" : "attention";
   const readinessItems: ReadinessItem[] = [
-    { id: "system", label: copy.systemReadiness, detail: systemReady ? copy.operational : copy.attentionNeeded, attention: !systemReady, view: "settings" },
+    { id: "system", label: copy.systemReadiness, detail: systemHealthState === "ready" ? copy.operational : systemHealthState === "unknown" ? copy.unknownValue : copy.attentionNeeded, attention: systemHealthState === "attention", view: "settings" },
     { id: "endpoints", label: copy.modelEndpoints, detail: dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel, attention: dashboard.endpoints.available === 0, view: "models" },
     { id: "datasets", label: copy.evaluationData, detail: dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset, attention: dashboard.datasets.ready === 0, view: "datasets" },
     { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "queue" },

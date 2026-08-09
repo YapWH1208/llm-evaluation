@@ -29,15 +29,24 @@ describe("workspace setup workbench", () => {
     expect(screen.getByLabelText("Prompt name")).not.toBeVisible();
   });
 
-  it("keeps existing setup sections mounted while switching the visible workbench mode", async () => {
+  it("keeps existing setup panes mounted while switching the visible workbench mode", async () => {
     const user = userEvent.setup();
-    render(<WorkspaceSetupPage><section>Prompt setup</section><section>Asset setup</section><section>Suite setup</section><section>Benchmark registry</section><section>Dataset cache</section></WorkspaceSetupPage>);
+    render(
+      <WorkspaceSetupPage
+        assets={<p>Asset setup</p>}
+        catalog={<><section>Benchmark registry</section><section>Dataset cache</section></>}
+        inputs={<p>Prompt setup</p>}
+        suites={<p>Suite setup</p>}
+      />,
+    );
 
     expect(screen.getByText("Prompt setup")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Catalog" })).toHaveAttribute("aria-controls", "workspace-tabpanel-catalog");
     await user.click(screen.getByRole("tab", { name: "Catalog" }));
 
     expect(screen.getByText("Benchmark registry")).toBeVisible();
     expect(screen.getByText("Dataset cache")).toBeVisible();
     expect(screen.getByText("Prompt setup")).not.toBeVisible();
+    expect(screen.getByRole("tabpanel", { name: "Catalog" })).toBeVisible();
   });
 });

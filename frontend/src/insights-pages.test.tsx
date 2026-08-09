@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -126,6 +126,45 @@ describe("insight workspace pages", () => {
     await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
 
     expect(onSelectBaseline).toHaveBeenCalledWith(completedRun.id);
+  });
+
+  it("keeps a user-chosen baseline and its delta cells across background refreshes", async () => {
+    const user = userEvent.setup();
+    const baselineCell = { ...languageCell, baseline_score: .9, delta: -.01 };
+    const baselineMatrix = { ...analytics, baseline_run_id: completedRun.id, heatmaps: { ...analytics.heatmaps, model_language: [baselineCell] } } as AnalyticsMatrix;
+    const onSelectBaseline = vi.fn().mockResolvedValue(baselineMatrix);
+    const { rerender } = render(<LocaleProvider><AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} /></LocaleProvider>);
+
+    await user.click(screen.getByRole("tab", { name: "Model × language" }));
+    await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
+
+    expect(screen.getByRole("cell", { name: "90% / -1%" })).toBeVisible();
+
+    rerender(<LocaleProvider><AnalysisPage analytics={{ ...analytics, heatmaps: { ...analytics.heatmaps, model_language: [languageCell] } }} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} /></LocaleProvider>);
+
+    expect((screen.getByLabelText("Baseline run") as HTMLSelectElement).value).toBe(completedRun.id);
+    expect(screen.getByRole("cell", { name: "90% / -1%" })).toBeVisible();
+  });
+
+  it("reverts the baseline selector when the requested matrix fails", async () => {
+    const user = userEvent.setup();
+    const onSelectBaseline = vi.fn().mockRejectedValue(new Error("baseline unavailable"));
+    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} />);
+
+    await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
+
+    await waitFor(() => expect((screen.getByLabelText("Baseline run") as HTMLSelectElement).value).toBe(""));
+  });
+
+  it("wires the active analysis dimension to its tab panel", async () => {
+    const user = userEvent.setup();
+    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={vi.fn().mockResolvedValue(analytics)} />);
+
+    expect(screen.getByRole("tabpanel", { name: "Model × benchmark" })).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Model × language" }));
+
+    expect(screen.getByRole("tabpanel", { name: "Model × language" })).toBeVisible();
   });
 
   it("keeps both comparison sources, the submit path, and result evidence in one investigation surface", async () => {

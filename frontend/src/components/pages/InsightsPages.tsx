@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { AnalyticsCell, AnalyticsMatrix, Comparison, EvaluationRun } from "../../api";
 import { useTranslation } from "../../i18n/LocaleProvider";
@@ -27,7 +27,25 @@ export function AnalysisPage({ analytics, completedRuns, onSelectBaseline }: Ana
   const [matrix, setMatrix] = useState<AnalyticsMatrix | null>(analytics);
   const [baselineRunId, setBaselineRunId] = useState(analytics?.baseline_run_id ?? "");
   const [dimension, setDimension] = useState<AnalysisDimension>("model_benchmark");
-  useEffect(() => { setMatrix(analytics); setBaselineRunId(analytics?.baseline_run_id ?? ""); }, [analytics]);
+  const requestedBaselineRunId = useRef<string | null>(null);
+  useEffect(() => {
+    if ((analytics?.baseline_run_id ?? "") !== baselineRunId) return;
+    setMatrix(analytics);
+    setBaselineRunId(analytics?.baseline_run_id ?? "");
+  }, [analytics, baselineRunId]);
+
+  const applyBaseline = (runId: string) => {
+    requestedBaselineRunId.current = runId;
+    setBaselineRunId(runId);
+    void onSelectBaseline(runId).then((next) => {
+      if (requestedBaselineRunId.current !== runId) return;
+      setMatrix(next);
+    }).catch(() => {
+      if (requestedBaselineRunId.current !== runId) return;
+      setBaselineRunId("");
+      setMatrix(analytics);
+    });
+  };
 
   const cells = matrix?.heatmaps[dimension] ?? [];
   const selectedDimension = analysisDimensions.find((item) => item.id === dimension) ?? analysisDimensions[0];
@@ -36,10 +54,10 @@ export function AnalysisPage({ analytics, completedRuns, onSelectBaseline }: Ana
     <PageHeader description="Investigate supplied quality, reliability, latency, and cost evidence across evaluation dimensions." eyebrow="Insights" status={<>{matrix ? `${cells.length} ${selectedDimension.label.toLowerCase()} cells` : "Loading analysis"}</>} title="Analysis" />
     {!matrix ? <WorkspacePanel description="The analysis matrix is loading from the evaluation service." title="Analysis matrix"><p className="empty">Loading analysis matrix...</p></WorkspacePanel> : <>
       <WorkspacePanel className="workspace-analysis-context" description="The selected baseline applies to every evidence cell and delta shown below." title="Analysis context">
-        <label className="workspace-filter-control">Baseline run<select onChange={(event) => { const runId = event.target.value; setBaselineRunId(runId); void onSelectBaseline(runId).then(setMatrix); }} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
+        <label className="workspace-filter-control">Baseline run<select onChange={(event) => applyBaseline(event.target.value)} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
       </WorkspacePanel>
       <WorkspaceTabs onChange={setDimension} tabs={analysisDimensions} value={dimension} />
-      <div className="workspace-insights-grid">
+      <div aria-labelledby={`workspace-tab-${dimension}`} className="workspace-insights-grid" id={`workspace-tabpanel-${dimension}`} role="tabpanel">
         <CapabilityChart cells={matrix.capability_matrix} />
         <HeatmapBreakdown cells={cells} dimension={selectedDimension.label} />
       </div>

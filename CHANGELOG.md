@@ -38,6 +38,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run's attempts load, so stale samples can no longer be selected.
 - Workspace filters, dataset lifecycle actions, suite queue controls, disk
   usage, and audit/compare states are translated for non-English locales.
+- Selecting an analysis baseline no longer gets silently reset by background
+  run-event refreshes, and a failed baseline request reverts the selector
+  instead of leaving a stale choice.
+- Report and review run selectors list only completed runs, so generating a
+  report from an in-progress run is no longer offered.
+- System readiness on the dashboard stays neutral while health is unknown
+  instead of flashing "attention needed", and a healthy service is now
+  recognized from the deployed health response.
+- The dataset catalog refetches disk usage only when dataset cache state
+  changes rather than on every background refresh.
+- Workspace tabs expose their tab panels to assistive technology, and the
+  setup workbench maps inputs, assets, suites, and catalog panes by name
+  instead of by section position.
 
 ## 0.2.0 — 2026-08-07
 

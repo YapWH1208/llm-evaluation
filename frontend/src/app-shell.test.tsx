@@ -123,4 +123,18 @@ describe("AppShell", () => {
     expect(props.onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(props.onDismissNotice).toHaveBeenCalledOnce();
   });
+
+  it("labels a healthy service from the deployed health response", () => {
+    renderShell({ systemHealth: { status: "ok", database: "sqlite", schema_version: 1, database_connected: true, disk: { available_bytes: 1024, total_bytes: 2048 }, queue: { pending: 0, active: 0 } } });
+
+    expect(screen.getByText("System healthy")).toBeVisible();
+    expect(document.querySelector(".health-dot")).toHaveClass("is-healthy");
+  });
+
+  it("reports an unknown service state while health has not responded", () => {
+    renderShell({ systemHealth: null });
+
+    expect(screen.getByText("System status unavailable")).toBeVisible();
+    expect(document.querySelector(".health-dot")).not.toHaveClass("is-healthy");
+  });
 });

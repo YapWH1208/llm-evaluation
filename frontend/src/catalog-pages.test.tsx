@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -144,6 +144,20 @@ describe("catalog workspace pages", () => {
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     expect(await screen.findByText("2 + 2")).toBeVisible();
+  });
+
+  it("refetches disk usage only when dataset cache state changes", async () => {
+    const usageRequest = vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });
+    const page = <DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />;
+    const { rerender } = renderCatalogPage(page);
+
+    expect(usageRequest).toHaveBeenCalledTimes(1);
+
+    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} /></LocaleProvider>);
+    await waitFor(() => expect(usageRequest).toHaveBeenCalledTimes(1));
+
+    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset, status: "verifying" }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} /></LocaleProvider>);
+    await waitFor(() => expect(usageRequest).toHaveBeenCalledTimes(2));
   });
 
   it("formats the versioned benchmark composition shown for a suite", () => {

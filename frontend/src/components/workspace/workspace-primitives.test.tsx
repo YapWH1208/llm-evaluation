@@ -48,6 +48,8 @@ describe("workspace presentation primitives", () => {
 
     expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Outputs" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("id", "workspace-tab-inputs");
+    expect(screen.getByRole("tab", { name: "Outputs" })).toHaveAttribute("aria-controls", "workspace-tabpanel-outputs");
 
     await user.click(screen.getByRole("tab", { name: "Outputs" }));
 

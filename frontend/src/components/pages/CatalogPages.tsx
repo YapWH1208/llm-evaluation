@@ -85,6 +85,7 @@ export async function loadDatasetPreview(dataset: Dataset) {
 export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspace, onPause, onPrepare, onUpdate, onUpload, onValidate }: DatasetsPageProps) {
   const { formatNumber: display, locale } = useTranslation();
   const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
+  const usageKey = datasets.map((dataset) => `${dataset.id}:${dataset.status}`).join("|");
   const [preview, setPreview] = useState<DatasetPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
@@ -93,7 +94,7 @@ export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspac
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedId) ?? datasets[0] ?? null;
 
-  useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [datasets]);
+  useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [usageKey]);
 
   return (
     <div className="workspace-page datasets-page">
