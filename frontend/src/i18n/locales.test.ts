@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { catalogs, isLocale, localeIds, navigationCopy, overviewCopy, resolveLocale } from "./catalog";
-import { hasExplicitStaticTranslation, translateStaticTemplate, translateStaticText } from "./operationalCopy";
+import { hasExplicitStaticTranslation, staticSourceTexts, translateStaticTemplate, translateStaticText } from "./operationalCopy";
 
 const analyticsOverviewKeys = [
   "dashboardTitle",
@@ -342,32 +342,9 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ja", "total runs")).toBe("総実行数");
   });
 
-  it("requires direct translations for every remaining redesigned workspace phrase", () => {
-    const phrases = [
-      "Endpoint inventory",
-      "Choose the evaluation snapshot and sample before opening human or independent judge workflows.",
-      "Review run",
-      "Review sample",
-      "Select a run to begin a human or judge review.",
-      "Human review workflow",
-      "Provision constrained API users and keep recent administrative activity alongside the current inventory.",
-      "User inventory",
-      "Create a token-bearing account with the least-privileged role and an optional concurrency ceiling.",
-      "Roles, rate ceilings, and status remain visible before issuing additional credentials.",
-      "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.",
-      "Inspect deployment-owned configuration, local workspace preferences, and the bearer token used for protected service calls.",
-      "Application and storage",
-      "Access and preferences",
-      "The token remains only in this browser session. Clear it when you no longer need protected access.",
-      "Operating guidance",
-      "Choose a storage deployment that matches the worker topology, then use the theme toggle for this workspace only.",
-      "Name, source, status…",
-      "Benchmark, status, or ID",
-      "total runs",
-    ] as const;
-
+  it("requires direct translations for every bridged static phrase", () => {
     for (const locale of localeIds.filter((locale) => locale !== "en")) {
-      for (const phrase of phrases) {
+      for (const phrase of staticSourceTexts) {
         expect(hasExplicitStaticTranslation(locale, phrase), `${locale}: ${phrase}`).toBe(true);
       }
     }

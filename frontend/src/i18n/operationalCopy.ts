@@ -1134,14 +1134,2514 @@ const localizationCompletionPhrases: Record<Locale, Record<string, string>> = {
   },
 };
 
+const materializedStaticLabelPhrases: Record<Locale, Record<string, string>> = {
+  "en": {
+  },
+  "zh-CN": {
+    "Display name": "显示 名称",
+    "Base URL": "基础 URL",
+    "Model name": "模型 名称",
+    "Protocol profile": "协议 配置文件",
+    "API key": "API 密钥",
+    "Custom headers (JSON)": "自定义 标头 (JSON)",
+    "Endpoint concurrency": "端点 并发",
+    "Shared API-key concurrency": "共享 API 密钥 并发",
+    "Requests / minute": "请求 / 分钟",
+    "Tokens / minute": "令牌 / 分钟",
+    "Requests / second": "请求 / 秒",
+    "Input tokens / minute": "输入 令牌 / 分钟",
+    "Output tokens / minute": "输出 令牌 / 分钟",
+    "Input / 1M tokens": "输入 / 1百万 令牌",
+    "Output / 1M tokens": "输出 / 1百万 令牌",
+    "Currency": "货币",
+    "Tags (comma-separated)": "标签 (逗号分隔)",
+    "Notes": "备注",
+    "Saving...": "正在保存...",
+    "Save encrypted endpoint": "保存 已加密 端点",
+    "Benchmark pack": "基准 包",
+    "Built-in benchmark prompt": "内置 基准 提示词",
+    "Run concurrency cap": "运行 并发 上限",
+    "Models": "模型",
+    "Test connection": "测试 连接",
+    "Probe capabilities": "探测 能力",
+    "Queue selected benchmark": "队列 已选择 基准",
+    "User: unknown": "用户: 未知",
+    "User: supported": "用户: 受支持",
+    "User: unsupported": "用户: 不支持",
+    "Benchmarks": "基准",
+    "Benchmark": "基准",
+    "Version": "版本",
+    "Source": "来源",
+    "Status": "状态",
+    "Modalities": "模态",
+    "Operation": "操作",
+    "Enable": "启用",
+    "Disable": "禁用",
+    "Managed by pack": "受管理 由 包",
+    "Queue on": "队列 在",
+    "Create prompt package": "创建 提示词 包",
+    "Name": "名称",
+    "Prompt type": "提示词 类型",
+    "Official prompt": "官方 提示词",
+    "Platform default": "平台 默认",
+    "User custom": "用户 自定义",
+    "Benchmark variant": "基准 变体",
+    "Language-specific": "特定语言",
+    "System message": "系统 消息",
+    "User template": "用户 模板",
+    "Output format (JSON)": "输出 格式 (JSON)",
+    "Response parser (JSON)": "响应 解析器 (JSON)",
+    "Scoring rule (JSON)": "评分 规则 (JSON)",
+    "Change log": "更改 日志",
+    "Save versioned prompt": "保存 已版本化 提示词",
+    "Register dataset version": "注册 数据集 版本",
+    "Dataset ID": "数据集 ID",
+    "Revision": "修订",
+    "Source HTTPS URL": "来源 HTTPS URL",
+    "Expected SHA-256 checksum": "预期 SHA-256 校验和",
+    "Credential binding ID": "凭据 绑定 ID",
+    "License text": "许可证 文本",
+    "Register dataset": "注册 数据集",
+    "Preview": "预览",
+    "Edit": "编辑",
+    "Delete": "删除",
+    "Cancel": "取消",
+    "Endpoint": "端点",
+    "Select available endpoint": "选择 可用 端点",
+    "Sample ID": "样本 ID",
+    "Prompt": "提示词",
+    "Expected text answer": "预期 文本 答案",
+    "Uploaded media": "已上传 媒体",
+    "Queue multimodal run": "队列 多模态 运行",
+    "Media asset upload": "媒体 资源 上传",
+    "Create evaluation suite": "创建 评测 套件",
+    "Benchmarks (id@version)": "基准 (ID@版本)",
+    "Prompt overrides (JSON)": "提示词 覆盖 (JSON)",
+    "Weight configuration (JSON)": "权重 配置 (JSON)",
+    "Description": "描述",
+    "Save suite": "保存 套件",
+    "Benchmark registry": "基准 注册表",
+    "Dataset cache": "数据集 缓存",
+    "No source URL": "无 来源 URL",
+    "Accept license": "接受 许可证",
+    "Download and verify": "下载 和 验证",
+    "Run preflight": "运行 预检",
+    "Checking…": "正在检查…",
+    "Preflight": "预检",
+    "Evaluation runs": "评测 运行",
+    "Inspect": "查看",
+    "Run cap": "运行 上限",
+    "Pause": "暂停",
+    "Resume": "恢复",
+    "Clone": "克隆",
+    "Retry failed": "重试 失败",
+    "Archive": "归档",
+    "Task queue": "任务 队列",
+    "Workers": "工作节点",
+    "Worker": "工作节点",
+    "Task": "任务",
+    "Run": "运行",
+    "Priority": "优先级",
+    "Attempts": "尝试",
+    "Created": "已创建",
+    "Run A": "运行 一个",
+    "Select completed run": "选择 已完成 运行",
+    "Compare": "比较",
+    "Report type": "报告 类型",
+    "Prompt comparison": "提示词 比较",
+    "Cost": "成本",
+    "Related completed run": "相关 已完成 运行",
+    "Select run": "选择 运行",
+    "Generate PDF": "生成 PDF",
+    "Generate JSON": "生成 JSON",
+    "Create user": "创建 用户",
+    "Email": "电子邮件",
+    "Reviewer": "审查者",
+    "User concurrency cap": "用户 并发 上限",
+    "Action": "操作",
+    "Database": "数据库",
+    "Health": "健康",
+    "Queue": "队列",
+    "Disk": "磁盘",
+    "Theme": "主题",
+    "Workspace language": "工作区 语言",
+    "Media preview": "媒体 预览",
+    "Loading": "正在加载",
+    "evidence…": "证据…",
+    "Audio preview unavailable.": "音频 预览 不可用.",
+    "Video preview unavailable.": "视频 预览 不可用.",
+    "Download attached file": "下载 已附加 文件",
+    "Sample evidence": "样本 证据",
+    "Search samples": "搜索 样本",
+    "All states": "全部 状态",
+    "Succeeded": "成功",
+    "Failed": "失败",
+    "Pending": "待处理",
+    "Running": "运行中",
+    "Correctness": "正确性",
+    "Correct": "正确",
+    "Incorrect": "不正确",
+    "Capability": "能力",
+    "Modality": "模态",
+    "Language": "语言",
+    "Difficulty": "难度",
+    "Error type": "错误 类型",
+    "Any error": "任何 错误",
+    "API error": "API 错误",
+    "Parser error": "解析器 错误",
+    "Judge": "裁判",
+    "Disagreement": "分歧",
+    "No disagreement": "无 分歧",
+    "None": "无",
+    "Load next 100 samples": "加载 下一步 100 样本",
+    "Run executive summary": "运行 执行 摘要",
+    "Completion": "完成情况",
+    "Accuracy": "准确率",
+    "Latency": "延迟",
+    "Loading summary...": "正在加载 摘要...",
+    "Durable run log": "持久 运行 日志",
+    "Capability evidence": "能力 证据",
+    "Score": "得分",
+    "Samples": "样本",
+    "Run signals": "运行 信号",
+    "Loading next page…": "正在加载 下一步 页面…",
+    "Reviewer ID": "审查者 ID",
+    "Save review": "保存 审查",
+    "Judge evidence": "裁判 证据",
+    "Baseline run": "基线 运行",
+    "No baseline": "无 基线",
+    "Row": "行",
+    "Column": "列",
+    "Baseline / Δ": "基线 / Δ",
+    "Errors": "错误",
+    "Latency difference": "延迟 差异",
+    "Cost difference": "成本 差异",
+    "Output tokens": "输出 令牌",
+    "Stored encrypted": "已存储 已加密",
+    "Unlimited": "无限制",
+    "production, vision": "生产, 视觉",
+    "configured": "已配置",
+    "cost not configured": "成本 未 已配置",
+    "executed": "已执行",
+    "paused": "已暂停",
+    "resumed": "已恢复",
+    "cancelled": "已取消",
+    "single model": "单 模型",
+    "multi model": "多 模型",
+    "prompt comparison": "提示词 比较",
+    "Run {{action}}.": "运行 {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} 下载 已暂停.",
+  },
+  "fr": {
+    "Display name": "affichage nom",
+    "Base URL": "base URL",
+    "Model name": "modèle nom",
+    "Protocol profile": "protocole profil",
+    "API key": "API clé",
+    "Custom headers (JSON)": "personnalisé en-têtes (JSON)",
+    "Endpoint concurrency": "point de terminaison concurrence",
+    "Shared API-key concurrency": "partagé clé API concurrence",
+    "Requests / minute": "requêtes / minute",
+    "Tokens / minute": "jetons / minute",
+    "Requests / second": "requêtes / seconde",
+    "Input tokens / minute": "entrée jetons / minute",
+    "Output tokens / minute": "sortie jetons / minute",
+    "Input / 1M tokens": "entrée / 1M jetons",
+    "Output / 1M tokens": "sortie / 1M jetons",
+    "Currency": "devise",
+    "Tags (comma-separated)": "étiquettes (séparé par des virgules)",
+    "Notes": "notes",
+    "Saving...": "enregistrement...",
+    "Save encrypted endpoint": "enregistrer chiffré point de terminaison",
+    "Benchmark pack": "référentiel pack",
+    "Built-in benchmark prompt": "intégré référentiel invite",
+    "Run concurrency cap": "exécution concurrence plafond",
+    "Models": "modèles",
+    "Test connection": "tester connexion",
+    "Probe capabilities": "sonder capacités",
+    "Queue selected benchmark": "file sélectionné référentiel",
+    "User: unknown": "utilisateur: inconnu",
+    "User: supported": "utilisateur: pris en charge",
+    "User: unsupported": "utilisateur: non pris en charge",
+    "Benchmarks": "référentiels",
+    "Benchmark": "référentiel",
+    "Version": "version",
+    "Source": "source",
+    "Status": "statut",
+    "Modalities": "modalités",
+    "Operation": "opération",
+    "Enable": "activer",
+    "Disable": "désactiver",
+    "Managed by pack": "géré par pack",
+    "Queue on": "file sur",
+    "Create prompt package": "créer invite package",
+    "Name": "nom",
+    "Prompt type": "invite type",
+    "Official prompt": "officiel invite",
+    "Platform default": "plateforme par défaut",
+    "User custom": "utilisateur personnalisé",
+    "Benchmark variant": "référentiel variante",
+    "Language-specific": "spécifique à la langue",
+    "System message": "système message",
+    "User template": "utilisateur modèle",
+    "Output format (JSON)": "sortie format (JSON)",
+    "Response parser (JSON)": "réponse analyseur (JSON)",
+    "Scoring rule (JSON)": "notation règle (JSON)",
+    "Change log": "modifier journal",
+    "Save versioned prompt": "enregistrer versionné invite",
+    "Register dataset version": "enregistrer jeu de données version",
+    "Dataset ID": "jeu de données ID",
+    "Revision": "révision",
+    "Source HTTPS URL": "source HTTPS URL",
+    "Expected SHA-256 checksum": "attendu SHA-256 somme de contrôle",
+    "Credential binding ID": "identifiant liaison ID",
+    "License text": "licence texte",
+    "Register dataset": "enregistrer jeu de données",
+    "Preview": "aperçu",
+    "Edit": "modifier",
+    "Delete": "supprimer",
+    "Cancel": "annuler",
+    "Endpoint": "point de terminaison",
+    "Select available endpoint": "sélectionner disponible point de terminaison",
+    "Sample ID": "échantillon ID",
+    "Prompt": "invite",
+    "Expected text answer": "attendu texte réponse",
+    "Uploaded media": "téléversé média",
+    "Queue multimodal run": "file multimodal exécution",
+    "Media asset upload": "média ressource téléverser",
+    "Create evaluation suite": "créer évaluation suite",
+    "Benchmarks (id@version)": "référentiels (ID@version)",
+    "Prompt overrides (JSON)": "invite remplacements (JSON)",
+    "Weight configuration (JSON)": "poids configuration (JSON)",
+    "Description": "description",
+    "Save suite": "enregistrer suite",
+    "Benchmark registry": "référentiel registre",
+    "Dataset cache": "jeu de données cache",
+    "No source URL": "aucun source URL",
+    "Accept license": "accepter licence",
+    "Download and verify": "télécharger et vérifier",
+    "Run preflight": "exécution pré-vérification",
+    "Checking…": "vérification…",
+    "Preflight": "pré-vérification",
+    "Evaluation runs": "évaluation exécutions",
+    "Inspect": "inspecter",
+    "Run cap": "exécution plafond",
+    "Pause": "mettre en pause",
+    "Resume": "reprendre",
+    "Clone": "cloner",
+    "Retry failed": "réessayer échoué",
+    "Archive": "archiver",
+    "Task queue": "tâche file",
+    "Workers": "agents",
+    "Worker": "agent",
+    "Task": "tâche",
+    "Run": "exécution",
+    "Priority": "priorité",
+    "Attempts": "tentatives",
+    "Created": "créé",
+    "Run A": "exécution un",
+    "Select completed run": "sélectionner terminé exécution",
+    "Compare": "comparer",
+    "Report type": "rapport type",
+    "Prompt comparison": "invite comparaison",
+    "Cost": "coût",
+    "Related completed run": "associé terminé exécution",
+    "Select run": "sélectionner exécution",
+    "Generate PDF": "générer PDF",
+    "Generate JSON": "générer JSON",
+    "Create user": "créer utilisateur",
+    "Email": "e-mail",
+    "Reviewer": "évaluateur",
+    "User concurrency cap": "utilisateur concurrence plafond",
+    "Action": "action",
+    "Database": "base de données",
+    "Health": "santé",
+    "Queue": "file",
+    "Disk": "disque",
+    "Theme": "thème",
+    "Workspace language": "espace de travail langue",
+    "Media preview": "média aperçu",
+    "Loading": "chargement",
+    "evidence…": "preuve…",
+    "Audio preview unavailable.": "audio aperçu indisponible.",
+    "Video preview unavailable.": "vidéo aperçu indisponible.",
+    "Download attached file": "télécharger joint fichier",
+    "Sample evidence": "échantillon preuve",
+    "Search samples": "rechercher échantillons",
+    "All states": "tous états",
+    "Succeeded": "réussi",
+    "Failed": "échoué",
+    "Pending": "en attente",
+    "Running": "en cours",
+    "Correctness": "exactitude",
+    "Correct": "correct",
+    "Incorrect": "incorrect",
+    "Capability": "capacité",
+    "Modality": "modalité",
+    "Language": "langue",
+    "Difficulty": "difficulté",
+    "Error type": "erreur type",
+    "Any error": "tout erreur",
+    "API error": "API erreur",
+    "Parser error": "analyseur erreur",
+    "Judge": "juge",
+    "Disagreement": "désaccord",
+    "No disagreement": "aucun désaccord",
+    "None": "aucun",
+    "Load next 100 samples": "charger suivant 100 échantillons",
+    "Run executive summary": "exécution exécutif résumé",
+    "Completion": "achèvement",
+    "Accuracy": "précision",
+    "Latency": "latence",
+    "Loading summary...": "chargement résumé...",
+    "Durable run log": "durable exécution journal",
+    "Capability evidence": "capacité preuve",
+    "Score": "score",
+    "Samples": "échantillons",
+    "Run signals": "exécution signaux",
+    "Loading next page…": "chargement suivant page…",
+    "Reviewer ID": "évaluateur ID",
+    "Save review": "enregistrer révision",
+    "Judge evidence": "juge preuve",
+    "Baseline run": "référence exécution",
+    "No baseline": "aucun référence",
+    "Row": "ligne",
+    "Column": "colonne",
+    "Baseline / Δ": "référence / Δ",
+    "Errors": "erreurs",
+    "Latency difference": "latence différence",
+    "Cost difference": "coût différence",
+    "Output tokens": "sortie jetons",
+    "Stored encrypted": "stocké chiffré",
+    "Unlimited": "illimité",
+    "production, vision": "production, vision",
+    "configured": "configuré",
+    "cost not configured": "coût non configuré",
+    "executed": "exécutée",
+    "paused": "mise en pause",
+    "resumed": "reprise",
+    "cancelled": "annulée",
+    "single model": "unique modèle",
+    "multi model": "multi modèle",
+    "prompt comparison": "invite comparaison",
+    "Run {{action}}.": "exécution {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} télécharger mise en pause.",
+  },
+  "de": {
+    "Display name": "Anzeige Name",
+    "Base URL": "Basis URL",
+    "Model name": "Modell Name",
+    "Protocol profile": "Protokoll Profil",
+    "API key": "API Schlüssel",
+    "Custom headers (JSON)": "benutzerdefiniert Header (JSON)",
+    "Endpoint concurrency": "Endpunkt Parallelität",
+    "Shared API-key concurrency": "geteilt API-Schlüssel Parallelität",
+    "Requests / minute": "Anfragen / Minute",
+    "Tokens / minute": "Token / Minute",
+    "Requests / second": "Anfragen / Sekunde",
+    "Input tokens / minute": "Eingabe Token / Minute",
+    "Output tokens / minute": "Ausgabe Token / Minute",
+    "Input / 1M tokens": "Eingabe / 1M Token",
+    "Output / 1M tokens": "Ausgabe / 1M Token",
+    "Currency": "Währung",
+    "Tags (comma-separated)": "Tags (kommagetrennt)",
+    "Notes": "Notizen",
+    "Saving...": "speichert...",
+    "Save encrypted endpoint": "speichern verschlüsselt Endpunkt",
+    "Benchmark pack": "Benchmark Paket",
+    "Built-in benchmark prompt": "integriert Benchmark Prompt",
+    "Run concurrency cap": "Ausführung Parallelität Obergrenze",
+    "Models": "Modelle",
+    "Test connection": "testen Verbindung",
+    "Probe capabilities": "prüfen Fähigkeiten",
+    "Queue selected benchmark": "Warteschlange ausgewählt Benchmark",
+    "User: unknown": "Benutzer: unbekannt",
+    "User: supported": "Benutzer: unterstützt",
+    "User: unsupported": "Benutzer: nicht unterstützt",
+    "Benchmarks": "Benchmarks",
+    "Benchmark": "Benchmark",
+    "Version": "Version",
+    "Source": "Quelle",
+    "Status": "Status",
+    "Modalities": "Modalitäten",
+    "Operation": "Vorgang",
+    "Enable": "aktivieren",
+    "Disable": "deaktivieren",
+    "Managed by pack": "verwaltet von Paket",
+    "Queue on": "Warteschlange auf",
+    "Create prompt package": "erstellen Prompt Paket",
+    "Name": "Name",
+    "Prompt type": "Prompt Typ",
+    "Official prompt": "offiziell Prompt",
+    "Platform default": "Plattform Standard",
+    "User custom": "Benutzer benutzerdefiniert",
+    "Benchmark variant": "Benchmark Variante",
+    "Language-specific": "sprachspezifisch",
+    "System message": "System Nachricht",
+    "User template": "Benutzer Vorlage",
+    "Output format (JSON)": "Ausgabe Format (JSON)",
+    "Response parser (JSON)": "Antwort Parser (JSON)",
+    "Scoring rule (JSON)": "Bewertung Regel (JSON)",
+    "Change log": "ändern Protokoll",
+    "Save versioned prompt": "speichern versioniert Prompt",
+    "Register dataset version": "registrieren Datensatz Version",
+    "Dataset ID": "Datensatz ID",
+    "Revision": "Revision",
+    "Source HTTPS URL": "Quelle HTTPS URL",
+    "Expected SHA-256 checksum": "erwartet SHA-256 Prüfsumme",
+    "Credential binding ID": "Anmeldeinformation Bindung ID",
+    "License text": "Lizenz Text",
+    "Register dataset": "registrieren Datensatz",
+    "Preview": "Vorschau",
+    "Edit": "bearbeiten",
+    "Delete": "löschen",
+    "Cancel": "abbrechen",
+    "Endpoint": "Endpunkt",
+    "Select available endpoint": "auswählen verfügbar Endpunkt",
+    "Sample ID": "Stichprobe ID",
+    "Prompt": "Prompt",
+    "Expected text answer": "erwartet Text Antwort",
+    "Uploaded media": "hochgeladen Medien",
+    "Queue multimodal run": "Warteschlange multimodal Ausführung",
+    "Media asset upload": "Medien Asset hochladen",
+    "Create evaluation suite": "erstellen Bewertung Suite",
+    "Benchmarks (id@version)": "Benchmarks (ID@Version)",
+    "Prompt overrides (JSON)": "Prompt Überschreibungen (JSON)",
+    "Weight configuration (JSON)": "Gewichtung Konfiguration (JSON)",
+    "Description": "Beschreibung",
+    "Save suite": "speichern Suite",
+    "Benchmark registry": "Benchmark Registrierung",
+    "Dataset cache": "Datensatz Cache",
+    "No source URL": "keine Quelle URL",
+    "Accept license": "akzeptieren Lizenz",
+    "Download and verify": "herunterladen und prüfen",
+    "Run preflight": "Ausführung Vorprüfung",
+    "Checking…": "Prüfung…",
+    "Preflight": "Vorprüfung",
+    "Evaluation runs": "Bewertung Ausführungen",
+    "Inspect": "prüfen",
+    "Run cap": "Ausführung Obergrenze",
+    "Pause": "pausieren",
+    "Resume": "fortsetzen",
+    "Clone": "klonen",
+    "Retry failed": "wiederholen fehlgeschlagen",
+    "Archive": "archivieren",
+    "Task queue": "Aufgabe Warteschlange",
+    "Workers": "Worker",
+    "Worker": "Worker",
+    "Task": "Aufgabe",
+    "Run": "Ausführung",
+    "Priority": "Priorität",
+    "Attempts": "Versuche",
+    "Created": "erstellt",
+    "Run A": "Ausführung ein",
+    "Select completed run": "auswählen abgeschlossen Ausführung",
+    "Compare": "vergleichen",
+    "Report type": "Bericht Typ",
+    "Prompt comparison": "Prompt Vergleich",
+    "Cost": "Kosten",
+    "Related completed run": "zugehörig abgeschlossen Ausführung",
+    "Select run": "auswählen Ausführung",
+    "Generate PDF": "generieren PDF",
+    "Generate JSON": "generieren JSON",
+    "Create user": "erstellen Benutzer",
+    "Email": "E-Mail",
+    "Reviewer": "Prüfer",
+    "User concurrency cap": "Benutzer Parallelität Obergrenze",
+    "Action": "Aktion",
+    "Database": "Datenbank",
+    "Health": "Zustand",
+    "Queue": "Warteschlange",
+    "Disk": "Datenträger",
+    "Theme": "Design",
+    "Workspace language": "Arbeitsbereich Sprache",
+    "Media preview": "Medien Vorschau",
+    "Loading": "wird geladen",
+    "evidence…": "Nachweis…",
+    "Audio preview unavailable.": "Audio Vorschau nicht verfügbar.",
+    "Video preview unavailable.": "Video Vorschau nicht verfügbar.",
+    "Download attached file": "herunterladen angehängt Datei",
+    "Sample evidence": "Stichprobe Nachweis",
+    "Search samples": "suchen Stichproben",
+    "All states": "alle Zustände",
+    "Succeeded": "erfolgreich",
+    "Failed": "fehlgeschlagen",
+    "Pending": "ausstehend",
+    "Running": "laufend",
+    "Correctness": "Korrektheit",
+    "Correct": "richtig",
+    "Incorrect": "falsch",
+    "Capability": "Fähigkeit",
+    "Modality": "Modalität",
+    "Language": "Sprache",
+    "Difficulty": "Schwierigkeit",
+    "Error type": "Fehler Typ",
+    "Any error": "beliebig Fehler",
+    "API error": "API Fehler",
+    "Parser error": "Parser Fehler",
+    "Judge": "Bewertung",
+    "Disagreement": "Uneinigkeit",
+    "No disagreement": "keine Uneinigkeit",
+    "None": "keine",
+    "Load next 100 samples": "laden nächste 100 Stichproben",
+    "Run executive summary": "Ausführung Management Zusammenfassung",
+    "Completion": "Abschluss",
+    "Accuracy": "Genauigkeit",
+    "Latency": "Latenz",
+    "Loading summary...": "wird geladen Zusammenfassung...",
+    "Durable run log": "beständig Ausführung Protokoll",
+    "Capability evidence": "Fähigkeit Nachweis",
+    "Score": "Punktzahl",
+    "Samples": "Stichproben",
+    "Run signals": "Ausführung Signale",
+    "Loading next page…": "wird geladen nächste Seite…",
+    "Reviewer ID": "Prüfer ID",
+    "Save review": "speichern Überprüfung",
+    "Judge evidence": "Bewertung Nachweis",
+    "Baseline run": "Basislinie Ausführung",
+    "No baseline": "keine Basislinie",
+    "Row": "Zeile",
+    "Column": "Spalte",
+    "Baseline / Δ": "Basislinie / Δ",
+    "Errors": "Fehler",
+    "Latency difference": "Latenz Differenz",
+    "Cost difference": "Kosten Differenz",
+    "Output tokens": "Ausgabe Token",
+    "Stored encrypted": "gespeichert verschlüsselt",
+    "Unlimited": "unbegrenzt",
+    "production, vision": "Produktion, Vision",
+    "configured": "konfiguriert",
+    "cost not configured": "Kosten nicht konfiguriert",
+    "executed": "ausgeführt",
+    "paused": "pausiert",
+    "resumed": "fortgesetzt",
+    "cancelled": "abgebrochen",
+    "single model": "einzel Modell",
+    "multi model": "mehrere Modell",
+    "prompt comparison": "Prompt Vergleich",
+    "Run {{action}}.": "Ausführung {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} herunterladen pausiert.",
+  },
+  "ru": {
+    "Display name": "отображение имя",
+    "Base URL": "база URL",
+    "Model name": "модель имя",
+    "Protocol profile": "протокол профиль",
+    "API key": "API ключ",
+    "Custom headers (JSON)": "пользовательский заголовки (JSON)",
+    "Endpoint concurrency": "конечная точка параллелизм",
+    "Shared API-key concurrency": "общий ключ API параллелизм",
+    "Requests / minute": "запросы / минута",
+    "Tokens / minute": "токены / минута",
+    "Requests / second": "запросы / секунда",
+    "Input tokens / minute": "ввод токены / минута",
+    "Output tokens / minute": "вывод токены / минута",
+    "Input / 1M tokens": "ввод / 1млн токены",
+    "Output / 1M tokens": "вывод / 1млн токены",
+    "Currency": "валюта",
+    "Tags (comma-separated)": "теги (разделённый запятыми)",
+    "Notes": "примечания",
+    "Saving...": "сохранение...",
+    "Save encrypted endpoint": "сохранить зашифрованный конечная точка",
+    "Benchmark pack": "бенчмарк пакет",
+    "Built-in benchmark prompt": "встроенный бенчмарк запрос",
+    "Run concurrency cap": "запуск параллелизм лимит",
+    "Models": "модели",
+    "Test connection": "тест подключение",
+    "Probe capabilities": "зондировать возможности",
+    "Queue selected benchmark": "очередь выбранный бенчмарк",
+    "User: unknown": "пользователь: неизвестный",
+    "User: supported": "пользователь: поддерживается",
+    "User: unsupported": "пользователь: не поддерживается",
+    "Benchmarks": "бенчмарки",
+    "Benchmark": "бенчмарк",
+    "Version": "версия",
+    "Source": "источник",
+    "Status": "статус",
+    "Modalities": "модальности",
+    "Operation": "операция",
+    "Enable": "включить",
+    "Disable": "отключить",
+    "Managed by pack": "управляемый по пакет",
+    "Queue on": "очередь на",
+    "Create prompt package": "создать запрос пакет",
+    "Name": "имя",
+    "Prompt type": "запрос тип",
+    "Official prompt": "официальный запрос",
+    "Platform default": "платформа по умолчанию",
+    "User custom": "пользователь пользовательский",
+    "Benchmark variant": "бенчмарк вариант",
+    "Language-specific": "языковой",
+    "System message": "система сообщение",
+    "User template": "пользователь шаблон",
+    "Output format (JSON)": "вывод формат (JSON)",
+    "Response parser (JSON)": "ответ парсер (JSON)",
+    "Scoring rule (JSON)": "оценивание правило (JSON)",
+    "Change log": "изменить журнал",
+    "Save versioned prompt": "сохранить версионированный запрос",
+    "Register dataset version": "зарегистрировать набор данных версия",
+    "Dataset ID": "набор данных ID",
+    "Revision": "редакция",
+    "Source HTTPS URL": "источник HTTPS URL",
+    "Expected SHA-256 checksum": "ожидаемый SHA-256 контрольная сумма",
+    "Credential binding ID": "учётные данные привязка ID",
+    "License text": "лицензия текст",
+    "Register dataset": "зарегистрировать набор данных",
+    "Preview": "предпросмотр",
+    "Edit": "изменить",
+    "Delete": "удалить",
+    "Cancel": "отменить",
+    "Endpoint": "конечная точка",
+    "Select available endpoint": "выбрать доступный конечная точка",
+    "Sample ID": "образец ID",
+    "Prompt": "запрос",
+    "Expected text answer": "ожидаемый текст ответ",
+    "Uploaded media": "загружен медиа",
+    "Queue multimodal run": "очередь мультимодальный запуск",
+    "Media asset upload": "медиа ресурс загрузить",
+    "Create evaluation suite": "создать оценка набор",
+    "Benchmarks (id@version)": "бенчмарки (ID@версия)",
+    "Prompt overrides (JSON)": "запрос переопределения (JSON)",
+    "Weight configuration (JSON)": "вес конфигурация (JSON)",
+    "Description": "описание",
+    "Save suite": "сохранить набор",
+    "Benchmark registry": "бенчмарк реестр",
+    "Dataset cache": "набор данных кэш",
+    "No source URL": "нет источник URL",
+    "Accept license": "принять лицензия",
+    "Download and verify": "скачать и проверить",
+    "Run preflight": "запуск предпроверка",
+    "Checking…": "проверка…",
+    "Preflight": "предпроверка",
+    "Evaluation runs": "оценка запуски",
+    "Inspect": "проверить",
+    "Run cap": "запуск лимит",
+    "Pause": "приостановить",
+    "Resume": "возобновить",
+    "Clone": "клонировать",
+    "Retry failed": "повторить сбой",
+    "Archive": "архивировать",
+    "Task queue": "задача очередь",
+    "Workers": "воркеры",
+    "Worker": "воркер",
+    "Task": "задача",
+    "Run": "запуск",
+    "Priority": "приоритет",
+    "Attempts": "попытки",
+    "Created": "создан",
+    "Run A": "запуск один",
+    "Select completed run": "выбрать завершено запуск",
+    "Compare": "сравнить",
+    "Report type": "отчёт тип",
+    "Prompt comparison": "запрос сравнение",
+    "Cost": "стоимость",
+    "Related completed run": "связанный завершено запуск",
+    "Select run": "выбрать запуск",
+    "Generate PDF": "создать PDF",
+    "Generate JSON": "создать JSON",
+    "Create user": "создать пользователь",
+    "Email": "электронная почта",
+    "Reviewer": "рецензент",
+    "User concurrency cap": "пользователь параллелизм лимит",
+    "Action": "действие",
+    "Database": "база данных",
+    "Health": "состояние",
+    "Queue": "очередь",
+    "Disk": "диск",
+    "Theme": "тема",
+    "Workspace language": "рабочее пространство язык",
+    "Media preview": "медиа предпросмотр",
+    "Loading": "загрузка",
+    "evidence…": "доказательство…",
+    "Audio preview unavailable.": "аудио предпросмотр недоступно.",
+    "Video preview unavailable.": "видео предпросмотр недоступно.",
+    "Download attached file": "скачать прикреплён файл",
+    "Sample evidence": "образец доказательство",
+    "Search samples": "поиск образцы",
+    "All states": "все состояния",
+    "Succeeded": "успешно",
+    "Failed": "сбой",
+    "Pending": "ожидающий",
+    "Running": "выполняется",
+    "Correctness": "правильность",
+    "Correct": "верный",
+    "Incorrect": "неверный",
+    "Capability": "возможность",
+    "Modality": "модальность",
+    "Language": "язык",
+    "Difficulty": "сложность",
+    "Error type": "ошибка тип",
+    "Any error": "любой ошибка",
+    "API error": "API ошибка",
+    "Parser error": "парсер ошибка",
+    "Judge": "судья",
+    "Disagreement": "разногласие",
+    "No disagreement": "нет разногласие",
+    "None": "нет",
+    "Load next 100 samples": "загрузить следующий 100 образцы",
+    "Run executive summary": "запуск исполнительный сводка",
+    "Completion": "завершение",
+    "Accuracy": "точность",
+    "Latency": "задержка",
+    "Loading summary...": "загрузка сводка...",
+    "Durable run log": "долговечный запуск журнал",
+    "Capability evidence": "возможность доказательство",
+    "Score": "оценка",
+    "Samples": "образцы",
+    "Run signals": "запуск сигналы",
+    "Loading next page…": "загрузка следующий страница…",
+    "Reviewer ID": "рецензент ID",
+    "Save review": "сохранить проверка",
+    "Judge evidence": "судья доказательство",
+    "Baseline run": "базовый запуск",
+    "No baseline": "нет базовый",
+    "Row": "строка",
+    "Column": "столбец",
+    "Baseline / Δ": "базовый / Δ",
+    "Errors": "ошибки",
+    "Latency difference": "задержка разница",
+    "Cost difference": "стоимость разница",
+    "Output tokens": "вывод токены",
+    "Stored encrypted": "сохранён зашифрованный",
+    "Unlimited": "без ограничений",
+    "production, vision": "производство, зрение",
+    "configured": "настроен",
+    "cost not configured": "стоимость не настроен",
+    "executed": "выполнен",
+    "paused": "приостановлен",
+    "resumed": "возобновлён",
+    "cancelled": "отменён",
+    "single model": "одна модель",
+    "multi model": "несколько модель",
+    "prompt comparison": "запрос сравнение",
+    "Run {{action}}.": "запуск {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} скачать приостановлен.",
+  },
+  "ja": {
+    "Display name": "表示 名前",
+    "Base URL": "ベース URL",
+    "Model name": "モデル 名前",
+    "Protocol profile": "プロトコル プロファイル",
+    "API key": "API キー",
+    "Custom headers (JSON)": "カスタム ヘッダー (JSON)",
+    "Endpoint concurrency": "エンドポイント 同時実行",
+    "Shared API-key concurrency": "共有 API キー 同時実行",
+    "Requests / minute": "リクエスト / 分",
+    "Tokens / minute": "トークン / 分",
+    "Requests / second": "リクエスト / 秒",
+    "Input tokens / minute": "入力 トークン / 分",
+    "Output tokens / minute": "出力 トークン / 分",
+    "Input / 1M tokens": "入力 / 1M トークン",
+    "Output / 1M tokens": "出力 / 1M トークン",
+    "Currency": "通貨",
+    "Tags (comma-separated)": "タグ (カンマ区切り)",
+    "Notes": "メモ",
+    "Saving...": "保存中...",
+    "Save encrypted endpoint": "保存 暗号化済み エンドポイント",
+    "Benchmark pack": "ベンチマーク パック",
+    "Built-in benchmark prompt": "組み込み ベンチマーク プロンプト",
+    "Run concurrency cap": "実行 同時実行 上限",
+    "Models": "モデル",
+    "Test connection": "テスト 接続",
+    "Probe capabilities": "検出 機能",
+    "Queue selected benchmark": "キュー 選択済み ベンチマーク",
+    "User: unknown": "ユーザー: 不明",
+    "User: supported": "ユーザー: 対応",
+    "User: unsupported": "ユーザー: 未対応",
+    "Benchmarks": "ベンチマーク",
+    "Benchmark": "ベンチマーク",
+    "Version": "バージョン",
+    "Source": "ソース",
+    "Status": "状態",
+    "Modalities": "モダリティ",
+    "Operation": "操作",
+    "Enable": "有効化",
+    "Disable": "無効化",
+    "Managed by pack": "管理済み により パック",
+    "Queue on": "キュー で",
+    "Create prompt package": "作成 プロンプト パッケージ",
+    "Name": "名前",
+    "Prompt type": "プロンプト 種類",
+    "Official prompt": "公式 プロンプト",
+    "Platform default": "プラットフォーム 既定",
+    "User custom": "ユーザー カスタム",
+    "Benchmark variant": "ベンチマーク バリアント",
+    "Language-specific": "言語固有",
+    "System message": "システム メッセージ",
+    "User template": "ユーザー テンプレート",
+    "Output format (JSON)": "出力 形式 (JSON)",
+    "Response parser (JSON)": "応答 パーサー (JSON)",
+    "Scoring rule (JSON)": "採点 ルール (JSON)",
+    "Change log": "変更 ログ",
+    "Save versioned prompt": "保存 バージョン管理済み プロンプト",
+    "Register dataset version": "登録 データセット バージョン",
+    "Dataset ID": "データセット ID",
+    "Revision": "改訂",
+    "Source HTTPS URL": "ソース HTTPS URL",
+    "Expected SHA-256 checksum": "期待 SHA-256 チェックサム",
+    "Credential binding ID": "資格情報 バインド ID",
+    "License text": "ライセンス テキスト",
+    "Register dataset": "登録 データセット",
+    "Preview": "プレビュー",
+    "Edit": "編集",
+    "Delete": "削除",
+    "Cancel": "キャンセル",
+    "Endpoint": "エンドポイント",
+    "Select available endpoint": "選択 利用可能 エンドポイント",
+    "Sample ID": "サンプル ID",
+    "Prompt": "プロンプト",
+    "Expected text answer": "期待 テキスト 回答",
+    "Uploaded media": "アップロード済み メディア",
+    "Queue multimodal run": "キュー マルチモーダル 実行",
+    "Media asset upload": "メディア アセット アップロード",
+    "Create evaluation suite": "作成 評価 スイート",
+    "Benchmarks (id@version)": "ベンチマーク (ID@バージョン)",
+    "Prompt overrides (JSON)": "プロンプト 上書き (JSON)",
+    "Weight configuration (JSON)": "重み 設定 (JSON)",
+    "Description": "説明",
+    "Save suite": "保存 スイート",
+    "Benchmark registry": "ベンチマーク レジストリ",
+    "Dataset cache": "データセット キャッシュ",
+    "No source URL": "なし ソース URL",
+    "Accept license": "承諾 ライセンス",
+    "Download and verify": "ダウンロード と 確認",
+    "Run preflight": "実行 事前確認",
+    "Checking…": "確認中…",
+    "Preflight": "事前確認",
+    "Evaluation runs": "評価 実行",
+    "Inspect": "確認",
+    "Run cap": "実行 上限",
+    "Pause": "一時停止",
+    "Resume": "再開",
+    "Clone": "複製",
+    "Retry failed": "再試行 失敗",
+    "Archive": "アーカイブ",
+    "Task queue": "タスク キュー",
+    "Workers": "ワーカー",
+    "Worker": "ワーカー",
+    "Task": "タスク",
+    "Run": "実行",
+    "Priority": "優先度",
+    "Attempts": "試行",
+    "Created": "作成済み",
+    "Run A": "実行 1つの",
+    "Select completed run": "選択 完了 実行",
+    "Compare": "比較",
+    "Report type": "レポート 種類",
+    "Prompt comparison": "プロンプト 比較",
+    "Cost": "コスト",
+    "Related completed run": "関連 完了 実行",
+    "Select run": "選択 実行",
+    "Generate PDF": "生成 PDF",
+    "Generate JSON": "生成 JSON",
+    "Create user": "作成 ユーザー",
+    "Email": "メール",
+    "Reviewer": "レビュアー",
+    "User concurrency cap": "ユーザー 同時実行 上限",
+    "Action": "操作",
+    "Database": "データベース",
+    "Health": "正常性",
+    "Queue": "キュー",
+    "Disk": "ディスク",
+    "Theme": "テーマ",
+    "Workspace language": "ワークスペース 言語",
+    "Media preview": "メディア プレビュー",
+    "Loading": "読み込み中",
+    "evidence…": "証拠…",
+    "Audio preview unavailable.": "音声 プレビュー 利用不可.",
+    "Video preview unavailable.": "動画 プレビュー 利用不可.",
+    "Download attached file": "ダウンロード 添付済み ファイル",
+    "Sample evidence": "サンプル 証拠",
+    "Search samples": "検索 サンプル",
+    "All states": "すべて 状態",
+    "Succeeded": "成功",
+    "Failed": "失敗",
+    "Pending": "保留中",
+    "Running": "実行中",
+    "Correctness": "正確性",
+    "Correct": "正解",
+    "Incorrect": "不正解",
+    "Capability": "機能",
+    "Modality": "モダリティ",
+    "Language": "言語",
+    "Difficulty": "難易度",
+    "Error type": "エラー 種類",
+    "Any error": "任意 エラー",
+    "API error": "API エラー",
+    "Parser error": "パーサー エラー",
+    "Judge": "判定",
+    "Disagreement": "不一致",
+    "No disagreement": "なし 不一致",
+    "None": "なし",
+    "Load next 100 samples": "読み込む 次 100 サンプル",
+    "Run executive summary": "実行 エグゼクティブ 概要",
+    "Completion": "完了",
+    "Accuracy": "精度",
+    "Latency": "レイテンシ",
+    "Loading summary...": "読み込み中 概要...",
+    "Durable run log": "永続 実行 ログ",
+    "Capability evidence": "機能 証拠",
+    "Score": "スコア",
+    "Samples": "サンプル",
+    "Run signals": "実行 シグナル",
+    "Loading next page…": "読み込み中 次 ページ…",
+    "Reviewer ID": "レビュアー ID",
+    "Save review": "保存 レビュー",
+    "Judge evidence": "判定 証拠",
+    "Baseline run": "ベースライン 実行",
+    "No baseline": "なし ベースライン",
+    "Row": "行",
+    "Column": "列",
+    "Baseline / Δ": "ベースライン / Δ",
+    "Errors": "エラー",
+    "Latency difference": "レイテンシ 差分",
+    "Cost difference": "コスト 差分",
+    "Output tokens": "出力 トークン",
+    "Stored encrypted": "保存済み 暗号化済み",
+    "Unlimited": "無制限",
+    "production, vision": "本番, ビジョン",
+    "configured": "設定済み",
+    "cost not configured": "コスト ない 設定済み",
+    "executed": "実行済み",
+    "paused": "一時停止済み",
+    "resumed": "再開済み",
+    "cancelled": "キャンセル済み",
+    "single model": "単一 モデル",
+    "multi model": "複数 モデル",
+    "prompt comparison": "プロンプト 比較",
+    "Run {{action}}.": "実行 {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} ダウンロード 一時停止済み.",
+  },
+  "ko": {
+    "Display name": "표시 이름",
+    "Base URL": "기본 URL",
+    "Model name": "모델 이름",
+    "Protocol profile": "프로토콜 프로필",
+    "API key": "API 키",
+    "Custom headers (JSON)": "사용자 지정 헤더 (JSON)",
+    "Endpoint concurrency": "엔드포인트 동시 실행",
+    "Shared API-key concurrency": "공유 API 키 동시 실행",
+    "Requests / minute": "요청 / 분",
+    "Tokens / minute": "토큰 / 분",
+    "Requests / second": "요청 / 초",
+    "Input tokens / minute": "입력 토큰 / 분",
+    "Output tokens / minute": "출력 토큰 / 분",
+    "Input / 1M tokens": "입력 / 1M 토큰",
+    "Output / 1M tokens": "출력 / 1M 토큰",
+    "Currency": "통화",
+    "Tags (comma-separated)": "태그 (쉼표로 구분)",
+    "Notes": "메모",
+    "Saving...": "저장 중...",
+    "Save encrypted endpoint": "저장 암호화됨 엔드포인트",
+    "Benchmark pack": "벤치마크 팩",
+    "Built-in benchmark prompt": "내장 벤치마크 프롬프트",
+    "Run concurrency cap": "실행 동시 실행 한도",
+    "Models": "모델",
+    "Test connection": "테스트 연결",
+    "Probe capabilities": "탐색 기능",
+    "Queue selected benchmark": "대기열 선택됨 벤치마크",
+    "User: unknown": "사용자: 알 수 없음",
+    "User: supported": "사용자: 지원됨",
+    "User: unsupported": "사용자: 지원되지 않음",
+    "Benchmarks": "벤치마크",
+    "Benchmark": "벤치마크",
+    "Version": "버전",
+    "Source": "소스",
+    "Status": "상태",
+    "Modalities": "모달리티",
+    "Operation": "작업",
+    "Enable": "활성화",
+    "Disable": "비활성화",
+    "Managed by pack": "관리됨 으로 팩",
+    "Queue on": "대기열 에서",
+    "Create prompt package": "생성 프롬프트 패키지",
+    "Name": "이름",
+    "Prompt type": "프롬프트 유형",
+    "Official prompt": "공식 프롬프트",
+    "Platform default": "플랫폼 기본",
+    "User custom": "사용자 사용자 지정",
+    "Benchmark variant": "벤치마크 변형",
+    "Language-specific": "언어별",
+    "System message": "시스템 메시지",
+    "User template": "사용자 템플릿",
+    "Output format (JSON)": "출력 형식 (JSON)",
+    "Response parser (JSON)": "응답 파서 (JSON)",
+    "Scoring rule (JSON)": "채점 규칙 (JSON)",
+    "Change log": "변경 로그",
+    "Save versioned prompt": "저장 버전 관리됨 프롬프트",
+    "Register dataset version": "등록 데이터 세트 버전",
+    "Dataset ID": "데이터 세트 ID",
+    "Revision": "개정",
+    "Source HTTPS URL": "소스 HTTPS URL",
+    "Expected SHA-256 checksum": "예상 SHA-256 체크섬",
+    "Credential binding ID": "자격 증명 바인딩 ID",
+    "License text": "라이선스 텍스트",
+    "Register dataset": "등록 데이터 세트",
+    "Preview": "미리보기",
+    "Edit": "편집",
+    "Delete": "삭제",
+    "Cancel": "취소",
+    "Endpoint": "엔드포인트",
+    "Select available endpoint": "선택 사용 가능 엔드포인트",
+    "Sample ID": "샘플 ID",
+    "Prompt": "프롬프트",
+    "Expected text answer": "예상 텍스트 답변",
+    "Uploaded media": "업로드됨 미디어",
+    "Queue multimodal run": "대기열 멀티모달 실행",
+    "Media asset upload": "미디어 자산 업로드",
+    "Create evaluation suite": "생성 평가 스위트",
+    "Benchmarks (id@version)": "벤치마크 (ID@버전)",
+    "Prompt overrides (JSON)": "프롬프트 재정의 (JSON)",
+    "Weight configuration (JSON)": "가중치 구성 (JSON)",
+    "Description": "설명",
+    "Save suite": "저장 스위트",
+    "Benchmark registry": "벤치마크 레지스트리",
+    "Dataset cache": "데이터 세트 캐시",
+    "No source URL": "없음 소스 URL",
+    "Accept license": "수락 라이선스",
+    "Download and verify": "다운로드 및 검증",
+    "Run preflight": "실행 사전 점검",
+    "Checking…": "확인 중…",
+    "Preflight": "사전 점검",
+    "Evaluation runs": "평가 실행",
+    "Inspect": "검사",
+    "Run cap": "실행 한도",
+    "Pause": "일시 중지",
+    "Resume": "재개",
+    "Clone": "복제",
+    "Retry failed": "재시도 실패",
+    "Archive": "보관",
+    "Task queue": "작업 대기열",
+    "Workers": "워커",
+    "Worker": "워커",
+    "Task": "작업",
+    "Run": "실행",
+    "Priority": "우선순위",
+    "Attempts": "시도",
+    "Created": "생성됨",
+    "Run A": "실행 하나의",
+    "Select completed run": "선택 완료됨 실행",
+    "Compare": "비교",
+    "Report type": "보고서 유형",
+    "Prompt comparison": "프롬프트 비교",
+    "Cost": "비용",
+    "Related completed run": "관련 완료됨 실행",
+    "Select run": "선택 실행",
+    "Generate PDF": "생성 PDF",
+    "Generate JSON": "생성 JSON",
+    "Create user": "생성 사용자",
+    "Email": "이메일",
+    "Reviewer": "검토자",
+    "User concurrency cap": "사용자 동시 실행 한도",
+    "Action": "작업",
+    "Database": "데이터베이스",
+    "Health": "상태",
+    "Queue": "대기열",
+    "Disk": "디스크",
+    "Theme": "테마",
+    "Workspace language": "작업 공간 언어",
+    "Media preview": "미디어 미리보기",
+    "Loading": "불러오는 중",
+    "evidence…": "증거…",
+    "Audio preview unavailable.": "오디오 미리보기 사용 불가.",
+    "Video preview unavailable.": "비디오 미리보기 사용 불가.",
+    "Download attached file": "다운로드 첨부됨 파일",
+    "Sample evidence": "샘플 증거",
+    "Search samples": "검색 샘플",
+    "All states": "전체 상태",
+    "Succeeded": "성공",
+    "Failed": "실패",
+    "Pending": "보류",
+    "Running": "실행 중",
+    "Correctness": "정확성",
+    "Correct": "정답",
+    "Incorrect": "오답",
+    "Capability": "기능",
+    "Modality": "모달리티",
+    "Language": "언어",
+    "Difficulty": "난이도",
+    "Error type": "오류 유형",
+    "Any error": "모든 오류",
+    "API error": "API 오류",
+    "Parser error": "파서 오류",
+    "Judge": "심사",
+    "Disagreement": "불일치",
+    "No disagreement": "없음 불일치",
+    "None": "없음",
+    "Load next 100 samples": "불러오기 다음 100 샘플",
+    "Run executive summary": "실행 요약 요약",
+    "Completion": "완료",
+    "Accuracy": "정확도",
+    "Latency": "지연 시간",
+    "Loading summary...": "불러오는 중 요약...",
+    "Durable run log": "지속 실행 로그",
+    "Capability evidence": "기능 증거",
+    "Score": "점수",
+    "Samples": "샘플",
+    "Run signals": "실행 신호",
+    "Loading next page…": "불러오는 중 다음 페이지…",
+    "Reviewer ID": "검토자 ID",
+    "Save review": "저장 검토",
+    "Judge evidence": "심사 증거",
+    "Baseline run": "기준선 실행",
+    "No baseline": "없음 기준선",
+    "Row": "행",
+    "Column": "열",
+    "Baseline / Δ": "기준선 / Δ",
+    "Errors": "오류",
+    "Latency difference": "지연 시간 차이",
+    "Cost difference": "비용 차이",
+    "Output tokens": "출력 토큰",
+    "Stored encrypted": "저장됨 암호화됨",
+    "Unlimited": "무제한",
+    "production, vision": "프로덕션, 비전",
+    "configured": "구성됨",
+    "cost not configured": "비용 아님 구성됨",
+    "executed": "실행됨",
+    "paused": "일시 중지됨",
+    "resumed": "재개됨",
+    "cancelled": "취소됨",
+    "single model": "단일 모델",
+    "multi model": "다중 모델",
+    "prompt comparison": "프롬프트 비교",
+    "Run {{action}}.": "실행 {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} 다운로드 일시 중지됨.",
+  },
+  "ms": {
+    "Display name": "paparan nama",
+    "Base URL": "asas URL",
+    "Model name": "model nama",
+    "Protocol profile": "protokol profil",
+    "API key": "API kunci",
+    "Custom headers (JSON)": "tersuai pengepala (JSON)",
+    "Endpoint concurrency": "titik akhir serentak",
+    "Shared API-key concurrency": "dikongsi kunci API serentak",
+    "Requests / minute": "permintaan / minit",
+    "Tokens / minute": "token / minit",
+    "Requests / second": "permintaan / saat",
+    "Input tokens / minute": "input token / minit",
+    "Output tokens / minute": "output token / minit",
+    "Input / 1M tokens": "input / 1J token",
+    "Output / 1M tokens": "output / 1J token",
+    "Currency": "mata wang",
+    "Tags (comma-separated)": "tag (dipisahkan koma)",
+    "Notes": "nota",
+    "Saving...": "menyimpan...",
+    "Save encrypted endpoint": "simpan disulitkan titik akhir",
+    "Benchmark pack": "penanda aras pek",
+    "Built-in benchmark prompt": "terbina dalam penanda aras gesaan",
+    "Run concurrency cap": "larian serentak had",
+    "Models": "model",
+    "Test connection": "uji sambungan",
+    "Probe capabilities": "siasat keupayaan",
+    "Queue selected benchmark": "baris dipilih penanda aras",
+    "User: unknown": "pengguna: tidak diketahui",
+    "User: supported": "pengguna: disokong",
+    "User: unsupported": "pengguna: tidak disokong",
+    "Benchmarks": "penanda aras",
+    "Benchmark": "penanda aras",
+    "Version": "versi",
+    "Source": "sumber",
+    "Status": "status",
+    "Modalities": "modaliti",
+    "Operation": "operasi",
+    "Enable": "dayakan",
+    "Disable": "nyahdayakan",
+    "Managed by pack": "diuruskan oleh pek",
+    "Queue on": "baris pada",
+    "Create prompt package": "cipta gesaan pakej",
+    "Name": "nama",
+    "Prompt type": "gesaan jenis",
+    "Official prompt": "rasmi gesaan",
+    "Platform default": "platform lalai",
+    "User custom": "pengguna tersuai",
+    "Benchmark variant": "penanda aras varian",
+    "Language-specific": "khusus bahasa",
+    "System message": "sistem mesej",
+    "User template": "pengguna templat",
+    "Output format (JSON)": "output format (JSON)",
+    "Response parser (JSON)": "respons penghurai (JSON)",
+    "Scoring rule (JSON)": "pemarkahan peraturan (JSON)",
+    "Change log": "ubah log",
+    "Save versioned prompt": "simpan berversi gesaan",
+    "Register dataset version": "daftar set data versi",
+    "Dataset ID": "set data ID",
+    "Revision": "semakan",
+    "Source HTTPS URL": "sumber HTTPS URL",
+    "Expected SHA-256 checksum": "dijangka SHA-256 jumlah semak",
+    "Credential binding ID": "kelayakan pengikatan ID",
+    "License text": "lesen teks",
+    "Register dataset": "daftar set data",
+    "Preview": "pratonton",
+    "Edit": "sunting",
+    "Delete": "padam",
+    "Cancel": "batal",
+    "Endpoint": "titik akhir",
+    "Select available endpoint": "pilih tersedia titik akhir",
+    "Sample ID": "sampel ID",
+    "Prompt": "gesaan",
+    "Expected text answer": "dijangka teks jawapan",
+    "Uploaded media": "dimuat naik media",
+    "Queue multimodal run": "baris multimodal larian",
+    "Media asset upload": "media aset muat naik",
+    "Create evaluation suite": "cipta penilaian set",
+    "Benchmarks (id@version)": "penanda aras (ID@versi)",
+    "Prompt overrides (JSON)": "gesaan gantian (JSON)",
+    "Weight configuration (JSON)": "berat konfigurasi (JSON)",
+    "Description": "penerangan",
+    "Save suite": "simpan set",
+    "Benchmark registry": "penanda aras daftar",
+    "Dataset cache": "set data cache",
+    "No source URL": "tiada sumber URL",
+    "Accept license": "terima lesen",
+    "Download and verify": "muat turun dan sahkan",
+    "Run preflight": "larian pra-semak",
+    "Checking…": "menyemak…",
+    "Preflight": "pra-semak",
+    "Evaluation runs": "penilaian larian",
+    "Inspect": "periksa",
+    "Run cap": "larian had",
+    "Pause": "jeda",
+    "Resume": "sambung",
+    "Clone": "klon",
+    "Retry failed": "cuba lagi gagal",
+    "Archive": "arkib",
+    "Task queue": "tugas baris",
+    "Workers": "pekerja",
+    "Worker": "pekerja",
+    "Task": "tugas",
+    "Run": "larian",
+    "Priority": "keutamaan",
+    "Attempts": "percubaan",
+    "Created": "dicipta",
+    "Run A": "larian satu",
+    "Select completed run": "pilih selesai larian",
+    "Compare": "bandingkan",
+    "Report type": "laporan jenis",
+    "Prompt comparison": "gesaan perbandingan",
+    "Cost": "kos",
+    "Related completed run": "berkaitan selesai larian",
+    "Select run": "pilih larian",
+    "Generate PDF": "jana PDF",
+    "Generate JSON": "jana JSON",
+    "Create user": "cipta pengguna",
+    "Email": "e-mel",
+    "Reviewer": "penyemak",
+    "User concurrency cap": "pengguna serentak had",
+    "Action": "tindakan",
+    "Database": "pangkalan data",
+    "Health": "kesihatan",
+    "Queue": "baris",
+    "Disk": "cakera",
+    "Theme": "tema",
+    "Workspace language": "ruang kerja bahasa",
+    "Media preview": "media pratonton",
+    "Loading": "memuatkan",
+    "evidence…": "bukti…",
+    "Audio preview unavailable.": "audio pratonton tidak tersedia.",
+    "Video preview unavailable.": "video pratonton tidak tersedia.",
+    "Download attached file": "muat turun dilampirkan fail",
+    "Sample evidence": "sampel bukti",
+    "Search samples": "cari sampel",
+    "All states": "semua keadaan",
+    "Succeeded": "berjaya",
+    "Failed": "gagal",
+    "Pending": "menunggu",
+    "Running": "berjalan",
+    "Correctness": "ketepatan",
+    "Correct": "betul",
+    "Incorrect": "salah",
+    "Capability": "keupayaan",
+    "Modality": "modaliti",
+    "Language": "bahasa",
+    "Difficulty": "kesukaran",
+    "Error type": "ralat jenis",
+    "Any error": "mana-mana ralat",
+    "API error": "API ralat",
+    "Parser error": "penghurai ralat",
+    "Judge": "penilai",
+    "Disagreement": "ketidaksetujuan",
+    "No disagreement": "tiada ketidaksetujuan",
+    "None": "tiada",
+    "Load next 100 samples": "muatkan seterusnya 100 sampel",
+    "Run executive summary": "larian eksekutif ringkasan",
+    "Completion": "penyiapan",
+    "Accuracy": "ketepatan",
+    "Latency": "kependaman",
+    "Loading summary...": "memuatkan ringkasan...",
+    "Durable run log": "kekal larian log",
+    "Capability evidence": "keupayaan bukti",
+    "Score": "skor",
+    "Samples": "sampel",
+    "Run signals": "larian isyarat",
+    "Loading next page…": "memuatkan seterusnya halaman…",
+    "Reviewer ID": "penyemak ID",
+    "Save review": "simpan semakan",
+    "Judge evidence": "penilai bukti",
+    "Baseline run": "garis asas larian",
+    "No baseline": "tiada garis asas",
+    "Row": "baris",
+    "Column": "lajur",
+    "Baseline / Δ": "garis asas / Δ",
+    "Errors": "ralat",
+    "Latency difference": "kependaman perbezaan",
+    "Cost difference": "kos perbezaan",
+    "Output tokens": "output token",
+    "Stored encrypted": "disimpan disulitkan",
+    "Unlimited": "tanpa had",
+    "production, vision": "pengeluaran, penglihatan",
+    "configured": "dikonfigurasikan",
+    "cost not configured": "kos tidak dikonfigurasikan",
+    "executed": "dilaksanakan",
+    "paused": "dijeda",
+    "resumed": "disambung",
+    "cancelled": "dibatalkan",
+    "single model": "tunggal model",
+    "multi model": "berbilang model",
+    "prompt comparison": "gesaan perbandingan",
+    "Run {{action}}.": "larian {{action}}.",
+    "{{dataset}} download paused.": "{{dataset}} muat turun dijeda.",
+  },
+};
+
 for (const locale of localeIds) {
-  Object.assign(phrases[locale], redesignedWorkspacePhrases[locale], localizationCompletionPhrases[locale]);
+  Object.assign(phrases[locale], redesignedWorkspacePhrases[locale], localizationCompletionPhrases[locale], materializedStaticLabelPhrases[locale]);
 }
+
+const handAuthoredStaticPhraseTranslations: Partial<Record<Locale, readonly string[]>> = {
+  "zh-CN": `默认请求正文（JSON）
+新运行的提示词包
+运行请求正文覆盖（JSON）
+连接测试和执行使用已保存端点。运行覆盖会在套件和基准默认值之后合并；基准强制字段仍优先。API 密钥永不返回浏览器。
+检测证据与用户声明保持分离。
+探测能力前，请先添加模型端点。
+尚未加载探测结果。
+从工作区目录创建套件。
+少样本示例（JSON 数组）
+本地文件请使用数据集上传功能。
+输入字段
+参考（输出）字段
+自定义多模态快速检查
+请先上传资源。
+文件会通过 MIME 签名验证、按内容寻址，并在进入运行快照前存储在浏览器内存之外。
+选择图像、音频、视频或 PDF
+正在上传并验证资源…
+套件默认请求正文（JSON）
+尚未创建套件。
+注册数据集版本以管理下载和许可证。
+在不创建队列条目的情况下验证兼容性并估算工作量。
+验证模型端点后即可创建首个运行。
+设置上限
+执行
+重新运行基准测试
+没有排队工作。
+实时更新从工作器事件通道传送。
+没有活动工作器租约。
+状态
+租约到期
+父级
+模型和运行比较
+运行必须使用相同的基准测试版本。差异按运行 A 减去运行 B 计算。
+运行 B
+报告
+为以下对象生成可移植报告
+，或下载以前的工件。
+单模型完整报告
+多模型比较
+回归
+可靠性
+生成 HTML
+生成 Markdown
+生成 CSV
+生成 Parquet
+在“运行”页面选择一个运行后再生成报告。
+审核者评分与确定性证据和评审证据保持分离。
+从“运行”页面选择一个运行和样本以进行审核。
+角色
+查看者
+评估者
+管理员
+创建 API 令牌用户
+用户和审计追踪
+服务器身份验证启用时，用户管理需要管理员持有者令牌。
+最近的审计事件
+实体
+时间
+运行时设置通过部署环境配置；敏感值绝不会返回浏览器。
+架构版本
+管理员或用户持有者令牌
+保存令牌
+清除令牌
+SQLite 运行指南
+SQLite 适用于本地或小型团队使用。对于多进程、分布式工作器部署，请使用 PostgreSQL 或 MongoDB；通过部署环境设置配置全局工作器上限。
+切换到
+模式
+仅在选择此样本后获取。
+此运行尚无已保存尝试。
+异常
+没有样本匹配这些筛选条件。
+随实时运行事件刷新
+尚未记录任务或样本生命周期事件。
+尚无已评分能力证据。
+未检测到显著异常或回归。
+加载下一页证据
+审核阶段
+初审
+复审
+裁决
+评分细则（JSON）
+标签（逗号分隔）
+此操作会记录针对所有已保存初审和复审的最终决定。
+审核一致性
+打开样本以加载审核一致性。
+已保存审核
+尚未为此尝试保存人工审核。
+大语言模型评审
+独立评审端点
+请求评审判断
+尚未记录独立评审判断。
+报告工件
+盲测成对评审
+模型身份永不发送给评审器。
+与匹配的样本尝试进行比较
+单答案评审判断
+或粘贴样本尝试 ID
+运行反序交换测试
+运行盲测比较
+评审一致性
+打开样本以加载评审一致性。
+分析热图
+每个单元格均保留其样本数、95% 置信区间、延迟、成本和可选基线差异。
+交互式能力图表
+单击条形图或按 Enter 键以检查模型能力结果。
+完成运行以填充交互式评分条。
+完成运行以填充此分析。
+样本 / 95% 置信区间
+仅 A 正确
+仅 B 正确
+指标
+成功率
+P95 延迟
+我的本地模型
+可用于本地 Ollama 服务
+使用端点容量
+样本、预测、错误
+无法连接到评测服务。
+能力探测会向此提供商发送少量请求，可能产生 API 费用。是否继续？
+删除 {{dataset}} v{{version}} 的缓存数据？已注册版本将保留。
+7 个步骤
+注册模型端点和数据集，然后将评测运行加入队列并检查证据。
+模型 · 配置提供商、运行连接测试并确认其可用。
+数据集 · 声明来源，并可选设置输入和参考字段。
+下载数据集并等待其状态就绪。
+工作区 · 编写用户模板；记录字段通过 {{ placeholders }} 渲染。
+运行 · 选择数据集、参考字段和端点，然后将运行加入队列。
+打开运行以查看样本、评分、延迟、成本和错误。
+运行盲测成对评审、保存人工审核并生成报告。
+端点已保存。开始运行前请测试其连接。
+能力探测已完成。声明的能力设置未更改。
+用户能力声明已与检测证据一同保存。
+预检已就绪：{{samples}} 个样本、{{requests}} 个请求、预计 {{tokens}} 个令牌、{{cost}}。
+预检已阻止：{{issues}}
+{{benchmark}} 已加入队列，并带有不可变配置快照。
+已克隆运行，并生成新的不可变配置快照。
+已将基准测试重新运行加入队列，并关联其源运行。
+失败样本已作为新尝试加入队列。
+运行已归档。其证据会一直通过 API 提供，直至删除。
+未来任务认领的运行并发上限已更新；其评测快照保持不变。
+{{benchmark}} 当前为 {{status}}。
+已生成 {{format}} {{reportType}} 报告。
+只读共享链接（{{expires}} 到期）：{{url}}
+已保存版本化提示词包。
+数据集版本已注册。
+用户已创建。请立即复制此 API 令牌：{{token}}
+已保存版本化评测套件。
+已将 {{count}} 个套件运行加入队列。
+已上传并选择经验证的媒体资源用于自定义运行。
+请先选择可用端点并上传或选择媒体资源。
+自定义多模态运行已加入队列，并带有不可变资源快照。
+已接受许可证。现在可以下载数据集。
+数据集已下载、验证并缓存。
+数据集上传校验和已验证并存储在本地数据集缓存中。
+已验证数据集缓存的校验和和大小。
+已移除数据集缓存。您可以再次下载或上传它。
+从同一基准测试版本中选择两个不同的运行。
+人工审核已与自动结果分开保存。
+已保存盲测成对评审证据和交换测试结果。
+已保存独立 LLM 评审判断及理由证据。
+任务优先级已更新为 {{priority}}。`.split("\n"),
+  fr: `Corps de requête par défaut (JSON)
+Paquet de prompts pour une nouvelle exécution
+Remplacement du corps de requête de l’exécution (JSON)
+Les tests de connexion et l’exécution utilisent le point de terminaison enregistré. Le remplacement de l’exécution est fusionné après les valeurs par défaut de la suite et du benchmark ; les champs imposés par le benchmark restent prioritaires. Les clés API ne reviennent jamais dans le navigateur.
+Les preuves de détection et les déclarations des utilisateurs restent distinctes.
+Ajoutez un point de terminaison de modèle avant de sonder les capacités.
+Aucun résultat de sondage n’est encore chargé.
+Créez une suite depuis le catalogue de l’espace de travail.
+Exemples few-shot (tableau JSON)
+Utilisez l’action de téléversement de jeu de données pour les fichiers locaux.
+Champ d’entrée
+Champ de référence (sortie)
+Vérification rapide multimodale personnalisée
+Téléversez d’abord une ressource.
+Les fichiers sont validés par signature MIME, adressés par contenu et stockés hors de la mémoire du navigateur avant d’entrer dans un snapshot d’exécution.
+Choisissez une image, un audio, une vidéo ou un PDF
+Téléversement et validation de la ressource…
+Corps de requête par défaut de la suite (JSON)
+Aucune suite n’a été créée.
+Enregistrez une version de jeu de données pour gérer les téléchargements et les licences.
+Validez la compatibilité et estimez le travail sans créer d’entrée dans la file.
+Vérifiez un point de terminaison de modèle pour créer la première exécution.
+Définir le plafond
+Exécuter
+Relancer le benchmark
+Aucun travail en file n’existe.
+Les mises à jour en direct sont diffusées depuis le canal d’événements des workers.
+Aucun bail de worker n’est actif.
+État
+Expiration du bail
+Parent
+Comparaison de modèles et d’exécutions
+Les exécutions doivent utiliser la même version de benchmark. Les différences correspondent à l’exécution A moins l’exécution B.
+Exécution B
+Rapports
+Générer un rapport portable pour
+, ou téléchargez les artefacts précédents.
+Complet pour un modèle
+Comparaison de plusieurs modèles
+Régression
+Fiabilité
+Générer HTML
+Générer Markdown
+Générer CSV
+Générer Parquet
+Choisissez une exécution dans la page Exécutions avant de générer un rapport.
+Les scores des réviseurs restent distincts des preuves déterministes et des preuves de juge.
+Sélectionnez une exécution et un échantillon depuis la page Exécutions pour les examiner.
+Rôle
+Lecteur
+Évaluateur
+Administrateur
+Créer un utilisateur avec jeton API
+Utilisateurs et piste d’audit
+L’administration des utilisateurs nécessite un jeton porteur d’administrateur lorsque l’authentification du serveur est activée.
+Événements d’audit récents
+Entité
+Quand
+Les paramètres d’exécution sont configurés par l’environnement de déploiement ; les valeurs sensibles ne reviennent jamais dans le navigateur.
+Version du schéma
+Jeton porteur d’administrateur ou d’utilisateur
+Enregistrer le jeton
+Effacer le jeton
+Guide d’exploitation SQLite
+SQLite convient à une utilisation locale ou en petite équipe. Utilisez PostgreSQL ou MongoDB pour les déploiements de workers distribués à plusieurs processus ; configurez les plafonds globaux de workers avec les paramètres de l’environnement de déploiement.
+Passer au
+mode
+Récupéré uniquement après la sélection de cet échantillon.
+Cette exécution ne possède encore aucune tentative enregistrée.
+Anomalie
+Aucun échantillon ne correspond à ces filtres.
+Actualisé avec les événements d’exécution en direct
+Aucun événement de cycle de vie de tâche ou d’échantillon n’a été enregistré.
+Pas encore de preuve de capacité notée.
+Aucune anomalie ni régression significative détectée.
+Charger la page de preuves suivante
+Étape de révision
+Révision principale
+Révision secondaire
+Arbitrage
+Grille d’évaluation (JSON)
+Libellés (séparés par des virgules)
+Cette action enregistre une décision finale sur toutes les révisions principales et secondaires sauvegardées.
+Accord de révision
+Ouvrez un échantillon pour charger l’accord de révision.
+Révisions enregistrées
+Aucune révision humaine n’a été enregistrée pour cette tentative.
+LLM en tant que juge
+Point de terminaison de juge indépendant
+Demander l’évaluation du juge
+Aucune évaluation de juge indépendant n’a été enregistrée.
+Artefacts de rapport
+Juge pair-à-pair en aveugle
+Les identités des modèles ne sont jamais envoyées au juge.
+Comparer avec la tentative d’échantillon correspondante
+Évaluation du juge pour une seule réponse
+Ou collez un ID de tentative d’échantillon
+Exécuter le test d’inversion de l’ordre
+Exécuter la comparaison en aveugle
+Accord du juge
+Ouvrez un échantillon pour charger l’accord du juge.
+Cartes thermiques d’analyse
+Chaque cellule conserve son nombre d’échantillons, son intervalle de confiance à 95 %, sa latence, son coût et son delta de référence facultatif.
+Graphique interactif des capacités
+Cliquez sur une barre ou utilisez Entrée pour examiner le résultat modèle-capacité fourni.
+Terminez une exécution pour remplir les barres de score interactives.
+Terminez des exécutions pour remplir cette analyse.
+Échantillons / IC à 95 %
+Correct uniquement pour A
+Correct uniquement pour B
+Métrique
+Taux de réussite
+Latence P95
+Mon modèle local
+Facultatif pour un service Ollama local
+Utiliser la capacité du point de terminaison
+échantillon, prédiction, erreur
+Impossible d’atteindre le service d’évaluation.
+Le sondage des capacités envoie de petites requêtes à ce fournisseur et peut entraîner des frais d’API. Continuer ?
+Supprimer les données mises en cache pour {{dataset}} v{{version}} ? La version enregistrée restera disponible.
+7 étapes
+Enregistrez un point de terminaison de modèle et un jeu de données, puis mettez des exécutions d’évaluation en file et examinez les preuves.
+Modèles · configurez le fournisseur, exécutez un test de connexion et confirmez sa disponibilité.
+Jeux de données · déclarez la source et, éventuellement, les champs d’entrée et de référence.
+Téléchargez le jeu de données et attendez que son état soit prêt.
+Espace de travail · rédigez le modèle utilisateur ; les champs d’enregistrement sont rendus via {{ placeholders }}.
+Exécutions · choisissez le jeu de données, le champ de référence et le point de terminaison, puis mettez l’exécution en file.
+Ouvrez l’exécution pour examiner les échantillons, les scores, la latence, le coût et les erreurs.
+Exécutez un jugement pair-à-pair en aveugle, enregistrez les révisions humaines et générez des rapports.
+Point de terminaison enregistré. Testez sa connexion avant de démarrer une exécution.
+Sondage des capacités terminé. Les paramètres de capacité déclarés n’ont pas été modifiés.
+La déclaration de capacité utilisateur a été enregistrée avec les preuves de détection.
+Précontrôle prêt : {{samples}} échantillons, {{requests}} requêtes, {{tokens}} jetons estimés, {{cost}}.
+Précontrôle bloqué : {{issues}}
+{{benchmark}} a été mis en file avec un snapshot de configuration immuable.
+Exécution clonée avec un nouveau snapshot de configuration immuable.
+Nouvelle exécution du benchmark mise en file avec un lien vers son exécution source.
+Les échantillons échoués ont été mis en file comme nouvelles tentatives.
+Exécution archivée. Ses preuves restent accessibles par l’API jusqu’à leur suppression.
+Le plafond de concurrence de l’exécution a été mis à jour pour les prochaines acquisitions de tâche ; son snapshot d’évaluation reste inchangé.
+{{benchmark}} est maintenant {{status}}.
+Rapport {{reportType}} au format {{format}} généré.
+Lien de partage en lecture seule (expire {{expires}}) : {{url}}
+Paquet de prompts versionné enregistré.
+Version du jeu de données enregistrée.
+Utilisateur créé. Copiez ce jeton API maintenant : {{token}}
+Suite d’évaluation versionnée enregistrée.
+{{count}} exécution(s) de suite mise(s) en file.
+Ressource multimédia validée téléversée et sélectionnée pour l’exécution personnalisée.
+Sélectionnez d’abord un point de terminaison disponible, puis téléversez ou choisissez une ressource multimédia.
+Exécution multimodale personnalisée mise en file avec un snapshot de ressource immuable.
+Licence acceptée. Le jeu de données peut maintenant être téléchargé.
+Jeu de données téléchargé, vérifié et mis en cache.
+La somme de contrôle du téléversement du jeu de données a été vérifiée et stockée dans le cache local.
+La somme de contrôle et la taille du cache du jeu de données ont été vérifiées.
+Cache du jeu de données supprimé. Vous pouvez le télécharger ou le téléverser à nouveau.
+Choisissez deux exécutions différentes de la même version de benchmark.
+La révision humaine a été enregistrée séparément des résultats automatisés.
+Les preuves du juge pair-à-pair en aveugle et les résultats du test d’inversion ont été enregistrés.
+L’évaluation indépendante LLM en tant que juge a été enregistrée avec les preuves de justification.
+La priorité de la tâche a été mise à jour à {{priority}}.`.split("\n"),
+  de: `Standard-Anfragetext (JSON)
+Prompt-Paket für einen neuen Lauf
+Überschreibung des Anfragetexts für den Lauf (JSON)
+Verbindungstests und Ausführung verwenden den gespeicherten Endpunkt. Die Laufüberschreibung wird nach den Standardwerten der Suite und des Benchmarks zusammengeführt; vom Benchmark erzwungene Felder behalten Vorrang. API-Schlüssel werden nie an den Browser zurückgegeben.
+Erkennungsnachweise und Benutzerdeklarationen bleiben getrennt.
+Fügen Sie einen Modellendpunkt hinzu, bevor Sie Funktionen prüfen.
+Noch kein Prüfergebnis geladen.
+Erstellen Sie eine Suite aus dem Arbeitsbereichskatalog.
+Few-Shot-Beispiele (JSON-Array)
+Verwenden Sie für lokale Dateien die Aktion zum Hochladen eines Datensatzes.
+Eingabefeld
+Referenzfeld (Ausgabe)
+Benutzerdefinierte multimodale Schnellprüfung
+Laden Sie zuerst ein Asset hoch.
+Dateien werden anhand ihrer MIME-Signatur validiert, inhaltsadressiert und außerhalb des Browserspeichers abgelegt, bevor sie in einen Laufschnappschuss gelangen.
+Wählen Sie Bild, Audio, Video oder PDF
+Asset wird hochgeladen und validiert…
+Standard-Anfragetext der Suite (JSON)
+Es wurden noch keine Suiten erstellt.
+Registrieren Sie eine Datensatzversion, um Downloads und Lizenzen zu verwalten.
+Validieren Sie die Kompatibilität und schätzen Sie den Aufwand, ohne einen Warteschlangeneintrag zu erstellen.
+Prüfen Sie einen Modellendpunkt, um den ersten Lauf zu erstellen.
+Obergrenze festlegen
+Ausführen
+Benchmark erneut ausführen
+Es gibt keine eingereihten Aufgaben.
+Live-Updates werden über den Worker-Ereigniskanal gestreamt.
+Keine Worker-Leases sind aktiv.
+Status
+Ablauf des Leases
+Übergeordnet
+Modell- und Laufvergleich
+Läufe müssen dieselbe Benchmark-Version verwenden. Unterschiede entsprechen Lauf A minus Lauf B.
+Lauf B
+Berichte
+Portablen Bericht erstellen für
+, oder laden Sie frühere Artefakte herunter.
+Vollständig für ein Modell
+Vergleich mehrerer Modelle
+Regression
+Zuverlässigkeit
+HTML generieren
+Markdown generieren
+CSV generieren
+Parquet generieren
+Wählen Sie auf der Seite Läufe einen Lauf aus, bevor Sie einen Bericht generieren.
+Prüferbewertungen bleiben von deterministischen Nachweisen und Richternachweisen getrennt.
+Wählen Sie auf der Seite Läufe einen Lauf und eine Stichprobe zur Überprüfung aus.
+Rolle
+Betrachter
+Evaluator
+Administrator
+API-Token-Benutzer erstellen
+Benutzer und Prüfprotokoll
+Die Benutzerverwaltung benötigt ein Administrator-Bearer-Token, wenn die Serverauthentifizierung aktiviert ist.
+Neueste Prüfereignisse
+Entität
+Zeitpunkt
+Laufzeiteinstellungen werden über die Bereitstellungsumgebung konfiguriert; vertrauliche Werte werden nie an den Browser zurückgegeben.
+Schemaversion
+Administrator- oder Benutzer-Bearer-Token
+Token speichern
+Token löschen
+SQLite-Betriebshinweise
+SQLite eignet sich für lokale Nutzung oder kleine Teams. Verwenden Sie PostgreSQL oder MongoDB für Mehrprozess- und verteilte Worker-Bereitstellungen; konfigurieren Sie globale Worker-Obergrenzen über Einstellungen der Bereitstellungsumgebung.
+Wechseln zu
+Modus
+Wird erst abgerufen, nachdem diese Stichprobe ausgewählt wurde.
+Dieser Lauf hat noch keine gespeicherten Versuche.
+Anomalie
+Keine Stichproben entsprechen diesen Filtern.
+Wird mit Live-Laufereignissen aktualisiert
+Es wurden keine Lebenszyklusereignisse für Aufgaben oder Stichproben aufgezeichnet.
+Noch keine bewerteten Fähigkeitsnachweise.
+Keine signifikanten Anomalien oder Regressionen erkannt.
+Nächste Nachweisseite laden
+Überprüfungsphase
+Primäre Überprüfung
+Sekundäre Überprüfung
+Entscheidung
+Bewertungsraster (JSON)
+Beschriftungen (durch Kommas getrennt)
+Dies erfasst eine endgültige Entscheidung über alle gespeicherten primären und sekundären Überprüfungen.
+Übereinstimmung der Überprüfung
+Öffnen Sie eine Stichprobe, um die Überprüfungsübereinstimmung zu laden.
+Gespeicherte Überprüfungen
+Für diesen Versuch wurde keine menschliche Überprüfung gespeichert.
+LLM als Richter
+Unabhängiger Richterendpunkt
+Richterbewertung anfordern
+Es wurde keine unabhängige Richterbewertung aufgezeichnet.
+Berichtsartefakte
+Verblindeter paarweiser Richter
+Modellidentitäten werden nie an den Richter gesendet.
+Mit passendem Stichprobenversuch vergleichen
+Richterbewertung für eine einzelne Antwort
+Oder eine Stichprobenversuchs-ID einfügen
+Test zum Umkehren der Reihenfolge ausführen
+Verblindeten Vergleich ausführen
+Richterübereinstimmung
+Öffnen Sie eine Stichprobe, um die Richterübereinstimmung zu laden.
+Analyse-Heatmaps
+Jede Zelle enthält ihre Stichprobenzahl, ihr 95%-Konfidenzintervall, ihre Latenz, ihre Kosten und eine optionale Basisliniendifferenz.
+Interaktives Fähigkeitsdiagramm
+Klicken Sie auf einen Balken oder drücken Sie die Eingabetaste, um das Modellfähigkeitsresultat zu prüfen.
+Schließen Sie einen Lauf ab, um interaktive Ergebnisbalken zu füllen.
+Schließen Sie Läufe ab, um diese Analyse zu füllen.
+Stichproben / 95%-KI
+Nur A korrekt
+Nur B korrekt
+Metrik
+Erfolgsrate
+P95-Latenz
+Mein lokales Modell
+Optional für einen lokalen Ollama-Dienst
+Endpunktkapazität verwenden
+Stichprobe, Vorhersage, Fehler
+Der Bewertungsdienst ist nicht erreichbar.
+Die Funktionsprüfung sendet kleine Anfragen an diesen Anbieter und kann API-Kosten verursachen. Fortfahren?
+Die zwischengespeicherten Daten für {{dataset}} v{{version}} entfernen? Die registrierte Version bleibt erhalten.
+7 Schritte
+Registrieren Sie einen Modellendpunkt und einen Datensatz, reihen Sie dann Bewertungsläufe ein und prüfen Sie die Nachweise.
+Modelle · konfigurieren Sie den Anbieter, führen Sie einen Verbindungstest durch und bestätigen Sie die Verfügbarkeit.
+Datensätze · geben Sie die Quelle sowie optional die Eingabe- und Referenzfelder an.
+Laden Sie den Datensatz herunter und warten Sie, bis sein Status bereit ist.
+Arbeitsbereich · schreiben Sie die Benutzervorlage; Datensatzfelder werden über {{ placeholders }} gerendert.
+Läufe · wählen Sie Datensatz, Referenzfeld und Endpunkt aus und reihen Sie dann den Lauf ein.
+Öffnen Sie den Lauf, um Stichproben, Bewertungen, Latenz, Kosten und Fehler zu prüfen.
+Führen Sie verblindete paarweise Bewertungen aus, speichern Sie menschliche Überprüfungen und generieren Sie Berichte.
+Endpunkt gespeichert. Testen Sie seine Verbindung, bevor Sie einen Lauf starten.
+Funktionsprüfung abgeschlossen. Deklarierte Fähigkeitseinstellungen wurden nicht geändert.
+Die Benutzer-Fähigkeitsdeklaration wurde zusammen mit den Erkennungsnachweisen gespeichert.
+Vorprüfung bereit: {{samples}} Stichproben, {{requests}} Anfragen, {{tokens}} geschätzte Token, {{cost}}.
+Vorprüfung blockiert: {{issues}}
+{{benchmark}} wurde mit einem unveränderlichen Konfigurationsschnappschuss eingereiht.
+Lauf mit einem neuen unveränderlichen Konfigurationsschnappschuss geklont.
+Benchmark-Neuausführung wurde mit einem Link zu ihrem Ursprungslauf eingereiht.
+Fehlgeschlagene Stichproben wurden als neue Versuche eingereiht.
+Lauf archiviert. Seine Nachweise bleiben über die API verfügbar, bis sie gelöscht werden.
+Die Lauf-Obergrenze wurde für zukünftige Aufgabenübernahmen aktualisiert; sein Bewertungsschnappschuss bleibt unverändert.
+{{benchmark}} ist jetzt {{status}}.
+{{format}}-{{reportType}}-Bericht generiert.
+Schreibgeschützter Freigabelink (läuft {{expires}} ab): {{url}}
+Versioniertes Prompt-Paket gespeichert.
+Datensatzversion registriert.
+Benutzer erstellt. Kopieren Sie dieses API-Token jetzt: {{token}}
+Versionierte Bewertungssuite gespeichert.
+{{count}} Suite-Lauf/Läufe eingereiht.
+Validiertes Medien-Asset wurde hochgeladen und für den benutzerdefinierten Lauf ausgewählt.
+Wählen Sie zuerst einen verfügbaren Endpunkt und laden Sie ein Medien-Asset hoch oder wählen Sie eines aus.
+Benutzerdefinierter multimodaler Lauf mit unveränderlichem Asset-Schnappschuss eingereiht.
+Lizenz akzeptiert. Der Datensatz kann jetzt heruntergeladen werden.
+Datensatz heruntergeladen, verifiziert und zwischengespeichert.
+Die Prüfsumme des Datensatzuploads wurde verifiziert und im lokalen Datensatzcache gespeichert.
+Prüfsumme und Größe des Datensatzcaches wurden verifiziert.
+Datensatzcache entfernt. Sie können ihn erneut herunterladen oder hochladen.
+Wählen Sie zwei verschiedene Läufe derselben Benchmark-Version aus.
+Menschliche Überprüfung wurde getrennt von automatisierten Ergebnissen gespeichert.
+Nachweise des verblindeten paarweisen Richters und Ergebnisse des Umkehrtests wurden gespeichert.
+Unabhängige LLM-als-Richter-Bewertung wurde mit Begründungsnachweisen gespeichert.
+Aufgabenpriorität auf {{priority}} aktualisiert.`.split("\n"),
+  ru: `Тело запроса по умолчанию (JSON)
+Пакет промптов для нового запуска
+Переопределение тела запроса запуска (JSON)
+Проверки подключения и выполнение используют сохранённую конечную точку. Переопределение запуска объединяется после значений по умолчанию набора и бенчмарка; поля, принудительно заданные бенчмарком, по-прежнему имеют приоритет. Ключи API никогда не возвращаются в браузер.
+Доказательства обнаружения и декларации пользователей остаются раздельными.
+Добавьте конечную точку модели перед проверкой возможностей.
+Результат проверки ещё не загружен.
+Создайте набор из каталога рабочего пространства.
+Примеры few-shot (массив JSON)
+Используйте действие загрузки набора данных для локальных файлов.
+Поле ввода
+Поле эталонного ответа (вывод)
+Пользовательская быстрая мультимодальная проверка
+Сначала загрузите ресурс.
+Файлы проверяются по MIME-подписи, адресуются по содержимому и хранятся вне памяти браузера до попадания в снимок запуска.
+Выберите изображение, аудио, видео или PDF
+Загрузка и проверка ресурса…
+Тело запроса набора по умолчанию (JSON)
+Наборы ещё не созданы.
+Зарегистрируйте версию набора данных для управления загрузками и лицензиями.
+Проверьте совместимость и оцените объём работы без создания записи в очереди.
+Проверьте конечную точку модели, чтобы создать первый запуск.
+Установить ограничение
+Выполнить
+Перезапустить бенчмарк
+В очереди нет заданий.
+Обновления в реальном времени передаются из канала событий воркеров.
+Нет активных аренд воркеров.
+Состояние
+Истечение аренды
+Родительский объект
+Сравнение модели и запуска
+Запуски должны использовать одну версию бенчмарка. Разница рассчитывается как запуск A минус запуск B.
+Запуск B
+Отчёты
+Создать переносимый отчёт для
+, или скачайте предыдущие артефакты.
+Полный для одной модели
+Сравнение нескольких моделей
+Регрессия
+Надёжность
+Создать HTML
+Создать Markdown
+Создать CSV
+Создать Parquet
+Перед созданием отчёта выберите запуск на странице «Запуски».
+Оценки рецензентов остаются отдельными от детерминированных доказательств и доказательств судьи.
+Выберите запуск и образец на странице «Запуски», чтобы проверить их.
+Роль
+Наблюдатель
+Оценщик
+Администратор
+Создать пользователя с API-токеном
+Пользователи и журнал аудита
+Для управления пользователями требуется токен носителя администратора, когда включена аутентификация сервера.
+Недавние события аудита
+Сущность
+Когда
+Параметры выполнения задаются через среду развёртывания; чувствительные значения никогда не возвращаются в браузер.
+Версия схемы
+Токен носителя администратора или пользователя
+Сохранить токен
+Очистить токен
+Руководство по эксплуатации SQLite
+SQLite подходит для локального использования или небольшой команды. Используйте PostgreSQL или MongoDB для многопроцессных и распределённых развёртываний воркеров; настройте глобальные ограничения воркеров с помощью параметров среды развёртывания.
+Переключиться в
+режим
+Получается только после выбора этого образца.
+У этого запуска ещё нет сохранённых попыток.
+Аномалия
+Ни один образец не соответствует этим фильтрам.
+Обновляется событиями запуска в реальном времени
+События жизненного цикла задач или образцов не записаны.
+Оценённых доказательств возможностей пока нет.
+Значимых аномалий или регрессий не обнаружено.
+Загрузить следующую страницу доказательств
+Этап проверки
+Первичная проверка
+Вторичная проверка
+Разрешение разногласий
+Рубрика (JSON)
+Метки (через запятую)
+Это фиксирует окончательное решение по всем сохранённым первичным и вторичным проверкам.
+Согласие проверки
+Откройте образец, чтобы загрузить согласие проверки.
+Сохранённые проверки
+Для этой попытки не сохранена проверка человеком.
+LLM в роли судьи
+Независимая конечная точка судьи
+Запросить оценку судьи
+Независимая оценка судьи ещё не записана.
+Артефакты отчёта
+Слепой попарный судья
+Идентификаторы моделей никогда не отправляются судье.
+Сравнить с соответствующей попыткой образца
+Оценка судьи для одного ответа
+Или вставьте ID попытки образца
+Запустить тест смены порядка
+Запустить слепое сравнение
+Согласие судьи
+Откройте образец, чтобы загрузить согласие судьи.
+Тепловые карты анализа
+В каждой ячейке сохраняются число образцов, 95%-й доверительный интервал, задержка, стоимость и необязательная разница с базовой линией.
+Интерактивная диаграмма возможностей
+Щёлкните столбец или нажмите Enter, чтобы проверить результат для модели и возможности.
+Завершите запуск, чтобы заполнить интерактивные столбцы оценок.
+Завершите запуски, чтобы заполнить этот анализ.
+Образцы / 95% ДИ
+Верно только для A
+Верно только для B
+Метрика
+Доля успеха
+Задержка P95
+Моя локальная модель
+Необязательно для локальной службы Ollama
+Использовать ёмкость конечной точки
+образец, прогноз, ошибка
+Не удаётся подключиться к службе оценки.
+Проверка возможностей отправляет небольшие запросы этому поставщику и может повлечь расходы на API. Продолжить?
+Удалить кэшированные данные для {{dataset}} v{{version}}? Зарегистрированная версия останется.
+7 шагов
+Зарегистрируйте конечную точку модели и набор данных, затем поставьте запуски оценки в очередь и изучите доказательства.
+Модели · настройте поставщика, выполните проверку подключения и подтвердите доступность.
+Наборы данных · укажите источник, а также при необходимости поля ввода и эталонного ответа.
+Скачайте набор данных и дождитесь состояния готовности.
+Рабочее пространство · напишите пользовательский шаблон; поля записи отображаются через {{ placeholders }}.
+Запуски · выберите набор данных, эталонное поле и конечную точку, затем поставьте запуск в очередь.
+Откройте запуск, чтобы просмотреть образцы, оценки, задержку, стоимость и ошибки.
+Запустите слепое попарное судейство, сохраните проверки человеком и создайте отчёты.
+Конечная точка сохранена. Проверьте её подключение перед началом запуска.
+Проверка возможностей завершена. Заявленные параметры возможностей не изменены.
+Декларация возможностей пользователя сохранена вместе с доказательствами обнаружения.
+Предварительная проверка готова: {{samples}} образцов, {{requests}} запросов, {{tokens}} расчётных токенов, {{cost}}.
+Предварительная проверка заблокирована: {{issues}}
+{{benchmark}} поставлен в очередь с неизменяемым снимком конфигурации.
+Запуск клонирован с новым неизменяемым снимком конфигурации.
+Повторный запуск бенчмарка поставлен в очередь со ссылкой на исходный запуск.
+Неудачные образцы поставлены в очередь как новые попытки.
+Запуск архивирован. Его доказательства доступны через API до удаления.
+Ограничение параллелизма запуска обновлено для будущих получений задач; его снимок оценки не изменился.
+{{benchmark}} теперь {{status}}.
+Создан {{reportType}}-отчёт в формате {{format}}.
+Ссылка только для чтения (истекает {{expires}}): {{url}}
+Версионированный пакет промптов сохранён.
+Версия набора данных зарегистрирована.
+Пользователь создан. Скопируйте этот API-токен сейчас: {{token}}
+Версионированный набор оценки сохранён.
+{{count}} запуск(ов) набора поставлено в очередь.
+Проверенный медиафайл загружен и выбран для пользовательского запуска.
+Сначала выберите доступную конечную точку и загрузите или выберите медиафайл.
+Пользовательский мультимодальный запуск поставлен в очередь с неизменяемым снимком ресурса.
+Лицензия принята. Набор данных теперь можно скачать.
+Набор данных скачан, проверен и кэширован.
+Контрольная сумма загрузки набора данных проверена и сохранена в локальном кэше набора данных.
+Контрольная сумма и размер кэша набора данных проверены.
+Кэш набора данных удалён. Его можно скачать или загрузить снова.
+Выберите два разных запуска одной версии бенчмарка.
+Проверка человеком сохранена отдельно от автоматизированных результатов.
+Доказательства слепого попарного судьи и результаты теста смены порядка сохранены.
+Независимая оценка LLM в роли судьи сохранена с доказательствами обоснования.
+Приоритет задачи обновлён до {{priority}}.`.split("\n"),
+  ja: `既定のリクエスト本文（JSON）
+新しい実行用のプロンプト パッケージ
+実行リクエスト本文のオーバーライド（JSON）
+接続テストと実行では保存済みエンドポイントを使用します。実行のオーバーライドはスイートとベンチマークの既定値の後にマージされ、ベンチマークで強制されるフィールドは引き続き優先されます。API キーがブラウザに返されることはありません。
+検出証拠とユーザー宣言は分けて保持されます。
+機能をプローブする前にモデル エンドポイントを追加してください。
+まだプローブ結果は読み込まれていません。
+ワークスペース カタログからスイートを作成します。
+Few-shot の例（JSON 配列）
+ローカル ファイルにはデータセットのアップロード操作を使用してください。
+入力フィールド
+参照（出力）フィールド
+カスタム マルチモーダル クイックチェック
+最初にアセットをアップロードしてください。
+ファイルは MIME シグネチャで検証され、コンテンツアドレス化され、実行スナップショットに入る前にブラウザ メモリ外に保存されます。
+画像、音声、動画、または PDF を選択
+アセットをアップロードして検証中…
+スイートの既定のリクエスト本文（JSON）
+まだスイートは作成されていません。
+ダウンロードとライセンスを管理するためにデータセット バージョンを登録します。
+キュー項目を作成せずに互換性を検証し、作業量を見積もります。
+最初の実行を作成する前にモデル エンドポイントを検証してください。
+上限を設定
+実行
+ベンチマークを再実行
+キューに入っている作業はありません。
+ライブ更新はワーカー イベント チャネルからストリーミングされます。
+アクティブなワーカー リースはありません。
+状態
+リースの有効期限
+親
+モデルと実行の比較
+実行には同じベンチマーク バージョンを使用する必要があります。差分は常に実行 A から実行 B を引いて計算されます。
+実行 B
+レポート
+次の対象のポータブル レポートを生成
+、または以前の成果物をダウンロードします。
+単一モデル完全版
+複数モデル比較
+回帰
+信頼性
+HTML を生成
+Markdown を生成
+CSV を生成
+Parquet を生成
+レポートを生成する前に、実行ページで実行を選択してください。
+レビュアーのスコアは、決定論的な証拠および判定者の証拠とは分けて保持されます。
+実行ページで実行とサンプルを選択してレビューします。
+ロール
+閲覧者
+評価者
+管理者
+API トークン ユーザーを作成
+ユーザーと監査証跡
+サーバー認証が有効な場合、ユーザー管理には管理者ベアラー トークンが必要です。
+最近の監査イベント
+エンティティ
+日時
+ランタイム設定はデプロイ環境で構成され、機密値がブラウザに返されることはありません。
+スキーマ バージョン
+管理者またはユーザーのベアラー トークン
+トークンを保存
+トークンを消去
+SQLite 運用ガイド
+SQLite はローカルまたは小規模チームでの利用に適しています。マルチプロセスまたは分散ワーカーのデプロイには PostgreSQL または MongoDB を使用し、グローバル ワーカー上限はデプロイ環境設定で構成してください。
+次に切り替える
+モード
+このサンプルを選択した後にのみ取得されます。
+この実行にはまだ保存済みの試行がありません。
+異常
+これらのフィルターに一致するサンプルはありません。
+ライブ実行イベントで更新されます
+タスクまたはサンプルのライフサイクル イベントは記録されていません。
+スコア付きの機能証拠はまだありません。
+重大な異常または回帰は検出されませんでした。
+次の証拠ページを読み込む
+レビュー段階
+一次レビュー
+二次レビュー
+裁定
+評価基準（JSON）
+ラベル（コンマ区切り）
+これにより、保存済みのすべての一次・二次レビューに対する最終決定が記録されます。
+レビューの一致
+サンプルを開いてレビューの一致を読み込みます。
+保存済みレビュー
+この試行には人によるレビューが保存されていません。
+LLM-as-a-judge
+独立した判定者エンドポイント
+判定者の評価をリクエスト
+独立した判定者の評価は記録されていません。
+レポート成果物
+ブラインドのペアワイズ判定
+モデルの識別情報が判定者に送信されることはありません。
+一致するサンプル試行と比較
+単一回答の判定者評価
+またはサンプル試行 ID を貼り付け
+逆順入れ替えテストを実行
+ブラインド比較を実行
+判定者の一致
+サンプルを開いて判定者の一致を読み込みます。
+分析ヒートマップ
+各セルにはサンプル数、95% 信頼区間、レイテンシ、コスト、任意のベースライン差分が保持されます。
+インタラクティブな機能グラフ
+バーをクリックするか Enter キーを押して、モデル機能の結果を確認します。
+実行を完了してインタラクティブなスコア バーを表示します。
+実行を完了してこの分析を表示します。
+サンプル / 95% 信頼区間
+A のみ正解
+B のみ正解
+指標
+成功率
+P95 レイテンシ
+ローカル モデル
+ローカル Ollama サービスでは任意
+エンドポイント容量を使用
+サンプル、予測、エラー
+評価サービスに接続できません。
+機能プローブはこのプロバイダーに小さなリクエストを送信するため、API 料金が発生する場合があります。続行しますか？
+{{dataset}} v{{version}} のキャッシュ データを削除しますか？登録済みバージョンは残ります。
+7 ステップ
+モデル エンドポイントとデータセットを登録し、評価実行をキューに入れて証拠を確認します。
+モデル · プロバイダーを構成し、接続テストを実行して、利用可能であることを確認します。
+データセット · ソースを宣言し、必要に応じて入力フィールドと参照フィールドを指定します。
+データセットをダウンロードし、ステータスが準備完了になるまで待ちます。
+ワークスペース · ユーザー テンプレートを作成します。レコード フィールドは {{ placeholders }} を通じてレンダリングされます。
+実行 · データセット、参照フィールド、エンドポイントを選び、実行をキューに入れます。
+実行を開いてサンプル、スコア、レイテンシ、コスト、エラーを確認します。
+ブラインドのペアワイズ判定を実行し、人によるレビューを保存してレポートを生成します。
+エンドポイントを保存しました。実行を開始する前に接続をテストしてください。
+機能プローブが完了しました。宣言済みの機能設定は変更されていません。
+ユーザーの機能宣言は検出証拠とともに保存されました。
+事前チェックの準備ができました: {{samples}} サンプル、{{requests}} リクエスト、推定 {{tokens}} トークン、{{cost}}。
+事前チェックがブロックされました: {{issues}}
+{{benchmark}} は不変の構成スナップショットとともにキューに入りました。
+実行を新しい不変の構成スナップショットで複製しました。
+ベンチマークの再実行は、元の実行へのリンクとともにキューに入りました。
+失敗したサンプルは新しい試行としてキューに入りました。
+実行をアーカイブしました。その証拠は削除されるまで API から利用できます。
+実行の同時実行上限を今後のタスク取得用に更新しました。評価スナップショットは変更されません。
+{{benchmark}} は現在 {{status}} です。
+{{format}} の {{reportType}} レポートを生成しました。
+読み取り専用の共有リンク（{{expires}} に期限切れ）: {{url}}
+バージョン管理されたプロンプト パッケージを保存しました。
+データセット バージョンを登録しました。
+ユーザーを作成しました。この API トークンを今すぐコピーしてください: {{token}}
+バージョン管理された評価スイートを保存しました。
+{{count}} 件のスイート実行をキューに入れました。
+検証済みのメディア アセットをアップロードし、カスタム実行用に選択しました。
+最初に利用可能なエンドポイントを選択し、メディア アセットをアップロードまたは選択してください。
+カスタム マルチモーダル実行を不変のアセット スナップショットとともにキューに入れました。
+ライセンスを承諾しました。データセットをダウンロードできます。
+データセットをダウンロード、検証し、キャッシュしました。
+データセット アップロードのチェックサムを検証し、ローカル データセット キャッシュに保存しました。
+データセット キャッシュのチェックサムとサイズを検証しました。
+データセット キャッシュを削除しました。再度ダウンロードまたはアップロードできます。
+同じベンチマーク バージョンから異なる 2 つの実行を選択します。
+人によるレビューは自動結果とは別に保存されました。
+ブラインドのペアワイズ判定の証拠と入れ替えテストの結果を保存しました。
+根拠の証拠とともに独立した LLM-as-a-judge 評価を保存しました。
+タスク優先度を {{priority}} に更新しました。`.split("\n"),
+  ko: `기본 요청 본문(JSON)
+새 실행용 프롬프트 패키지
+실행 요청 본문 재정의(JSON)
+연결 테스트와 실행은 저장된 엔드포인트를 사용합니다. 실행 재정의는 스위트 및 벤치마크 기본값 뒤에 병합되며 벤치마크에서 강제한 필드는 계속 우선합니다. API 키는 브라우저로 반환되지 않습니다.
+감지 증거와 사용자 선언은 별도로 유지됩니다.
+기능을 프로브하기 전에 모델 엔드포인트를 추가하세요.
+아직 로드된 프로브 결과가 없습니다.
+작업 공간 카탈로그에서 스위트를 만드세요.
+퓨샷 예제(JSON 배열)
+로컬 파일에는 데이터 세트 업로드 작업을 사용하세요.
+입력 필드
+참조(출력) 필드
+사용자 지정 멀티모달 빠른 검사
+먼저 자산을 업로드하세요.
+파일은 MIME 서명으로 검증되고 콘텐츠 주소화되며 실행 스냅샷에 들어가기 전에 브라우저 메모리 밖에 저장됩니다.
+이미지, 오디오, 비디오 또는 PDF 선택
+자산 업로드 및 검증 중…
+스위트 기본 요청 본문(JSON)
+아직 만든 스위트가 없습니다.
+다운로드와 라이선스를 관리하려면 데이터 세트 버전을 등록하세요.
+대기열 항목을 만들지 않고 호환성을 검증하고 작업량을 추정하세요.
+첫 실행을 만들려면 모델 엔드포인트를 검증하세요.
+상한 설정
+실행
+벤치마크 다시 실행
+대기 중인 작업이 없습니다.
+실시간 업데이트는 워커 이벤트 채널에서 스트리밍됩니다.
+활성 워커 임대가 없습니다.
+상태
+임대 만료
+상위 항목
+모델 및 실행 비교
+실행은 같은 벤치마크 버전을 사용해야 합니다. 차이는 항상 실행 A에서 실행 B를 뺀 값입니다.
+실행 B
+보고서
+다음에 대한 이동식 보고서 생성
+, 또는 이전 아티팩트를 다운로드하세요.
+단일 모델 전체
+다중 모델 비교
+회귀
+신뢰성
+HTML 생성
+Markdown 생성
+CSV 생성
+Parquet 생성
+보고서를 생성하기 전에 실행 페이지에서 실행을 선택하세요.
+검토자 점수는 결정적 증거 및 판정자 증거와 별도로 유지됩니다.
+실행 페이지에서 실행과 샘플을 선택하여 검토하세요.
+역할
+뷰어
+평가자
+관리자
+API 토큰 사용자 만들기
+사용자 및 감사 추적
+서버 인증이 사용 설정된 경우 사용자 관리에는 관리자 베어러 토큰이 필요합니다.
+최근 감사 이벤트
+엔터티
+시간
+런타임 설정은 배포 환경에서 구성되며 민감한 값은 브라우저로 반환되지 않습니다.
+스키마 버전
+관리자 또는 사용자 베어러 토큰
+토큰 저장
+토큰 지우기
+SQLite 운영 안내
+SQLite는 로컬 또는 소규모 팀 사용에 적합합니다. 다중 프로세스 및 분산 워커 배포에는 PostgreSQL 또는 MongoDB를 사용하고 배포 환경 설정으로 전역 워커 상한을 구성하세요.
+다음으로 전환
+모드
+이 샘플을 선택한 후에만 가져옵니다.
+이 실행에는 아직 저장된 시도가 없습니다.
+이상 징후
+이 필터와 일치하는 샘플이 없습니다.
+실시간 실행 이벤트로 새로 고침
+작업 또는 샘플 수명 주기 이벤트가 기록되지 않았습니다.
+아직 점수화된 기능 증거가 없습니다.
+중요한 이상 징후 또는 회귀가 감지되지 않았습니다.
+다음 증거 페이지 불러오기
+검토 단계
+기본 검토
+보조 검토
+판정
+평가 기준(JSON)
+레이블(쉼표로 구분)
+저장된 모든 기본 및 보조 검토에 대한 최종 결정을 기록합니다.
+검토 일치도
+샘플을 열어 검토 일치도를 불러오세요.
+저장된 검토
+이 시도에는 사람 검토가 저장되지 않았습니다.
+LLM 판정
+독립 판정자 엔드포인트
+판정자 평가 요청
+독립 판정자 평가가 기록되지 않았습니다.
+보고서 아티팩트
+블라인드 쌍대 판정
+모델 ID는 판정자에게 전송되지 않습니다.
+일치하는 샘플 시도와 비교
+단일 답변 판정자 평가
+또는 샘플 시도 ID 붙여넣기
+역순 교환 테스트 실행
+블라인드 비교 실행
+판정자 일치도
+샘플을 열어 판정자 일치도를 불러오세요.
+분석 히트맵
+각 셀은 샘플 수, 95% 신뢰 구간, 지연 시간, 비용 및 선택적 기준선 차이를 유지합니다.
+대화형 기능 차트
+막대를 클릭하거나 Enter 키를 눌러 모델 기능 결과를 확인하세요.
+실행을 완료하여 대화형 점수 막대를 채우세요.
+실행을 완료하여 이 분석을 채우세요.
+샘플 / 95% 신뢰 구간
+A만 정답
+B만 정답
+측정항목
+성공률
+P95 지연 시간
+내 로컬 모델
+로컬 Ollama 서비스에 선택 사항
+엔드포인트 용량 사용
+샘플, 예측, 오류
+평가 서비스에 연결할 수 없습니다.
+기능 프로브는 이 공급자에 작은 요청을 보내며 API 요금이 발생할 수 있습니다. 계속할까요?
+{{dataset}} v{{version}}의 캐시 데이터를 제거할까요? 등록된 버전은 유지됩니다.
+7단계
+모델 엔드포인트와 데이터 세트를 등록한 다음 평가 실행을 대기열에 넣고 증거를 검토하세요.
+모델 · 공급자를 구성하고 연결 테스트를 실행한 뒤 사용 가능한지 확인하세요.
+데이터 세트 · 소스와 선택적 입력 및 참조 필드를 선언하세요.
+데이터 세트를 다운로드하고 상태가 준비될 때까지 기다리세요.
+작업 공간 · 사용자 템플릿을 작성하세요. 레코드 필드는 {{ placeholders }}를 통해 렌더링됩니다.
+실행 · 데이터 세트, 참조 필드 및 엔드포인트를 선택한 다음 실행을 대기열에 넣으세요.
+실행을 열어 샘플, 점수, 지연 시간, 비용 및 오류를 검토하세요.
+블라인드 쌍대 판정을 실행하고 사람 검토를 저장한 다음 보고서를 생성하세요.
+엔드포인트가 저장되었습니다. 실행을 시작하기 전에 연결을 테스트하세요.
+기능 프로브가 완료되었습니다. 선언된 기능 설정은 변경되지 않았습니다.
+사용자 기능 선언이 감지 증거와 함께 저장되었습니다.
+사전 점검 준비됨: {{samples}}개 샘플, {{requests}}개 요청, 예상 {{tokens}}개 토큰, {{cost}}.
+사전 점검 차단됨: {{issues}}
+{{benchmark}}이(가) 변경 불가능한 구성 스냅샷과 함께 대기열에 추가되었습니다.
+실행이 새 변경 불가능한 구성 스냅샷으로 복제되었습니다.
+벤치마크 재실행이 원본 실행 링크와 함께 대기열에 추가되었습니다.
+실패한 샘플이 새 시도로 대기열에 추가되었습니다.
+실행이 보관되었습니다. 증거는 삭제될 때까지 API를 통해 계속 사용할 수 있습니다.
+향후 작업 요청을 위한 실행 동시성 상한이 업데이트되었으며 평가 스냅샷은 변경되지 않습니다.
+{{benchmark}}은(는) 이제 {{status}}입니다.
+{{format}} {{reportType}} 보고서가 생성되었습니다.
+읽기 전용 공유 링크({{expires}} 만료): {{url}}
+버전 관리된 프롬프트 패키지가 저장되었습니다.
+데이터 세트 버전이 등록되었습니다.
+사용자가 생성되었습니다. 지금 이 API 토큰을 복사하세요: {{token}}
+버전 관리된 평가 스위트가 저장되었습니다.
+{{count}}개 스위트 실행이 대기열에 추가되었습니다.
+검증된 미디어 자산이 업로드되어 사용자 지정 실행에 선택되었습니다.
+먼저 사용 가능한 엔드포인트를 선택하고 미디어 자산을 업로드하거나 선택하세요.
+사용자 지정 멀티모달 실행이 변경 불가능한 자산 스냅샷과 함께 대기열에 추가되었습니다.
+라이선스가 수락되었습니다. 이제 데이터 세트를 다운로드할 수 있습니다.
+데이터 세트가 다운로드, 검증 및 캐시되었습니다.
+데이터 세트 업로드 체크섬이 검증되어 로컬 데이터 세트 캐시에 저장되었습니다.
+데이터 세트 캐시 체크섬과 크기가 검증되었습니다.
+데이터 세트 캐시가 제거되었습니다. 다시 다운로드하거나 업로드할 수 있습니다.
+같은 벤치마크 버전에서 서로 다른 두 실행을 선택하세요.
+사람 검토가 자동화된 결과와 별도로 저장되었습니다.
+블라인드 쌍대 판정 증거와 교환 테스트 결과가 저장되었습니다.
+독립 LLM 판정 평가가 근거 증거와 함께 저장되었습니다.
+작업 우선순위가 {{priority}}(으)로 업데이트되었습니다.`.split("\n"),
+  ms: `Badan permintaan lalai (JSON)
+Pakej gesaan untuk larian baharu
+Gantian badan permintaan larian (JSON)
+Ujian sambungan dan pelaksanaan menggunakan titik akhir tersimpan. Gantian larian digabungkan selepas lalai set dan penanda aras; medan yang dipaksa oleh penanda aras masih diutamakan. Kekunci API tidak pernah dikembalikan kepada pelayar.
+Bukti pengesanan dan pengisytiharan pengguna kekal berasingan.
+Tambah titik akhir model sebelum menyiasat keupayaan.
+Belum ada hasil siasatan dimuatkan.
+Cipta set daripada katalog ruang kerja.
+Contoh few-shot (tatasusunan JSON)
+Gunakan tindakan muat naik set data untuk fail tempatan.
+Medan input
+Medan rujukan (output)
+Semakan pantas multimodal tersuai
+Muat naik aset dahulu.
+Fail disahkan melalui tandatangan MIME, dialamatkan mengikut kandungan dan disimpan di luar memori pelayar sebelum memasuki petikan larian.
+Pilih imej, audio, video atau PDF
+Memuat naik dan mengesahkan aset…
+Badan permintaan lalai set (JSON)
+Belum ada set dicipta.
+Daftarkan versi set data untuk mengurus muat turun dan lesen.
+Sahkan keserasian dan anggarkan kerja tanpa mencipta entri baris.
+Sahkan titik akhir model untuk mencipta larian pertama.
+Tetapkan had
+Laksanakan
+Jalankan semula penanda aras
+Tiada kerja dalam baris.
+Kemas kini langsung distrim daripada saluran acara pekerja.
+Tiada pajakan pekerja aktif.
+Keadaan
+Tamat tempoh pajakan
+Induk
+Perbandingan model dan larian
+Larian mesti menggunakan versi penanda aras yang sama. Perbezaan ialah larian A tolak larian B.
+Larian B
+Laporan
+Jana laporan mudah alih untuk
+, atau muat turun artifak terdahulu.
+Lengkap untuk satu model
+Perbandingan berbilang model
+Regresi
+Kebolehpercayaan
+Jana HTML
+Jana Markdown
+Jana CSV
+Jana Parquet
+Pilih larian dalam halaman Larian sebelum menjana laporan.
+Skor penyemak kekal berasingan daripada bukti deterministik dan bukti hakim.
+Pilih larian dan sampel daripada halaman Larian untuk menyemaknya.
+Peranan
+Pemerhati
+Penilai
+Pentadbir
+Cipta pengguna token API
+Pengguna dan jejak audit
+Pentadbiran pengguna memerlukan token pembawa pentadbir apabila pengesahan pelayan didayakan.
+Acara audit terkini
+Entiti
+Bila
+Tetapan masa jalan dikonfigurasi melalui persekitaran penggunaan; nilai sensitif tidak pernah dikembalikan kepada pelayar.
+Versi skema
+Token pembawa pentadbir atau pengguna
+Simpan token
+Kosongkan token
+Panduan operasi SQLite
+SQLite sesuai untuk kegunaan setempat atau pasukan kecil. Gunakan PostgreSQL atau MongoDB bagi penggunaan pekerja berbilang proses dan teragih; konfigurasikan had pekerja global dengan tetapan persekitaran penggunaan.
+Tukar kepada
+mod
+Diambil hanya selepas sampel ini dipilih.
+Larian ini belum mempunyai percubaan tersimpan.
+Anomali
+Tiada sampel sepadan dengan penapis ini.
+Dikemas kini dengan acara larian langsung
+Tiada acara kitar hayat tugas atau sampel direkodkan.
+Belum ada bukti keupayaan yang diberi skor.
+Tiada anomali atau regresi penting dikesan.
+Muatkan halaman bukti seterusnya
+Peringkat semakan
+Semakan utama
+Semakan kedua
+Pengadjudikasian
+Rubrik (JSON)
+Label (dipisahkan dengan koma)
+Ini merekodkan keputusan muktamad untuk semua semakan utama dan kedua yang disimpan.
+Persetujuan semakan
+Buka sampel untuk memuatkan persetujuan semakan.
+Semakan tersimpan
+Tiada semakan manusia disimpan untuk percubaan ini.
+LLM sebagai hakim
+Titik akhir hakim bebas
+Minta penilaian hakim
+Tiada penilaian hakim bebas direkodkan.
+Artifak laporan
+Hakim berpasangan buta
+Identiti model tidak pernah dihantar kepada hakim.
+Bandingkan dengan percubaan sampel sepadan
+Penilaian hakim jawapan tunggal
+Atau tampal ID percubaan sampel
+Jalankan ujian pertukaran susunan terbalik
+Jalankan perbandingan buta
+Persetujuan hakim
+Buka sampel untuk memuatkan persetujuan hakim.
+Peta haba analisis
+Setiap sel menyimpan bilangan sampel, selang keyakinan 95%, kependaman, kos dan delta garis asas pilihan.
+Carta keupayaan interaktif
+Klik atau gunakan Enter pada bar untuk memeriksa hasil keupayaan model.
+Selesaikan larian untuk mengisi bar skor interaktif.
+Selesaikan larian untuk mengisi analisis ini.
+Sampel / SK 95%
+Hanya A betul
+Hanya B betul
+Metrik
+Kadar kejayaan
+Kependaman P95
+Model tempatan saya
+Pilihan untuk perkhidmatan Ollama tempatan
+Gunakan kapasiti titik akhir
+sampel, ramalan, ralat
+Tidak dapat mencapai perkhidmatan penilaian.
+Siasatan keupayaan menghantar permintaan kecil kepada pembekal ini dan mungkin dikenakan caj API. Teruskan?
+Buang data cache untuk {{dataset}} v{{version}}? Versi berdaftar akan kekal.
+7 langkah
+Daftarkan titik akhir model dan set data, kemudian letakkan larian penilaian dalam baris dan periksa bukti.
+Model · konfigurasikan pembekal, jalankan ujian sambungan dan sahkan ia tersedia.
+Set data · isytiharkan sumber serta, secara pilihan, medan input dan rujukan.
+Muat turun set data dan tunggu sehingga statusnya sedia.
+Ruang kerja · tulis templat pengguna; medan rekod dirender melalui {{ placeholders }}.
+Larian · pilih set data, medan rujukan dan titik akhir, kemudian letakkan larian dalam baris.
+Buka larian untuk menyemak sampel, skor, kependaman, kos dan ralat.
+Jalankan pengadilan berpasangan buta, simpan semakan manusia dan jana laporan.
+Titik akhir disimpan. Uji sambungannya sebelum memulakan larian.
+Siasatan keupayaan selesai. Tetapan keupayaan yang diisytiharkan tidak diubah.
+Pengisytiharan keupayaan pengguna disimpan bersama bukti pengesanan.
+Prasemak sedia: {{samples}} sampel, {{requests}} permintaan, {{tokens}} token dianggarkan, {{cost}}.
+Prasemak disekat: {{issues}}
+{{benchmark}} diletakkan dalam baris dengan petikan konfigurasi tidak berubah.
+Larian diklon dengan petikan konfigurasi tidak berubah yang baharu.
+Larian semula penanda aras diletakkan dalam baris dengan pautan kepada larian sumbernya.
+Sampel gagal diletakkan dalam baris sebagai percubaan baharu.
+Larian diarkibkan. Buktinya kekal tersedia melalui API sehingga dipadamkan.
+Had keserentakan larian dikemas kini untuk tuntutan tugas masa depan; petikan penilaiannya kekal tidak berubah.
+{{benchmark}} kini {{status}}.
+Laporan {{reportType}} {{format}} dijana.
+Pautan kongsi baca sahaja (tamat {{expires}}): {{url}}
+Pakej gesaan berversi disimpan.
+Versi set data didaftarkan.
+Pengguna dicipta. Salin token API ini sekarang: {{token}}
+Set penilaian berversi disimpan.
+{{count}} larian set diletakkan dalam baris.
+Aset media yang disahkan dimuat naik dan dipilih untuk larian tersuai.
+Pilih titik akhir tersedia dan muat naik atau pilih aset media dahulu.
+Larian multimodal tersuai diletakkan dalam baris dengan petikan aset tidak berubah.
+Lesen diterima. Set data kini boleh dimuat turun.
+Set data dimuat turun, disahkan dan dicache.
+Jumlah semak muat naik set data disahkan dan disimpan dalam cache set data tempatan.
+Jumlah semak dan saiz cache set data disahkan.
+Cache set data dibuang. Anda boleh memuat turun atau memuat naiknya lagi.
+Pilih dua larian berlainan daripada versi penanda aras yang sama.
+Semakan manusia disimpan berasingan daripada keputusan automatik.
+Bukti hakim berpasangan buta dan hasil ujian pertukaran disimpan.
+Penilaian LLM-sebagai-hakim bebas disimpan bersama bukti alasan.
+Keutamaan tugas dikemas kini kepada {{priority}}.`.split("\n"),
+};
 
 // Only literals authored by the client are eligible for word-level fallback.
 // This is deliberately an allow-list: endpoint names, benchmark names, raw
 // responses, and provider errors must remain exactly as the server supplied.
-const staticSourceTexts = new Set([
+export const staticSourceTexts = new Set([
   "Add model endpoint", "Display name", "Base URL", "Model name", "Protocol profile", "API key", "Custom headers (JSON)", "Default request body (JSON)", "Endpoint concurrency", "Shared API-key concurrency", "Requests / minute", "Tokens / minute", "Requests / second", "Input tokens / minute", "Output tokens / minute", "Input / 1M tokens", "Output / 1M tokens", "Currency", "Tags (comma-separated)", "Notes", "Saving...", "Save encrypted endpoint",
   "Run configuration", "Benchmark pack", "Prompt package for a new run", "Built-in benchmark prompt", "Run Request Body override (JSON)", "Run concurrency cap", "Connection tests and execution use the saved endpoint. The run override is merged after suite and benchmark defaults; benchmark-forced fields still win. API keys never return to the browser.", "Models", "No model endpoints yet.", "Test connection", "Probe capabilities", "Queue selected benchmark", "User: unknown", "User: supported", "User: unsupported",
   "Model capabilities", "Detection evidence and user declarations remain separate.", "Add a model endpoint before probing capabilities.", "No probe result loaded yet.", "Benchmarks", "Benchmark", "Version", "Source", "Status", "Modalities", "Operation", "Enable", "Disable", "Managed by pack",
@@ -1168,6 +3668,20 @@ const staticSourceTexts = new Set([
   "Filter benchmarks", "Name, source, status…", "Find run", "Benchmark, status, or ID", "Run status", "No runs match the current filters.", "Pause download", "Validate cache", "Clear cache", "Retry download", "Upload local revision", "Benchmark composition", "Queue suite", "Uses each selected endpoint’s saved connection and capacity configuration.", "No available endpoints are ready to receive this suite.", "Loading disk usage…", "No events available.", "Comparing…", "registered versions", "total runs", "tasks visible",
   "Endpoint saved. Test its connection before starting a run.", "Capability probe completed. Declared capability settings were not changed.", "User capability declaration saved alongside detection evidence.", "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}.", "Preflight blocked: {{issues}}", "{{benchmark}} queued with an immutable configuration snapshot.", "Run cloned with a new immutable configuration snapshot.", "Benchmark rerun queued with a link to its source run.", "Failed samples were queued as new attempts.", "Run archived. Its evidence remains available through the API until deleted.", "Run {{action}}.", "Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.", "{{benchmark}} is now {{status}}.", "{{dataset}} download paused.", "{{format}} {{reportType}} report generated.", "Read-only share link (expires {{expires}}): {{url}}",   "Versioned prompt package saved.", "Dataset version registered.", "Dataset version updated.", "Dataset version deleted.", "Preview unavailable.", "User created. Copy this API token now: {{token}}", "Versioned evaluation suite saved.", "{{count}} suite run(s) queued.", "Validated media asset uploaded and selected for the custom run.", "Select an available endpoint and upload or select a media asset first.", "Custom multimodal run queued with an immutable asset snapshot.", "License accepted. The dataset can now be downloaded.", "Dataset downloaded, verified, and cached.", "Dataset upload checksum verified and stored in the local dataset cache.", "Dataset cache checksum and size were verified.", "Dataset cache removed. You can download or upload it again.", "Choose two different runs from the same benchmark version.", "Human review saved separately from automated results.", "Blinded pairwise judge evidence and swap-test results saved.", "Independent LLM-as-judge assessment saved with rationale evidence.", "Task priority updated to {{priority}}.",
 ]);
+
+const handAuthoredStaticPhraseSources = [...staticSourceTexts].filter((source) =>
+  localeIds.slice(1).every((locale) => !protocolProfilePhrases[locale][source] && !phrases[locale][source]),
+);
+
+for (const locale of localeIds.slice(1)) {
+  const translations = handAuthoredStaticPhraseTranslations[locale];
+  if (!translations || translations.length !== handAuthoredStaticPhraseSources.length) {
+    throw new Error(`Static phrase catalog is incomplete for ${locale}.`);
+  }
+  Object.assign(phrases[locale], Object.fromEntries(handAuthoredStaticPhraseSources.map((source, index) => [source, translations[index]!])));
+}
+
+phrases.ja["My local model"] = "ローカル モデル";
 
 export function translateStaticText(locale: Locale, text: string): string {
   if (locale === "en") return text;
