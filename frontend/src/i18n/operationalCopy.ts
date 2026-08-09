@@ -418,6 +418,33 @@ const phrases: Record<Locale, Record<string, string>> = {
   ms: { "Add model endpoint": "Tambah titik akhir model", "Run configuration": "Konfigurasi larian", "No model endpoints yet.": "Belum ada titik akhir model.", "Model capabilities": "Keupayaan model", "Evaluation suites": "Set penilaian", "System settings": "Tetapan sistem", "Human review": "Semakan manusia", "Data preview": "Pratonton data", "Delete dataset version?": "Padam versi set data?", "Save changes": "Simpan perubahan", "Dataset version updated.": "Versi set data dikemas kini.", "Dataset version deleted.": "Versi set data dipadam.", "Preview unavailable.": "Pratonton tidak tersedia.", "How to use this workspace": "Cara menggunakan ruang kerja ini", "1. Add a model endpoint": "1. Tambah titik akhir model", "2. Register a dataset": "2. Daftar set data", "3. Download and verify": "3. Muat turun dan sahkan", "4. Create a prompt package": "4. Cipta pakej prom", "5. Queue a dataset run": "5. Letakkan larian set data dalam baris", "6. Inspect evidence": "6. Periksa bukti", "7. Judge, review, and report": "7. Nilai, semak dan lapor", "Filter benchmarks": "Tapis penanda aras", "Find run": "Cari larian", "Run status": "Status larian", "No runs match the current filters.": "Tiada larian sepadan dengan penapis semasa.", "Pause download": "Jeda muat turun", "Validate cache": "Sahkan cache", "Clear cache": "Kosongkan cache", "Retry download": "Cuba muat turun semula", "Upload local revision": "Muat naik semakan tempatan", "Benchmark composition": "Komposisi penanda aras", "Queue suite": "Letakkan set dalam baris", "Uses each selected endpoint’s saved connection and capacity configuration.": "Menggunakan sambungan dan konfigurasi kapasiti tersimpan setiap titik akhir yang dipilih.", "No available endpoints are ready to receive this suite.": "Tiada titik akhir tersedia yang bersedia menerima set ini.", "Loading disk usage…": "Memuatkan penggunaan cakera…", "No events available.": "Tiada peristiwa tersedia.", "Comparing…": "Membandingkan…", "registered versions": "versi berdaftar", "tasks visible": "tugas kelihatan", },
 };
 
+const redesignedWorkspacePhrases: Record<Locale, Record<string, string>> = {
+  en: {},
+  "zh-CN": {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "注册端点、验证连接，并让新运行的默认设置贴近其所管理的模型。",
+  },
+  fr: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Enregistrez les points de terminaison, validez la connectivité et conservez les paramètres par défaut des nouvelles exécutions près des modèles qu’ils régissent.",
+  },
+  de: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Registrieren Sie Endpunkte, prüfen Sie die Verbindung und halten Sie die Standardwerte für neue Ausführungen bei den Modellen, für die sie gelten.",
+  },
+  ru: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Зарегистрируйте конечные точки, проверьте подключение и храните параметры по умолчанию для новых запусков рядом с моделями, которыми они управляют.",
+  },
+  ja: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "エンドポイントを登録して接続を検証し、新しい実行の既定値を対象モデルの近くに保ちます。",
+  },
+  ko: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "엔드포인트를 등록하고 연결을 검증하며 새 실행의 기본값을 해당 모델 가까이에 유지합니다.",
+  },
+  ms: {
+    "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.": "Daftarkan titik akhir, sahkan sambungan dan kekalkan lalai larian baharu berdekatan model yang ditadbirnya.",
+  },
+};
+
+for (const locale of localeIds) Object.assign(phrases[locale], redesignedWorkspacePhrases[locale]);
+
 // Only literals authored by the client are eligible for word-level fallback.
 // This is deliberately an allow-list: endpoint names, benchmark names, raw
 // responses, and provider errors must remain exactly as the server supplied.

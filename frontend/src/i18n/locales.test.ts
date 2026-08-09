@@ -78,4 +78,16 @@ describe("workspace locale catalog", () => {
       }
     }
   });
+
+  it("renders redesigned workspace descriptions as complete locale phrases", () => {
+    const description = "Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern.";
+
+    expect(translateStaticText("zh-CN", description)).toBe("注册端点、验证连接，并让新运行的默认设置贴近其所管理的模型。");
+    expect(translateStaticText("fr", description)).toBe("Enregistrez les points de terminaison, validez la connectivité et conservez les paramètres par défaut des nouvelles exécutions près des modèles qu’ils régissent.");
+    expect(translateStaticText("de", description)).toBe("Registrieren Sie Endpunkte, prüfen Sie die Verbindung und halten Sie die Standardwerte für neue Ausführungen bei den Modellen, für die sie gelten.");
+    expect(translateStaticText("ru", description)).toBe("Зарегистрируйте конечные точки, проверьте подключение и храните параметры по умолчанию для новых запусков рядом с моделями, которыми они управляют.");
+    expect(translateStaticText("ja", description)).toBe("エンドポイントを登録して接続を検証し、新しい実行の既定値を対象モデルの近くに保ちます。");
+    expect(translateStaticText("ko", description)).toBe("엔드포인트를 등록하고 연결을 검증하며 새 실행의 기본값을 해당 모델 가까이에 유지합니다.");
+    expect(translateStaticText("ms", description)).toBe("Daftarkan titik akhir, sahkan sambungan dan kekalkan lalai larian baharu berdekatan model yang ditadbirnya.");
+  });
 });
