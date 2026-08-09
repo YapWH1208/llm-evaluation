@@ -207,4 +207,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("현재 활성 임대를 가진 작업자가 없습니다. 배포 용량을 변경하기 전에 대기열과 시스템 상태를 확인하세요.");
     expect(translateStaticText("ms", phrases[6])).toBe("Buka baris tugas");
   });
+
+  it("renders worker summary and lease diagnostics as complete phrases", () => {
+    const phrases = [
+      "Active leases",
+      "Connected workers",
+      "Tasks currently leased or running",
+      "Distinct workers with an active lease",
+      "Pending tasks reported by system health",
+      "Health signal unavailable",
+      "Active worker leases",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("活动租约");
+    expect(translateStaticText("fr", phrases[1])).toBe("Agents connectés");
+    expect(translateStaticText("de", phrases[2])).toBe("Derzeit geleaste oder laufende Aufgaben");
+    expect(translateStaticText("ru", phrases[3])).toBe("Отдельные работники с активной арендой");
+    expect(translateStaticText("ja", phrases[4])).toBe("システムの健全性が報告した保留中のタスク");
+    expect(translateStaticText("ko", phrases[5])).toBe("상태 신호를 사용할 수 없음");
+    expect(translateStaticText("ms", phrases[6])).toBe("Pajakan pekerja aktif");
+  });
 });
