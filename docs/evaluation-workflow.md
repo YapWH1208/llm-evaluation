@@ -125,8 +125,10 @@ Return only the star count.
 
 When no prompt package is selected, the run's selected **input field** is used
 as the prompt. API clients that omit `input_field` retain the legacy behavior
-of using the first non-empty string field. With a prompt package, records whose
-fields do not render a prompt are skipped.
+of using the first non-empty string field. With a prompt package, the package
+template renders the prompt and the input field is ignored (and not recorded in
+the run snapshot); records whose fields do not render a prompt are skipped.
+The input and reference fields must name different columns.
 
 ## 6. Queue a dataset evaluation run
 
@@ -146,7 +148,8 @@ evaluation** card:
 
 Use **Preflight dataset** in the shared launch context to check the complete
 selection without creating a run. Queueing remains disabled while schema
-reading fails or either field is unresolved. The backend returns clear errors
+reading fails, either field is unresolved, or the input and reference fields
+are identical. The backend returns clear errors
 when a check fails — for example a dataset version that is not `ready`, a
 selected field that is absent, or an endpoint that is not available. Scripted
 checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.

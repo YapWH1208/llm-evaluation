@@ -51,6 +51,22 @@ _FIXED_TEMPLATE_KEYS = {
     "output_schema": "",
 }
 
+
+def _effective_dataset_input_field(input_field: str | None, prompt_package: object | None) -> str | None:
+    """The selected input field only applies when no prompt package renders the prompt."""
+
+    if prompt_package is not None:
+        return None
+    return input_field.strip() if input_field and input_field.strip() else None
+
+
+def _validate_distinct_dataset_fields(selected_input_field: str | None, reference_field: str) -> str:
+    normalized = reference_field.strip()
+    if selected_input_field is not None and selected_input_field == normalized:
+        raise DatasetRunError("Input and reference fields must name different dataset columns.")
+    return normalized
+
+
 _DATASET_RUN_MANIFEST: dict[str, object] = {
     "benchmark_id": DATASET_RUN_BENCHMARK_ID,
     "version": DATASET_RUN_BENCHMARK_VERSION,
@@ -107,14 +123,15 @@ def create_dataset_run(
         raise DatasetRunError("Prompt package not found.")
     if not reference_field.strip():
         raise DatasetRunError("A reference field is required.")
-    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
+    selected_input_field = _effective_dataset_input_field(input_field, prompt_package)
+    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
     try:
         samples, skipped = _build_dataset_samples(
             prepared_path=dataset.prepared_path,
             data_root=data_root,
             sample_limit=sample_limit,
             input_field=selected_input_field,
-            reference_field=reference_field.strip(),
+            reference_field=normalized_reference_field,
             prompt_package=prompt_package,
             dataset_id=dataset.dataset_id,
             dataset_version=dataset.version,
@@ -125,7 +142,7 @@ def create_dataset_run(
         raise DatasetRunError(_empty_dataset_samples_message(
             sample_limit=sample_limit,
             input_field=selected_input_field,
-            reference_field=reference_field.strip(),
+            reference_field=normalized_reference_field,
         ))
     compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
     if compatibility["unsupported"]:
@@ -165,7 +182,7 @@ def create_dataset_run(
         "datasets": frozen_datasets,
         "dataset_version": {"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision},
         "input_field": selected_input_field,
-        "reference_field": reference_field.strip(),
+        "reference_field": normalized_reference_field,
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
@@ -281,18 +298,22 @@ def preflight_dataset_run(
         issues.append("Prompt package not found.")
     if not reference_field.strip():
         issues.append("A reference field is required.")
-    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
+    selected_input_field = _effective_dataset_input_field(
+        input_field,
+        session.get(PromptPackage, prompt_package_id) if prompt_package_id else None,
+    )
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
         datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": False})
         try:
+            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
             samples, skipped = _build_dataset_samples(
                 prepared_path=dataset.prepared_path,
                 data_root=data_root,
                 sample_limit=sample_limit,
                 input_field=selected_input_field,
-                reference_field=reference_field.strip(),
+                reference_field=normalized_reference_field,
                 prompt_package=session.get(PromptPackage, prompt_package_id) if prompt_package_id else None,
                 dataset_id=dataset.dataset_id,
                 dataset_version=dataset.version,
@@ -301,7 +322,7 @@ def preflight_dataset_run(
                 issues.append(_empty_dataset_samples_message(
                     sample_limit=sample_limit,
                     input_field=selected_input_field,
-                    reference_field=reference_field.strip(),
+                    reference_field=normalized_reference_field,
                 ))
         except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))

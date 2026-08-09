@@ -247,6 +247,7 @@ export default function App() {
   const quickStartBenchmarks = useMemo(() => benchmarks.filter((benchmark) => benchmark.source === "builtin" && ["available", "enabled"].includes(benchmark.status)), [benchmarks]);
   const selectedQuickStart = quickStartBenchmarks.find((benchmark) => `${benchmark.benchmark_id}@${benchmark.version}` === selectedQuickStartBenchmark) ?? quickStartBenchmarks[0] ?? null;
   const selectedDatasetForRun = datasets.find((dataset) => dataset.id === datasetRunForm.dataset_version_id) ?? null;
+  const datasetRunFieldsCollide = useMemo(() => Boolean(datasetRunForm.input_field) && datasetRunForm.input_field === datasetRunForm.reference_field, [datasetRunForm.input_field, datasetRunForm.reference_field]);
 
   useEffect(() => {
     if (!selectedQuickStart) return;
@@ -268,14 +269,14 @@ export default function App() {
     setDatasetRunFields([]);
     setDatasetRunFieldsError(null);
     setDatasetRunFieldsLoading(true);
-    void api.previewDataset(datasetId, 5).then((preview) => {
+    void api.previewDataset(datasetId, 50).then((preview) => {
       if (disposed) return;
       const fields = Array.from(new Set(preview.fields.map(String).filter(Boolean)));
       const dataset = datasets.find((item) => item.id === datasetId);
       const inputField = dataset?.input_field && fields.includes(dataset.input_field) ? dataset.input_field : fields[0] ?? "";
-      const referenceField = dataset?.reference_field && fields.includes(dataset.reference_field) ? dataset.reference_field : fields.find((field) => field !== inputField) ?? fields[0] ?? "";
+      const referenceField = dataset?.reference_field && fields.includes(dataset.reference_field) ? dataset.reference_field : fields.find((field) => field !== inputField) ?? "";
       setDatasetRunFields(fields);
-      setDatasetRunFieldsError(fields.length === 0 ? t("runLauncher.schemaEmpty") : null);
+      setDatasetRunFieldsError(fields.length === 0 ? t("runLauncher.schemaEmpty") : referenceField ? null : t("runLauncher.schemaReferenceRequired"));
       setDatasetRunForm((current) => current.dataset_version_id === datasetId ? { ...current, input_field: inputField, reference_field: referenceField } : current);
     }).catch((error: unknown) => {
       if (disposed) return;
@@ -603,13 +604,14 @@ export default function App() {
         model_endpoint_id: datasetRunForm.model_endpoint_id,
         dataset_version_id: datasetRunForm.dataset_version_id,
         prompt_package_id: datasetRunForm.prompt_package_id || null,
-        input_field: datasetRunForm.input_field,
+        input_field: datasetRunForm.prompt_package_id ? null : datasetRunForm.input_field,
         reference_field: datasetRunForm.reference_field,
         sample_limit: Number(datasetRunForm.sample_limit) || 100,
       });
       setNotice(t("datasetRun.queued"));
       setDatasetRunForm({ ...initialDatasetRun, model_endpoint_id: datasetRunForm.model_endpoint_id });
       setDatasetHandoffId(null);
+      setLaunchPreflight(null);
       await refresh();
     } catch (error) {
       showError(error);
@@ -626,7 +628,7 @@ export default function App() {
         model_endpoint_id: datasetRunForm.model_endpoint_id,
         dataset_version_id: datasetRunForm.dataset_version_id,
         prompt_package_id: datasetRunForm.prompt_package_id || null,
-        input_field: datasetRunForm.input_field,
+        input_field: datasetRunForm.prompt_package_id ? null : datasetRunForm.input_field,
         reference_field: datasetRunForm.reference_field,
         sample_limit: Number(datasetRunForm.sample_limit) || 100,
       });
@@ -871,18 +873,20 @@ export default function App() {
           {datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}
           {datasetRunFieldsLoading && <p className="muted">{t("runLauncher.schemaLoading")}</p>}
           {datasetRunFieldsError && <p className="error" role="alert" data-i18n-preserve>{datasetRunFieldsError}</p>}
+          {datasetRunFieldsCollide && <p className="error" role="alert">{t("runLauncher.schemaDistinctFields")}</p>}
+          {datasetRunFieldsError && <div className="actions"><button type="button" onClick={() => { setLaunchPreflight(null); setDatasetRunSchemaRequest((current) => current + 1); }}>{t("runLauncher.schemaRetry")}</button></div>}
           <div className="workspace-field-grid workspace-field-grid--two">
-            <label>{t("datasetRun.inputField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0} required value={datasetRunForm.input_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, input_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
+            <label>{t("datasetRun.inputField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0 || Boolean(datasetRunForm.prompt_package_id)} required value={datasetRunForm.input_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, input_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
             <label>{t("datasetRun.referenceField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0} required value={datasetRunForm.reference_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, reference_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
           </div>
           <label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value }); }}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
-          <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || !datasetRunForm.input_field || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
+          <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}
         onSelect={(runId) => void selectRun(runId)}
         preflight={<div className="workspace-run-context-controls">
           <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
-          <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || !datasetRunForm.dataset_version_id || !datasetRunForm.input_field || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
+          <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
           <div aria-live="polite" className={`workspace-preflight-state ${launchPreflight?.result.can_queue ? "is-ready" : launchPreflight ? "is-blocked" : ""}`} role="status"><strong>{busy === "preflight-quick-start" || busy === "preflight-dataset" ? t("runLauncher.checking") : launchPreflight?.result.can_queue ? t("runLauncher.ready") : launchPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{launchPreflight && !launchPreflight.result.can_queue && <span data-i18n-preserve>{launchPreflight.result.issues.join(" ")}</span>}</div>
         </div>}
         quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>

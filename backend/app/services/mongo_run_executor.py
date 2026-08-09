@@ -30,7 +30,9 @@ from app.services.dataset_runs import (
     DATASET_RUN_BENCHMARK_VERSION,
     DatasetRunError,
     _build_dataset_samples,
+    _effective_dataset_input_field,
     _empty_dataset_samples_message,
+    _validate_distinct_dataset_fields,
 )
 from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
@@ -368,14 +370,15 @@ def create_mongo_dataset_run(
         raise MongoRunExecutionError("Prompt package not found.")
     if not reference_field.strip():
         raise MongoRunExecutionError("A reference field is required.")
-    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
+    selected_input_field = _effective_dataset_input_field(input_field, prompt_package)
+    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
     try:
         samples, skipped = _build_dataset_samples(
             prepared_path=dataset["prepared_path"],
             data_root=data_root,
             sample_limit=sample_limit,
             input_field=selected_input_field,
-            reference_field=reference_field.strip(),
+            reference_field=normalized_reference_field,
             prompt_package=_proxy(prompt_package) if prompt_package else None,
             dataset_id=dataset["dataset_id"],
             dataset_version=dataset["version"],
@@ -386,7 +389,7 @@ def create_mongo_dataset_run(
         raise MongoRunExecutionError(_empty_dataset_samples_message(
             sample_limit=sample_limit,
             input_field=selected_input_field,
-            reference_field=reference_field.strip(),
+            reference_field=normalized_reference_field,
         ))
     compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
     if compatibility["unsupported"]:
@@ -427,7 +430,7 @@ def create_mongo_dataset_run(
         "datasets": frozen_datasets,
         "dataset_version": {"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default")},
         "input_field": selected_input_field,
-        "reference_field": reference_field.strip(),
+        "reference_field": normalized_reference_field,
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
@@ -588,18 +591,22 @@ def preflight_mongo_dataset_run(
         issues.append("Prompt package not found.")
     if not reference_field.strip():
         issues.append("A reference field is required.")
-    selected_input_field = input_field.strip() if input_field and input_field.strip() else None
+    selected_input_field = _effective_dataset_input_field(
+        input_field,
+        _proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
+    )
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
         datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default"), "status": dataset["status"], "will_prepare": False})
         try:
+            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
             samples, _skipped = _build_dataset_samples(
                 prepared_path=dataset["prepared_path"],
                 data_root=data_root,
                 sample_limit=sample_limit,
                 input_field=selected_input_field,
-                reference_field=reference_field.strip(),
+                reference_field=normalized_reference_field,
                 prompt_package=_proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
                 dataset_id=dataset["dataset_id"],
                 dataset_version=dataset["version"],
@@ -608,7 +615,7 @@ def preflight_mongo_dataset_run(
                 issues.append(_empty_dataset_samples_message(
                     sample_limit=sample_limit,
                     input_field=selected_input_field,
-                    reference_field=reference_field.strip(),
+                    reference_field=normalized_reference_field,
                 ))
         except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))

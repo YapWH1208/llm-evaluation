@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, Benchmark, Dataset, Endpoint } from "./api";
+import { api, Benchmark, Dataset, Endpoint, PromptPackage } from "./api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -20,6 +20,17 @@ const readyDataset = {
   input_field: "question",
   reference_field: "answer",
 } as Dataset;
+const promptPackage = {
+  id: "pp-1",
+  name: "Templated",
+  version: "1.0.0",
+  prompt_type: "user_custom",
+  system_message: null,
+  user_template: "Q: {{question}}\nA:",
+  few_shot_examples: [],
+  scoring_rule: { type: "exact_match" },
+  created_at: "2026-08-09T00:00:00Z",
+} as PromptPackage;
 const quickStartBenchmark = {
   id: "benchmark-1",
   benchmark_id: "text-quick-check",
@@ -35,15 +46,17 @@ function mockWorkspace({
   benchmarks = [quickStartBenchmark],
   datasets = [readyDataset],
   endpoints = [endpoint],
+  prompts = [promptPackage],
 }: {
   benchmarks?: Benchmark[];
   datasets?: Dataset[];
   endpoints?: Endpoint[];
+  prompts?: PromptPackage[];
 } = {}) {
   vi.spyOn(api, "listEndpoints").mockResolvedValue(endpoints);
   vi.spyOn(api, "listRuns").mockResolvedValue([]);
   vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-  vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
+  vi.spyOn(api, "listPromptPackages").mockResolvedValue(prompts);
   vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
   vi.spyOn(api, "listSuites").mockResolvedValue([]);
   vi.spyOn(api, "listBenchmarks").mockResolvedValue(benchmarks);
@@ -183,5 +196,99 @@ describe("evaluation run launch workspace", () => {
       reference_field: "answer",
     }));
     expect(screen.getByText("Ready to queue")).toBeVisible();
+  }, 10_000);
+
+  it("queues a prompt-package dataset run without an input field and clears stale preflight state", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({
+      id: "run-1",
+      benchmark_id: "dataset-evaluation",
+      total_samples: 1,
+      status: "queued",
+    } as never);
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
+    const packageSelects = screen.getAllByLabelText("Prompt package (optional)");
+    await user.selectOptions(packageSelects[1], promptPackage.id);
+    expect(screen.getByLabelText("Input field")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
+    await waitFor(() => expect(screen.getByText("Ready to queue")).toBeVisible());
+    await user.click(screen.getByRole("button", { name: "Queue dataset run" }));
+
+    expect(validateDatasetRun).toHaveBeenCalledWith(expect.objectContaining({ input_field: null, prompt_package_id: promptPackage.id }));
+    expect(createDatasetRun).toHaveBeenCalledWith(expect.objectContaining({
+      model_endpoint_id: endpoint.id,
+      dataset_version_id: readyDataset.id,
+      prompt_package_id: promptPackage.id,
+      input_field: null,
+      reference_field: "answer",
+    }));
+    expect(screen.getByText("Not checked")).toBeVisible();
+  }, 10_000);
+
+  it("blocks queueing a single-field dataset and explains the missing reference field", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["only"],
+      rows: [{ only: "value" }],
+    });
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+
+    expect(await screen.findByText("This dataset exposes only one field; a distinct reference field is required.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Queue dataset run" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Preflight dataset" })).toBeDisabled();
+  }, 10_000);
+
+  it("blocks queueing when input and reference fields are the same", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({
+      id: "run-1",
+      benchmark_id: "dataset-evaluation",
+      total_samples: 1,
+      status: "queued",
+    } as never);
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Reference field")).toHaveValue("answer"));
+    await user.selectOptions(screen.getByLabelText("Reference field"), "question");
+
+    expect(screen.getByText("Input and reference fields must be different.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Queue dataset run" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Queue dataset run" }));
+    expect(createDatasetRun).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("retries the schema fetch after a transient preview failure", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset")
+      .mockRejectedValueOnce(new Error("Prepared schema is unavailable."))
+      .mockResolvedValueOnce({
+        fields: ["question", "answer"],
+        rows: [{ question: "2 + 2?", answer: "4" }],
+      });
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Prepared schema is unavailable.");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
+    expect(screen.getByRole("button", { name: "Queue dataset run" })).toBeEnabled();
   }, 10_000);
 });

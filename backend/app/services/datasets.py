@@ -42,7 +42,6 @@ MATERIAL_DATASET_SOURCE_FIELDS = (
 )
 INACTIVE_DATASET_EDIT_RESET_STATUSES = frozenset({
     DatasetStatus.NOT_DOWNLOADED.value,
-    DatasetStatus.WAITING.value,
     DatasetStatus.UPDATE_AVAILABLE.value,
     DatasetStatus.LICENSE_REQUIRED.value,
     DatasetStatus.CREDENTIAL_REQUIRED.value,
@@ -62,17 +61,7 @@ def resolve_dataset_source(
     parsed = urlparse(source_url)
     if parsed.scheme == "hf":
         path_parts = [part for part in parsed.path.split("/") if part]
-        if parsed.netloc in {"models", "spaces"}:
-            raise DatasetError(
-                f"Hugging Face repository type {parsed.netloc!r} is not supported; "
-                "dataset sources must use hf://datasets/owner/repository/path/to/file."
-            )
-        if parsed.netloc == "datasets":
-            if len(path_parts) < 3:
-                raise DatasetError(
-                    "Hugging Face canonical dataset sources must use "
-                    "hf://datasets/owner/repository/path/to/file."
-                )
+        if parsed.netloc == "datasets" and len(path_parts) >= 3:
             repository = "/".join(path_parts[:2])
             relative_path = "/".join(path_parts[2:])
         else:

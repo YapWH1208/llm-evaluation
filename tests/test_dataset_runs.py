@@ -232,3 +232,82 @@ def test_dataset_run_uses_selected_input_field_and_preserves_legacy_fallback(tmp
             "sample_limit": 10,
         })
         assert blank_input.status_code == 422
+
+
+def test_dataset_run_with_prompt_package_ignores_input_field(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+        model_executor=_DatasetAnswerExecutor(),
+    )
+    with TestClient(app) as client:
+        dataset = _register_ready_dataset(client)
+        endpoint_id = _create_available_endpoint(client)
+        package_id = _prompt_package(client)
+
+        created = client.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "prompt_package_id": package_id,
+            "input_field": "missing-field",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert created.status_code == 201
+        snapshot = created.json()["configuration_snapshot"]
+        assert snapshot["input_field"] is None
+        assert snapshot["prompt_package"]["id"] == package_id
+        attempts = client.get(f"/api/v1/evaluation-runs/{created.json()['id']}/attempts").json()
+        contents = {attempt["input_snapshot"]["messages"][-1]["content"] for attempt in attempts}
+        assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
+
+        preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "prompt_package_id": package_id,
+            "input_field": "missing-field",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        })
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is True
+        assert not any("input field" in issue for issue in preflight.json()["issues"])
+
+
+def test_dataset_run_rejects_identical_input_and_reference_fields(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        dataset = _register_ready_dataset(client)
+        endpoint_id = _create_available_endpoint(client)
+
+        preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "input_field": "question",
+            "reference_field": "question",
+            "sample_limit": 10,
+        })
+        assert preflight.status_code == 200
+        assert preflight.json()["can_queue"] is False
+        assert any("different" in issue for issue in preflight.json()["issues"])
+
+        created = client.post("/api/v1/evaluation-runs/dataset", json={
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "input_field": "question",
+            "reference_field": "question",
+            "sample_limit": 10,
+        })
+        assert created.status_code == 409
+        assert "different" in created.json()["detail"]

@@ -17,7 +17,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schema before preflight or queueing.
 - Dataset evaluation runs can explicitly select an input field; the chosen input
   and reference fields are frozen in the run snapshot, while clients that omit
-  the input field retain the legacy first-string behavior.
+  the input field retain the legacy first-string behavior. The input field only
+  applies when no prompt package renders the prompt.
 - The evaluation dashboard now surfaces live quality, model/benchmark comparisons,
   latency, cost, error signals, recent runs, and system readiness in a compact,
   responsive analytics workspace for light and dark themes.
@@ -33,8 +34,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   verification, preparation, and removal states suppress conflicting changes.
 - Canonical Hugging Face dataset URIs such as
   `hf://datasets/hf-internal-testing/textfolder/hello.txt` now resolve correctly,
-  while the existing shorthand remains supported and unsupported repository types
-  return actionable errors.
+  while the existing `hf://owner/repository/path` shorthand remains supported,
+  including owners named `datasets`, `models`, or `spaces`.
+- Dataset evaluation runs reject identical input and reference fields instead of
+  silently scoring model output against the input itself.
+- Paused dataset downloads keep their paused state when a source correction is
+  saved; the pause is released only by explicitly retrying the download.
 - Material corrections to failed, non-cached dataset registrations clear stale
   failures consistently in relational and MongoDB stores and require acceptance
   again when license terms change.

@@ -122,17 +122,33 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
         "release%2F1/path%20with%20spaces/file.jsonl"
     )
 
-    for unsupported_type in ("models", "spaces"):
-        with pytest.raises(DatasetError, match=f"repository type {unsupported_type!r} is not supported"):
-            resolve_dataset_source(
-                f"hf://{unsupported_type}/owner/repository/file.jsonl",
-                "main",
-                None,
-                settings,
-            )
+    owner_named_datasets, _ = resolve_dataset_source(
+        "hf://datasets/foo/file.jsonl",
+        "main",
+        None,
+        settings,
+    )
+    assert owner_named_datasets == "https://huggingface.co/datasets/datasets/foo/resolve/main/file.jsonl"
+    two_part_datasets, _ = resolve_dataset_source(
+        "hf://datasets/owner/repository",
+        "main",
+        None,
+        settings,
+    )
+    assert two_part_datasets == "https://huggingface.co/datasets/datasets/owner/resolve/main/repository"
 
-    with pytest.raises(DatasetError, match="canonical dataset sources"):
-        resolve_dataset_source("hf://datasets/owner/repository", "main", None, settings)
+    for owner in ("models", "spaces"):
+        shorthand, _ = resolve_dataset_source(
+            f"hf://{owner}/owner/repository/file.jsonl",
+            "main",
+            None,
+            settings,
+        )
+        assert shorthand == (
+            f"https://huggingface.co/datasets/{owner}/owner/resolve/main/repository/file.jsonl"
+        )
+        with pytest.raises(DatasetError, match="hf://owner/repository/path"):
+            resolve_dataset_source(f"hf://{owner}/owner", "main", None, settings)
     with pytest.raises(DatasetError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)
     with pytest.raises(DatasetError, match="not configured"):
@@ -431,6 +447,10 @@ def test_inactive_dataset_nonmaterial_or_cached_edit_preserves_lifecycle() -> No
         "source_url": "https://datasets.example.test/corrected.jsonl",
     }) == {}
     assert dataset_edit_lifecycle_updates({**current, "status": "downloading"}, {
+        **unchanged,
+        "source_url": "https://datasets.example.test/corrected.jsonl",
+    }) == {}
+    assert dataset_edit_lifecycle_updates({**current, "status": "waiting"}, {
         **unchanged,
         "source_url": "https://datasets.example.test/corrected.jsonl",
     }) == {}
