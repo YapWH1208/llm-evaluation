@@ -187,4 +187,24 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ko", phrases[5])).toBe("대기열 인벤토리");
     expect(translateStaticText("ms", phrases[6])).toBe("Baris maya memastikan baris berjumlah tinggi responsif sambil mengekalkan kawalan operasi pada peringkat tugas.");
   });
+
+  it("renders task and worker guidance as complete phrases", () => {
+    const phrases = [
+      "Find task",
+      "Task status",
+      "No tasks match the current filters.",
+      "Track active task leases and the worker capacity currently consuming evaluation work.",
+      "No active worker leases",
+      "No worker has an active lease at the moment. Inspect the queue and system health before changing deployment capacity.",
+      "Open task queue",
+    ] as const;
+
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("查找任务");
+    expect(translateStaticText("fr", phrases[1])).toBe("État de la tâche");
+    expect(translateStaticText("de", phrases[2])).toBe("Keine Aufgaben entsprechen den aktuellen Filtern.");
+    expect(translateStaticText("ru", phrases[3])).toBe("Отслеживайте активные аренды задач и ресурсы работников, которые сейчас выполняют оценочную работу.");
+    expect(translateStaticText("ja", phrases[4])).toBe("アクティブなワーカーリースはありません");
+    expect(translateStaticText("ko", phrases[5])).toBe("현재 활성 임대를 가진 작업자가 없습니다. 배포 용량을 변경하기 전에 대기열과 시스템 상태를 확인하세요.");
+    expect(translateStaticText("ms", phrases[6])).toBe("Buka baris tugas");
+  });
 });
