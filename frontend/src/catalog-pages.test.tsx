@@ -155,11 +155,12 @@ describe("catalog workspace pages", () => {
   });
 
   it("suppresses mutation actions while a dataset is actively preparing", () => {
-    renderCatalogPage(<DatasetInspector busy={null} dataset={{ ...waitingDataset, status: "preparing" }} editForm={{}} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+    renderCatalogPage(<DatasetInspector busy={null} dataset={{ ...waitingDataset, status: "preparing" }} editForm={datasetEditForm(waitingDataset)} editing onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
 
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download and verify" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
   });
 
   it("starts an evaluation handoff for a ready dataset without queueing it", async () => {
