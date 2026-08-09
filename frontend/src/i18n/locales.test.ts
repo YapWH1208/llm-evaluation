@@ -325,4 +325,12 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ru", "Select a run to begin a human or judge review.")).toBe("Выберите запуск, чтобы начать проверку человеком или судьёй.");
     expect(translateStaticText("ja", "Human review workflow")).toBe("人によるレビューのワークフロー");
   });
+
+  it("renders administration guidance as complete phrases", () => {
+    expect(translateStaticText("zh-CN", "Provision constrained API users and keep recent administrative activity alongside the current inventory.")).toBe("配置受限的 API 用户，并将最近的管理活动与当前清单一同保留。");
+    expect(translateStaticText("fr", "User inventory")).toBe("Inventaire des utilisateurs");
+    expect(translateStaticText("de", "Create a token-bearing account with the least-privileged role and an optional concurrency ceiling.")).toBe("Erstellen Sie ein tokenbasiertes Konto mit der geringsten Berechtigung und einer optionalen Parallelitätsobergrenze.");
+    expect(translateStaticText("ru", "Roles, rate ceilings, and status remain visible before issuing additional credentials.")).toBe("Роли, ограничения частоты и статус остаются видимыми перед выпуском дополнительных учётных данных.");
+    expect(translateStaticText("ja", "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.")).toBe("最新の記録済み管理変更は、ユーザー作成値とは分けて監査証跡として保持されます。");
+  });
 });

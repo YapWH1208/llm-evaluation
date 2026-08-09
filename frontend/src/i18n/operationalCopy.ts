@@ -343,6 +343,7 @@ const words: Record<string, readonly string[]> = {
 const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
   en: {},
   "zh-CN": {
+    "Provision constrained API users and keep recent administrative activity alongside the current inventory.": "配置受限的 API 用户，并将最近的管理活动与当前清单一同保留。",
     "Choose the evaluation snapshot and sample before opening human or independent judge workflows.": "在打开人工或独立评审工作流前，选择评测快照和样本。",
     "Overview": "概览", "Configure": "配置", "Catalog": "目录", "Operations": "运行", "Insights": "洞察", "Reporting": "报告", "Quality review": "质量审核", "Administration": "管理", "Evaluation workflow": "评测工作流",
     "OpenAI-compatible Chat Completions": "兼容 OpenAI 的聊天补全",
@@ -354,6 +355,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "自定义 HTTP JSON",
   },
   fr: {
+    "User inventory": "Inventaire des utilisateurs",
     "Review run": "Exécution à examiner",
     "Overview": "Vue d’ensemble", "Configure": "Configurer", "Catalog": "Catalogue", "Operations": "Opérations", "Insights": "Analyses", "Reporting": "Rapports", "Quality review": "Revue qualité", "Administration": "Administration", "Evaluation workflow": "Flux de travail d’évaluation",
     "OpenAI-compatible Chat Completions": "Complétions de chat compatibles OpenAI",
@@ -365,6 +367,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "JSON HTTP personnalisé",
   },
   de: {
+    "Create a token-bearing account with the least-privileged role and an optional concurrency ceiling.": "Erstellen Sie ein tokenbasiertes Konto mit der geringsten Berechtigung und einer optionalen Parallelitätsobergrenze.",
     "Review sample": "Zu prüfende Stichprobe",
     "Overview": "Übersicht", "Configure": "Konfigurieren", "Catalog": "Katalog", "Operations": "Betrieb", "Insights": "Erkenntnisse", "Reporting": "Berichte", "Quality review": "Qualitätsprüfung", "Administration": "Verwaltung", "Evaluation workflow": "Bewertungsablauf",
     "OpenAI-compatible Chat Completions": "OpenAI-kompatible Chat-Vervollständigungen",
@@ -376,6 +379,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Benutzerdefiniertes HTTP-JSON",
   },
   ru: {
+    "Roles, rate ceilings, and status remain visible before issuing additional credentials.": "Роли, ограничения частоты и статус остаются видимыми перед выпуском дополнительных учётных данных.",
     "Select a run to begin a human or judge review.": "Выберите запуск, чтобы начать проверку человеком или судьёй.",
     "Overview": "Обзор", "Configure": "Настройка", "Catalog": "Каталог", "Operations": "Операции", "Insights": "Аналитика", "Reporting": "Отчёты", "Quality review": "Проверка качества", "Administration": "Администрирование", "Evaluation workflow": "Рабочий процесс оценки",
     "OpenAI-compatible Chat Completions": "Совместимые с OpenAI чат-завершения",
@@ -387,6 +391,7 @@ const protocolProfilePhrases: Record<Locale, Record<string, string>> = {
     "Custom HTTP JSON": "Пользовательский HTTP JSON",
   },
   ja: {
+    "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.": "最新の記録済み管理変更は、ユーザー作成値とは分けて監査証跡として保持されます。",
     "Human review workflow": "人によるレビューのワークフロー",
     "Overview": "概要", "Configure": "設定", "Catalog": "カタログ", "Operations": "運用", "Insights": "インサイト", "Reporting": "レポート", "Quality review": "品質レビュー", "Administration": "管理", "Evaluation workflow": "評価ワークフロー",
     "OpenAI-compatible Chat Completions": "OpenAI 互換チャット補完",
