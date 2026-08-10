@@ -150,8 +150,6 @@ export type Dataset = {
   input_field: string | null;
   reference_field: string | null;
 };
-export type EvaluationSuite = { id: string; name: string; description: string | null; benchmark_list: Array<Record<string, unknown>>; default_prompt_overrides: Record<string, unknown>; default_request_body: Record<string, unknown>; weight_configuration: Record<string, unknown>; version: string; created_by: string | null; created_at: string };
-
 export type Capability = {
   id: string;
   capability_key: string;
@@ -175,13 +173,10 @@ export type Review = { id: string; sample_attempt_id: string; reviewer_id: strin
 export type ReviewAgreement = { sample_attempt_id: string; review_count: number; distinct_reviewer_count: number; review_stage_counts: { primary: number; secondary: number; adjudication: number }; numeric_score: { count: number; mean: number | null; standard_deviation: number | null; range: number | null }; label_agreement: number | null; status: string; adjudication_review_id: string | null };
 export type JudgeAssessment = { id: string; sample_attempt_id: string; judge_endpoint_id: string; comparison_sample_attempt_id: string | null; rubric: Record<string, unknown>; answer_order: string[]; swap_test_group_id: string | null; selected_answer: string | null; score: number | null; label: string | null; rationale: string | null; raw_response: string | null; status: string; error_message: string | null; created_at: string };
 export type JudgeAgreement = { status: string; assessment_count: number; successful_assessment_count: number; judge_endpoint_count: number; scores: { mean: number | null; range: number | null }; decisions: { distinct: string[]; count: number }; swap_test_group_count: number };
-export type Asset = { id: string; original_filename: string; media_kind: "image" | "audio" | "video" | "file"; mime_type: string; size_bytes: number; sha256: string; created_at: string };
 export type Task = { id: string; run_id: string; parent_task_id: string | null; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsCell = { x_key: string; x_label: string; y_key: string; y_label: string; run_ids: string[]; score: number | null; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; baseline_score: number | null; delta: number | null };
 export type AnalyticsMatrix = { baseline_run_id: string | null; heatmap: Array<{ run_id: string; model_endpoint_id: string; model_name: string; benchmark_id: string; benchmark_version: string; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; required_capabilities: string[]; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null }>; capability_matrix: Array<{ model_endpoint_id: string; capability: string; run_count: number; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null; baseline_score: number | null; delta: number | null }>; heatmaps: Record<"model_benchmark" | "model_capability" | "model_language" | "model_difficulty" | "prompt_benchmark" | "model_modality", AnalyticsCell[]> };
 export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
-export type User = { id: string; email: string; display_name: string; role: string; status: string; max_concurrency: number | null; created_at: string };
-export type AuditEvent = { id: string; actor_id: string | null; action: string; entity_type: string; entity_id: string | null; details: Record<string, unknown> | null; created_at: string };
 export type SystemHealth = { status: string; database: string; schema_version: number; database_connected: boolean; disk: { available_bytes: number; total_bytes: number }; queue: { pending: number; active: number } };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -271,7 +266,6 @@ export const api = {
   listRuns: () => request<EvaluationRun[]>("/evaluation-runs"),
   createRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null, benchmarkId = "text-quick-check", benchmarkVersion = "1.0.0", sampleLimit: number | null = null) => request<EvaluationRun>("/evaluation-runs", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency, benchmark_id: benchmarkId, benchmark_version: benchmarkVersion, sample_limit: sampleLimit }) }),
   validateRun: (modelEndpointId: string, promptPackageId?: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null, benchmarkId = "text-quick-check", benchmarkVersion = "1.0.0", sampleLimit: number | null = null) => request<RunPreflight>("/evaluation-runs/validate", { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, prompt_package_id: promptPackageId || null, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency, benchmark_id: benchmarkId, benchmark_version: benchmarkVersion, sample_limit: sampleLimit }) }),
-  createCustomMultimodalRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/custom-multimodal", { method: "POST", body: JSON.stringify(body) }),
   createDatasetRun: (body: Record<string, unknown>) => request<EvaluationRun>("/evaluation-runs/dataset", { method: "POST", body: JSON.stringify(body) }),
   validateDatasetRun: (body: Record<string, unknown>) => request<RunPreflight>("/evaluation-runs/dataset/preflight", { method: "POST", body: JSON.stringify(body) }),
   executeRun: (runId: string) => request<EvaluationRun>(`/evaluation-runs/${runId}/execute`, { method: "POST" }),
@@ -288,7 +282,6 @@ export const api = {
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
   listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
   subscribeToRunEvents: (runId: string, onEvent: () => void) => subscribeToEvents("/evaluation-runs/" + runId + "/events", "run", onEvent),
-  subscribeToWorkerEvents: (onEvent: () => void) => subscribeToEvents("/workers/events", "worker", onEvent),
   createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
   createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
@@ -297,13 +290,9 @@ export const api = {
   dashboard: () => request<Dashboard>("/dashboard"),
   compare: (runA: string, runB: string) => request<Comparison>(`/comparisons?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`),
   listBenchmarks: () => request<Benchmark[]>("/benchmarks"),
-  updateBenchmark: (benchmarkId: string, body: Record<string, unknown>) => request<Benchmark>(`/benchmarks/${benchmarkId}`, { method: "PATCH", body: JSON.stringify(body) }),
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
   createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
   listDatasets: () => request<Dataset[]>("/datasets"),
-  listSuites: () => request<EvaluationSuite[]>("/evaluation-suites"),
-  createSuite: (body: Record<string, unknown>) => request<EvaluationSuite>("/evaluation-suites", { method: "POST", body: JSON.stringify(body) }),
-  createSuiteRuns: (suiteId: string, modelEndpointId: string, requestBodyOverride: Record<string, unknown> = {}, maxConcurrency: number | null = null) => request<EvaluationRun[]>(`/evaluation-suites/${suiteId}/runs`, { method: "POST", body: JSON.stringify({ model_endpoint_id: modelEndpointId, request_body_override: requestBodyOverride, max_concurrency: maxConcurrency }) }),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   previewDataset: (datasetId: string, limit = 5) => request<{ fields: string[]; rows: Array<Record<string, string>> }>(`/datasets/${datasetId}/preview?limit=${limit}`),
   updateDataset: (datasetId: string, body: Record<string, unknown>) => request<Dataset>(`/datasets/${datasetId}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -326,13 +315,8 @@ export const api = {
   createJudgeComparison: (body: Record<string, unknown>) => request<JudgeAssessment[]>("/judge-assessments/compare", { method: "POST", body: JSON.stringify(body) }),
   listJudgeAssessments: (attemptId: string) => request<JudgeAssessment[]>(`/judge-assessments/sample/${attemptId}`),
   getJudgeAgreement: (attemptId: string) => request<JudgeAgreement>(`/judge-assessments/sample/${attemptId}/agreement`),
-  uploadAsset: (body: { filename: string; mime_type: string; base64_data: string }) => request<Asset>("/assets", { method: "POST", body: JSON.stringify(body) }),
   assetPreviewObjectUrl: (assetId: string) => requestObjectUrl(`/assets/${assetId}/download`),
   listTasks: () => request<Task[]>("/tasks"),
-  updateTaskPriority: (taskId: string, priority: number) => request<Task>(`/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ priority }) }),
   analyticsMatrix: (baselineRunId?: string) => request<AnalyticsMatrix>(`/analytics/matrix${baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : ""}`),
-  listUsers: () => request<User[]>("/users"),
-  createUser: (body: Record<string, unknown>) => request<User & { api_token: string }>("/users", { method: "POST", body: JSON.stringify(body) }),
-  listAuditEvents: () => request<AuditEvent[]>("/audit-events"),
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };

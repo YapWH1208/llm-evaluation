@@ -333,8 +333,7 @@
   overflow-wrap: anywhere;
 }
 
-.workspace-dataset-inspector,
-.workspace-suite-inspector {
+.workspace-dataset-inspector {
   display: grid;
   gap: .9rem;
 }
@@ -365,8 +364,7 @@
   margin: 0;
 }
 
-.workspace-preview-table h3,
-.workspace-suite-inspector h3 {
+.workspace-preview-table h3 {
   color: var(--text);
   font-size: .78rem;
   margin: 0;
@@ -384,25 +382,6 @@
 .workspace-dataset-actions {
   border-top: 1px solid var(--border);
   padding-top: .9rem;
-}
-
-.workspace-suite-queue {
-  align-items: start;
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: .65rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding-top: .9rem;
-}
-
-.workspace-suite-queue h3,
-.workspace-suite-queue p {
-  margin: 0;
-}
-
-.workspace-suite-queue p {
-  font-size: .78rem;
-  margin-top: .2rem;
 }
 
 .workspace-split--runs {
@@ -557,8 +536,7 @@
   padding-top: .68rem;
 }
 
-.workspace-run-actions button,
-.workspace-queue-table button {
+.workspace-run-actions button {
   font-size: .7rem;
   padding: .34rem .52rem;
 }
@@ -582,49 +560,6 @@
 
 .workspace-run-detail-empty {
   align-self: start;
-}
-
-.workspace-queue-table {
-  max-height: min(66vh, 42rem);
-}
-
-.workspace-queue-table table {
-  font-size: .78rem;
-  min-width: 50rem;
-}
-
-.workspace-queue-table th,
-.workspace-queue-table td {
-  padding: .58rem .66rem;
-}
-
-.workspace-worker-metrics {
-  display: grid;
-  gap: .85rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.workspace-worker-metrics .workspace-panel {
-  display: grid;
-  gap: .18rem;
-}
-
-.workspace-worker-metrics strong {
-  color: var(--text);
-  font-size: 1.45rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -.04em;
-}
-
-.workspace-worker-metrics span {
-  color: var(--text-muted);
-  font-size: .75rem;
-}
-
-.workspace-worker-empty {
-  display: grid;
-  gap: .2rem;
-  justify-items: start;
 }
 
 .workspace-analysis-context {
@@ -888,10 +823,6 @@
     max-height: none;
   }
 
-  .workspace-suite-queue {
-    grid-template-columns: 1fr;
-  }
-
   .workspace-operation-toolbar .workspace-filter-control,
   .workspace-operation-toolbar .workspace-filter-control input,
   .workspace-operation-toolbar .workspace-filter-control select {
@@ -901,10 +832,6 @@
 
   .workspace-run-list {
     max-height: none;
-  }
-
-  .workspace-worker-metrics {
-    grid-template-columns: 1fr;
   }
 
   .workspace-analysis-context {

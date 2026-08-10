@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import { api, Benchmark, Dataset, Endpoint, EvaluationSuite } from "../../api";
+import { api, Dataset } from "../../api";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { translateStaticTemplate } from "../../i18n/operationalCopy";
 import { PageHeader } from "../workspace/PageHeader";
@@ -9,40 +9,6 @@ import { WorkspacePanel } from "../workspace/WorkspacePanel";
 type DatasetAction = (dataset: Dataset) => Promise<void>;
 type DatasetUploadAction = (dataset: Dataset, event: ChangeEvent<HTMLInputElement>) => Promise<void>;
 
-type BenchmarksPageProps = {
-  benchmarks: Benchmark[];
-  busy: string | null;
-  onToggleStatus: (benchmark: Benchmark) => void;
-};
-
-export function benchmarkModalities(benchmark: Benchmark) {
-  const modalities = benchmark.manifest.modalities;
-  return Array.isArray(modalities) ? modalities.map(String).join(", ") : "--";
-}
-
-export function BenchmarksPage({ benchmarks, busy, onToggleStatus }: BenchmarksPageProps) {
-  const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredBenchmarks = benchmarks.filter((benchmark) => [benchmark.benchmark_id, benchmark.display_name, benchmark.source, benchmark.status, benchmark.version, benchmarkModalities(benchmark)].join(" ").toLocaleLowerCase().includes(normalizedQuery));
-
-  return (
-    <div className="workspace-page benchmarks-page">
-      <PageHeader
-        actions={<label className="workspace-filter-control">Filter benchmarks<input aria-label="Filter benchmarks" onChange={(event) => setQuery(event.target.value)} placeholder="Name, source, status…" type="search" value={query} /></label>}
-        description="Inspect versioned benchmark packs, their supported modalities, and the availability state used by new runs."
-        eyebrow="Catalog"
-        status={<><strong>{benchmarks.length}</strong> registered versions</>}
-        title="Benchmarks"
-      />
-      <WorkspacePanel description="Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog." title="Benchmark registry" toolbar={<span className="workspace-count">{filteredBenchmarks.length} shown</span>}>
-        {filteredBenchmarks.length === 0 ? <p className="empty">No benchmark versions match this filter.</p> : <div className="table-wrap workspace-dense-table"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th><th>Modalities</th><th><span className="sr-only">Operation</span></th></tr></thead><tbody>{filteredBenchmarks.map((benchmark) => {
-          const canToggle = ["registered", "enabled", "disabled"].includes(benchmark.status);
-          return <tr key={benchmark.id}><td data-i18n-preserve><strong>{benchmark.display_name}</strong><span className="workspace-table-detail">{benchmark.benchmark_id}</span></td><td data-i18n-preserve>{benchmark.version}</td><td data-i18n-preserve title={benchmark.source}>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td><td data-i18n-preserve>{benchmarkModalities(benchmark)}</td><td>{canToggle ? <button className="secondary workspace-table-action" disabled={busy === `benchmark-${benchmark.id}`} onClick={() => onToggleStatus(benchmark)} type="button">{benchmark.status === "disabled" ? "Enable" : "Disable"}</button> : <span className="workspace-table-detail">Managed by pack</span>}</td></tr>;
-        })}</tbody></table></div>}
-      </WorkspacePanel>
-    </div>
-  );
-}
 
 type DatasetsPageProps = {
   busy: string | null;
@@ -161,34 +127,4 @@ export function DatasetInspector({ busy, dataset, editForm, editing, onClear, on
       {!active && <><button className="secondary" onClick={onStartEdit} type="button">Edit</button><button className="secondary danger" disabled={busy === `dataset-delete-${dataset.id}`} onClick={() => void onDelete(dataset)} type="button">Delete</button><label className="file-picker">Upload local revision<input accept=".json,.jsonl,.csv,.tsv,.txt,.zip,.parquet" aria-label={`Upload local revision for ${dataset.dataset_id}`} disabled={busy === `dataset-upload-${dataset.id}`} onChange={(event) => void onUpload(dataset, event)} type="file" /></label></>}
     </div>
   </WorkspacePanel>;
-}
-
-type SuitesPageProps = {
-  busy: string | null;
-  endpoints: Endpoint[];
-  onOpenWorkspace: () => void;
-  onQueue: (suiteId: string, endpointId: string) => void;
-  suites: EvaluationSuite[];
-};
-
-export function suiteBenchmarkList(suite: EvaluationSuite) {
-  return suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ");
-}
-
-export function SuitesPage({ busy, endpoints, onOpenWorkspace, onQueue, suites }: SuitesPageProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedSuite = suites.find((suite) => suite.id === selectedId) ?? suites[0] ?? null;
-  const availableEndpoints = endpoints.filter((endpoint) => endpoint.status === "available");
-
-  return <div className="workspace-page suites-page">
-    <PageHeader actions={<button onClick={onOpenWorkspace} type="button">Open suite builder</button>} description="Compose versioned benchmark sets and queue them on ready endpoints without losing the benchmark evidence behind each suite." eyebrow="Catalog" status={<><strong>{suites.length}</strong> versioned suites</>} title="Suites" />
-    {suites.length === 0 ? <WorkspacePanel title="No evaluation suites"><p className="empty">Create a suite from the Workspace catalog to define versioned benchmark composition and default execution settings.</p></WorkspacePanel> : <div className="workspace-split workspace-split--catalog">
-      <WorkspacePanel description="Choose a versioned suite to inspect composition and queue it on an available endpoint." title="Suite inventory" toolbar={<span className="workspace-count">{suites.length} versions</span>}><div className="workspace-inventory-list workspace-catalog-inventory">{suites.map((suite) => <button aria-pressed={selectedSuite?.id === suite.id} className={selectedSuite?.id === suite.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={suite.id} onClick={() => setSelectedId(suite.id)} type="button"><span data-i18n-preserve><strong>{suite.name} v{suite.version}</strong></span><small data-i18n-preserve>{suiteBenchmarkList(suite)}</small><span className="sr-only">Inspect {suite.name} v{suite.version}</span></button>)}</div></WorkspacePanel>
-      {selectedSuite && <WorkspacePanel className="workspace-suite-inspector" description={selectedSuite.description || "No suite description was provided."} title={<span data-i18n-preserve>{selectedSuite.name} v{selectedSuite.version}</span>}>
-        <h3>Benchmark composition</h3>
-        <div className="table-wrap workspace-dense-table"><table><thead><tr><th>Benchmark</th><th>Version</th></tr></thead><tbody>{selectedSuite.benchmark_list.map((item, index) => <tr key={`${String(item.benchmark_id)}-${index}`} data-i18n-preserve><td>{String(item.benchmark_id ?? "benchmark")}</td><td>{String(item.version ?? "--")}</td></tr>)}</tbody></table></div>
-        <div className="workspace-suite-queue"><div><h3>Queue suite</h3><p className="muted">Uses each selected endpoint’s saved connection and capacity configuration.</p></div>{availableEndpoints.length === 0 ? <p className="empty">No available endpoints are ready to receive this suite.</p> : <div className="actions">{availableEndpoints.map((endpoint) => <button disabled={busy === `suite-${selectedSuite.id}`} key={endpoint.id} onClick={() => onQueue(selectedSuite.id, endpoint.id)} type="button">Queue on <span data-i18n-preserve>{endpoint.display_name}</span></button>)}</div>}</div>
-      </WorkspacePanel>}
-    </div>}
-  </div>;
 }

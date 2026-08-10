@@ -9,6 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/dashboard");
 });
 
 const endpoint = { id: "ep-1", display_name: "Test model", status: "available" } as Endpoint;
@@ -60,19 +61,16 @@ function mockWorkspace({
   vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
   vi.spyOn(api, "listPromptPackages").mockResolvedValue(prompts);
   vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
-  vi.spyOn(api, "listSuites").mockResolvedValue([]);
   vi.spyOn(api, "listBenchmarks").mockResolvedValue(benchmarks);
   vi.spyOn(api, "listTasks").mockResolvedValue([]);
   vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "listUsers").mockResolvedValue([]);
-  vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
   vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
 }
 
 async function openRuns() {
   const user = userEvent.setup();
   render(<LocaleProvider><App /></LocaleProvider>);
-  await user.click(screen.getByRole("button", { name: "Runs" }));
+  await user.click(screen.getByRole("link", { name: "Runs" }));
   return user;
 }
 

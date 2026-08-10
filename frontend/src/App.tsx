@@ -1,10 +1,8 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
-  AuditEvent,
   ApiError,
   AnalyticsMatrix,
-  Asset,
   Benchmark,
   Capability,
   Comparison,
@@ -12,13 +10,11 @@ import {
   Dataset,
   Endpoint,
   EvaluationRun,
-  EvaluationSuite,
   JudgeAssessment,
   JudgeAgreement,
   PromptPackage,
   Report,
   ReportShare,
-  ReportType,
   Review,
   ReviewAgreement,
   RunPreflight,
@@ -27,19 +23,19 @@ import {
   SampleAttempt,
   SystemHealth,
   Task,
-  User,
 } from "./api";
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { Guide } from "./components/Guide";
 import { DatasetRegistrationForm } from "./components/datasets/DatasetRegistrationForm";
-import { BenchmarksPage, DatasetsPage, SuitesPage } from "./components/pages/CatalogPages";
-import { CapabilitiesPage, ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
-import { AnalysisPage, ComparePage } from "./components/pages/InsightsPages";
-import { QueuePage, RunsPage, WorkersPage } from "./components/pages/OperationsPages";
-import { ReportsPage, ReviewsPage, SettingsPage, UsersPage } from "./components/pages/SystemPages";
-import { WorkspaceSetupPage } from "./components/pages/WorkspaceSetupPage";
+import { DatasetsPage } from "./components/pages/CatalogPages";
+import { ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
+import { AnalysisPage } from "./components/pages/InsightsPages";
+import { RunsPage } from "./components/pages/OperationsPages";
+import { SettingsPage } from "./components/pages/SystemPages";
 import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
+import type { View } from "./dashboard/navigation";
+import { workspacePath, workspaceRoute } from "./dashboard/routing";
 import { reportCopy, type TranslationKey } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
@@ -48,7 +44,6 @@ import "./evidence.css";
 
 export { SharedReportPage } from "./components/pages/SystemPages";
 
-type View = "dashboard" | "guide" | "models" | "capabilities" | "workspace" | "benchmarks" | "datasets" | "suites" | "runs" | "queue" | "workers" | "analysis" | "compare" | "reports" | "reviews" | "users" | "settings";
 type Theme = "dark" | "light";
 const initialEndpoint: EndpointForm = {
   base_url: "",
@@ -72,14 +67,10 @@ const initialEndpoint: EndpointForm = {
   input_tokens_per_minute: "",
   output_tokens_per_minute: "",
 };
-const initialPrompt = { name: "", version: "1", prompt_type: "user_custom", system_message: "", user_template: "{{ question }}", few_shot_examples: "[]", output_format: "{}", response_parser: "{}", scoring_rule: "{}", change_log: "" };
 const initialDataset = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "" };
-const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
 const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "", metric: "default" as DatasetMetricId };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
-const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
-const initialUser = { email: "", display_name: "", role: "viewer", max_concurrency: "" };
 const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
 
 const datasetMetricLabelKeys = {
@@ -112,12 +103,6 @@ function parseJsonObject(value: string, label: string): Record<string, unknown> 
   const parsed: unknown = JSON.parse(value);
   if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error(`${label} must be a JSON object.`);
   return parsed as Record<string, unknown>;
-}
-
-function parseJsonArray(value: string, label: string): unknown[] {
-  const parsed: unknown = JSON.parse(value);
-  if (!Array.isArray(parsed)) throw new Error(`${label} must be a JSON array.`);
-  return parsed;
 }
 
 type EvidenceMedia = { assetId: string; kind: "image" | "audio" | "video" | "file"; mimeType: string };
@@ -180,8 +165,8 @@ function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
 }
 
 export default function App() {
-  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent, locale, setLocale, t } = useTranslation();
-  const [view, setView] = useState<View>("dashboard");
+  const { formatCurrency: money, formatNumber: display, formatPercent: percent, locale, setLocale, t } = useTranslation();
+  const [view, setRoutedView] = useState<View>(() => workspaceRoute(window.location.pathname).view);
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
   const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
@@ -189,7 +174,6 @@ export default function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [prompts, setPrompts] = useState<PromptPackage[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [suites, setSuites] = useState<EvaluationSuite[]>([]);
   const [benchmarks, setBenchmarks] = useState<Benchmark[]>([]);
   const [capabilities, setCapabilities] = useState<Record<string, Capability[]>>({});
   const [attempts, setAttempts] = useState<SampleAttempt[]>([]);
@@ -209,7 +193,6 @@ export default function App() {
   const [form, setForm] = useState(initialEndpoint);
   const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
   const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
-  const [promptForm, setPromptForm] = useState(initialPrompt);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
   const [datasetRunFields, setDatasetRunFields] = useState<string[]>([]);
@@ -217,16 +200,10 @@ export default function App() {
   const [datasetRunFieldsLoading, setDatasetRunFieldsLoading] = useState(false);
   const [datasetRunSchemaRequest, setDatasetRunSchemaRequest] = useState(0);
   const [datasetHandoffId, setDatasetHandoffId] = useState<string | null>(null);
-  const [suiteForm, setSuiteForm] = useState(initialSuite);
   const [reviewForm, setReviewForm] = useState(initialReview);
-  const [multimodalForm, setMultimodalForm] = useState(initialMultimodal);
-  const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsMatrix | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
-  const [userForm, setUserForm] = useState(initialUser);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [selectedBenchmark, setSelectedBenchmark] = useState("text-quick-check@1.0.0");
   const [selectedQuickStartBenchmark, setSelectedQuickStartBenchmark] = useState("text-quick-check@1.0.0");
@@ -235,26 +212,40 @@ export default function App() {
   const [runRequestBody, setRunRequestBody] = useState("{}");
   const [runMaxConcurrency, setRunMaxConcurrency] = useState("");
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
-  const [reportType, setReportType] = useState<ReportType>("single_model");
-  const [relatedReportRunId, setRelatedReportRunId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const navigate = useCallback((nextView: View, options: { replace?: boolean } = {}) => {
+    const pathname = workspacePath(nextView);
+    if (window.location.pathname !== pathname) {
+      window.history[options.replace ? "replaceState" : "pushState"](null, "", pathname);
+    }
+    setRoutedView(nextView);
+  }, []);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = workspaceRoute(window.location.pathname);
+      if (route.replace) window.history.replaceState(null, "", `${route.pathname}${window.location.search}${window.location.hash}`);
+      setRoutedView(route.view);
+    };
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
   const refresh = useCallback(async () => {
-    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextSuites, nextBenchmarks, nextTasks, nextAnalytics, nextUsers, nextAuditEvents, nextSystemHealth] = await Promise.all([
-      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listSuites(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(), api.listUsers().catch(() => []), api.listAuditEvents().catch(() => []), api.systemHealth().catch(() => null),
+    const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks, nextTasks, nextAnalytics, nextSystemHealth] = await Promise.all([
+      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(), api.systemHealth().catch(() => null),
     ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
     setDashboard(nextDashboard);
     setPrompts(nextPrompts);
     setDatasets(nextDatasets);
-    setSuites(nextSuites);
     setBenchmarks(nextBenchmarks);
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
-    setUsers(nextUsers);
-    setAuditEvents(nextAuditEvents);
     setSystemHealth(nextSystemHealth);
   }, []);
 
@@ -318,12 +309,6 @@ export default function App() {
     };
     return api.subscribeToRunEvents(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
-
-  useEffect(() => {
-    if (!["queue", "workers"].includes(view)) return;
-    const update = () => { void refresh().catch(showError); };
-    return api.subscribeToWorkerEvents(update);
-  }, [view, refresh]);
 
   function showNotice(template: string, values?: Record<string, string | number>) {
     setNotice(translateStaticTemplate(locale, template, values));
@@ -464,7 +449,7 @@ export default function App() {
       const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
       const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       await selectRun(run.id);
-      setView("runs");
+      navigate("runs");
       showNotice("{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: `${benchmarkId}@${benchmarkVersion}` });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -505,15 +490,6 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function updateBenchmarkStatus(benchmark: Benchmark) {
-    const status = benchmark.status === "disabled" ? "enabled" : "disabled";
-    setBusy(`benchmark-${benchmark.id}`);
-    try {
-      await api.updateBenchmark(benchmark.id, { status });
-      showNotice("{{benchmark}} is now {{status}}.", { benchmark: benchmark.display_name, status });
-      await refresh();
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
   async function pauseDataset(dataset: Dataset) {
     setBusy(`dataset-${dataset.id}`);
@@ -552,9 +528,8 @@ export default function App() {
   async function generateReport(runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") {
     setBusy(`report-${runId}-${format}`);
     try {
-      const comparisonType = ["multi_model_comparison", "regression", "prompt_comparison"].includes(reportType);
-      const report = await api.createReport(runId, format, reportType, comparisonType && relatedReportRunId ? [relatedReportRunId] : []);
-      showNotice("{{format}} {{reportType}} report generated.", { format: format.toUpperCase(), reportType: translateStaticTemplate(locale, reportType.replaceAll("_", " ")) });
+      const report = await api.createReport(runId, format, "single_model", []);
+      showNotice("{{format}} {{reportType}} report generated.", { format: format.toUpperCase(), reportType: translateStaticTemplate(locale, "single model") });
       const reportUrl = await api.downloadReport(report.id);
       window.open(reportUrl, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
@@ -563,31 +538,7 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function shareReport(report: Report, shareForm: typeof initialShare): Promise<ReportShare> {
-    setBusy(`share-${report.id}`);
-    try {
-      const days = Math.min(365, Math.max(1, Number(shareForm.days) || 7));
-      const share = await api.createReportShare(report.id, {
-        expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
-        password: shareForm.password || undefined,
-        allow_download: shareForm.allow_download,
-        include_evidence: shareForm.include_evidence,
-      });
-      showNotice("Read-only share link (expires {{expires}}): {{url}}", { expires: formatDate(share.expires_at) ?? "--", url: share.share_url ?? "--" });
-      return share;
-    } finally { setBusy(null); }
-  }
 
-  async function createPrompt(event: FormEvent) {
-    event.preventDefault();
-    setBusy("prompt");
-    try {
-      await api.createPromptPackage({ ...promptForm, system_message: promptForm.system_message || null, few_shot_examples: parseJsonArray(promptForm.few_shot_examples, "Few-shot examples"), output_format: parseJsonObject(promptForm.output_format, "Output format"), response_parser: parseJsonObject(promptForm.response_parser, "Response parser"), scoring_rule: parseJsonObject(promptForm.scoring_rule, "Scoring rule"), change_log: promptForm.change_log || null });
-      setPromptForm(initialPrompt);
-      showNotice("Versioned prompt package saved.");
-      await refresh();
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
   async function createDataset(event: FormEvent) {
     event.preventDefault();
@@ -600,26 +551,7 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function createUser(event: FormEvent) {
-    event.preventDefault();
-    setBusy("user");
-    try {
-      const created = await api.createUser({ ...userForm, max_concurrency: optionalNumber(userForm.max_concurrency) });
-      setUserForm(initialUser);
-      showNotice("User created. Copy this API token now: {{token}}", { token: created.api_token });
-      await refresh();
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
-  async function createSuite(event: FormEvent) {
-    event.preventDefault();
-    const benchmark_list = suiteForm.benchmarks.split(",").map((value) => value.trim()).filter(Boolean).map((value) => {
-      const [benchmark_id, version = "1.0.0"] = value.split("@", 2);
-      return { benchmark_id, version };
-    });
-    setBusy("suite");
-    try { await api.createSuite({ name: suiteForm.name, version: suiteForm.version, description: suiteForm.description || null, benchmark_list, default_request_body: parseJsonObject(suiteForm.default_request_body, "Suite default request body"), default_prompt_overrides: parseJsonObject(suiteForm.default_prompt_overrides, "Suite default prompt overrides"), weight_configuration: parseJsonObject(suiteForm.weight_configuration, "Suite weight configuration") }); setSuiteForm(initialSuite); showNotice("Versioned evaluation suite saved."); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
   async function queueDatasetRun() {
     setBusy("dataset-run");
@@ -656,49 +588,11 @@ export default function App() {
     setDatasetRunSchemaRequest((current) => current + 1);
     setDatasetHandoffId(dataset.id);
     setLaunchPreflight(null);
-    setView("runs");
+    navigate("runs");
   }
 
-  async function queueSuite(suiteId: string, endpointId: string) {
-    setBusy(`suite-${suiteId}`);
-    try { const nextRuns = await api.createSuiteRuns(suiteId, endpointId, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency)); showNotice("{{count}} suite run(s) queued.", { count: nextRuns.length }); if (nextRuns[0]) await selectRun(nextRuns[0].id); setView("runs"); await refresh(); } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
-  async function uploadAsset(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBusy("asset-upload");
-    try {
-      const dataUrl = await fileAsDataUrl(file);
-      const asset = await api.uploadAsset({ filename: file.name, mime_type: file.type, base64_data: dataUrl.split(",", 2)[1] ?? "" });
-      setUploadedAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
-      setMultimodalForm((current) => ({ ...current, asset_id: asset.id }));
-      showNotice("Validated media asset uploaded and selected for the custom run.");
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
-  async function createMultimodalRun(event: FormEvent) {
-    event.preventDefault();
-    const asset = uploadedAssets.find((item) => item.id === multimodalForm.asset_id);
-    if (!asset || !multimodalForm.endpoint_id) {
-      showNotice("Select an available endpoint and upload or select a media asset first.");
-      return;
-    }
-    setBusy("multimodal-run");
-    try {
-      const run = await api.createCustomMultimodalRun({
-        model_endpoint_id: multimodalForm.endpoint_id,
-        sample_id: multimodalForm.sample_id,
-        reference_answer: multimodalForm.reference_answer,
-        messages: [{ role: "user", content: [{ type: "text", text: multimodalForm.prompt }, { type: asset.media_kind, source: { asset_id: asset.id }, mime_type: asset.mime_type }] }],
-      });
-      setMultimodalForm(initialMultimodal);
-      await selectRun(run.id);
-      setView("runs");
-      showNotice("Custom multimodal run queued with an immutable asset snapshot.");
-      await refresh();
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
 
   async function prepareDataset(dataset: Dataset) {
     setBusy(`dataset-${dataset.id}`);
@@ -811,15 +705,6 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function updateTaskPriority(task: Task, priority: number) {
-    setBusy(`task-${task.id}`);
-    try {
-      const updated = await api.updateTaskPriority(task.id, priority);
-      setTasks((current) => current.map((item) => item.id === updated.id ? updated : item));
-      showNotice("Task priority updated to {{priority}}.", { priority: updated.priority });
-    } catch (error) { showError(error); } finally { setBusy(null); }
-  }
-
   return (
     <AppShell
       completedRunCount={dashboard?.runs.completed ?? 0}
@@ -831,12 +716,12 @@ export default function App() {
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={setLocale}
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
-      onViewChange={setView}
+      onViewChange={navigate}
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); setView("runs"); }} onOpenView={setView} />}
-      {view === "guide" && <Guide onOpenView={setView} />}
+      {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); navigate("runs"); }} onOpenView={navigate} />}
+      {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
         busy={busy}
@@ -854,20 +739,8 @@ export default function App() {
         testRequests={testRequests}
       />}
 
-      {view === "capabilities" && <CapabilitiesPage busy={busy} capabilities={capabilities} endpoints={endpoints} onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)} onProbe={(endpointId) => void probeCapabilities(endpointId)} />}
-
-      {view === "benchmarks" && <BenchmarksPage benchmarks={benchmarks} busy={busy} onToggleStatus={(benchmark) => void updateBenchmarkStatus(benchmark)} />}
-
       {view === "datasets" && <DatasetsPage busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} registration={<DatasetRegistrationForm busy={busy === "dataset"} onChange={setDatasetForm} onSubmit={createDataset} values={datasetForm} />} />}
 
-      {view === "suites" && <SuitesPage busy={busy} endpoints={endpoints} onOpenWorkspace={() => setView("workspace")} onQueue={(suiteId, endpointId) => void queueSuite(suiteId, endpointId)} suites={suites} />}
-
-      {view === "workspace" && <WorkspaceSetupPage inputs={<section className="grid two">
-        <article className="panel"><h2>Create prompt package</h2><form onSubmit={createPrompt} className="form"><label>Name<input required value={promptForm.name} onChange={(event) => setPromptForm({ ...promptForm, name: event.target.value })} /></label><label>Version<input required value={promptForm.version} onChange={(event) => setPromptForm({ ...promptForm, version: event.target.value })} /></label><label>Prompt type<select value={promptForm.prompt_type} onChange={(event) => setPromptForm({ ...promptForm, prompt_type: event.target.value })}><option value="official">Official prompt</option><option value="platform_default">Platform default</option><option value="user_custom">User custom</option><option value="benchmark_variant">Benchmark variant</option><option value="language_specific">Language-specific</option></select></label><label>System message<textarea value={promptForm.system_message} onChange={(event) => setPromptForm({ ...promptForm, system_message: event.target.value })} /></label><label>User template<textarea required value={promptForm.user_template} onChange={(event) => setPromptForm({ ...promptForm, user_template: event.target.value })} placeholder="{{ question }}, {{ context }}, {{ image }}, {{ audio }}, {{ video }}, {{ language }}" /></label><label>Few-shot examples (JSON array)<textarea value={promptForm.few_shot_examples} onChange={(event) => setPromptForm({ ...promptForm, few_shot_examples: event.target.value })} spellCheck={false} /></label><label>Output format (JSON)<textarea value={promptForm.output_format} onChange={(event) => setPromptForm({ ...promptForm, output_format: event.target.value })} spellCheck={false} /></label><label>Response parser (JSON)<textarea value={promptForm.response_parser} onChange={(event) => setPromptForm({ ...promptForm, response_parser: event.target.value })} spellCheck={false} /></label><label>Scoring rule (JSON)<textarea value={promptForm.scoring_rule} onChange={(event) => setPromptForm({ ...promptForm, scoring_rule: event.target.value })} spellCheck={false} /></label><label>Change log<textarea value={promptForm.change_log} onChange={(event) => setPromptForm({ ...promptForm, change_log: event.target.value })} /></label><button disabled={busy === "prompt"}>Save versioned prompt</button></form></article>
-        </section>} assets={<section className="grid two"><article className="panel"><h2>Custom multimodal quick check</h2><form className="form" onSubmit={createMultimodalRun}><label>Endpoint<select required value={multimodalForm.endpoint_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Sample ID<input required value={multimodalForm.sample_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, sample_id: event.target.value })} /></label><label>Prompt<textarea required value={multimodalForm.prompt} onChange={(event) => setMultimodalForm({ ...multimodalForm, prompt: event.target.value })} placeholder="Describe or answer a question about the attached media." /></label><label>Expected text answer<textarea required value={multimodalForm.reference_answer} onChange={(event) => setMultimodalForm({ ...multimodalForm, reference_answer: event.target.value })} /></label><label>Uploaded media<select required value={multimodalForm.asset_id} onChange={(event) => setMultimodalForm({ ...multimodalForm, asset_id: event.target.value })}><option value="">Upload an asset first</option>{uploadedAssets.map((asset) => <option data-i18n-preserve key={asset.id} value={asset.id}>{asset.original_filename} · {asset.media_kind}</option>)}</select></label><button disabled={busy === "multimodal-run"}>Queue multimodal run</button></form></article><article className="panel"><h2>Media asset upload</h2><p className="muted">Files are validated by MIME signature, content-addressed, and stored outside browser memory before they enter a run snapshot.</p><label className="file-picker">Choose image, audio, video, or PDF<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/wav,audio/mpeg,video/mp4,video/webm,application/pdf" onChange={(event) => void uploadAsset(event)} /></label>{busy === "asset-upload" && <p className="muted">Uploading and validating asset...</p>}{uploadedAssets.length > 0 && <div className="asset-list">{uploadedAssets.map((asset) => <button className={multimodalForm.asset_id === asset.id ? "asset selected" : "asset"} key={asset.id} onClick={() => setMultimodalForm({ ...multimodalForm, asset_id: asset.id })}><strong data-i18n-preserve>{asset.original_filename}</strong><span data-i18n-preserve>{asset.media_kind} · {display(asset.size_bytes)} bytes</span></button>)}</div>}</article></section>} suites={<section className="grid two"><article className="panel"><h2>Create evaluation suite</h2><form onSubmit={createSuite} className="form"><label>Name<input required value={suiteForm.name} onChange={(event) => setSuiteForm({ ...suiteForm, name: event.target.value })} /></label><label>Version<input required value={suiteForm.version} onChange={(event) => setSuiteForm({ ...suiteForm, version: event.target.value })} /></label><label>Benchmarks (id@version)<input required value={suiteForm.benchmarks} onChange={(event) => setSuiteForm({ ...suiteForm, benchmarks: event.target.value })} /></label><label>Suite default Request Body (JSON)<textarea value={suiteForm.default_request_body} onChange={(event) => setSuiteForm({ ...suiteForm, default_request_body: event.target.value })} spellCheck={false} /></label><label>Prompt overrides (JSON)<textarea value={suiteForm.default_prompt_overrides} onChange={(event) => setSuiteForm({ ...suiteForm, default_prompt_overrides: event.target.value })} spellCheck={false} /></label><label>Weight configuration (JSON)<textarea value={suiteForm.weight_configuration} onChange={(event) => setSuiteForm({ ...suiteForm, weight_configuration: event.target.value })} spellCheck={false} /></label><label>Description<textarea value={suiteForm.description} onChange={(event) => setSuiteForm({ ...suiteForm, description: event.target.value })} /></label><button disabled={busy === "suite"}>Save suite</button></form></article><article className="panel"><h2>Evaluation suites</h2>{suites.length === 0 ? <p className="empty">No suites have been created.</p> : <div className="cards">{suites.map((suite) => <article className="card" key={suite.id}><h3 data-i18n-preserve>{suite.name} v{suite.version}</h3><p className="muted" data-i18n-preserve>{suite.benchmark_list.map((item) => `${item.benchmark_id ?? "benchmark"}@${item.version ?? ""}`).join(", ")}</p>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <button key={endpoint.id} disabled={busy === `suite-${suite.id}`} onClick={() => void queueSuite(suite.id, endpoint.id)}>Queue on <span data-i18n-preserve>{endpoint.display_name}</span></button>)}</article>)}</div>}</article></section>} catalog={<>
-        <section className="panel"><div className="section-title"><h2>Benchmark registry</h2><span>{benchmarks.length} registered</span></div><div className="table-wrap"><table><thead><tr><th>Benchmark</th><th>Version</th><th>Source</th><th>Status</th></tr></thead><tbody>{benchmarks.map((benchmark) => <tr key={benchmark.id}><td data-i18n-preserve>{benchmark.display_name}</td><td data-i18n-preserve>{benchmark.version}</td><td data-i18n-preserve>{benchmark.source}</td><td><span className={`badge ${benchmark.status}`}>{benchmark.status}</span></td></tr>)}</tbody></table></div></section>
-        <section className="panel"><div className="section-title"><h2>Dataset cache</h2><span>{datasets.length} registered</span></div>{datasets.length === 0 ? <p className="empty">Register a dataset version to manage downloads and licenses.</p> : <div className="cards">{datasets.map((dataset) => <article className="card" key={dataset.id}><div><h3 data-i18n-preserve>{dataset.dataset_id} v{dataset.version}</h3><p className="muted">{dataset.source_url ? <span data-i18n-preserve>{dataset.source_url}</span> : "No source URL"}</p>{dataset.error_message && <p className="error">{dataset.error_message}</p>}</div><span className={`badge ${dataset.status}`}>{dataset.status}</span>{dataset.status !== "ready" && <div className="actions"><button disabled={busy === `dataset-${dataset.id}`} onClick={() => void prepareDataset(dataset)}>{dataset.license_text && !dataset.license_accepted_at ? "Accept license" : "Download and verify"}</button></div>}</article>)}</div>}</section></>}
-      />}
 
       {view === "runs" && <RunsPage
         inspector={selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
@@ -908,20 +781,7 @@ export default function App() {
         selectedRunId={selectedRun}
       />}
 
-      {view === "queue" && <QueuePage busy={busy} onPriority={updateTaskPriority} tasks={tasks} />}
-
-      {view === "workers" && <WorkersPage onOpenQueue={() => setView("queue")} systemHealth={systemHealth} tasks={tasks} />}
-
       {view === "analysis" && <AnalysisPage analytics={analytics} busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSelectBaseline={(runId) => api.analyticsMatrix(runId || undefined)} onSubmitComparison={compareRuns} runA={comparisonRunA} runB={comparisonRunB} />}
-
-      {view === "compare" && <ComparePage busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmit={compareRuns} runA={comparisonRunA} runB={comparisonRunB} />}
-
-      {view === "reports" && <ReportsPage completedRuns={completedRuns} onGenerateReport={generateReport} onRelatedRunChange={setRelatedReportRunId} onReportTypeChange={setReportType} onSelectRun={(runId) => void selectRun(runId)} relatedRunId={relatedReportRunId} reportArtifacts={<ReportsTable reports={reports} onShare={shareReport} />} reportType={reportType} runs={runs} selectedRun={selectedRunInfo} />}
-
-      {view === "reviews" && <ReviewsPage attempts={attempts} onSelectAttempt={(attempt) => void openReview(attempt)} onSelectRun={(runId) => void selectRun(runId)} reviewDetail={selectedRunInfo ? <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={[]} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} /> : null} runs={runs} selectedAttempt={selectedAttempt} selectedRun={selectedRunInfo} />}
-
-      {view === "users" && <UsersPage auditEvents={auditEvents} busy={busy} form={userForm} onFormChange={setUserForm} onSubmit={createUser} users={users} />}
-
       {view === "settings" && <SettingsPage apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>

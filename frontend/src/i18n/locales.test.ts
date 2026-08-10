@@ -59,8 +59,8 @@ describe("workspace locale catalog", () => {
     expect(resolveLocale(null)).toBe("en");
   });
 
-  it("keeps corrected French worker language and localized templates intact", () => {
-    expect(navigationCopy.fr.items.workers).toEqual({ label: "Agents", description: "Baux et agents actifs" });
+  it("keeps corrected French operational language and localized templates intact", () => {
+    expect(navigationCopy.fr.items.runs).toEqual({ label: "Exécutions", description: "Exécution, résultats et preuves" });
     expect(overviewCopy.fr.workers).toBe("Agents");
     expect(translateStaticTemplate("fr", "configured")).toBe("configuré");
     expect(translateStaticTemplate("ja", "{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: "benchmark-a" })).toContain("benchmark-a");

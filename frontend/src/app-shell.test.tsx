@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -37,13 +37,14 @@ describe("AppShell", () => {
     for (const group of navigationGroups) {
       expect(screen.getByRole("region", { name: navigationCopy.en.groups[group.id] })).toBeVisible();
       for (const item of group.items) {
-        const button = screen.getByRole("button", { name: navigationCopy.en.items[item.view].label });
-        expect(button).toBeVisible();
-        expect(button.querySelector(`[data-navigation-icon="${item.view}"]`)).toHaveAttribute("aria-hidden", "true");
+        const link = screen.getByRole("link", { name: navigationCopy.en.items[item.view].label });
+        expect(link).toBeVisible();
+        expect(link).toHaveAttribute("href", `/${item.view}`);
+        expect(link.querySelector(`[data-navigation-icon="${item.view}"]`)).toHaveAttribute("aria-hidden", "true");
       }
     }
 
-    expect(screen.getByRole("button", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("12", { selector: "strong" })).toBeVisible();
     expect(props.onViewChange).not.toHaveBeenCalled();
   });
@@ -105,10 +106,20 @@ describe("AppShell", () => {
     expect(sidebar).toHaveClass("is-open");
     expect(sidebar).not.toHaveClass("is-closed");
 
-    await user.click(screen.getByRole("button", { name: "Models" }));
+    await user.click(screen.getByRole("link", { name: "Models" }));
     expect(props.onViewChange).toHaveBeenCalledWith("models");
     expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
+  });
+
+  it("leaves modified navigation clicks to the browser", () => {
+    const props = renderShell();
+    const link = screen.getByRole("link", { name: "Models" });
+    link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+
+    fireEvent.click(link, { button: 0, metaKey: true });
+
+    expect(props.onViewChange).not.toHaveBeenCalled();
   });
 
   it("keeps the global theme, locale, and notice controls available", async () => {

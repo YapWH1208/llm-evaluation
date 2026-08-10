@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Capability, Endpoint } from "./api";
 import { Guide } from "./components/Guide";
-import { CapabilitiesPage, CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
+import { CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
 
 afterEach(cleanup);
 
@@ -34,8 +34,6 @@ const endpoint: Endpoint = {
   timeout_seconds: 60,
   tokens_per_minute: null,
 };
-
-const secondEndpoint: Endpoint = { ...endpoint, display_name: "Vision model", id: "endpoint-2", model_name: "vision-model" };
 
 const form: EndpointForm = {
   api_key: "",
@@ -121,20 +119,6 @@ describe("configure workspace pages", () => {
     expect(screen.getByLabelText("Display name")).toHaveValue("Staging");
   });
 
-  it("uses an endpoint selection inspector while preserving capability declarations", async () => {
-    const user = userEvent.setup();
-    const onDeclare = vi.fn();
-    render(<CapabilitiesPage busy={null} capabilities={{ [endpoint.id]: [capability], [secondEndpoint.id]: [capability] }} endpoints={[endpoint, secondEndpoint]} onDeclare={onDeclare} onProbe={vi.fn()} />);
-
-    expect(screen.getByRole("heading", { level: 1, name: "Capabilities" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /Inspect Vision model/ }));
-    expect(screen.getByRole("heading", { level: 2, name: "Vision model" })).toBeVisible();
-
-    await user.selectOptions(screen.getByLabelText("vision declaration"), "supported");
-    expect(onDeclare).toHaveBeenCalledWith(secondEndpoint.id, capability, "supported");
-    expect(screen.getByText("Detected: supported")).toBeVisible();
-    expect(screen.getByText("Effective: supported")).toBeVisible();
-  });
 
   it("shows detected and effective state beside each declaration control", () => {
     render(<CapabilityDeclarations busy={null} capabilities={[capability]} endpointId={endpoint.id} onDeclare={vi.fn()} />);

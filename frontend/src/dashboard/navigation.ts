@@ -13,12 +13,10 @@ export type NavigationGroup = {
 
 export const navigationGroups: NavigationGroup[] = [
   { id: "overview", items: [{ view: "dashboard" }, { view: "guide" }] },
-  { id: "configure", items: [
-    { view: "models" }, { view: "capabilities" }, { view: "workspace" }, { view: "benchmarks" }, { view: "datasets" }, { view: "suites" },
-  ] },
-  { id: "operations", items: [{ view: "runs" }, { view: "queue" }, { view: "workers" }] },
-  { id: "insights", items: [{ view: "analysis" }, { view: "compare" }, { view: "reports" }, { view: "reviews" }] },
-  { id: "system", items: [{ view: "users" }, { view: "settings" }] },
+  { id: "configure", items: [{ view: "models" }, { view: "datasets" }] },
+  { id: "operations", items: [{ view: "runs" }] },
+  { id: "insights", items: [{ view: "analysis" }] },
+  { id: "system", items: [{ view: "settings" }] },
 ];
 
 export const navigationItems = navigationGroups.flatMap((group) => group.items);

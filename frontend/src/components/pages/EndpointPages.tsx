@@ -93,34 +93,6 @@ export function ModelsPage({ busy, capabilities, editingEndpointId, endpoints, f
   );
 }
 
-type CapabilitiesPageProps = {
-  busy: string | null;
-  capabilities: Record<string, Capability[]>;
-  endpoints: Endpoint[];
-  onDeclare: (endpointId: string, capability: Capability, status: CapabilityStatus) => void;
-  onProbe: (endpointId: string) => void;
-};
-
-export function CapabilitiesPage({ busy, capabilities, endpoints, onDeclare, onProbe }: CapabilitiesPageProps) {
-  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
-  const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? endpoints[0] ?? null;
-  const selectedCapabilities = selectedEndpoint ? capabilities[selectedEndpoint.id] : undefined;
-
-  return (
-    <div className="workspace-page capabilities-page">
-      <PageHeader description="Inspect detected capability evidence separately from the declarations used by run compatibility checks." eyebrow="Configure" status={<><strong>{endpoints.length}</strong> endpoints</>} title="Capabilities" />
-      {endpoints.length === 0 ? <WorkspacePanel title="No endpoints available"><p className="empty">Add a model endpoint before probing capabilities.</p></WorkspacePanel> : <div className="workspace-split workspace-split--capabilities">
-        <WorkspacePanel description="Choose an endpoint to inspect its detection and declaration evidence." title="Endpoints">
-          <div className="workspace-inventory-list">{endpoints.map((endpoint) => <button aria-pressed={selectedEndpoint?.id === endpoint.id} className={selectedEndpoint?.id === endpoint.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={endpoint.id} onClick={() => setSelectedEndpointId(endpoint.id)} type="button"><span data-i18n-preserve>{endpoint.display_name}</span><span className={`badge ${endpoint.status}`}>{endpoint.status}</span><small data-i18n-preserve>{endpoint.model_name}</small><span className="sr-only">Inspect {endpoint.display_name}</span></button>)}</div>
-        </WorkspacePanel>
-        {selectedEndpoint && <WorkspacePanel toolbar={<button className="secondary" disabled={busy === `capabilities-${selectedEndpoint.id}`} onClick={() => onProbe(selectedEndpoint.id)} type="button">Probe capabilities</button>} title={selectedEndpoint.display_name}>
-          <p className="workspace-item-meta" data-i18n-preserve>{selectedEndpoint.model_name} · {selectedEndpoint.base_url}</p>
-          {selectedCapabilities ? <CapabilityDeclarations capabilities={selectedCapabilities} busy={busy} endpointId={selectedEndpoint.id} onDeclare={onDeclare} /> : <p className="empty">No probe result loaded yet. Probe this endpoint to collect capability evidence.</p>}
-        </WorkspacePanel>}
-      </div>}
-    </div>
-  );
-}
 
 export function CapabilityDeclarations({ busy, capabilities, endpointId, onDeclare }: { busy: string | null; capabilities: Capability[]; endpointId: string; onDeclare: (endpointId: string, capability: Capability, status: CapabilityStatus) => void }) {
   return <div className="workspace-capability-list">{capabilities.map((capability) => <div className="workspace-capability-row" key={capability.id}><div><strong data-i18n-preserve>{capability.capability_key}</strong><div className="workspace-capability-state" data-i18n-preserve><span>Detected: {capability.auto_detection_status}</span><span>Effective: {capability.effective_status}</span></div></div><label data-i18n-preserve>{capability.capability_key} declaration<select aria-label={`${capability.capability_key} declaration`} disabled={busy === `declare-${endpointId}-${capability.capability_key}`} onChange={(event) => onDeclare(endpointId, capability, event.target.value as CapabilityStatus)} value={capability.user_declared_status}><option value="unknown">User: unknown</option><option value="supported">User: supported</option><option value="unsupported">User: unsupported</option></select></label></div>)}</div>;

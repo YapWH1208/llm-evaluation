@@ -9,6 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/dashboard");
 });
 
 const readyDataset = {
@@ -35,17 +36,14 @@ async function renderApp(datasets = [readyDataset]) {
   vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
   vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
   vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
-  vi.spyOn(api, "listSuites").mockResolvedValue([]);
   vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
   vi.spyOn(api, "listTasks").mockResolvedValue([]);
   vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "listUsers").mockResolvedValue([]);
-  vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
   vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
   vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ root: "/data", cache_bytes: 10, available_bytes: 1000, total_bytes: 2000 });
   render(<LocaleProvider><App /></LocaleProvider>);
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: "Datasets" }));
+  await user.click(screen.getByRole("link", { name: "Datasets" }));
   return { user };
 }
 
@@ -65,7 +63,12 @@ describe("dataset catalog", () => {
     list.mockResolvedValue([readyDataset]);
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const idInput = screen.getByLabelText("Dataset ID");
+    const idInput = screen
+      .getAllByLabelText<HTMLInputElement>("Dataset ID")
+      .find((element) => element.value === readyDataset.dataset_id);
+    if (!idInput) {
+      throw new Error("Expected the dataset edit form to contain the selected dataset ID");
+    }
     await user.clear(idInput);
     await user.type(idInput, "renamed");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -135,6 +138,7 @@ describe("dataset catalog", () => {
     await user.click(screen.getByRole("button", { name: "Start evaluation" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
+    expect(window.location.pathname).toBe("/runs");
     expect(screen.getByLabelText("Dataset")).toHaveValue(readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
     expect(screen.getByLabelText("Reference field")).toHaveValue("answer");
@@ -148,10 +152,10 @@ describe("dataset catalog", () => {
     });
     const { user } = await renderApp();
 
-    await user.click(screen.getByRole("button", { name: "Runs" }));
+    await user.click(screen.getByRole("link", { name: "Runs" }));
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
-    await user.click(screen.getByRole("button", { name: "Datasets" }));
+    await user.click(screen.getByRole("link", { name: "Datasets" }));
     await user.click(screen.getByRole("button", { name: "Start evaluation" }));
 
     await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));

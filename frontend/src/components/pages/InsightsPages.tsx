@@ -101,7 +101,7 @@ export function HeatmapBreakdown({ cells, dimension }: { cells: AnalyticsCell[];
   </WorkspacePanel>;
 }
 
-type ComparePageProps = {
+type ComparisonWorkspaceProps = {
   busy: string | null;
   comparison: Comparison | null;
   completedRuns: EvaluationRun[];
@@ -112,14 +112,8 @@ type ComparePageProps = {
   runB: string;
 };
 
-export function ComparePage({ busy, comparison, completedRuns, onRunAChange, onRunBChange, onSubmit, runA, runB }: ComparePageProps) {
-  return <div className="workspace-page compare-page">
-    <PageHeader description="Compare two completed runs from the same benchmark version and retain the complete evidence trail." eyebrow="Insights" status={<>{completedRuns.length} completed runs</>} title="Compare runs" />
-    <ComparisonWorkspace busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmit} runA={runA} runB={runB} />
-  </div>;
-}
 
-function ComparisonWorkspace({ busy, comparison, completedRuns, onRunAChange, onRunBChange, onSubmit, runA, runB }: ComparePageProps) {
+function ComparisonWorkspace({ busy, comparison, completedRuns, onRunAChange, onRunBChange, onSubmit, runA, runB }: ComparisonWorkspaceProps) {
   const { formatDate } = useTranslation();
   return <>
     <WorkspacePanel className="workspace-compare-sources" description="Choose two distinct completed snapshots. Differences are always calculated as Run A minus Run B." title="Comparison sources">
