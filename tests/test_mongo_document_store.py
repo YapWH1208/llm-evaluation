@@ -767,9 +767,11 @@ def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:
         assert created.status_code == 201
         body = created.json()
         assert body["input_field"] == "q"
+        assert body["revision"] == "main"
         updated = api.put(f"/api/v1/datasets/{body['id']}", json={"dataset_id": "m2", "version": "2", "revision": "default"})
         assert updated.status_code == 200
         assert updated.json()["dataset_id"] == "m2"
+        assert updated.json()["revision"] == "default"
         deleted = api.delete(f"/api/v1/datasets/{body['id']}")
         assert deleted.status_code == 200
         assert api.get("/api/v1/datasets").json() == []

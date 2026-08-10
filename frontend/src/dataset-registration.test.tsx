@@ -30,6 +30,7 @@ describe("dataset registration", () => {
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("button", { name: "Workspace" }));
+    expect(screen.getByLabelText("Revision")).toHaveValue("main");
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
     await user.type(screen.getByLabelText("Credential binding ID"), "private-dataset");
@@ -38,7 +39,7 @@ describe("dataset registration", () => {
     expect(createDataset).toHaveBeenCalledWith({
       dataset_id: "private-corpus",
       version: "1",
-      revision: "default",
+      revision: "main",
       source_url: "https://datasets.example.test/corpus.jsonl",
       checksum: null,
       credential_binding_id: "private-dataset",

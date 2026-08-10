@@ -7,12 +7,44 @@ import httpx
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from app.api.datasets import DatasetCreate
 from app.core.config import DatasetCredentialBinding, Settings
 from app.db.models import DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
 from app.services.datasets import DatasetError, dataset_edit_lifecycle_updates, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
 from tests.test_mongo_document_store import FakeClient
+
+
+def test_new_dataset_revisions_default_to_main_and_preserve_explicit_legacy_values(tmp_path: Path) -> None:
+    assert DatasetCreate(dataset_id="schema-default", version="1").revision == "main"
+    assert DatasetCreate(dataset_id="schema-legacy", version="1", revision="default").revision == "default"
+
+    app = create_app(Settings.local_development(
+        database_url=f"sqlite:///{tmp_path/'db.sqlite'}",
+        data_root=str(tmp_path / "data"),
+    ))
+    with TestClient(app) as client:
+        omitted = client.post("/api/v1/datasets", json={"dataset_id": "api-default", "version": "1"})
+        explicit = client.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "api-legacy", "version": "1", "revision": "default"},
+        )
+
+        assert omitted.status_code == 201
+        assert omitted.json()["revision"] == "main"
+        assert explicit.status_code == 201
+        assert explicit.json()["revision"] == "default"
+
+        session = app.state.database.get_session()
+        try:
+            model_default = DatasetVersion(dataset_id="model-default", version="1")
+            session.add(model_default)
+            session.commit()
+            session.refresh(model_default)
+            assert model_default.revision == "main"
+        finally:
+            session.close()
 
 def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
     app=create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}",data_root=str(tmp_path/'data')))
@@ -355,7 +387,11 @@ def test_mongodb_dataset_update_and_delete_of_missing_version_return_404(tmp_pat
 def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -> None:
     app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:
-        first = client.post("/api/v1/datasets", json={"dataset_id": "dup", "version": "1"}).json()
+        first = client.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "dup", "version": "1", "revision": "default"},
+        ).json()
+        assert first["revision"] == "default"
         second = client.post("/api/v1/datasets", json={"dataset_id": "target", "version": "1"}).json()
         updated = client.put(f"/api/v1/datasets/{second['id']}", json={
             "dataset_id": "renamed", "version": "2", "revision": "fixed",
