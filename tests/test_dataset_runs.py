@@ -63,10 +63,13 @@ def _register_ready_dataset(
     return uploaded.json()
 
 
-def _prompt_package(client: TestClient) -> str:
+def _prompt_package(
+    client: TestClient,
+    scoring_rule: dict[str, object] | None = None,
+) -> str:
     created = client.post(
         "/api/v1/prompt-packages",
-        json={"name": "record-template", "version": "1.0.0", "prompt_type": "user_custom", "user_template": "Q: {{question}}\nA:", "system_message": "Answer only the number.", "few_shot_examples": [{"role": "assistant", "content": "4"}], "scoring_rule": {"type": "exact_match"}},
+        json={"name": "record-template", "version": "1.0.0", "prompt_type": "user_custom", "user_template": "Q: {{question}}\nA:", "system_message": "Answer only the number.", "few_shot_examples": [{"role": "assistant", "content": "4"}], "scoring_rule": scoring_rule or {"type": "exact_match"}},
     )
     assert created.status_code == 201
     return created.json()["id"]
@@ -85,6 +88,107 @@ def test_dataset_run_service_manifest_identity() -> None:
     assert DATASET_RUN_DEFAULT_SAMPLE_LIMIT == 100
     assert _DATASET_RUN_MANIFEST["benchmark_id"] == DATASET_RUN_BENCHMARK_ID
     assert _DATASET_RUN_MANIFEST["shard_size"] == 50
+
+
+def test_effective_dataset_scoring_rule_uses_requested_package_default_precedence() -> None:
+    from types import SimpleNamespace
+
+    from app.services import dataset_runs
+
+    package_rule = {"type": "regex_match", "pattern": "BLUE"}
+    requested_rule = {"type": "token_f1"}
+
+    assert dataset_runs.effective_dataset_scoring_rule(None, None) == {"type": "exact_match"}
+    assert dataset_runs.effective_dataset_scoring_rule(
+        None,
+        SimpleNamespace(scoring_rule=package_rule),
+    ) == package_rule
+    effective = dataset_runs.effective_dataset_scoring_rule(
+        requested_rule,
+        SimpleNamespace(scoring_rule=package_rule),
+    )
+    requested_rule["type"] = "bleu"
+    assert effective == {"type": "token_f1"}
+
+    with pytest.raises(dataset_runs.DatasetRunError, match="Scoring rule is invalid:"):
+        dataset_runs.effective_dataset_scoring_rule({"type": "unsupported"}, None)
+
+
+def test_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+    )
+    with TestClient(app) as client:
+        dataset = _register_ready_dataset(client)
+        endpoint_id = _create_available_endpoint(client)
+        package_rule = {"type": "regex_match", "pattern": "BLUE"}
+        package_id = _prompt_package(client, package_rule)
+        base_payload = {
+            "model_endpoint_id": endpoint_id,
+            "dataset_version_id": dataset["id"],
+            "reference_field": "answer",
+            "sample_limit": 10,
+        }
+
+        default_preflight = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json=base_payload,
+        )
+        assert default_preflight.status_code == 200
+        assert default_preflight.json()["can_queue"] is True
+        default_run = client.post("/api/v1/evaluation-runs/dataset", json=base_payload)
+        assert default_run.status_code == 201
+        assert default_run.json()["configuration_snapshot"]["scoring_rule"] == {"type": "exact_match"}
+
+        package_payload = {**base_payload, "prompt_package_id": package_id}
+        package_preflight = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json=package_payload,
+        )
+        assert package_preflight.status_code == 200
+        assert package_preflight.json()["can_queue"] is True
+        package_run = client.post("/api/v1/evaluation-runs/dataset", json=package_payload)
+        assert package_run.status_code == 201
+        assert package_run.json()["configuration_snapshot"]["scoring_rule"] == package_rule
+
+        requested_rule = {"type": "token_f1"}
+        requested_payload = {**package_payload, "scoring_rule": requested_rule}
+        requested_preflight = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json=requested_payload,
+        )
+        assert requested_preflight.status_code == 200
+        assert requested_preflight.json()["can_queue"] is True
+        requested_run = client.post("/api/v1/evaluation-runs/dataset", json=requested_payload)
+        assert requested_run.status_code == 201
+        assert requested_run.json()["configuration_snapshot"]["scoring_rule"] == requested_rule
+
+        expected_rules = {
+            default_run.json()["id"]: {"type": "exact_match"},
+            package_run.json()["id"]: package_rule,
+            requested_run.json()["id"]: requested_rule,
+        }
+        for run_id, expected_rule in expected_rules.items():
+            attempts = client.get(f"/api/v1/evaluation-runs/{run_id}/attempts").json()
+            assert attempts
+            assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
+
+        run_count = len(client.get("/api/v1/evaluation-runs").json())
+        invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
+        assert client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json=invalid_rule,
+        ).status_code == 422
+        assert client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json=invalid_rule,
+        ).status_code == 422
+        assert len(client.get("/api/v1/evaluation-runs").json()) == run_count
 
 
 def test_dataset_run_end_to_end(tmp_path: Path) -> None:

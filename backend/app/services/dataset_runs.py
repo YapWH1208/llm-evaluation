@@ -67,6 +67,21 @@ def _validate_distinct_dataset_fields(selected_input_field: str | None, referenc
     return normalized
 
 
+def effective_dataset_scoring_rule(
+    requested_rule: dict[str, object] | None,
+    prompt_package: object | None,
+) -> dict[str, object]:
+    candidate = requested_rule
+    if candidate is None and prompt_package is not None:
+        candidate = getattr(prompt_package, "scoring_rule", None)
+    rule = dict(candidate) if isinstance(candidate, dict) and candidate else {"type": "exact_match"}
+    try:
+        validate_scoring_rule(rule)
+    except ScoringError as error:
+        raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
+    return rule
+
+
 _DATASET_RUN_MANIFEST: dict[str, object] = {
     "benchmark_id": DATASET_RUN_BENCHMARK_ID,
     "version": DATASET_RUN_BENCHMARK_VERSION,
@@ -102,6 +117,7 @@ def create_dataset_run(
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
+    scoring_rule: dict[str, object] | None = None,
     created_by: str | None = None,
     max_concurrency: int | None = None,
     data_root: str,
@@ -149,11 +165,7 @@ def create_dataset_run(
         raise DatasetRunError(
             "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
         )
-    scoring_rule = dict(prompt_package.scoring_rule) if prompt_package and isinstance(prompt_package.scoring_rule, dict) and prompt_package.scoring_rule else {"type": "exact_match"}
-    try:
-        validate_scoring_rule(scoring_rule)
-    except ScoringError as error:
-        raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
+    effective_scoring_rule = effective_dataset_scoring_rule(scoring_rule, prompt_package)
     request_body_evidence = _request_body_evidence(
         endpoint=endpoint,
         benchmark_manifest=_DATASET_RUN_MANIFEST,
@@ -186,6 +198,7 @@ def create_dataset_run(
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
+        "scoring_rule": effective_scoring_rule,
         "capability_compatibility": compatibility,
         "prompt_package": (
             {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
@@ -259,7 +272,7 @@ def create_dataset_run(
                         "metadata": dict(sample.metadata),
                         "request_body_evidence": request_body_evidence,
                     },
-                    reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    reference_snapshot={"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule},
                 )
                 for sample in shard_samples
             ]
@@ -279,6 +292,7 @@ def preflight_dataset_run(
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
+    scoring_rule: dict[str, object] | None = None,
     data_root: str,
 ) -> dict[str, object]:
     """Preview dataset-run readiness and cost without persisting anything."""
@@ -294,14 +308,19 @@ def preflight_dataset_run(
         issues.append("Dataset version not found.")
     elif dataset.status != DatasetStatus.READY.value or not dataset.prepared_path:
         issues.append(f"Dataset {dataset.dataset_id} v{dataset.version} is not ready; download and verify it first.")
-    if prompt_package_id and session.get(PromptPackage, prompt_package_id) is None:
+    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
     if not reference_field.strip():
         issues.append("A reference field is required.")
     selected_input_field = _effective_dataset_input_field(
         input_field,
-        session.get(PromptPackage, prompt_package_id) if prompt_package_id else None,
+        prompt_package,
     )
+    try:
+        effective_dataset_scoring_rule(scoring_rule, prompt_package)
+    except DatasetRunError as error:
+        issues.append(str(error))
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
@@ -314,7 +333,7 @@ def preflight_dataset_run(
                 sample_limit=sample_limit,
                 input_field=selected_input_field,
                 reference_field=normalized_reference_field,
-                prompt_package=session.get(PromptPackage, prompt_package_id) if prompt_package_id else None,
+                prompt_package=prompt_package,
                 dataset_id=dataset.dataset_id,
                 dataset_version=dataset.version,
             )
