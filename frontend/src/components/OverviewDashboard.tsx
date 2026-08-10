@@ -203,8 +203,8 @@ export function OverviewDashboard({ analytics, dashboard, endpoints, runs, syste
     { id: "system", label: copy.systemReadiness, detail: systemHealthState === "ready" ? copy.operational : systemHealthState === "unknown" ? copy.unknownValue : copy.attentionNeeded, attention: systemHealthState === "attention", view: "settings" },
     { id: "endpoints", label: copy.modelEndpoints, detail: dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel, attention: dashboard.endpoints.available === 0, view: "models" },
     { id: "datasets", label: copy.evaluationData, detail: dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset, attention: dashboard.datasets.ready === 0, view: "datasets" },
-    { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "queue" },
-    { id: "workers", label: copy.workers, detail: formatNumber(dashboard.workers.active), attention: dashboard.workers.active === 0 && activeTasks.length > 0, view: "workers" },
+    { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "runs" },
+    { id: "workers", label: copy.workers, detail: formatNumber(dashboard.workers.active), attention: dashboard.workers.active === 0 && activeTasks.length > 0, view: "runs" },
   ];
 
   return (
@@ -220,7 +220,7 @@ export function OverviewDashboard({ analytics, dashboard, endpoints, runs, syste
           <EvaluationTrendChart formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
         </section>
         <section className="dashboard-panel dashboard-panel--comparison" aria-labelledby="comparison-title">
-          <div className="dashboard-panel__heading"><h2 id="comparison-title">{copy.modelBenchmarkComparison}</h2><button className="secondary" onClick={() => onOpenView("compare")} type="button">{copy.openAnalysis}</button></div>
+          <div className="dashboard-panel__heading"><h2 id="comparison-title">{copy.modelBenchmarkComparison}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
           <ComparisonTable copy={copy} formatters={formatters} points={analyticsPoints.slice(-6).reverse()} />
         </section>
       </div>
@@ -249,7 +249,7 @@ function DashboardHeader({ copy, onOpenView }: { copy: OverviewCopy; onOpenView:
         <p>{copy.dashboardDescription}</p>
       </div>
       <div className="overview-dashboard__actions">
-        <button onClick={() => onOpenView("workspace")} type="button">{copy.setupEvaluation}</button>
+        <button onClick={() => onOpenView("datasets")} type="button">{copy.setupEvaluation}</button>
         <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button>
       </div>
     </header>

@@ -214,6 +214,24 @@ describe("OverviewDashboard", () => {
     expect(screen.getAllByText("--").length).toBeGreaterThan(0);
   });
 
+  it("routes setup, comparison, and operational readiness through retained pages", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview();
+
+    const comparison = screen.getByRole("heading", { name: "Model / benchmark comparison" }).closest("section");
+    const queue = screen.getByText("Queue pressure").closest("article");
+    const workers = screen.getByText("Workers").closest("article");
+    await user.click(within(comparison as HTMLElement).getByRole("button", { name: "Open analysis" }));
+    await user.click(screen.getByRole("button", { name: "Set up an evaluation" }));
+    await user.click(within(queue as HTMLElement).getByRole("button", { name: "Manage" }));
+    await user.click(within(workers as HTMLElement).getByRole("button", { name: "Manage" }));
+
+    expect(props.onOpenView).toHaveBeenNthCalledWith(1, "analysis");
+    expect(props.onOpenView).toHaveBeenNthCalledWith(2, "datasets");
+    expect(props.onOpenView).toHaveBeenNthCalledWith(3, "runs");
+    expect(props.onOpenView).toHaveBeenNthCalledWith(4, "runs");
+  });
+
   it("keeps localized recovery actions available when the live dashboard summary is unavailable", async () => {
     const user = userEvent.setup();
     const props = renderOverview({ dashboard: null });

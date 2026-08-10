@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { api, Benchmark, Dataset, Endpoint, EvaluationSuite } from "../../api";
 import { useTranslation } from "../../i18n/LocaleProvider";
@@ -49,13 +49,13 @@ type DatasetsPageProps = {
   datasets: Dataset[];
   onClear: DatasetAction;
   onDelete: DatasetAction;
-  onOpenWorkspace?: () => void;
   onPause: DatasetAction;
   onPrepare: DatasetAction;
   onStartEvaluation?: (dataset: Dataset) => void;
   onUpdate: (dataset: Dataset, payload: Record<string, string>) => Promise<void>;
   onUpload: DatasetUploadAction;
   onValidate: DatasetAction;
+  registration: ReactNode;
 };
 
 type DatasetPreview = { datasetId: string; fields: string[]; rows: Array<Record<string, string>> };
@@ -83,7 +83,7 @@ export async function loadDatasetPreview(dataset: Dataset) {
   return api.previewDataset(dataset.id, 5);
 }
 
-export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspace, onPause, onPrepare, onStartEvaluation, onUpdate, onUpload, onValidate }: DatasetsPageProps) {
+export function DatasetsPage({ busy, datasets, onClear, onDelete, onPause, onPrepare, onStartEvaluation, onUpdate, onUpload, onValidate, registration }: DatasetsPageProps) {
   const { formatNumber: display, locale } = useTranslation();
   const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
   const usageKey = datasets.map((dataset) => `${dataset.id}:${dataset.status}`).join("|");
@@ -100,14 +100,14 @@ export function DatasetsPage({ busy, datasets, onClear, onDelete, onOpenWorkspac
   return (
     <div className="workspace-page datasets-page">
       <PageHeader
-        actions={onOpenWorkspace ? <button onClick={onOpenWorkspace} type="button">Register dataset</button> : undefined}
         description="Manage source versions, cached data, licenses, and field mapping while keeping the selected dataset’s evidence in view."
         eyebrow="Catalog"
         status={<>{usage ? <><strong>{display(usage.cache_bytes)}</strong> cached · {display(usage.available_bytes)} free</> : "Loading disk usage…"}</>}
         title="Datasets"
       />
+      {registration}
       {previewError && <p className="error" role="alert">{previewError}</p>}
-      {datasets.length === 0 ? <WorkspacePanel title="No dataset versions"><p className="empty">Register a dataset source from the Workspace catalog, then return here to prepare, validate, and inspect it.</p></WorkspacePanel> : <div className="workspace-split workspace-split--catalog">
+      {datasets.length === 0 ? <WorkspacePanel title="No dataset versions"><p className="empty">Use the registration form above to add a source, then prepare, validate, and inspect it here.</p></WorkspacePanel> : <div className="workspace-split workspace-split--catalog">
         <WorkspacePanel description="Select a source version to inspect its cache, metadata, and lifecycle actions." title="Dataset inventory" toolbar={<span className="workspace-count">{datasets.length} versions</span>}>
           <div className="workspace-inventory-list workspace-catalog-inventory">{datasets.map((dataset) => <button aria-pressed={selectedDataset?.id === dataset.id} className={selectedDataset?.id === dataset.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={dataset.id} onClick={() => setSelectedId(dataset.id)} type="button"><span data-i18n-preserve><strong>{dataset.dataset_id} v{dataset.version}</strong></span><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span><small data-i18n-preserve>{dataset.revision} · {dataset.source_url ? "source configured" : "local upload"}</small><span className="sr-only">Inspect {dataset.dataset_id} v{dataset.version}</span></button>)}</div>
         </WorkspacePanel>

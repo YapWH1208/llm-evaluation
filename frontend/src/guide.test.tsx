@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { api } from "./api";
+import { Guide } from "./components/Guide";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -34,4 +35,23 @@ describe("usage guide", () => {
     await user.click(screen.getByRole("button", { name: "Open Models" }));
     expect(screen.getByLabelText("Base URL")).toBeTruthy();
   }, 10_000);
+
+  it("keeps every workflow action inside the retained workspace", async () => {
+    const user = userEvent.setup();
+    const onOpenView = vi.fn();
+    render(<Guide onOpenView={onOpenView} />);
+
+    for (const action of screen.getAllByRole("button")) await user.click(action);
+
+    expect(onOpenView.mock.calls.map(([view]) => view)).toEqual([
+      "models",
+      "datasets",
+      "datasets",
+      "runs",
+      "runs",
+      "analysis",
+    ]);
+    expect(screen.queryByText(/Workspace ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Human review/)).not.toBeInTheDocument();
+  });
 });

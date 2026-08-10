@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 
-import { Benchmark, Capability, Endpoint, PromptPackage } from "../../api";
+import { Capability, Endpoint } from "../../api";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 
@@ -27,13 +27,6 @@ export type EndpointForm = {
   tokens_per_minute: string;
 };
 
-type RunConfigurationForm = {
-  benchmark: string;
-  maxConcurrency: string;
-  promptId: string;
-  requestBody: string;
-};
-
 type CapabilityStatus = "supported" | "unsupported" | "unknown";
 
 export function updateEndpointForm<K extends keyof EndpointForm>(form: EndpointForm, key: K, value: EndpointForm[K]): EndpointForm {
@@ -41,7 +34,6 @@ export function updateEndpointForm<K extends keyof EndpointForm>(form: EndpointF
 }
 
 type ModelsPageProps = {
-  benchmarks: Benchmark[];
   busy: string | null;
   capabilities: Record<string, Capability[]>;
   editingEndpointId: string | null;
@@ -52,21 +44,16 @@ type ModelsPageProps = {
   onEdit: (endpoint: Endpoint) => void;
   onFormChange: (form: EndpointForm) => void;
   onProbe: (endpointId: string) => void;
-  onQueue: (endpointId: string) => void;
-  onRunConfigChange: (form: RunConfigurationForm) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTest: (endpointId: string) => void;
-  prompts: PromptPackage[];
-  runConfig: RunConfigurationForm;
   testRequests: Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>;
 };
 
-export function ModelsPage({ benchmarks, busy, capabilities, editingEndpointId, endpoints, form, onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onQueue, onRunConfigChange, onSubmit, onTest, prompts, runConfig, testRequests }: ModelsPageProps) {
-  const editableBenchmarks = benchmarks.filter((benchmark) => !["disabled", "deprecated", "broken"].includes(benchmark.status));
+export function ModelsPage({ busy, capabilities, editingEndpointId, endpoints, form, onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTest, testRequests }: ModelsPageProps) {
   return (
     <div className="workspace-page models-page">
       <PageHeader
-        description="Register endpoints, validate connectivity, and keep new-run defaults close to the models they govern."
+        description="Register endpoints, validate connectivity, and inspect the capabilities available to evaluations."
         eyebrow="Configure"
         status={<><strong>{endpoints.length}</strong> configured</>}
         title="Models"
@@ -95,16 +82,10 @@ export function ModelsPage({ benchmarks, busy, capabilities, editingEndpointId, 
               <div className="workspace-inventory-item-heading" data-i18n-preserve><div><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p></div><span className={`badge ${endpoint.status}`}>{endpoint.status}</span></div>
               <p className="muted" data-i18n-preserve>{endpoint.base_url}</p>
               <p className="workspace-item-meta">{endpoint.max_concurrency} endpoint / {endpoint.api_key_max_concurrency ?? "∞"} shared-key concurrent · {endpoint.input_cost_per_million ?? "--"} {endpoint.currency} input / 1M</p>
-              <div className="actions"><button className="secondary" onClick={() => onEdit(endpoint)} type="button">Edit configuration</button><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => onTest(endpoint.id)} type="button">Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => onProbe(endpoint.id)} type="button">Probe capabilities</button><button disabled={endpoint.status !== "available" || busy === `run-${endpoint.id}`} onClick={() => onQueue(endpoint.id)} type="button">Queue selected benchmark</button></div>
+              <div className="actions"><button className="secondary" onClick={() => onEdit(endpoint)} type="button">Edit configuration</button><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => onTest(endpoint.id)} type="button">Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => onProbe(endpoint.id)} type="button">Probe capabilities</button></div>
               {testRequests[endpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[endpoint.id].method} {testRequests[endpoint.id].url}</p><pre>{JSON.stringify(testRequests[endpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
               {capabilities[endpoint.id] && <CapabilityDeclarations capabilities={capabilities[endpoint.id]} busy={busy} endpointId={endpoint.id} onDeclare={onDeclare} />}
             </article>)}</div>}
-          </WorkspacePanel>
-          <WorkspacePanel description="These defaults are merged into a newly queued benchmark run without changing a saved endpoint." title="Run configuration">
-            <div className="workspace-field-grid workspace-field-grid--two"><label className="select-label">Benchmark pack<select onChange={(event) => onRunConfigChange({ ...runConfig, benchmark: event.target.value })} value={runConfig.benchmark}>{editableBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name} v{benchmark.version}</option>)}</select></label><label className="select-label">Prompt package for a new run<select onChange={(event) => onRunConfigChange({ ...runConfig, promptId: event.target.value })} value={runConfig.promptId}><option value="">Built-in benchmark prompt</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label></div>
-            <label>Run request body override (JSON)<textarea onChange={(event) => onRunConfigChange({ ...runConfig, requestBody: event.target.value })} placeholder='{"temperature":0}' spellCheck={false} value={runConfig.requestBody} /></label>
-            <label>Run concurrency cap<input max="1000" min="1" onChange={(event) => onRunConfigChange({ ...runConfig, maxConcurrency: event.target.value })} placeholder="Use endpoint capacity" type="number" value={runConfig.maxConcurrency} /></label>
-            <p className="muted">Connection tests and execution use the saved endpoint. The run override is merged after suite and benchmark defaults; benchmark-forced fields still win. API keys never return to the browser.</p>
           </WorkspacePanel>
         </div>
       </div>

@@ -29,7 +29,7 @@ describe("dataset registration", () => {
     const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
-    await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("button", { name: "Datasets" }));
     expect(screen.getByLabelText("Revision")).toHaveValue("main");
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
@@ -66,7 +66,7 @@ describe("dataset registration", () => {
     const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
-    await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("button", { name: "Datasets" }));
     await user.type(screen.getByLabelText("Dataset ID"), "fields-demo");
     await user.type(screen.getByLabelText("Input field"), "question");
     await user.type(screen.getByLabelText("Reference (output) field"), "answer");

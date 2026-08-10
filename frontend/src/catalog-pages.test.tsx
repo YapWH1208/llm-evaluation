@@ -177,7 +177,7 @@ describe("catalog workspace pages", () => {
     const user = userEvent.setup();
     vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });
     vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question"], rows: [{ question: "2 + 2" }] });
-    renderCatalogPage(<DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />);
+    renderCatalogPage(<DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} />);
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
@@ -186,15 +186,15 @@ describe("catalog workspace pages", () => {
 
   it("refetches disk usage only when dataset cache state changes", async () => {
     const usageRequest = vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });
-    const page = <DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />;
+    const page = <DatasetsPage busy={null} datasets={[readyDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} />;
     const { rerender } = renderCatalogPage(page);
 
     expect(usageRequest).toHaveBeenCalledTimes(1);
 
-    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} /></LocaleProvider>);
+    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} /></LocaleProvider>);
     await waitFor(() => expect(usageRequest).toHaveBeenCalledTimes(1));
 
-    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset, status: "verifying" }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} /></LocaleProvider>);
+    rerender(<LocaleProvider><DatasetsPage busy={null} datasets={[{ ...readyDataset, status: "verifying" }]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} /></LocaleProvider>);
     await waitFor(() => expect(usageRequest).toHaveBeenCalledTimes(2));
   });
 
@@ -219,7 +219,7 @@ describe("catalog workspace pages", () => {
   it("keeps the dataset inventory visible while selecting a versioned inspector", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 128, root: "/data", total_bytes: 2000 });
-    renderCatalogPage(<DatasetsPage busy={null} datasets={[readyDataset, waitingDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />);
+    renderCatalogPage(<DatasetsPage busy={null} datasets={[readyDataset, waitingDataset]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Datasets" })).toBeVisible();
     expect(screen.getByRole("button", { name: /Inspect support-set v1/ })).toBeVisible();
@@ -230,11 +230,12 @@ describe("catalog workspace pages", () => {
     expect(screen.getByRole("button", { name: "Retry download" })).toBeVisible();
   });
 
-  it("uses one clear registration action for an empty dataset catalog", () => {
+  it("keeps registration and inventory together for an empty dataset catalog", () => {
     vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 0, root: "/data", total_bytes: 2000 });
-    renderCatalogPage(<DatasetsPage busy={null} datasets={[]} onClear={vi.fn()} onDelete={vi.fn()} onOpenWorkspace={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} />);
+    renderCatalogPage(<DatasetsPage busy={null} datasets={[]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<section aria-label="Dataset registration">Registration form</section>} />);
 
-    expect(screen.getAllByRole("button", { name: "Register dataset" })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Dataset registration" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Register dataset" })).not.toBeInTheDocument();
   });
 
   it("routes an empty suite inventory to the existing suite builder", async () => {

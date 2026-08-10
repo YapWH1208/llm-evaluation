@@ -3,7 +3,7 @@ import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Benchmark, Capability, Endpoint, PromptPackage } from "./api";
+import { Capability, Endpoint } from "./api";
 import { Guide } from "./components/Guide";
 import { CapabilitiesPage, CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
 
@@ -60,13 +60,10 @@ const form: EndpointForm = {
   tokens_per_minute: "",
 };
 
-const benchmark: Benchmark = { created_at: "2026-08-08T00:00:00Z", display_name: "Quick check", id: "benchmark-1", benchmark_id: "quick-check", manifest: {}, source: "builtin", status: "enabled", version: "1" };
-const prompt: PromptPackage = { created_at: "2026-08-08T00:00:00Z", id: "prompt-1", name: "Baseline", prompt_type: "user_custom", system_message: null, user_template: "{{ question }}", version: "1" };
 const capability: Capability = { auto_detection_status: "supported", capability_key: "vision", effective_status: "supported", id: "capability-1", user_declared_status: "unknown" };
 
 function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> = {}) {
   return {
-    benchmarks: [benchmark],
     busy: null,
     capabilities: { [endpoint.id]: [capability] },
     editingEndpointId: null,
@@ -77,12 +74,8 @@ function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> 
     onEdit: vi.fn(),
     onFormChange: vi.fn(),
     onProbe: vi.fn(),
-    onQueue: vi.fn(),
-    onRunConfigChange: vi.fn(),
     onSubmit: vi.fn((event) => event.preventDefault()),
     onTest: vi.fn(),
-    prompts: [prompt],
-    runConfig: { benchmark: "quick-check@1", maxConcurrency: "", promptId: "", requestBody: "{}" },
     testRequests: {},
     ...overrides,
   };
@@ -106,7 +99,9 @@ describe("configure workspace pages", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
     expect(screen.getByLabelText("Base URL")).toBeVisible();
     expect(screen.getByLabelText("Default request body (JSON)")).toBeVisible();
-    expect(screen.getByLabelText("Run concurrency cap")).toBeVisible();
+    expect(screen.queryByLabelText("Run concurrency cap")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Run configuration" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Queue selected benchmark" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Display name"), "Staging");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
