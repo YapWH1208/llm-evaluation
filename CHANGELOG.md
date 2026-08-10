@@ -6,6 +6,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- Dataset evaluation runs can select Default, exact match, normalized exact
+  match, token F1, BLEU, or ROUGE-L. Explicit selections override the prompt
+  package rule; Default defers to the package and then exact match.
+- The retained workspace pages have stable direct URLs: `/dashboard`, `/guide`,
+  `/models`, `/datasets`, `/runs`, `/analysis`, and `/settings`.
+
+### Changed
+
+- The browser workspace is reduced to its essential evaluation workflow while
+  keeping Dashboard and Guide. Endpoint capabilities live under Models,
+  registration lives under Datasets, run review/report evidence stays under
+  Runs, and comparisons live under Analysis. Backend APIs remain available.
+
+### Fixed
+
+- New dataset registrations default their source revision to `main` without
+  rewriting revision values already stored for existing datasets.
+- Browser navigation now supports direct loads and back/forward history, with
+  root and unknown workspace paths canonicalized to `/dashboard`.
+
 ## 0.3.0 — 2026-08-09
 
 ### Added

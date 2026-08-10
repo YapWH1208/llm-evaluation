@@ -1,6 +1,8 @@
 # LLM/SLM Evaluation Platform
 
-An API-hosted model evaluation workspace with encrypted endpoint credentials, reproducible runs, durable sample evidence, multimodal custom checks, human/LLM judging, reports, comparisons, queue controls, and a React web application.
+An API-hosted model evaluation workspace with encrypted endpoint credentials,
+reproducible runs, durable sample evidence, human/LLM judging, reports,
+comparisons, and a focused React web application.
 
 ## Quick start (SQLite)
 
@@ -28,7 +30,14 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Open the web workspace at `http://127.0.0.1:5173`. The API is available at `http://127.0.0.1:8000/docs` and defaults to `data/llm_evaluation.db`.
+Open the web workspace at
+[`http://127.0.0.1:5173/dashboard`](http://127.0.0.1:5173/dashboard). The
+browser workspace has seven direct routes: `/dashboard`, `/guide`, `/models`,
+`/datasets`, `/runs`, `/analysis`, and `/settings`. Opening `/` or an unknown
+workspace path is canonicalized to `/dashboard`; read-only public report links
+continue to use `/shared-reports/<token>`. The API is available at
+[`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) and defaults to
+`data/llm_evaluation.db`.
 
 ## Database operations
 

@@ -61,7 +61,7 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 1. Generate a Fernet key and choose a strong administrator token.
 2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
-3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin; the static host must route `/shared-reports/<token>` back to the frontend entry point.
+3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin. Configure the static host to rewrite `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 
 This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
 
@@ -82,7 +82,7 @@ Before upgrades, run `python -m app.cli database preview`. After upgrades, run `
 
 ## Public report sharing
 
-Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Configure the static host to rewrite `/shared-reports/<token>` to the SPA entry point and allow `X-Report-Password` in CORS preflights.
+Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Apply the same `index.html` SPA rewrite to `/shared-reports/<token>` as the seven workspace paths above, and allow `X-Report-Password` in CORS preflights.
 
 ## Worker rollout and verification
 
