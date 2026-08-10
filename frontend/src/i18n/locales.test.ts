@@ -28,6 +28,18 @@ const analyticsOverviewKeys = [
   "unknownValue",
 ] as const;
 
+const datasetMetricKeys = [
+  "datasetRun.metric",
+  "datasetRun.metricDefault",
+  "datasetRun.metricExactMatch",
+  "datasetRun.metricNormalizedExactMatch",
+  "datasetRun.metricTokenF1",
+  "datasetRun.metricBleu",
+  "datasetRun.metricRougeL",
+  "datasetRun.metricDefaultHint",
+  "datasetRun.effectiveMetric",
+] as const;
+
 describe("workspace locale catalog", () => {
   it("ships the requested locales with the complete English key set", () => {
     expect(localeIds).toEqual(["en", "zh-CN", "fr", "de", "ru", "ja", "ko", "ms"]);
@@ -59,6 +71,14 @@ describe("workspace locale catalog", () => {
     for (const locale of localeIds) {
       for (const key of analyticsOverviewKeys) {
         expect(overviewCopy[locale][key].trim(), `${locale}.${key}`).not.toBe("");
+      }
+    }
+  });
+
+  it("provides every dataset scoring metric label in each shipped locale", () => {
+    for (const locale of localeIds) {
+      for (const key of datasetMetricKeys) {
+        expect(catalogs[locale][key].trim(), `${locale}.${key}`).not.toBe("");
       }
     }
   });

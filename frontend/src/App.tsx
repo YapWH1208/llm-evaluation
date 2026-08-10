@@ -38,7 +38,8 @@ import { AnalysisPage, ComparePage } from "./components/pages/InsightsPages";
 import { QueuePage, RunsPage, WorkersPage } from "./components/pages/OperationsPages";
 import { ReportsPage, ReviewsPage, SettingsPage, UsersPage } from "./components/pages/SystemPages";
 import { WorkspaceSetupPage } from "./components/pages/WorkspaceSetupPage";
-import { reportCopy } from "./i18n/catalog";
+import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
+import { reportCopy, type TranslationKey } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
 import { StaticCopy } from "./i18n/StaticCopy";
@@ -73,12 +74,34 @@ const initialEndpoint: EndpointForm = {
 const initialPrompt = { name: "", version: "1", prompt_type: "user_custom", system_message: "", user_template: "{{ question }}", few_shot_examples: "[]", output_format: "{}", response_parser: "{}", scoring_rule: "{}", change_log: "" };
 const initialDataset = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "" };
 const initialSuite = { name: "", version: "1", description: "", benchmarks: "text-quick-check@1.0.0", default_request_body: "{}", default_prompt_overrides: "{}", weight_configuration: "{}" };
-const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "" };
+const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "", metric: "default" as DatasetMetricId };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
 const initialMultimodal = { endpoint_id: "", prompt: "", reference_answer: "", sample_id: "custom-sample", asset_id: "" };
 const initialUser = { email: "", display_name: "", role: "viewer", max_concurrency: "" };
 const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
+
+const datasetMetricLabelKeys = {
+  default: "datasetRun.metricDefault",
+  exact_match: "datasetRun.metricExactMatch",
+  normalized_exact_match: "datasetRun.metricNormalizedExactMatch",
+  token_f1: "datasetRun.metricTokenF1",
+  bleu: "datasetRun.metricBleu",
+  rouge_l: "datasetRun.metricRougeL",
+} as const satisfies Record<DatasetMetricId, TranslationKey>;
+
+function datasetRunPayload(form: typeof initialDatasetRun) {
+  const scoringRule = datasetScoringRuleFor(form.metric);
+  return {
+    model_endpoint_id: form.model_endpoint_id,
+    dataset_version_id: form.dataset_version_id,
+    prompt_package_id: form.prompt_package_id || null,
+    input_field: form.prompt_package_id ? null : form.input_field,
+    reference_field: form.reference_field,
+    sample_limit: Number(form.sample_limit) || 100,
+    ...(scoringRule ? { scoring_rule: scoringRule } : {}),
+  };
+}
 
 function optionalNumber(value: string) {
   return value.trim() === "" ? null : Number(value);
@@ -600,14 +623,7 @@ export default function App() {
   async function queueDatasetRun() {
     setBusy("dataset-run");
     try {
-      await api.createDatasetRun({
-        model_endpoint_id: datasetRunForm.model_endpoint_id,
-        dataset_version_id: datasetRunForm.dataset_version_id,
-        prompt_package_id: datasetRunForm.prompt_package_id || null,
-        input_field: datasetRunForm.prompt_package_id ? null : datasetRunForm.input_field,
-        reference_field: datasetRunForm.reference_field,
-        sample_limit: Number(datasetRunForm.sample_limit) || 100,
-      });
+      await api.createDatasetRun(datasetRunPayload(datasetRunForm));
       setNotice(t("datasetRun.queued"));
       setDatasetRunForm({ ...initialDatasetRun, model_endpoint_id: datasetRunForm.model_endpoint_id });
       setDatasetHandoffId(null);
@@ -624,14 +640,7 @@ export default function App() {
     setLaunchPreflight(null);
     setBusy("preflight-dataset");
     try {
-      const result = await api.validateDatasetRun({
-        model_endpoint_id: datasetRunForm.model_endpoint_id,
-        dataset_version_id: datasetRunForm.dataset_version_id,
-        prompt_package_id: datasetRunForm.prompt_package_id || null,
-        input_field: datasetRunForm.prompt_package_id ? null : datasetRunForm.input_field,
-        reference_field: datasetRunForm.reference_field,
-        sample_limit: Number(datasetRunForm.sample_limit) || 100,
-      });
+      const result = await api.validateDatasetRun(datasetRunPayload(datasetRunForm));
       setLaunchPreflight({ kind: "dataset", result });
       showNotice(result.can_queue ? "Preflight ready: {{samples}} samples." : "Preflight blocked: {{issues}}", result.can_queue ? { samples: result.sample_count } : { issues: result.issues.join(" ") });
     } catch (error) {
@@ -880,6 +889,8 @@ export default function App() {
             <label>{t("datasetRun.referenceField")}<select disabled={datasetRunFieldsLoading || datasetRunFields.length === 0} required value={datasetRunForm.reference_field} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, reference_field: event.target.value }); }}>{datasetRunFields.length === 0 && <option value="">—</option>}{datasetRunFields.map((field) => <option data-i18n-preserve key={field} value={field}>{field}</option>)}</select></label>
           </div>
           <label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value }); }}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
+          <label>{t("datasetRun.metric")}<select value={datasetRunForm.metric} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, metric: event.target.value as DatasetMetricId }); }}>{datasetMetricIds.map((metric) => <option key={metric} value={metric}>{t(datasetMetricLabelKeys[metric])}</option>)}</select></label>
+          <p className="muted">{t("datasetRun.metricDefaultHint")}</p>
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
           <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}
@@ -956,9 +967,19 @@ function SampleEvidenceBrowser({ attempts, onReview, onLoadMore, loadingMore }: 
 }
 
 function RunDetail({ run, summary, logs, attempts, reports, selectedAttempt, reviews, reviewAgreement, judgeAssessments, judgeAgreement, judgeForm, endpoints, reviewForm, busy, onJudgeForm, onReviewForm, onReview, onLoadMoreAttempts, onCreateJudgeAssessment, onCreateReview, onGenerateReport }: { run: EvaluationRun; summary: RunSummary | null; logs: RunLogEntry[]; attempts: SampleAttempt[]; reports: Report[]; selectedAttempt: SampleAttempt | null; reviews: Review[]; reviewAgreement: ReviewAgreement | null; judgeAssessments: JudgeAssessment[]; judgeAgreement: JudgeAgreement | null; judgeForm: typeof initialJudge; endpoints: Endpoint[]; reviewForm: typeof initialReview; busy: string | null; onJudgeForm: (value: typeof initialJudge) => void; onReviewForm: (value: typeof initialReview) => void; onReview: (attempt: SampleAttempt) => void; onLoadMoreAttempts: () => Promise<void>; onCreateJudgeAssessment: (event: FormEvent) => void; onCreateReview: (event: FormEvent) => void; onGenerateReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") => void }) {
-  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent } = useTranslation();
+  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent, t } = useTranslation();
+  const runRule = run.configuration_snapshot?.scoring_rule;
+  const attemptRule = selectedAttempt?.reference_snapshot.scoring;
+  const frozenScoringType = (
+    runRule && typeof runRule === "object" && !Array.isArray(runRule) && typeof (runRule as Record<string, unknown>).type === "string"
+      ? String((runRule as Record<string, unknown>).type)
+      : attemptRule && typeof attemptRule === "object" && !Array.isArray(attemptRule) && typeof (attemptRule as Record<string, unknown>).type === "string"
+        ? String((attemptRule as Record<string, unknown>).type)
+        : null
+  );
+  const frozenMetricKey = frozenScoringType ? datasetMetricLabelKeys[frozenScoringType as DatasetMetricId] : undefined;
   return <>
-    <section className="panel"><div className="section-title"><h2>Run executive summary</h2><span>{run.id.slice(0, 8)}</span></div>{summary ? <div className="metric-grid"><Metric label="Completion" value={`${summary.samples.completed}/${summary.samples.total}`} detail={percent(summary.samples.completion_rate)} /><Metric label="Accuracy" value={percent(summary.samples.accuracy)} detail={percent(summary.samples.success_rate) + " success rate"} /><Metric label="Latency" value={`${display(summary.latency_ms.average)} ms`} detail={`P50 ${display(summary.latency_ms.p50)} · P95 ${display(summary.latency_ms.p95)}`} /><Metric label="Cost" value={money(summary.cost.estimated, summary.cost.currency)} detail={`${summary.tokens.input} input / ${summary.tokens.output} output tokens`} /></div> : <p className="empty">Loading summary...</p>}</section>
+    <section className="panel"><div className="section-title"><h2>Run executive summary</h2><span>{run.id.slice(0, 8)}</span></div>{frozenScoringType && <p className="muted"><span>{t("datasetRun.effectiveMetric")}</span> <strong>{frozenMetricKey ? t(frozenMetricKey) : frozenScoringType}</strong></p>}{summary ? <div className="metric-grid"><Metric label="Completion" value={`${summary.samples.completed}/${summary.samples.total}`} detail={percent(summary.samples.completion_rate)} /><Metric label="Accuracy" value={percent(summary.samples.accuracy)} detail={percent(summary.samples.success_rate) + " success rate"} /><Metric label="Latency" value={`${display(summary.latency_ms.average)} ms`} detail={`P50 ${display(summary.latency_ms.p50)} · P95 ${display(summary.latency_ms.p95)}`} /><Metric label="Cost" value={money(summary.cost.estimated, summary.cost.currency)} detail={`${summary.tokens.input} input / ${summary.tokens.output} output tokens`} /></div> : <p className="empty">Loading summary...</p>}</section>
     <section className="panel"><div className="section-title"><h2>Durable run log</h2><span>Refreshes with live run events</span></div>{logs.length === 0 ? <p className="empty">No task or sample lifecycle events have been recorded.</p> : <div className="review-list">{logs.slice(-50).reverse().map((entry, index) => <article className="review" key={`${entry.event}-${entry.timestamp}-${index}`}><strong>{entry.level.toUpperCase()} · {entry.event}</strong><p>{entry.message}</p><small>{formatDate(entry.timestamp)} · task {entry.task_id?.slice(0, 8) ?? "--"} · sample {entry.details.sample_id ? String(entry.details.sample_id) : "--"}</small></article>)}</div>}</section>
     {summary && <section className="grid two"><article className="panel"><h2>Capability evidence</h2>{summary.insights.capabilities.length === 0 ? <p className="empty">No scored capability evidence yet.</p> : <div className="table-wrap"><table><thead><tr><th>Capability</th><th>Score</th><th>Samples</th></tr></thead><tbody>{summary.insights.capabilities.map((item) => <tr key={item.capability}><td>{item.capability}</td><td>{percent(item.score)}</td><td>{item.sample_count}</td></tr>)}</tbody></table></div>}<p className="muted">Strongest: {summary.insights.strongest_capability?.capability ?? "--"} · weakest: {summary.insights.weakest_capability?.capability ?? "--"}</p></article><article className="panel"><h2>Run signals</h2>{summary.insights.significant_anomalies.length === 0 && summary.insights.major_regressions.length === 0 ? <p className="empty">No significant anomalies or regressions detected.</p> : <>{summary.insights.significant_anomalies.map((item) => <p key={item.kind}><strong>{item.kind}</strong> {percent(item.value)} (threshold {percent(item.threshold)})</p>)}{summary.insights.major_regressions.map((item) => <p key={item.metric}><strong>{item.metric} regression</strong> {percent(item.delta)} versus baseline {percent(item.baseline)}</p>)}</>}</article></section>}
     <SampleEvidenceBrowser attempts={attempts} onReview={onReview} onLoadMore={onLoadMoreAttempts} loadingMore={busy === "attempts-more"} />

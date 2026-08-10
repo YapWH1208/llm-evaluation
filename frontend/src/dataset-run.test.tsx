@@ -1,9 +1,9 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, Benchmark, Dataset, Endpoint, PromptPackage } from "./api";
+import { api, Benchmark, Dataset, Endpoint, EvaluationRun, PromptPackage } from "./api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -47,14 +47,16 @@ function mockWorkspace({
   datasets = [readyDataset],
   endpoints = [endpoint],
   prompts = [promptPackage],
+  runs = [],
 }: {
   benchmarks?: Benchmark[];
   datasets?: Dataset[];
   endpoints?: Endpoint[];
   prompts?: PromptPackage[];
+  runs?: EvaluationRun[];
 } = {}) {
   vi.spyOn(api, "listEndpoints").mockResolvedValue(endpoints);
-  vi.spyOn(api, "listRuns").mockResolvedValue([]);
+  vi.spyOn(api, "listRuns").mockResolvedValue(runs);
   vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
   vi.spyOn(api, "listPromptPackages").mockResolvedValue(prompts);
   vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
@@ -195,7 +197,83 @@ describe("evaluation run launch workspace", () => {
       input_field: "question",
       reference_field: "answer",
     }));
+    expect(validateDatasetRun.mock.calls[0][0]).not.toHaveProperty("scoring_rule");
     expect(screen.getByText("Ready to queue")).toBeVisible();
+  }, 10_000);
+
+  it("submits the selected metric to dataset preflight and creation", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({ id: "run-1" } as never);
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Reference field")).toHaveValue("answer"));
+    const metric = screen.getByLabelText("Evaluation metric");
+    expect(metric).toHaveTextContent("Default");
+    expect(metric).toHaveTextContent("Exact match");
+    expect(metric).toHaveTextContent("Normalized exact match");
+    expect(metric).toHaveTextContent("Token F1");
+    expect(metric).toHaveTextContent("BLEU");
+    expect(metric).toHaveTextContent("ROUGE-L");
+    await user.selectOptions(metric, "token_f1");
+    await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
+
+    const expectedPayload = {
+      model_endpoint_id: endpoint.id,
+      dataset_version_id: readyDataset.id,
+      prompt_package_id: null,
+      input_field: "question",
+      reference_field: "answer",
+      sample_limit: 100,
+      scoring_rule: { type: "token_f1" },
+    };
+    expect(validateDatasetRun).toHaveBeenCalledWith(expectedPayload);
+    expect(screen.getByText("Ready to queue")).toBeVisible();
+
+    await user.selectOptions(metric, "bleu");
+    expect(screen.getByText("Not checked")).toBeVisible();
+    await user.selectOptions(metric, "token_f1");
+    await user.click(screen.getByRole("button", { name: "Queue dataset run" }));
+    expect(createDatasetRun).toHaveBeenCalledWith(expectedPayload);
+  }, 10_000);
+
+  it("shows the immutable scoring metric in selected run evidence", async () => {
+    const run = {
+      id: "run-scored",
+      model_endpoint_id: endpoint.id,
+      created_by: null,
+      max_concurrency: null,
+      benchmark_id: "dataset-evaluation",
+      benchmark_version: "1.0.0",
+      configuration_snapshot: { scoring_rule: { type: "rouge_l" } },
+      status: "completed",
+      total_samples: 1,
+      completed_samples: 1,
+      successful_samples: 1,
+      failed_samples: 0,
+      created_at: "2026-08-10T00:00:00Z",
+      started_at: "2026-08-10T00:00:01Z",
+      completed_at: "2026-08-10T00:00:02Z",
+      archived_at: null,
+    } as EvaluationRun;
+    mockWorkspace({ runs: [run] });
+    vi.spyOn(api, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
+    vi.spyOn(api, "listReports").mockResolvedValue([]);
+    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    const user = await openRuns();
+
+    await user.click(screen.getByRole("button", { name: /dataset-evaluation v1.0.0/i }));
+
+    const inspector = await screen.findByRole("region", { name: "Selected run inspector" });
+    expect(within(inspector).getByText("Evaluation metric")).toBeVisible();
+    expect(within(inspector).getByText("ROUGE-L")).toBeVisible();
   }, 10_000);
 
   it("queues a prompt-package dataset run without an input field and clears stale preflight state", async () => {

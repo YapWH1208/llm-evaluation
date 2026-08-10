@@ -40,6 +40,7 @@ export type EvaluationRun = {
   max_concurrency: number | null;
   benchmark_id: string;
   benchmark_version: string;
+  configuration_snapshot?: Record<string, unknown>;
   status: string;
   total_samples: number;
   completed_samples: number;
