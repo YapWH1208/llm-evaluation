@@ -28,6 +28,7 @@ describe("dataset registration", () => {
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Datasets" }));
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     expect(screen.getByLabelText("Revision")).toHaveValue("main");
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
@@ -62,6 +63,7 @@ describe("dataset registration", () => {
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Datasets" }));
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     await user.type(screen.getByLabelText("Dataset ID"), "fields-demo");
     await user.type(screen.getByLabelText("Input field"), "question");
     await user.type(screen.getByLabelText("Reference (output) field"), "answer");

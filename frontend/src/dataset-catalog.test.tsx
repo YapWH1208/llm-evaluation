@@ -139,6 +139,8 @@ describe("dataset catalog", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
     expect(window.location.pathname).toBe("/runs");
+    expect(window.location.search).toBe("?tab=launch-evaluation");
+    expect(screen.getByText(/Selected from the dataset catalog/)).toBeVisible();
     expect(screen.getByLabelText("Dataset")).toHaveValue(readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
     expect(screen.getByLabelText("Reference field")).toHaveValue("answer");

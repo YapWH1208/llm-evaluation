@@ -42,6 +42,7 @@ function mockWorkspace() {
   vi.spyOn(api, "listTasks").mockResolvedValue([]);
   vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
   vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+  vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 0, root: "/data", total_bytes: 2000 });
 }
 
 afterEach(() => {
@@ -64,5 +65,19 @@ describe("workspace tab routing", () => {
     expect(screen.getByRole("tab", { name: "Add endpoint" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Edit model endpoint" })).toBeVisible();
     expect(screen.getByLabelText("Display name")).toHaveValue("Production model");
+  });
+
+  it("opens dataset registration as an exclusive URL-backed tab", async () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/datasets");
+    const user = userEvent.setup();
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
+
+    expect(window.location.pathname).toBe("/datasets");
+    expect(window.location.search).toBe("?tab=register-dataset");
+    expect(screen.getByRole("heading", { name: "Register dataset version" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "No dataset versions" })).not.toBeInTheDocument();
   });
 });

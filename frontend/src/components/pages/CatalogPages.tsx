@@ -1,16 +1,20 @@
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { api, Dataset } from "../../api";
+import type { WorkspaceTabFor } from "../../dashboard/routing";
+import { workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { translateStaticTemplate } from "../../i18n/operationalCopy";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
+import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
 
 type DatasetAction = (dataset: Dataset) => Promise<void>;
 type DatasetUploadAction = (dataset: Dataset, event: ChangeEvent<HTMLInputElement>) => Promise<void>;
 
 
 type DatasetsPageProps = {
+  activeTab: WorkspaceTabFor<"datasets">;
   busy: string | null;
   datasets: Dataset[];
   onClear: DatasetAction;
@@ -18,6 +22,7 @@ type DatasetsPageProps = {
   onPause: DatasetAction;
   onPrepare: DatasetAction;
   onStartEvaluation?: (dataset: Dataset) => void;
+  onTabChange: (tab: WorkspaceTabFor<"datasets">) => void;
   onUpdate: (dataset: Dataset, payload: Record<string, string>) => Promise<void>;
   onUpload: DatasetUploadAction;
   onValidate: DatasetAction;
@@ -49,8 +54,9 @@ export async function loadDatasetPreview(dataset: Dataset) {
   return api.previewDataset(dataset.id, 5);
 }
 
-export function DatasetsPage({ busy, datasets, onClear, onDelete, onPause, onPrepare, onStartEvaluation, onUpdate, onUpload, onValidate, registration }: DatasetsPageProps) {
+export function DatasetsPage({ activeTab, busy, datasets, onClear, onDelete, onPause, onPrepare, onStartEvaluation, onTabChange, onUpdate, onUpload, onValidate, registration }: DatasetsPageProps) {
   const { formatNumber: display, locale } = useTranslation();
+  const copy = workspacePageTabCopy[locale].datasets;
   const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
   const usageKey = datasets.map((dataset) => `${dataset.id}:${dataset.status}`).join("|");
   const [preview, setPreview] = useState<DatasetPreview | null>(null);
@@ -71,14 +77,18 @@ export function DatasetsPage({ busy, datasets, onClear, onDelete, onPause, onPre
         status={<>{usage ? <><strong>{display(usage.cache_bytes)}</strong> cached · {display(usage.available_bytes)} free</> : "Loading disk usage…"}</>}
         title="Datasets"
       />
-      {registration}
-      {previewError && <p className="error" role="alert">{previewError}</p>}
-      {datasets.length === 0 ? <WorkspacePanel title="No dataset versions"><p className="empty">Use the registration form above to add a source, then prepare, validate, and inspect it here.</p></WorkspacePanel> : <div className="workspace-split workspace-split--catalog">
-        <WorkspacePanel description="Select a source version to inspect its cache, metadata, and lifecycle actions." title="Dataset inventory" toolbar={<span className="workspace-count">{datasets.length} versions</span>}>
-          <div className="workspace-inventory-list workspace-catalog-inventory">{datasets.map((dataset) => <button aria-pressed={selectedDataset?.id === dataset.id} className={selectedDataset?.id === dataset.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={dataset.id} onClick={() => setSelectedId(dataset.id)} type="button"><span data-i18n-preserve><strong>{dataset.dataset_id} v{dataset.version}</strong></span><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span><small data-i18n-preserve>{dataset.revision} · {dataset.source_url ? "source configured" : "local upload"}</small><span className="sr-only">Inspect {dataset.dataset_id} v{dataset.version}</span></button>)}</div>
-        </WorkspacePanel>
-        {selectedDataset && <DatasetInspector busy={busy} dataset={selectedDataset} editForm={editForm} editing={editingId === selectedDataset.id} onClear={onClear} onDelete={onDelete} onEditForm={setEditForm} onPause={onPause} onPrepare={onPrepare} onStartEdit={() => { setEditingId(selectedDataset.id); setEditForm(datasetEditForm(selectedDataset)); }} onStartEvaluation={onStartEvaluation} onStopEdit={() => setEditingId(null)} onSubmitEdit={(event) => { event.preventDefault(); setEditingId(null); void onUpdate(selectedDataset, editForm); }} onUpload={onUpload} onValidate={onValidate} preview={preview?.datasetId === selectedDataset.id ? preview : null} previewing={previewingId === selectedDataset.id} onPreview={() => { setPreviewingId(selectedDataset.id); setPreviewError(null); void loadDatasetPreview(selectedDataset).then((data) => setPreview({ datasetId: selectedDataset.id, fields: data.fields, rows: data.rows })).catch((error: unknown) => { setPreviewError(error instanceof Error ? error.message : translateStaticTemplate(locale, "Preview unavailable.")); setPreview(null); }).finally(() => setPreviewingId(null)); }} />}
-      </div>}
+      <WorkspaceTabs ariaLabel="Datasets sections" idPrefix="datasets" onChange={onTabChange} tabs={[{ id: "dataset-inventory", label: copy.datasetInventory }, { id: "register-dataset", label: copy.registerDataset }]} value={activeTab} />
+      <div aria-labelledby={workspaceTabId("datasets", activeTab)} id={workspaceTabPanelId("datasets", activeTab)} role="tabpanel" tabIndex={0}>
+        {activeTab === "register-dataset" ? registration : <>
+          {previewError && <p className="error" role="alert">{previewError}</p>}
+          {datasets.length === 0 ? <WorkspacePanel title="No dataset versions"><p className="empty">Register a source, then prepare, validate, and inspect it here.</p><div className="actions"><button onClick={() => onTabChange("register-dataset")} type="button">{copy.registerDataset}</button></div></WorkspacePanel> : <div className="workspace-split workspace-split--catalog">
+            <WorkspacePanel description="Select a source version to inspect its cache, metadata, and lifecycle actions." title="Dataset inventory" toolbar={<span className="workspace-count">{datasets.length} versions</span>}>
+              <div className="workspace-inventory-list workspace-catalog-inventory">{datasets.map((dataset) => <button aria-pressed={selectedDataset?.id === dataset.id} className={selectedDataset?.id === dataset.id ? "workspace-select-row is-selected" : "workspace-select-row"} key={dataset.id} onClick={() => setSelectedId(dataset.id)} type="button"><span data-i18n-preserve><strong>{dataset.dataset_id} v{dataset.version}</strong></span><span className={`badge ${dataset.status}`}>{dataset.status.replaceAll("_", " ")}</span><small data-i18n-preserve>{dataset.revision} · {dataset.source_url ? "source configured" : "local upload"}</small><span className="sr-only">Inspect {dataset.dataset_id} v{dataset.version}</span></button>)}</div>
+            </WorkspacePanel>
+            {selectedDataset && <DatasetInspector busy={busy} dataset={selectedDataset} editForm={editForm} editing={editingId === selectedDataset.id} onClear={onClear} onDelete={onDelete} onEditForm={setEditForm} onPause={onPause} onPrepare={onPrepare} onStartEdit={() => { setEditingId(selectedDataset.id); setEditForm(datasetEditForm(selectedDataset)); }} onStartEvaluation={onStartEvaluation} onStopEdit={() => setEditingId(null)} onSubmitEdit={(event) => { event.preventDefault(); setEditingId(null); void onUpdate(selectedDataset, editForm); }} onUpload={onUpload} onValidate={onValidate} preview={preview?.datasetId === selectedDataset.id ? preview : null} previewing={previewingId === selectedDataset.id} onPreview={() => { setPreviewingId(selectedDataset.id); setPreviewError(null); void loadDatasetPreview(selectedDataset).then((data) => setPreview({ datasetId: selectedDataset.id, fields: data.fields, rows: data.rows })).catch((error: unknown) => { setPreviewError(error instanceof Error ? error.message : translateStaticTemplate(locale, "Preview unavailable.")); setPreview(null); }).finally(() => setPreviewingId(null)); }} />}
+          </div>}
+        </>}
+      </div>
     </div>
   );
 }

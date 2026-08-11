@@ -589,7 +589,7 @@ export default function App() {
     setDatasetRunSchemaRequest((current) => current + 1);
     setDatasetHandoffId(dataset.id);
     setLaunchPreflight(null);
-    navigate("runs");
+    navigate("runs", { tab: "launch-evaluation" });
   }
 
 
@@ -743,7 +743,7 @@ export default function App() {
         testRequests={testRequests}
       />}
 
-      {view === "datasets" && <DatasetsPage busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} registration={<DatasetRegistrationForm busy={busy === "dataset"} onChange={setDatasetForm} onSubmit={createDataset} values={datasetForm} />} />}
+      {view === "datasets" && <DatasetsPage activeTab={route.tab as WorkspaceTabFor<"datasets">} busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onTabChange={(tab) => navigate("datasets", { tab })} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} registration={<DatasetRegistrationForm busy={busy === "dataset"} onChange={setDatasetForm} onSubmit={createDataset} values={datasetForm} />} />}
 
 
       {view === "runs" && <RunsPage
