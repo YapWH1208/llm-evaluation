@@ -15,6 +15,7 @@ from app.main import create_app
 from app.benchmarks.text_quick_check import TextSample
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_names import format_run_display_name
 from app.services.run_executor import _retry_delay_seconds
 from app.services.task_queue import claim_task, reclaim_expired_leases
 
@@ -129,12 +130,18 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
         assert body["status"] == "queued"
         assert body["total_samples"] == 2
         assert body["benchmark_id"] == "text-quick-check"
+        assert body["display_name"] == format_run_display_name(
+            "example-model",
+            "text-quick-check",
+            datetime.fromisoformat(body["created_at"]),
+        )
         assert body["configuration_snapshot"]["endpoint"]["model_name"] == "example-model"
         assert "encrypted_api_key" not in str(body["configuration_snapshot"])
 
         with app.state.database.get_session() as session:
             run = session.scalar(select(EvaluationRun).where(EvaluationRun.id == body["id"]))
             assert run is not None
+            assert run.display_name == body["display_name"]
             tasks = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run.id)))
             attempts = list(
                 session.scalars(
@@ -155,6 +162,13 @@ def test_text_quick_check_run_creates_durable_tasks_and_attempts(tmp_path: Path)
         assert {attempt.status for attempt in attempts} == {"pending"}
         assert {attempt.attempt_number for attempt in attempts} == {1}
         assert all(attempt.task_id == evaluation_task.id for attempt in attempts)
+
+        with app.state.database.get_session() as session:
+            legacy_run = session.get(EvaluationRun, body["id"])
+            assert legacy_run is not None
+            legacy_run.display_name = None
+            session.commit()
+        assert client.get(f"/api/v1/evaluation-runs/{body['id']}").json()["display_name"] == body["display_name"]
 
 
 def test_builtin_benchmark_packs_are_registered_and_preserve_multimodal_samples(tmp_path: Path) -> None:
@@ -424,6 +438,11 @@ def test_run_scheduling_controls_and_benchmark_rerun_preserve_source_evidence(tm
         rerun = client.post(f"/api/v1/evaluation-runs/{source['id']}/rerun-benchmark")
         assert rerun.status_code == 201
         assert rerun.json()["id"] != source["id"]
+        assert rerun.json()["display_name"] == format_run_display_name(
+            "example-model",
+            "text-quick-check",
+            datetime.fromisoformat(rerun.json()["created_at"]),
+        )
         assert rerun.json()["configuration_snapshot"]["rerun_of"] == {"run_id": source["id"], "kind": "benchmark"}
 
 
@@ -638,6 +657,11 @@ def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: P
         cloned = client.post(f"/api/v1/evaluation-runs/{run['id']}/clone")
         assert cloned.status_code == 201
         assert cloned.json()["id"] != run["id"]
+        assert cloned.json()["display_name"] == format_run_display_name(
+            "example-model",
+            "text-quick-check",
+            datetime.fromisoformat(cloned.json()["created_at"]),
+        )
         assert cloned.json()["configuration_snapshot"]["sample_ids"] == run["configuration_snapshot"]["sample_ids"]
 
         first_execution = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
@@ -645,6 +669,7 @@ def test_clone_run_and_retry_failed_samples_preserve_attempt_history(tmp_path: P
         retried = client.post(f"/api/v1/evaluation-runs/{run['id']}/retry-failed")
         assert retried.status_code == 200
         assert retried.json()["status"] == "queued"
+        assert retried.json()["display_name"] == run["display_name"]
 
         executor.fail = False
         second_execution = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")

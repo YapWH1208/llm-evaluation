@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from app.db.models import (
     TaskUnit,
 )
 from app.services.dataset_records import DatasetRecordError, iter_dataset_records
+from app.services.run_names import format_run_display_name
 from app.services.evaluation_runs import (
     RunCreationError,
     _build_sample_messages,
@@ -208,6 +210,7 @@ def create_dataset_run(
         ),
         "request_body_evidence": request_body_evidence,
     }
+    created_at = datetime.now(timezone.utc)
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
@@ -215,6 +218,8 @@ def create_dataset_run(
         max_concurrency=max_concurrency,
         benchmark_id=DATASET_RUN_BENCHMARK_ID,
         benchmark_version=DATASET_RUN_BENCHMARK_VERSION,
+        display_name=format_run_display_name(endpoint.model_name, dataset.dataset_id, created_at),
+        created_at=created_at,
         configuration_snapshot=snapshot,
         status=RunStatus.QUEUED.value,
         total_samples=len(samples),

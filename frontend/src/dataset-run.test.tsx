@@ -270,6 +270,7 @@ describe("evaluation run launch workspace", () => {
   it("shows the immutable scoring metric in selected run evidence", async () => {
     const run = {
       id: "run-scored",
+      display_name: "example-model_dataset-evaluation_20260810T000000Z",
       model_endpoint_id: endpoint.id,
       created_by: null,
       max_concurrency: null,

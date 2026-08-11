@@ -9,7 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(cleanup);
 
 const dashboard: Dashboard = {
-  runs: { active: 1, completed: 3, recent_completed: [{ id: "completed-run", benchmark_id: "release-check", status: "completed", completed_samples: 12, total_samples: 12, completed_at: "2026-07-30T09:00:00Z" }] },
+  runs: { active: 1, completed: 3, recent_completed: [{ id: "completed-run", display_name: "evaluation-model_release-check_20260730T090000Z", benchmark_id: "release-check", status: "completed", completed_samples: 12, total_samples: 12, completed_at: "2026-07-30T09:00:00Z" }] },
   queue: { pending: 2, leased: 1 },
   workers: { active: 2 },
   endpoints: { available: 1, unavailable: 0, total: 1 },
@@ -54,6 +54,7 @@ const endpoint: Endpoint = {
 
 const activeRun: EvaluationRun = {
   id: "active-run",
+  display_name: "evaluation-model_release-check_20260802T090000Z",
   model_endpoint_id: "endpoint-id",
   created_by: null,
   max_concurrency: null,

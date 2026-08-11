@@ -19,6 +19,7 @@ from app.db.models import CapabilityDetection
 from app.services.capability_detector import CapabilityDetectionResult
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 
 
@@ -453,6 +454,11 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         assert run.status_code == 201
+        assert run.json()["display_name"] == format_run_display_name(
+            "model",
+            "text-quick-check",
+            datetime.fromisoformat(run.json()["created_at"]),
+        )
         changed = api.patch(
             f"/api/v1/model-endpoints/{endpoint['id']}",
             json={"base_url": "https://changed.models.example.test/v1", "api_key": "rotated-secret", "model_name": "changed", "timeout_seconds": 5, "custom_headers": {"X-Run-Mode": "changed"}},
@@ -516,6 +522,11 @@ def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> Non
         assert api.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 2}).json()["max_concurrency"] == 2
         rerun = api.post(f"/api/v1/evaluation-runs/{source['id']}/rerun-benchmark")
         assert rerun.status_code == 201
+        assert rerun.json()["display_name"] == format_run_display_name(
+            "model",
+            "text-quick-check",
+            datetime.fromisoformat(rerun.json()["created_at"]),
+        )
         assert rerun.json()["configuration_snapshot"]["rerun_of"] == {"run_id": source["id"], "kind": "benchmark"}
 
 

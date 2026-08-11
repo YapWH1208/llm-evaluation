@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.services.run_names import resolve_run_display_name
 from app.services.reports import delete_report_artifact
 from app.services.scoring import ScoringError, validate_scoring_rule
 from app.services.mongo_run_executor import (
@@ -116,6 +117,7 @@ class EvaluationRunResponse(BaseModel):
     max_concurrency: int | None = None
     benchmark_id: str
     benchmark_version: str
+    display_name: str | None = None
     configuration_snapshot: dict[str, Any]
     status: str
     total_samples: int
@@ -126,6 +128,11 @@ class EvaluationRunResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     archived_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def populate_legacy_display_name(self) -> "EvaluationRunResponse":
+        self.display_name = resolve_run_display_name(self)
+        return self
 
 
 class EvaluationRunPreflightResponse(BaseModel):

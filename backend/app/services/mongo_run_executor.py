@@ -25,6 +25,7 @@ from app.services.evaluation_runs import (
     _sample_modality as _benchmark_sample_modality,
     _split_samples_for_endpoint_budget,
 )
+from app.services.run_names import format_run_display_name
 from app.services.dataset_runs import (
     DATASET_RUN_BENCHMARK_ID,
     DATASET_RUN_BENCHMARK_VERSION,
@@ -230,6 +231,7 @@ def create_mongo_benchmark_run(
             "max_concurrency": max_concurrency,
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
+            "display_name": format_run_display_name(str(endpoint["model_name"]), benchmark_id, now),
             "configuration_snapshot": snapshot,
             "status": "waiting_for_dataset" if frozen_datasets else "queued",
             "total_samples": len(samples),
@@ -458,6 +460,7 @@ def create_mongo_dataset_run(
             "max_concurrency": max_concurrency,
             "benchmark_id": DATASET_RUN_BENCHMARK_ID,
             "benchmark_version": DATASET_RUN_BENCHMARK_VERSION,
+            "display_name": format_run_display_name(str(endpoint["model_name"]), str(dataset["dataset_id"]), now),
             "configuration_snapshot": snapshot,
             "status": "queued",
             "total_samples": len(samples),
@@ -783,7 +786,7 @@ def create_mongo_custom_multimodal_run(
     normalized = _normalize_mongo_messages(store, data_root, messages)
     request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","display_name":format_run_display_name(str(endpoint["model_name"]),"custom-multimodal",now),"configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
     dataset_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":None,"task_type":"dataset_preparation","payload":{"source":"user","prepared_inline":True},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     benchmark_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":dataset_task["id"],"task_type":"benchmark","payload":{"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","planned_samples":1},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":benchmark_task["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})

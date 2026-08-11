@@ -42,6 +42,7 @@ const run: EvaluationRun = {
   created_by: null,
   failed_samples: 0,
   id: "run-1",
+  display_name: "example-model_math-check_20260808T120000Z",
   max_concurrency: null,
   model_endpoint_id: endpoint.id,
   started_at: "2026-08-08T12:00:01Z",

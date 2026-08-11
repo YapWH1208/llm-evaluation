@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_names import format_run_display_name
 from cryptography.fernet import Fernet
 
 
@@ -214,6 +216,11 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         assert created.status_code == 201
         run = created.json()
         assert run["benchmark_id"] == "dataset-evaluation"
+        assert run["display_name"] == format_run_display_name(
+            "example-model",
+            "demo",
+            datetime.fromisoformat(run["created_at"]),
+        )
         assert run["total_samples"] == 2
         assert run["configuration_snapshot"]["reference_field"] == "answer"
         executed = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
+from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,7 @@ from app.db.models import BenchmarkDefinition
 from app.services.request_body import resolve_request_body
 from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
 from app.services.scoring import ScoringError, validate_scoring_rule
+from app.services.run_names import format_run_display_name
 
 
 class RunCreationError(ValueError):
@@ -264,6 +266,7 @@ def create_benchmark_run(
         "evaluation_suite": suite_snapshot,
         "request_body_evidence": request_body_evidence,
     }
+    created_at = datetime.now(timezone.utc)
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
@@ -272,6 +275,8 @@ def create_benchmark_run(
         max_concurrency=max_concurrency,
         benchmark_id=benchmark_id,
         benchmark_version=benchmark_version,
+        display_name=format_run_display_name(endpoint.model_name, benchmark_id, created_at),
+        created_at=created_at,
         configuration_snapshot=snapshot,
         status=RunStatus.WAITING_FOR_DATASET.value if frozen_datasets else RunStatus.QUEUED.value,
         total_samples=len(samples),

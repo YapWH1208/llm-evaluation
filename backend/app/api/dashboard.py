@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.db.models import DatasetVersion, EvaluationRun, ModelEndpoint, Report, SampleAttempt, TaskUnit
 from app.db.mongo import MongoDocumentStore
 from app.services.run_analysis import summarize_attempts
+from app.services.run_names import resolve_run_display_name
 
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -163,6 +164,7 @@ def _run_summary(run: Any) -> dict[str, Any]:
     completed_at = getattr(run, "completed_at", None) if not isinstance(run, dict) else run.get("completed_at")
     return {
         "id": run["id"] if isinstance(run, dict) else run.id,
+        "display_name": resolve_run_display_name(run),
         "benchmark_id": run["benchmark_id"] if isinstance(run, dict) else run.benchmark_id,
         "status": run["status"] if isinstance(run, dict) else run.status,
         "completed_samples": run["completed_samples"] if isinstance(run, dict) else run.completed_samples,

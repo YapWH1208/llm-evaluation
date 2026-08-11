@@ -35,6 +35,7 @@ export type ConnectionTest = {
 
 export type EvaluationRun = {
   id: string;
+  display_name: string;
   model_endpoint_id: string;
   created_by: string | null;
   max_concurrency: number | null;
@@ -113,7 +114,7 @@ export type Report = { id: string; run_id: string; report_type: string; format: 
 export type ReportType = "single_model" | "multi_model_comparison" | "regression" | "prompt_comparison" | "benchmark" | "reliability" | "cost" | "human_review";
 export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
 export type Dashboard = {
-  runs: { active: number; completed: number; recent_completed: Array<{ id: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
+  runs: { active: number; completed: number; recent_completed: Array<{ id: string; display_name: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
   queue: { pending: number; leased: number };
   workers: { active: number };
   endpoints: { available: number; unavailable: number; total: number };
