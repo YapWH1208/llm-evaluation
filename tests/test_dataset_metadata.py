@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -138,3 +139,106 @@ def test_mongo_dataset_metadata_matches_relational_contract(tmp_path: Path) -> N
         assert listed[legacy["id"]]["capabilities"] == []
         assert listed[legacy["id"]]["languages"] == []
         assert listed[legacy["id"]]["evaluation_type"] == "custom"
+
+
+def test_mongo_ready_dataset_field_defaults_are_schema_validated(tmp_path: Path) -> None:
+    fake_client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+    )
+    store = MongoDocumentStore(settings, client=fake_client)
+    app = create_app(settings, document_store=store)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "mongo-schema", "version": "1"},
+        )
+        uploaded = client.post(
+            f"/api/v1/datasets/{created.json()['id']}/upload",
+            json={
+                "filename": "records.jsonl",
+                "base64_data": base64.b64encode(
+                    b'{"question":"2 + 2","answer":"4"}\n'
+                ).decode("ascii"),
+            },
+        )
+        assert uploaded.status_code == 200
+
+        stale = client.put(
+            f"/api/v1/datasets/{created.json()['id']}",
+            json={
+                "dataset_id": "mongo-schema",
+                "version": "1",
+                "input_field": "removed_question",
+                "reference_field": "answer",
+            },
+        )
+        assert stale.status_code == 409
+        assert "preview schema" in stale.json()["detail"]
+
+
+def test_dataset_field_defaults_are_distinct_and_revalidated_against_ready_schema(
+    tmp_path: Path,
+) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+        )
+    )
+    with TestClient(app) as client:
+        identical = client.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "identical",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "question",
+            },
+        )
+        assert identical.status_code == 422
+
+        created = client.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "schema-defaults",
+                "version": "1",
+                "input_field": "manual_input",
+                "reference_field": "manual_output",
+            },
+        )
+        assert created.status_code == 201
+        uploaded = client.post(
+            f"/api/v1/datasets/{created.json()['id']}/upload",
+            json={
+                "filename": "records.jsonl",
+                "base64_data": base64.b64encode(
+                    b'{"question":"2 + 2","answer":"4"}\n'
+                ).decode("ascii"),
+            },
+        )
+        assert uploaded.status_code == 200
+
+        valid = client.put(
+            f"/api/v1/datasets/{created.json()['id']}",
+            json={
+                "dataset_id": "schema-defaults",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+            },
+        )
+        assert valid.status_code == 200
+
+        stale = client.put(
+            f"/api/v1/datasets/{created.json()['id']}",
+            json={
+                "dataset_id": "schema-defaults",
+                "version": "1",
+                "input_field": "removed_question",
+                "reference_field": "answer",
+            },
+        )
+        assert stale.status_code == 409
+        assert "preview schema" in stale.json()["detail"]

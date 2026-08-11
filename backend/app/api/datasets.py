@@ -48,6 +48,8 @@ class DatasetCreate(BaseModel):
             self.input_field = self.input_field.strip()
         if self.reference_field is not None:
             self.reference_field = self.reference_field.strip()
+        if self.input_field is not None and self.input_field == self.reference_field:
+            raise ValueError("Input and reference fields must name different dataset columns.")
         try:
             self.capabilities = normalize_capabilities(self.capabilities)
             self.languages = normalize_languages(self.languages)
@@ -164,9 +166,19 @@ def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, requ
         raise HTTPException(404, "Dataset version not found")
     try:
         if store is not None:
-            return update_mongo_dataset(store, dataset_version_id, payload.model_dump())
+            return update_mongo_dataset(
+                store,
+                dataset_version_id,
+                payload.model_dump(),
+                data_root=request.app.state.settings.data_root,
+            )
         assert session is not None
-        return update_dataset(session, get_dataset_or_404(session, dataset_version_id), **payload.model_dump(exclude={"credential_env_var"}))
+        return update_dataset(
+            session,
+            get_dataset_or_404(session, dataset_version_id),
+            data_root=request.app.state.settings.data_root,
+            **payload.model_dump(exclude={"credential_env_var"}),
+        )
     except DatasetError as error:
         raise HTTPException(409, str(error)) from error
 @router.post("/{dataset_version_id}/accept-license",response_model=DatasetResponse)

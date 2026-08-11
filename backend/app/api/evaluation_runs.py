@@ -78,7 +78,7 @@ class DatasetRunCreate(BaseModel):
     dataset_version_id: str
     prompt_package_id: str | None = None
     input_field: Annotated[str, Field(min_length=1, max_length=255)] | None = None
-    reference_field: Annotated[str, Field(min_length=1, max_length=255)]
+    reference_field: Annotated[str, Field(min_length=1, max_length=255)] | None = None
     sample_limit: Annotated[int, Field(ge=1, le=10_000)] = 100
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     request_body_override: dict[str, Any] = Field(default_factory=dict)

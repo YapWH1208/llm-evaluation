@@ -422,3 +422,92 @@ def test_dataset_run_rejects_identical_input_and_reference_fields(tmp_path: Path
         })
         assert created.status_code == 409
         assert "different" in created.json()["detail"]
+
+
+def test_dataset_run_inherits_dataset_defaults_without_overwriting_record_metadata(
+    tmp_path: Path,
+) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+    )
+    content = (
+        b'{"question":"first","answer":"1","metadata":{"capabilities":["record_reasoning"],"languages":["fr"],"evaluation_type":"generation"}}\n'
+        b'{"question":"second","answer":"2"}\n'
+        b'{"question":"third","answer":"3","metadata":{"capabilities":[]}}\n'
+    )
+    with TestClient(app) as client:
+        created_dataset = client.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "profiled",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en-US"],
+                "evaluation_type": "classification",
+            },
+        )
+        uploaded = client.post(
+            f"/api/v1/datasets/{created_dataset.json()['id']}/upload",
+            json={
+                "filename": "profiled.jsonl",
+                "base64_data": base64.b64encode(content).decode("ascii"),
+            },
+        )
+        assert uploaded.status_code == 200
+        endpoint_id = _create_available_endpoint(client)
+
+        created = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": uploaded.json()["id"],
+                "sample_limit": 10,
+            },
+        )
+        assert created.status_code == 201
+        snapshot = created.json()["configuration_snapshot"]
+        assert snapshot["input_field"] == "question"
+        assert snapshot["reference_field"] == "answer"
+        assert snapshot["dataset_profile"] == {
+            "capabilities": ["classification"],
+            "languages": ["en-US"],
+            "evaluation_type": "classification",
+            "input_field": "question",
+            "reference_field": "answer",
+        }
+
+        attempts = client.get(
+            f"/api/v1/evaluation-runs/{created.json()['id']}/attempts"
+        ).json()
+        by_prompt = {
+            attempt["input_snapshot"]["messages"][-1]["content"]: attempt
+            for attempt in attempts
+        }
+        explicit = by_prompt["first"]
+        inherited = by_prompt["second"]
+        explicit_empty = by_prompt["third"]
+        assert explicit["input_snapshot"]["metadata"]["dataset"] == "profiled"
+        assert explicit["input_snapshot"]["metadata"]["record_number"] == "1"
+        assert explicit["input_snapshot"]["metadata"]["capabilities"] == ["record_reasoning"]
+        assert explicit["input_snapshot"]["metadata"]["languages"] == ["fr"]
+        assert explicit["input_snapshot"]["metadata"]["evaluation_type"] == "generation"
+        assert inherited["input_snapshot"]["metadata"]["capabilities"] == ["classification"]
+        assert inherited["input_snapshot"]["metadata"]["languages"] == ["en-US"]
+        assert inherited["input_snapshot"]["metadata"]["evaluation_type"] == "classification"
+        assert explicit_empty["input_snapshot"]["metadata"]["capabilities"] == []
+        assert explicit_empty["input_snapshot"]["metadata"]["languages"] == ["en-US"]
+        assert explicit_empty["input_snapshot"]["metadata"]["evaluation_type"] == "classification"
+        assert explicit["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "generation"
+        assert inherited["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "classification"
+        assert explicit_empty["reference_snapshot"]["dataset_profile"]["capabilities"] == []
+        assert all(
+            attempt["reference_snapshot"]["scoring"] == {"type": "exact_match"}
+            for attempt in attempts
+        )

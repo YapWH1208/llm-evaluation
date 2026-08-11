@@ -870,6 +870,85 @@ def test_mongo_dataset_run_uses_and_freezes_selected_input_field(tmp_path: Path)
         assert attempts[0]["input_snapshot"]["messages"][-1]["content"] == "chosen"
 
 
+def test_mongo_dataset_run_inherits_profile_defaults_with_record_precedence(
+    tmp_path: Path,
+) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        document_store=store,
+    )
+    content = (
+        b'{"question":"first","answer":"1","metadata":{"languages":["fr"],"evaluation_type":"generation"}}\n'
+        b'{"question":"second","answer":"2"}\n'
+    )
+    with TestClient(app) as api:
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+            },
+        ).json()
+        assert api.post(
+            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
+        ).status_code == 200
+        dataset = api.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "mongo-profiled",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en-US"],
+                "evaluation_type": "classification",
+            },
+        ).json()
+        uploaded = api.post(
+            f"/api/v1/datasets/{dataset['id']}/upload",
+            json={
+                "filename": "profiled.jsonl",
+                "base64_data": base64.b64encode(content).decode("ascii"),
+            },
+        )
+        assert uploaded.status_code == 200
+
+        created = api.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint["id"],
+                "dataset_version_id": dataset["id"],
+                "sample_limit": 10,
+            },
+        )
+        assert created.status_code == 201
+        snapshot = created.json()["configuration_snapshot"]
+        assert snapshot["input_field"] == "question"
+        assert snapshot["reference_field"] == "answer"
+        assert snapshot["dataset_profile"]["evaluation_type"] == "classification"
+        attempts = store.list_documents(
+            "sample_attempts", query={"run_id": created.json()["id"]}
+        )
+        by_prompt = {
+            attempt["input_snapshot"]["messages"][-1]["content"]: attempt
+            for attempt in attempts
+        }
+        assert by_prompt["first"]["input_snapshot"]["metadata"]["languages"] == ["fr"]
+        assert by_prompt["first"]["input_snapshot"]["metadata"]["capabilities"] == ["classification"]
+        assert by_prompt["first"]["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "generation"
+        assert by_prompt["second"]["input_snapshot"]["metadata"]["languages"] == ["en-US"]
+        assert by_prompt["second"]["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "classification"
+
+
 def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_path: Path) -> None:
     client = FakeClient()
     settings = Settings.local_development(
