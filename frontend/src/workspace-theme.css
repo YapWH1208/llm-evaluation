@@ -320,6 +320,7 @@ textarea {
 .badge.queued,
 .badge.pending,
 .badge.license_required,
+.badge.completed_with_errors,
 .badge.paused {
   background: var(--warning-soft);
   border-color: color-mix(in srgb, var(--warning) 35%, transparent);

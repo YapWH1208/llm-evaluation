@@ -124,6 +124,15 @@ describe("workspace locale catalog", () => {
     }
   });
 
+  it("provides complete run-detail terminology in every shipped locale", () => {
+    const detailCopy = catalogModule.runDetailCopy;
+    const englishKeys = Object.keys(detailCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(detailCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(detailCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+    }
+  });
+
   it("provides complete leaderboard terminology in every shipped locale", () => {
     const leaderboardCopy = catalogModule.leaderboardCopy;
     const englishKeys = Object.keys(leaderboardCopy.en).sort();

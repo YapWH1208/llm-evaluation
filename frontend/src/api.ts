@@ -430,6 +430,7 @@ export const api = {
   deleteRun: (runId: string) => request<void>(`/evaluation-runs/${runId}`, { method: "DELETE" }),
   listAttempts: (runId: string, offset = 0, limit = 200) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts?offset=${offset}&limit=${limit}`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
+  listRunMetrics: (runId: string) => request<AggregateMetric[]>(`/analytics/runs/${encodeURIComponent(runId)}/metrics`),
   listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
   subscribeToRunEvents: (runId: string, onEvent: () => void) => subscribeToEvents("/evaluation-runs/" + runId + "/events", "run", onEvent),
   createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),

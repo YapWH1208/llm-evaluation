@@ -67,14 +67,17 @@ describe("review run switching", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Runs" }));
     await user.click(screen.getByRole("button", { name: /math-check v1/ }));
+    await user.click(screen.getByRole("tab", { name: "Evidence" }));
     await waitFor(() => expect(screen.getByText(/sample-7 · attempt 1/)).toBeInTheDocument());
 
     await user.click(screen.getByRole("tab", { name: "Run inventory" }));
     await user.click(screen.getByRole("button", { name: /code-check v1/ }));
+    await user.click(screen.getByRole("tab", { name: "Evidence" }));
 
     expect(screen.queryByText(/sample-7 · attempt 1/)).not.toBeInTheDocument();
 

@@ -121,4 +121,15 @@ describe("authenticated browser transport", () => {
       expect.any(Object),
     );
   });
+
+  it("loads named metrics for a selected run", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await api.listRunMetrics("run/with spaces");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/analytics/runs/run%2Fwith%20spaces/metrics",
+      expect.any(Object),
+    );
+  });
 });

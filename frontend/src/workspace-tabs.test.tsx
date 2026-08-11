@@ -100,6 +100,7 @@ function mockWorkspace({ runs = [] }: { runs?: EvaluationRun[] } = {}) {
   vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
   vi.spyOn(api, "listReports").mockResolvedValue([]);
   vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+  vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
 }
 
 afterEach(() => {
@@ -149,7 +150,13 @@ describe("workspace tab routing", () => {
     expect(window.location.pathname).toBe("/runs");
     expect(window.location.search).toBe("?tab=run-details&run=run-1");
     expect(screen.getByRole("tab", { name: "Run details" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("region", { name: "Selected run inspector" })).toBeVisible();
+    const inspector = screen.getByRole("region", { name: "Selected run inspector" });
+    expect(inspector).toBeVisible();
+    expect(within(inspector).getByRole("heading", { name: run.display_name })).toBeVisible();
+    expect(within(inspector).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(within(inspector).getByRole("button", { name: "Clone" })).toBeVisible();
+    expect(within(inspector).getByRole("button", { name: "Rerun benchmark" })).toBeVisible();
+    expect(api.listRunMetrics).toHaveBeenCalledWith(run.id);
   });
 
   it("opens a leaderboard row at a restorable run-detail URL", async () => {

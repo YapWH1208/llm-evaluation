@@ -157,6 +157,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Quick start" }));
@@ -183,6 +184,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     let releaseRefresh: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
     let listRunsCalls = 0;
@@ -296,6 +298,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Run inventory" }));
