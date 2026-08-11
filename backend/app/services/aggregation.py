@@ -43,10 +43,7 @@ def recompute_aggregate_metrics(
         evaluation_type=evaluation_type_from_snapshot(run.configuration_snapshot),
     )
     session.execute(
-        delete(AggregateMetric).where(
-            AggregateMetric.run_id == run.id,
-            AggregateMetric.aggregation_version == AGGREGATION_VERSION,
-        )
+        delete(AggregateMetric).where(AggregateMetric.run_id == run.id)
     )
     rows = [
         AggregateMetric(
@@ -108,7 +105,7 @@ def recompute_mongo_aggregate_metrics(
     )
     store.delete_documents(
         "aggregate_metrics",
-        {"run_id": run_id, "aggregation_version": AGGREGATION_VERSION},
+        {"run_id": run_id},
     )
     return [
         store.insert_document(

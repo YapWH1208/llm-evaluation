@@ -21,6 +21,7 @@ from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
 from app.services.run_names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
+from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
 
 
 def _configure_dataset_download(monkeypatch, content: bytes) -> None:
@@ -1079,3 +1080,34 @@ def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp
         assert "references this revision" in blocked.json()["detail"]
         listed = api.get("/api/v1/datasets").json()
         assert any(item["id"] == created["id"] for item in listed)
+
+
+def test_mongo_recompute_replaces_legacy_aggregation_rows_for_the_run() -> None:
+    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=FakeClient())
+    run = store.insert_document("evaluation_runs", {
+        "model_endpoint_id": "endpoint-1",
+        "benchmark_id": "benchmark-a",
+        "benchmark_version": "1.0.0",
+        "configuration_snapshot": {"dataset_profile": {"evaluation_type": "custom"}},
+        "status": "completed",
+        "total_samples": 1,
+        "completed_samples": 1,
+        "successful_samples": 1,
+        "failed_samples": 0,
+        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+    })
+    store.insert_document("aggregate_metrics", {
+        "run_id": run["id"],
+        "benchmark_id": "benchmark-a",
+        "model_endpoint_id": "endpoint-1",
+        "metric_name": "score",
+        "metric_value": 0.5,
+        "availability_reason": None,
+        "sample_count": 1,
+        "aggregation_version": "1.0.0",
+    })
+    rows = recompute_mongo_aggregate_metrics(store, run["id"])
+    remaining = store.list_documents("aggregate_metrics", query={"run_id": run["id"]})
+    assert rows
+    assert remaining
+    assert all(row["aggregation_version"] == AGGREGATION_VERSION for row in remaining)
