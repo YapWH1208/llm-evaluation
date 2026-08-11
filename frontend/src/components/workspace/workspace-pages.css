@@ -755,6 +755,250 @@ button.dataset-value-chip {
   min-width: 0;
 }
 
+.workspace-scatter-stack,
+.workspace-scatter-controls form {
+  display: grid;
+  gap: .85rem;
+  min-width: 0;
+}
+
+.workspace-scatter-primary-filters {
+  align-items: end;
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: repeat(2, minmax(11rem, 1fr)) minmax(13rem, .8fr);
+}
+
+.workspace-scatter-primary-filters > label,
+.workspace-scatter-filter-grid > label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: .76rem;
+  font-weight: 700;
+  gap: .3rem;
+}
+
+.workspace-run-multiselect,
+.workspace-scatter-advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: .78rem;
+  position: relative;
+}
+
+.workspace-run-multiselect summary,
+.workspace-scatter-advanced summary {
+  cursor: pointer;
+  font-weight: 800;
+  list-style-position: inside;
+  padding: .62rem .7rem;
+}
+
+.workspace-run-multiselect fieldset {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+  display: grid;
+  gap: .5rem;
+  left: 0;
+  margin: .35rem 0 0;
+  max-height: min(22rem, 60vh);
+  min-width: 100%;
+  overflow: auto;
+  padding: .75rem;
+  position: absolute;
+  right: 0;
+  z-index: 4;
+}
+
+.workspace-run-multiselect legend {
+  color: var(--text);
+  font-size: .72rem;
+  font-weight: 800;
+  padding: 0 .2rem;
+}
+
+.workspace-run-multiselect label {
+  align-items: start;
+  color: var(--text-muted);
+  display: grid;
+  font-size: .74rem;
+  gap: .42rem;
+  grid-template-columns: auto 1fr auto;
+}
+
+.workspace-run-multiselect input {
+  margin: .12rem 0 0;
+  width: auto;
+}
+
+.workspace-scatter-advanced[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-scatter-filter-grid {
+  display: grid;
+  gap: .65rem;
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+  padding: .75rem;
+}
+
+.workspace-scatter-actions {
+  justify-content: flex-end;
+}
+
+.workspace-scatter-error {
+  align-items: center;
+  display: flex;
+  gap: .75rem;
+  justify-content: space-between;
+}
+
+.workspace-scatter-error p {
+  color: var(--danger);
+  margin: 0;
+}
+
+.workspace-scatter-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem 1rem;
+  justify-content: space-between;
+  margin-bottom: .7rem;
+}
+
+.workspace-scatter-summary strong {
+  color: var(--text);
+  font-size: .84rem;
+}
+
+.workspace-scatter-summary span {
+  color: var(--text-muted);
+  font-size: .74rem;
+}
+
+.workspace-scatter-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .8rem;
+  margin-bottom: .45rem;
+}
+
+.workspace-scatter-legend > span {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: .7rem;
+  gap: .32rem;
+}
+
+.workspace-scatter-swatch {
+  background: var(--primary);
+  border-radius: 999px;
+  display: inline-block;
+  height: .62rem;
+  width: .62rem;
+}
+
+.workspace-scatter-chart-scroll {
+  overflow-x: auto;
+}
+
+.workspace-scatter-chart {
+  display: block;
+  min-width: 44rem;
+  width: 100%;
+}
+
+.workspace-scatter-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.workspace-scatter-tick,
+.workspace-scatter-axis-label {
+  fill: var(--text-muted);
+  font-size: .68rem;
+}
+
+.workspace-scatter-axis-label {
+  font-weight: 800;
+}
+
+.workspace-scatter-point {
+  cursor: pointer;
+  outline: none;
+}
+
+.workspace-scatter-point > circle:first-of-type {
+  fill: var(--primary);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.workspace-scatter-point-focus {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2;
+}
+
+.workspace-scatter-point:focus .workspace-scatter-point-focus,
+.workspace-scatter-point.is-selected .workspace-scatter-point-focus {
+  stroke: var(--text);
+}
+
+.workspace-scatter-swatch.series-1,
+.workspace-scatter-point.series-1 > circle:first-of-type { background: #f59e0b; fill: #f59e0b; }
+.workspace-scatter-swatch.series-2,
+.workspace-scatter-point.series-2 > circle:first-of-type { background: #60a5fa; fill: #60a5fa; }
+.workspace-scatter-swatch.series-3,
+.workspace-scatter-point.series-3 > circle:first-of-type { background: #c084fc; fill: #c084fc; }
+.workspace-scatter-swatch.series-4,
+.workspace-scatter-point.series-4 > circle:first-of-type { background: #fb7185; fill: #fb7185; }
+.workspace-scatter-swatch.series-5,
+.workspace-scatter-point.series-5 > circle:first-of-type { background: #a3e635; fill: #a3e635; }
+
+.workspace-scatter-selected,
+.workspace-scatter-availability {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .22rem;
+  margin-top: .7rem;
+  padding: .65rem .75rem;
+}
+
+.workspace-scatter-selected span,
+.workspace-scatter-selected small,
+.workspace-scatter-availability {
+  color: var(--text-muted);
+  font-size: .73rem;
+}
+
+.workspace-scatter-selected strong,
+.workspace-scatter-availability strong {
+  color: var(--text);
+}
+
+.workspace-scatter-availability p,
+.workspace-scatter-availability ul {
+  margin: 0;
+}
+
+.workspace-scatter-availability ul {
+  display: grid;
+  gap: .2rem;
+  padding-left: 1rem;
+}
+
+.workspace-scatter-table-panel .workspace-dense-table table {
+  min-width: 54rem;
+}
+
 .workspace-capability-chart,
 .workspace-analysis-breakdown,
 .workspace-comparison-evidence {
@@ -1031,6 +1275,26 @@ button.dataset-value-chip {
   .workspace-analysis-context .workspace-filter-control select {
     min-width: 0;
     width: 100%;
+  }
+
+  .workspace-scatter-primary-filters,
+  .workspace-scatter-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-run-multiselect fieldset {
+    border-width: 1px 0 0;
+    box-shadow: none;
+    margin: 0;
+    max-height: 18rem;
+    position: static;
+  }
+
+  .workspace-scatter-actions,
+  .workspace-scatter-error,
+  .workspace-scatter-summary {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .workspace-compare-form,

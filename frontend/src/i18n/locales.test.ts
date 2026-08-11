@@ -106,6 +106,15 @@ describe("workspace locale catalog", () => {
     }
   });
 
+  it("provides complete evidence-scatter terminology in every shipped locale", () => {
+    const scatterCopy = catalogModule.analysisScatterCopy;
+    const englishKeys = Object.keys(scatterCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(scatterCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(scatterCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+    }
+  });
+
   it("provides every dataset scoring metric label in each shipped locale", () => {
     for (const locale of localeIds) {
       for (const key of datasetMetricKeys) {

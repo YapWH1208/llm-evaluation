@@ -1,12 +1,15 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useState } from "react";
 
-import { AnalyticsCell, AnalyticsMatrix, Comparison, EvaluationRun } from "../../api";
+import { AnalyticsCell, AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterQuery, ScatterResponse } from "../../api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
+import { EvidenceScatterWorkspace } from "../analysis/EvidenceScatter";
+
+export { EvidenceScatterWorkspace } from "../analysis/EvidenceScatter";
 
 type AnalysisDimension = keyof AnalyticsMatrix["heatmaps"];
 
@@ -21,62 +24,30 @@ export const analysisDimensions: ReadonlyArray<{ id: AnalysisDimension; label: s
 
 type AnalysisPageProps = {
   activeTab: WorkspaceTabFor<"analysis">;
-  analytics: AnalyticsMatrix | null;
   busy: string | null;
   comparison: Comparison | null;
   completedRuns: EvaluationRun[];
+  datasets: Dataset[];
+  endpoints: Endpoint[];
+  loadScatter: (query: ScatterQuery) => Promise<ScatterResponse>;
   onRunAChange: (runId: string) => void;
   onRunBChange: (runId: string) => void;
-  onSelectBaseline: (runId: string) => Promise<AnalyticsMatrix>;
   onSubmitComparison: (event: FormEvent<HTMLFormElement>) => void;
   onTabChange: (tab: WorkspaceTabFor<"analysis">) => void;
   runA: string;
   runB: string;
+  runs: EvaluationRun[];
 };
 
-export function AnalysisPage({ activeTab, analytics, busy, comparison, completedRuns, onRunAChange, onRunBChange, onSelectBaseline, onSubmitComparison, onTabChange, runA, runB }: AnalysisPageProps) {
+export function AnalysisPage({ activeTab, busy, comparison, completedRuns, datasets, endpoints, loadScatter, onRunAChange, onRunBChange, onSubmitComparison, onTabChange, runA, runB, runs }: AnalysisPageProps) {
   const { locale } = useTranslation();
   const copy = workspacePageTabCopy[locale].analysis;
-  const [matrix, setMatrix] = useState<AnalyticsMatrix | null>(analytics);
-  const [baselineRunId, setBaselineRunId] = useState(analytics?.baseline_run_id ?? "");
-  const [dimension, setDimension] = useState<AnalysisDimension>("model_benchmark");
-  const requestedBaselineRunId = useRef<string | null>(null);
-  useEffect(() => {
-    if ((analytics?.baseline_run_id ?? "") !== baselineRunId) return;
-    setMatrix(analytics);
-    setBaselineRunId(analytics?.baseline_run_id ?? "");
-  }, [analytics, baselineRunId]);
-
-  const applyBaseline = (runId: string) => {
-    requestedBaselineRunId.current = runId;
-    setBaselineRunId(runId);
-    void onSelectBaseline(runId).then((next) => {
-      if (requestedBaselineRunId.current !== runId) return;
-      setMatrix(next);
-    }).catch(() => {
-      if (requestedBaselineRunId.current !== runId) return;
-      setBaselineRunId("");
-      setMatrix(analytics);
-    });
-  };
-
-  const cells = matrix?.heatmaps[dimension] ?? [];
-  const selectedDimension = analysisDimensions.find((item) => item.id === dimension) ?? analysisDimensions[0];
 
   return <div className="workspace-page analysis-page">
-    <PageHeader description="Investigate supplied quality, reliability, latency, cost, and run-to-run evidence." eyebrow="Insights" status={<>{activeTab === "compare-runs" ? `${completedRuns.length} completed runs` : matrix ? `${cells.length} ${selectedDimension.label.toLowerCase()} cells` : "Loading analysis"}</>} title="Analysis" />
+    <PageHeader description="Investigate supplied quality, reliability, latency, cost, and run-to-run evidence." eyebrow="Insights" status={<>{activeTab === "compare-runs" ? `${completedRuns.length} completed runs` : `${runs.length} runs available`}</>} title="Analysis" />
     <WorkspaceTabs ariaLabel="Analysis sections" idPrefix="analysis" onChange={onTabChange} tabs={[{ id: "evidence-matrix", label: copy.evidenceMatrix }, { id: "compare-runs", label: copy.compareRuns }]} value={activeTab} />
     <div aria-labelledby={workspaceTabId("analysis", activeTab)} id={workspaceTabPanelId("analysis", activeTab)} role="tabpanel" tabIndex={0}>
-    {activeTab === "compare-runs" ? <ComparisonWorkspace busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmitComparison} runA={runA} runB={runB} /> : !matrix ? <WorkspacePanel description="The analysis matrix is loading from the evaluation service." title="Analysis matrix"><p className="empty">Loading analysis matrix...</p></WorkspacePanel> : <>
-      <WorkspacePanel className="workspace-analysis-context" description="The selected baseline applies to every evidence cell and delta shown below." title="Analysis context">
-        <label className="workspace-filter-control">Baseline run<select onChange={(event) => applyBaseline(event.target.value)} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
-      </WorkspacePanel>
-      <WorkspaceTabs ariaLabel="Evidence dimensions" idPrefix="analysis-dimension" onChange={setDimension} tabs={analysisDimensions} value={dimension} />
-      <div aria-labelledby={workspaceTabId("analysis-dimension", dimension)} className="workspace-insights-grid" id={workspaceTabPanelId("analysis-dimension", dimension)} role="tabpanel" tabIndex={0}>
-        <CapabilityChart cells={matrix.capability_matrix} />
-        <HeatmapBreakdown cells={cells} dimension={selectedDimension.label} />
-      </div>
-    </>}
+    {activeTab === "compare-runs" ? <ComparisonWorkspace busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmitComparison} runA={runA} runB={runB} /> : <EvidenceScatterWorkspace datasets={datasets} endpoints={endpoints} loadScatter={loadScatter} runs={runs} />}
     </div>
   </div>;
 }
