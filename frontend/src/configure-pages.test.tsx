@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,9 +59,19 @@ const form: EndpointForm = {
 };
 
 const capability: Capability = { auto_detection_status: "supported", capability_key: "vision", effective_status: "supported", id: "capability-1", user_declared_status: "unknown" };
+const stagingEndpoint: Endpoint = {
+  ...endpoint,
+  api_key_mask: "••••5678",
+  base_url: "https://staging.example/v1",
+  display_name: "Staging model",
+  id: "endpoint-2",
+  model_name: "staging-model",
+  status: "unverified",
+};
 
 function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> = {}) {
   return {
+    activeTab: "model-inventory" as const,
     busy: null,
     capabilities: { [endpoint.id]: [capability] },
     editingEndpointId: null,
@@ -73,6 +83,7 @@ function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> 
     onFormChange: vi.fn(),
     onProbe: vi.fn(),
     onSubmit: vi.fn((event) => event.preventDefault()),
+    onTabChange: vi.fn(),
     onTest: vi.fn(),
     testRequests: {},
     ...overrides,
@@ -81,7 +92,7 @@ function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> 
 
 function StatefulModelsPage() {
   const [currentForm, setCurrentForm] = useState(form);
-  return <ModelsPage {...modelProps({ form: currentForm, onFormChange: setCurrentForm })} />;
+  return <ModelsPage {...modelProps({ activeTab: "add-endpoint", form: currentForm, onFormChange: setCurrentForm })} />;
 }
 
 describe("configure workspace pages", () => {
@@ -89,25 +100,52 @@ describe("configure workspace pages", () => {
     expect(updateEndpointForm(form, "display_name", "Staging")).toEqual(expect.objectContaining({ display_name: "Staging", model_name: "" }));
   });
 
-  it("keeps the endpoint editor fields and inventory actions connected", async () => {
+  it("shows only the approved master-detail inventory on the inventory tab", async () => {
     const user = userEvent.setup();
-    const props = modelProps();
-    render(<ModelsPage {...props} />);
+    const props = modelProps({ endpoints: [endpoint, stagingEndpoint] });
+    const { rerender } = render(<ModelsPage {...props} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Model inventory" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByLabelText("Base URL")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select Production model" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Select Staging model" })).toHaveAttribute("aria-pressed", "false");
+
+    let inspector = screen.getByRole("region", { name: "Selected model endpoint" });
+    expect(within(inspector).getByRole("heading", { name: "Production model" })).toBeVisible();
+    expect(within(inspector).getByText(endpoint.base_url)).toBeVisible();
+    expect(within(inspector).queryByText(stagingEndpoint.base_url)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Select Staging model" }));
+    inspector = screen.getByRole("region", { name: "Selected model endpoint" });
+    expect(within(inspector).getByRole("heading", { name: "Staging model" })).toBeVisible();
+    expect(within(inspector).getByText(stagingEndpoint.base_url)).toBeVisible();
+
+    await user.click(within(inspector).getByRole("button", { name: "Test connection" }));
+    await user.click(within(inspector).getByRole("button", { name: "Probe capabilities" }));
+
+    expect(props.onTest).toHaveBeenCalledWith(stagingEndpoint.id);
+    expect(props.onProbe).toHaveBeenCalledWith(stagingEndpoint.id);
+
+    rerender(<ModelsPage {...props} endpoints={[endpoint]} />);
+    expect(screen.getByRole("button", { name: "Select Production model" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("region", { name: "Selected model endpoint" })).getByRole("heading", { name: "Production model" })).toBeVisible();
+  });
+
+  it("shows only the endpoint form on the add-endpoint tab", async () => {
+    const user = userEvent.setup();
+    const props = modelProps({ activeTab: "add-endpoint" });
+    render(<ModelsPage {...props} />);
+
+    expect(screen.getByRole("tab", { name: "Add endpoint" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Add model endpoint" })).toBeVisible();
     expect(screen.getByLabelText("Base URL")).toBeVisible();
     expect(screen.getByLabelText("Default request body (JSON)")).toBeVisible();
-    expect(screen.queryByLabelText("Run concurrency cap")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Run configuration" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Queue selected benchmark" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Endpoint inventory" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Display name"), "Staging");
-    await user.click(screen.getByRole("button", { name: "Test connection" }));
-    await user.click(screen.getByRole("button", { name: "Probe capabilities" }));
-
     expect(props.onFormChange).toHaveBeenCalled();
-    expect(props.onTest).toHaveBeenCalledWith(endpoint.id);
-    expect(props.onProbe).toHaveBeenCalledWith(endpoint.id);
+    await user.click(screen.getByRole("tab", { name: "Model inventory" }));
+    expect(props.onTabChange).toHaveBeenCalledWith("model-inventory");
   });
 
   it("keeps an editor change visible through the controlled form state", async () => {

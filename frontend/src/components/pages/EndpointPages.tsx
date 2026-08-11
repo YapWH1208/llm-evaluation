@@ -1,8 +1,11 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { Capability, Endpoint } from "../../api";
+import type { WorkspaceTabFor } from "../../dashboard/routing";
+import { workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
+import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
 
 export type EndpointForm = {
   api_key: string;
@@ -34,33 +37,30 @@ export function updateEndpointForm<K extends keyof EndpointForm>(form: EndpointF
 }
 
 type ModelsPageProps = {
+  activeTab: WorkspaceTabFor<"models">;
   busy: string | null;
   capabilities: Record<string, Capability[]>;
   editingEndpointId: string | null;
   endpoints: Endpoint[];
   form: EndpointForm;
+  locale?: Locale;
   onCancelEdit: () => void;
   onDeclare: (endpointId: string, capability: Capability, status: CapabilityStatus) => void;
   onEdit: (endpoint: Endpoint) => void;
   onFormChange: (form: EndpointForm) => void;
   onProbe: (endpointId: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTabChange: (tab: WorkspaceTabFor<"models">) => void;
   onTest: (endpointId: string) => void;
   testRequests: Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>;
 };
 
-export function ModelsPage({ busy, capabilities, editingEndpointId, endpoints, form, onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTest, testRequests }: ModelsPageProps) {
+type EndpointFormPanelProps = Pick<ModelsPageProps, "busy" | "editingEndpointId" | "form" | "onCancelEdit" | "onFormChange" | "onSubmit">;
+
+export function EndpointFormPanel({ busy, editingEndpointId, form, onCancelEdit, onFormChange, onSubmit }: EndpointFormPanelProps) {
   return (
-    <div className="workspace-page models-page">
-      <PageHeader
-        description="Register endpoints, validate connectivity, and inspect the capabilities available to evaluations."
-        eyebrow="Configure"
-        status={<><strong>{endpoints.length}</strong> configured</>}
-        title="Models"
-      />
-      <div className="workspace-split workspace-split--models">
-        <WorkspacePanel description="Connection, rate-limit, and cost settings remain editable without exposing stored credentials." title={editingEndpointId ? "Edit model endpoint" : "Add model endpoint"}>
-          <form className="form" onSubmit={onSubmit}>
+    <WorkspacePanel description="Connection, rate-limit, and cost settings remain editable without exposing stored credentials." title={editingEndpointId ? "Edit model endpoint" : "Add model endpoint"}>
+      <form className="form" onSubmit={onSubmit}>
             <label>Display name<input onChange={(event) => onFormChange(updateEndpointForm(form, "display_name", event.target.value))} placeholder="My local model" value={form.display_name} /></label>
             <label>Base URL<input onChange={(event) => onFormChange(updateEndpointForm(form, "base_url", event.target.value))} placeholder="https://provider.example/v1" required type="url" value={form.base_url} /></label>
             <label>Model name<input onChange={(event) => onFormChange(updateEndpointForm(form, "model_name", event.target.value))} placeholder="model-id" required value={form.model_name} /></label>
@@ -74,20 +74,94 @@ export function ModelsPage({ busy, capabilities, editingEndpointId, endpoints, f
             <label>Tags (comma-separated)<input onChange={(event) => onFormChange(updateEndpointForm(form, "tags", event.target.value))} placeholder="production, vision" value={form.tags} /></label>
             <label>Notes<textarea onChange={(event) => onFormChange(updateEndpointForm(form, "notes", event.target.value))} value={form.notes} /></label>
             <div className="actions"><button disabled={busy === "endpoint"}>{busy === "endpoint" ? "Saving..." : editingEndpointId ? "Save model configuration" : "Save encrypted endpoint"}</button>{editingEndpointId && <button className="secondary" onClick={onCancelEdit} type="button">Cancel edit</button>}</div>
-          </form>
-        </WorkspacePanel>
-        <div className="workspace-stack">
-          <WorkspacePanel toolbar={<span className="workspace-count">{endpoints.length} configured</span>} title="Endpoint inventory">
-            {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : <div className="workspace-inventory-list">{endpoints.map((endpoint) => <article className="workspace-inventory-item" key={endpoint.id}>
-              <div className="workspace-inventory-item-heading" data-i18n-preserve><div><h3>{endpoint.display_name}</h3><p>{endpoint.model_name} · {endpoint.api_key_mask}</p></div><span className={`badge ${endpoint.status}`}>{endpoint.status}</span></div>
-              <p className="muted" data-i18n-preserve>{endpoint.base_url}</p>
-              <p className="workspace-item-meta">{endpoint.max_concurrency} endpoint / {endpoint.api_key_max_concurrency ?? "∞"} shared-key concurrent · {endpoint.input_cost_per_million ?? "--"} {endpoint.currency} input / 1M</p>
-              <div className="actions"><button className="secondary" onClick={() => onEdit(endpoint)} type="button">Edit configuration</button><button className="secondary" disabled={busy === `test-${endpoint.id}`} onClick={() => onTest(endpoint.id)} type="button">Test connection</button><button className="secondary" disabled={busy === `capabilities-${endpoint.id}`} onClick={() => onProbe(endpoint.id)} type="button">Probe capabilities</button></div>
-              {testRequests[endpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[endpoint.id].method} {testRequests[endpoint.id].url}</p><pre>{JSON.stringify(testRequests[endpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
-              {capabilities[endpoint.id] && <CapabilityDeclarations capabilities={capabilities[endpoint.id]} busy={busy} endpointId={endpoint.id} onDeclare={onDeclare} />}
-            </article>)}</div>}
-          </WorkspacePanel>
-        </div>
+      </form>
+    </WorkspacePanel>
+  );
+}
+
+type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "onDeclare" | "onEdit" | "onProbe" | "onTest" | "testRequests">;
+
+export function ModelInventory({ busy, capabilities, endpoints, onDeclare, onEdit, onProbe, onTest, testRequests }: ModelInventoryProps) {
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(() => endpoints[0]?.id ?? null);
+  const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? endpoints[0] ?? null;
+
+  useEffect(() => {
+    if ((selectedEndpoint?.id ?? null) !== selectedEndpointId) setSelectedEndpointId(selectedEndpoint?.id ?? null);
+  }, [selectedEndpoint?.id, selectedEndpointId]);
+
+  return (
+    <div className="workspace-model-inventory-layout">
+      <WorkspacePanel toolbar={<span className="workspace-count">{endpoints.length} configured</span>} title="Endpoint inventory">
+        {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : (
+          <div className="workspace-model-selector-list">
+            {endpoints.map((endpoint) => (
+              <button
+                aria-label={`Select ${endpoint.display_name}`}
+                aria-pressed={endpoint.id === selectedEndpoint?.id}
+                className={endpoint.id === selectedEndpoint?.id ? "workspace-model-selector is-selected" : "workspace-model-selector"}
+                key={endpoint.id}
+                onClick={() => setSelectedEndpointId(endpoint.id)}
+                type="button"
+              >
+                <span data-i18n-preserve><strong>{endpoint.display_name}</strong><small>{endpoint.model_name}</small></span>
+                <span className={`badge ${endpoint.status}`}>{endpoint.status}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </WorkspacePanel>
+
+      <WorkspacePanel className="workspace-model-inspector" title="Selected model endpoint">
+        {!selectedEndpoint ? <p className="empty">Select a configured endpoint to inspect it.</p> : (
+          <article className="workspace-model-detail">
+            <div className="workspace-inventory-item-heading" data-i18n-preserve>
+              <div><h3>{selectedEndpoint.display_name}</h3><p>{selectedEndpoint.model_name} · {selectedEndpoint.api_key_mask}</p></div>
+              <span className={`badge ${selectedEndpoint.status}`}>{selectedEndpoint.status}</span>
+            </div>
+            <p className="muted" data-i18n-preserve>{selectedEndpoint.base_url}</p>
+            <dl className="workspace-model-metadata">
+              <div><dt>Protocol</dt><dd data-i18n-preserve>{selectedEndpoint.protocol_profile}</dd></div>
+              <div><dt>Endpoint concurrency</dt><dd>{selectedEndpoint.max_concurrency}</dd></div>
+              <div><dt>Shared-key concurrency</dt><dd>{selectedEndpoint.api_key_max_concurrency ?? "Unlimited"}</dd></div>
+              <div><dt>Requests / minute</dt><dd>{selectedEndpoint.requests_per_minute ?? "Unlimited"}</dd></div>
+              <div><dt>Tokens / minute</dt><dd>{selectedEndpoint.tokens_per_minute ?? "Unlimited"}</dd></div>
+              <div><dt>Input cost / 1M</dt><dd>{selectedEndpoint.input_cost_per_million ?? "--"} {selectedEndpoint.currency}</dd></div>
+              <div><dt>Output cost / 1M</dt><dd>{selectedEndpoint.output_cost_per_million ?? "--"} {selectedEndpoint.currency}</dd></div>
+              <div><dt>Timeout</dt><dd>{selectedEndpoint.timeout_seconds}s</dd></div>
+            </dl>
+            {selectedEndpoint.last_connection_error && <p className="error" role="alert" data-i18n-preserve>{selectedEndpoint.last_connection_error}</p>}
+            <div className="actions"><button className="secondary" onClick={() => onEdit(selectedEndpoint)} type="button">Edit configuration</button><button className="secondary" disabled={busy === `test-${selectedEndpoint.id}`} onClick={() => onTest(selectedEndpoint.id)} type="button">Test connection</button><button className="secondary" disabled={busy === `capabilities-${selectedEndpoint.id}`} onClick={() => onProbe(selectedEndpoint.id)} type="button">Probe capabilities</button></div>
+            {testRequests[selectedEndpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[selectedEndpoint.id].method} {testRequests[selectedEndpoint.id].url}</p><pre>{JSON.stringify(testRequests[selectedEndpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
+            {capabilities[selectedEndpoint.id] && <CapabilityDeclarations capabilities={capabilities[selectedEndpoint.id]} busy={busy} endpointId={selectedEndpoint.id} onDeclare={onDeclare} />}
+          </article>
+        )}
+      </WorkspacePanel>
+    </div>
+  );
+}
+
+export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTabChange, onTest, testRequests }: ModelsPageProps) {
+  const copy = workspacePageTabCopy[locale].models;
+  const tabs = [
+    { id: "model-inventory", label: copy.modelInventory, description: copy.inventoryDescription },
+    { id: "add-endpoint", label: copy.addEndpoint, description: copy.endpointDescription },
+  ] as const;
+
+  return (
+    <div className="workspace-page models-page">
+      <PageHeader
+        description="Register endpoints, validate connectivity, and inspect the capabilities available to evaluations."
+        eyebrow="Configure"
+        status={<><strong>{endpoints.length}</strong> configured</>}
+        title="Models"
+      />
+      <WorkspaceTabs ariaLabel="Models sections" idPrefix="models" onChange={onTabChange} tabs={tabs} value={activeTab} />
+      <div aria-labelledby={workspaceTabId("models", activeTab)} id={workspaceTabPanelId("models", activeTab)} role="tabpanel" tabIndex={0}>
+        {activeTab === "model-inventory" ? (
+          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} onDeclare={onDeclare} onEdit={onEdit} onProbe={onProbe} onTest={onTest} testRequests={testRequests} />
+        ) : (
+          <EndpointFormPanel busy={busy} editingEndpointId={editingEndpointId} form={form} onCancelEdit={onCancelEdit} onFormChange={onFormChange} onSubmit={onSubmit} />
+        )}
       </div>
     </div>
   );

@@ -155,6 +155,97 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(19rem, .85fr);
 }
 
+.workspace-tabs + [role="tabpanel"] {
+  margin-top: .85rem;
+}
+
+.workspace-model-inventory-layout {
+  align-items: start;
+  display: grid;
+  gap: .85rem;
+  grid-template-columns: minmax(15rem, .38fr) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.workspace-model-selector-list,
+.workspace-model-detail {
+  display: grid;
+  gap: .62rem;
+  min-width: 0;
+}
+
+.workspace-model-selector {
+  align-items: start;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: grid;
+  gap: .55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: .7rem;
+  text-align: left;
+  width: 100%;
+}
+
+.workspace-model-selector:hover,
+.workspace-model-selector.is-selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
+.workspace-model-selector > span:first-child {
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+}
+
+.workspace-model-selector strong,
+.workspace-model-selector small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-model-selector small {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.workspace-model-detail h3,
+.workspace-model-detail p {
+  margin: 0;
+}
+
+.workspace-model-metadata {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.workspace-model-metadata div {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+  padding: .58rem;
+}
+
+.workspace-model-metadata dt {
+  color: var(--text-subtle);
+  font-size: .7rem;
+  font-weight: 700;
+}
+
+.workspace-model-metadata dd {
+  color: var(--text);
+  font-size: .78rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .workspace-split--capabilities {
   grid-template-columns: minmax(15rem, .48fr) minmax(0, 1fr);
 }
@@ -805,6 +896,7 @@
   }
 
   .workspace-split--models,
+  .workspace-model-inventory-layout,
   .workspace-split--capabilities,
   .workspace-split--catalog,
   .workspace-split--runs,
@@ -814,6 +906,10 @@
   .workspace-field-grid--three,
   .workspace-field-grid--five {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-model-metadata {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .workspace-preflight-actions {

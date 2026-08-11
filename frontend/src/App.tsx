@@ -35,7 +35,7 @@ import { RunsPage } from "./components/pages/OperationsPages";
 import { SettingsPage } from "./components/pages/SystemPages";
 import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
 import type { View } from "./dashboard/navigation";
-import { workspacePath, workspaceRoute, type WorkspaceNavigate } from "./dashboard/routing";
+import { workspacePath, workspaceRoute, type WorkspaceNavigate, type WorkspaceTabFor } from "./dashboard/routing";
 import { reportCopy, type TranslationKey } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
@@ -725,17 +725,20 @@ export default function App() {
       {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
+        activeTab={route.tab as WorkspaceTabFor<"models">}
         busy={busy}
         capabilities={capabilities}
         editingEndpointId={editingEndpointId}
         endpoints={endpoints}
         form={form}
+        locale={locale}
         onCancelEdit={cancelEndpointEdit}
         onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)}
-        onEdit={editEndpoint}
+        onEdit={(endpoint) => { editEndpoint(endpoint); navigate("models", { tab: "add-endpoint" }); }}
         onFormChange={setForm}
         onProbe={(endpointId) => void probeCapabilities(endpointId)}
         onSubmit={createEndpoint}
+        onTabChange={(tab) => navigate("models", { tab })}
         onTest={(endpointId) => void testEndpoint(endpointId)}
         testRequests={testRequests}
       />}
