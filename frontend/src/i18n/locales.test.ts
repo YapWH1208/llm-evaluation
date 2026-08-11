@@ -38,6 +38,7 @@ const datasetMetricKeys = [
   "datasetRun.metricBleu",
   "datasetRun.metricRougeL",
   "datasetRun.metricDefaultHint",
+  "datasetRun.metricOverrideHint",
   "datasetRun.effectiveMetric",
 ] as const;
 

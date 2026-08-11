@@ -10,7 +10,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Dataset evaluation runs can select Default, exact match, normalized exact
   match, token F1, BLEU, or ROUGE-L. Explicit selections override the prompt
-  package rule; Default defers to the package and then exact match.
+  package rule; Default defers to the package and then exact match. The run
+  launcher now shows a hint when a chosen metric overrides the selected prompt
+  package's scoring rule.
 - The retained workspace pages have stable direct URLs: `/dashboard`, `/guide`,
   `/models`, `/datasets`, `/runs`, `/analysis`, and `/settings`.
 - Every retained page now exposes URL-backed task tabs so inventory, creation,

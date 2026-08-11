@@ -768,7 +768,7 @@ export default function App() {
           </div>
           <label>{t("datasetRun.promptPackage")}<select value={datasetRunForm.prompt_package_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, prompt_package_id: event.target.value }); }}><option value="">—</option>{prompts.map((prompt) => <option data-i18n-preserve key={prompt.id} value={prompt.id}>{prompt.name} v{prompt.version}</option>)}</select></label>
           <label>{t("datasetRun.metric")}<select value={datasetRunForm.metric} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, metric: event.target.value as DatasetMetricId }); }}>{datasetMetricIds.map((metric) => <option key={metric} value={metric}>{t(datasetMetricLabelKeys[metric])}</option>)}</select></label>
-          <p className="muted">{t("datasetRun.metricDefaultHint")}</p>
+          <p className="muted">{datasetRunForm.prompt_package_id && datasetRunForm.metric !== "default" ? t("datasetRun.metricOverrideHint") : t("datasetRun.metricDefaultHint")}</p>
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
           <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}

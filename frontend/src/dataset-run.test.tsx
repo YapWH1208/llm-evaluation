@@ -337,6 +337,24 @@ describe("evaluation run launch workspace", () => {
     expect(screen.getByText("Not checked")).toBeVisible();
   }, 10_000);
 
+  it("warns that a chosen metric overrides the prompt package scoring rule", async () => {
+    mockWorkspace();
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
+    const packageSelects = screen.getAllByLabelText("Prompt package (optional)");
+    await user.selectOptions(packageSelects[1], promptPackage.id);
+    await user.selectOptions(screen.getByLabelText("Evaluation metric"), "token_f1");
+
+    expect(screen.getByText("Choosing a metric here overrides the prompt package scoring rule.")).toBeVisible();
+  }, 10_000);
+
   it("blocks queueing a single-field dataset and explains the missing reference field", async () => {
     mockWorkspace();
     vi.spyOn(api, "previewDataset").mockResolvedValue({
