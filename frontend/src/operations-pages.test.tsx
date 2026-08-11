@@ -19,11 +19,12 @@ function runPageProps(overrides: Partial<React.ComponentProps<typeof RunsPage>> 
   return {
     activeTab: "run-inventory" as const,
     inspector: <p>Run inspector evidence</p>,
-    launcher: <p>Launch controls</p>,
+    datasetLauncher: <p>Dataset launch controls</p>,
+    datasetPreflight: <p>Dataset preflight controls</p>,
     onSelect: vi.fn(),
     onTabChange: vi.fn(),
-    preflight: <p>Preflight controls</p>,
     quickStartLauncher: <p>Quick start controls</p>,
+    quickStartPreflight: <p>Quick start preflight controls</p>,
     renderActions: () => <button type="button">Run action</button>,
     runs: [firstRun, secondRun],
     selectedRunId: firstRun.id,
@@ -55,12 +56,23 @@ describe("runs workspace page", () => {
     expect(props.onSelect).toHaveBeenCalledWith(secondRun.id);
   });
 
-  it("shows only preflight and launchers on the launch tab", () => {
-    renderOperationsPage(<RunsPage {...runPageProps({ activeTab: "launch-evaluation" })} />);
+  it("isolates quick-start context and controls on its URL-backed tab", () => {
+    renderOperationsPage(<RunsPage {...runPageProps({ activeTab: "quick-start" })} />);
 
-    expect(screen.getByText("Launch controls")).toBeVisible();
     expect(screen.getByText("Quick start controls")).toBeVisible();
-    expect(screen.getByText("Preflight controls")).toBeVisible();
+    expect(screen.getByText("Quick start preflight controls")).toBeVisible();
+    expect(screen.queryByText("Dataset launch controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dataset preflight controls")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Run inventory" })).not.toBeInTheDocument();
+  });
+
+  it("isolates dataset context and controls on its URL-backed tab", () => {
+    renderOperationsPage(<RunsPage {...runPageProps({ activeTab: "dataset-evaluation" })} />);
+
+    expect(screen.getByText("Dataset launch controls")).toBeVisible();
+    expect(screen.getByText("Dataset preflight controls")).toBeVisible();
+    expect(screen.queryByText("Quick start controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quick start preflight controls")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Run inventory" })).not.toBeInTheDocument();
     expect(screen.queryByText("Run inspector evidence")).not.toBeInTheDocument();
   });

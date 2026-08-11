@@ -127,6 +127,23 @@ describe("workspace tab routing", () => {
     expect(screen.getByRole("heading", { name: "Select a run" })).toBeVisible();
   });
 
+  it("canonicalizes the legacy launcher and keeps both launch tabs isolated", async () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/runs?tab=launch-evaluation");
+    const user = userEvent.setup();
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    await waitFor(() => expect(window.location.search).toBe("?tab=quick-start"));
+    expect(screen.getByRole("tab", { name: "Quick start" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Quick-start benchmark")).toBeVisible();
+    expect(screen.queryByLabelText("Dataset")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Dataset evaluation" }));
+    expect(window.location.search).toBe("?tab=dataset-evaluation");
+    expect(screen.getByLabelText("Dataset")).toBeVisible();
+    expect(screen.queryByLabelText("Quick-start benchmark")).not.toBeInTheDocument();
+  });
+
   it("direct-loads a lower-density Guide section from the URL", () => {
     mockWorkspace();
     window.history.replaceState(null, "", "/guide?tab=prepare-data");

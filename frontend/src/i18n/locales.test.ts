@@ -52,7 +52,7 @@ describe("workspace locale catalog", () => {
       guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
       models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
       datasets: ["datasetInventory", "registerDataset"],
-      runs: ["runInventory", "launchEvaluation", "runDetails"],
+      runs: ["runInventory", "quickStart", "datasetEvaluation", "runDetails"],
       analysis: ["evidenceMatrix", "compareRuns"],
       settings: ["health", "access", "preferences"],
     };
@@ -60,7 +60,7 @@ describe("workspace locale catalog", () => {
     expect(tabCopy?.en).toEqual(expect.objectContaining({
       dashboard: { summary: "Summary", evaluations: "Evaluations", readiness: "Readiness" },
       models: expect.objectContaining({ modelInventory: "Model inventory", addEndpoint: "Add endpoint" }),
-      runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+      runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
     }));
     for (const locale of localeIds) {
       const localizedCopy = tabCopy?.[locale] as Record<string, Record<string, string>> | undefined;

@@ -15,7 +15,7 @@ export const workspaceTabIds = {
   guide: ["getting-started", "prepare-data", "run-and-analyze"],
   models: ["model-inventory", "add-endpoint"],
   datasets: ["dataset-inventory", "register-dataset"],
-  runs: ["run-inventory", "launch-evaluation", "run-details"],
+  runs: ["run-inventory", "quick-start", "dataset-evaluation", "run-details"],
   analysis: ["evidence-matrix", "compare-runs"],
   settings: ["health", "access", "preferences"],
 } as const satisfies Record<WorkspaceView, readonly string[]>;
@@ -57,7 +57,10 @@ export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
   for (const [view, path] of Object.entries(workspacePaths) as Array<[WorkspaceView, `/${string}`]>) {
     if (normalized === path) {
       const normalizedSearch = search && !search.startsWith("?") ? `?${search}` : search;
-      const requestedTab = new URLSearchParams(normalizedSearch).get("tab");
+      const rawRequestedTab = new URLSearchParams(normalizedSearch).get("tab");
+      const requestedTab = view === "runs" && rawRequestedTab === "launch-evaluation"
+        ? "quick-start"
+        : rawRequestedTab;
       const tab = isWorkspaceTab(view, requestedTab) ? requestedTab : defaultWorkspaceTab(view);
       const canonicalSearch = tab === defaultWorkspaceTab(view) ? "" : `?tab=${encodeURIComponent(tab)}`;
       return {

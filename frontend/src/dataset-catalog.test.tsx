@@ -199,7 +199,7 @@ describe("dataset catalog", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
     expect(window.location.pathname).toBe("/runs");
-    expect(window.location.search).toBe("?tab=launch-evaluation");
+    expect(window.location.search).toBe("?tab=dataset-evaluation");
     expect(screen.getByText(/Selected from the dataset catalog/)).toBeVisible();
     expect(screen.getByLabelText("Dataset")).toHaveValue(readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
@@ -215,7 +215,7 @@ describe("dataset catalog", () => {
     const { user } = await renderApp();
 
     await user.click(screen.getByRole("link", { name: "Runs" }));
-    await user.click(screen.getByRole("tab", { name: "Launch evaluation" }));
+    await user.click(screen.getByRole("tab", { name: "Dataset evaluation" }));
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
     await user.click(screen.getByRole("link", { name: "Datasets" }));

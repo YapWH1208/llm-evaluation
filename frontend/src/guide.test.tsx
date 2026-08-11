@@ -80,7 +80,7 @@ describe("usage guide", () => {
       ["models", { tab: "add-endpoint" }],
       ["datasets", { tab: "register-dataset" }],
       ["datasets", { tab: "dataset-inventory" }],
-      ["runs", { tab: "launch-evaluation" }],
+      ["runs", { tab: "dataset-evaluation" }],
       ["runs", { tab: "run-inventory" }],
       ["analysis", { tab: "evidence-matrix" }],
     ]);

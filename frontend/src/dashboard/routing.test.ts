@@ -44,6 +44,16 @@ describe("workspace routing", () => {
     expect(workspacePath("analysis", "evidence-matrix")).toBe("/analysis");
   });
 
+  it("canonicalizes the legacy combined run launcher to quick start", () => {
+    expect(workspaceRoute("/runs", "?tab=launch-evaluation")).toEqual({
+      view: "runs",
+      tab: "quick-start",
+      pathname: "/runs",
+      search: "?tab=quick-start",
+      replace: true,
+    });
+  });
+
   it("falls back to the page default and canonicalizes unsupported tab text", () => {
     expect(workspaceRoute("/runs", "?tab=unknown&token=secret")).toEqual({
       view: "runs",

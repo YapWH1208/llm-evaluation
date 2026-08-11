@@ -594,7 +594,7 @@ export default function App() {
     setDatasetRunSchemaRequest((current) => current + 1);
     setDatasetHandoffId(dataset.id);
     setLaunchPreflight(null);
-    navigate("runs", { tab: "launch-evaluation" });
+    navigate("runs", { tab: "dataset-evaluation" });
   }
 
 
@@ -711,6 +711,21 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  function runPreflightControls(kind: "quick-start" | "dataset") {
+    const currentPreflight = launchPreflight?.kind === kind ? launchPreflight.result : null;
+    const checking = kind === "quick-start" ? busy === "preflight-quick-start" : busy === "preflight-dataset";
+    const datasetBlocked = datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field;
+    return <div className="workspace-run-context-controls">
+      <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
+      <div className="actions workspace-preflight-actions">
+        {kind === "quick-start"
+          ? <button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || checking} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button>
+          : <button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetBlocked || checking} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button>}
+      </div>
+      <div aria-live="polite" className={`workspace-preflight-state ${currentPreflight?.can_queue ? "is-ready" : currentPreflight ? "is-blocked" : ""}`} role="status"><strong>{checking ? t("runLauncher.checking") : currentPreflight?.can_queue ? t("runLauncher.ready") : currentPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{currentPreflight && !currentPreflight.can_queue && <span data-i18n-preserve>{currentPreflight.issues.join(" ")}</span>}</div>
+    </div>;
+  }
+
   return (
     <AppShell
       completedRunCount={dashboard?.runs.completed ?? 0}
@@ -754,7 +769,7 @@ export default function App() {
       {view === "runs" && <RunsPage
         activeTab={route.tab as WorkspaceTabFor<"runs">}
         inspector={selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
-        launcher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
+        datasetLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
           <label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => { setDatasetHandoffId(null); setLaunchPreflight(null); setDatasetRunForm((current) => ({ ...current, dataset_version_id: event.target.value, input_field: "", reference_field: "" })); }}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>
           {datasetHandoffId === datasetRunForm.dataset_version_id && <p className="workspace-launch-note">{t("runLauncher.datasetHandoff")}</p>}
           {datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}
@@ -772,13 +787,9 @@ export default function App() {
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
           <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}
+        datasetPreflight={runPreflightControls("dataset")}
         onSelect={inspectRun}
         onTabChange={(tab) => navigate("runs", { tab })}
-        preflight={<div className="workspace-run-context-controls">
-          <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
-          <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
-          <div aria-live="polite" className={`workspace-preflight-state ${launchPreflight?.result.can_queue ? "is-ready" : launchPreflight ? "is-blocked" : ""}`} role="status"><strong>{busy === "preflight-quick-start" || busy === "preflight-dataset" ? t("runLauncher.checking") : launchPreflight?.result.can_queue ? t("runLauncher.ready") : launchPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{launchPreflight && !launchPreflight.result.can_queue && <span data-i18n-preserve>{launchPreflight.result.issues.join(" ")}</span>}</div>
-        </div>}
         quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>
           <label>{t("runLauncher.quickStartBenchmark")}<select aria-label={t("runLauncher.quickStartBenchmark")} required value={selectedQuickStart ? `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}` : ""} onChange={(event) => { const benchmark = quickStartBenchmarks.find((item) => `${item.benchmark_id}@${item.version}` === event.target.value); setSelectedQuickStartBenchmark(event.target.value); setQuickStartSampleLimit(String(Number(benchmark?.manifest.sample_count) || 1)); setLaunchPreflight(null); }}><option value="">—</option>{quickStartBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name}</option>)}</select></label>
           {selectedQuickStart && <div className="workspace-modality-tags">{(Array.isArray(selectedQuickStart.manifest.modalities) ? selectedQuickStart.manifest.modalities : []).map((modality) => <span className="badge" data-i18n-preserve key={String(modality)}>{String(modality)}</span>)}</div>}
@@ -787,6 +798,7 @@ export default function App() {
           <p className="workspace-launch-note">{t("runLauncher.offlineHint")}</p>
           <button className="primary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === `run-${datasetRunForm.model_endpoint_id}`}>{t("runLauncher.queueQuickStart")}</button>
         </form>}
+        quickStartPreflight={runPreflightControls("quick-start")}
         renderActions={(run) => <><button className="secondary" onClick={() => inspectRun(run.id)} type="button">Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}</>}
         runs={runs}
         selectedRunId={selectedRun}

@@ -9,7 +9,7 @@ const steps = [
   { title: "1. Add a model endpoint", description: "Models · configure the provider, run a connection test, and confirm it is available.", action: "Open Models", open: (navigate: WorkspaceNavigate) => navigate("models", { tab: "add-endpoint" }) },
   { title: "2. Register a dataset", description: "Datasets · declare the source and, optionally, the input and reference fields.", action: "Open Datasets", open: (navigate: WorkspaceNavigate) => navigate("datasets", { tab: "register-dataset" }) },
   { title: "3. Download and verify", description: "Download the dataset and wait until its status is ready.", action: "Review Datasets", open: (navigate: WorkspaceNavigate) => navigate("datasets", { tab: "dataset-inventory" }) },
-  { title: "4. Queue a dataset run", description: "Runs · pick the dataset, evaluation metric, reference field, and endpoint, then queue the run.", action: "Open Runs", open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "launch-evaluation" }) },
+  { title: "4. Queue a dataset run", description: "Runs · pick the dataset, evaluation metric, reference field, and endpoint, then queue the run.", action: "Open Runs", open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "dataset-evaluation" }) },
   { title: "5. Inspect evidence", description: "Runs · open the run to review samples, scores, latency, cost, and errors.", action: "Inspect Runs", open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "run-inventory" }) },
   { title: "6. Analyze results", description: "Analysis · inspect evaluation dimensions or compare two completed runs.", action: "Open Analysis", open: (navigate: WorkspaceNavigate) => navigate("analysis", { tab: "evidence-matrix" }) },
 ] as const;

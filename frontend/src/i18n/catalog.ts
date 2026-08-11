@@ -674,7 +674,7 @@ export type WorkspacePageTabCopy = {
   guide: { gettingStarted: string; prepareData: string; runAndAnalyze: string };
   models: { modelInventory: string; addEndpoint: string; inventoryDescription: string; endpointDescription: string };
   datasets: { datasetInventory: string; registerDataset: string };
-  runs: { runInventory: string; launchEvaluation: string; runDetails: string };
+  runs: { runInventory: string; quickStart: string; datasetEvaluation: string; runDetails: string };
   analysis: { evidenceMatrix: string; compareRuns: string };
   settings: { health: string; access: string; preferences: string };
 };
@@ -685,7 +685,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Getting started", prepareData: "Prepare data", runAndAnalyze: "Run and analyze" },
     models: { modelInventory: "Model inventory", addEndpoint: "Add endpoint", inventoryDescription: "Test and inspect configured endpoints", endpointDescription: "Connection, limits, costs, and credentials" },
     datasets: { datasetInventory: "Dataset inventory", registerDataset: "Register dataset" },
-    runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+    runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
     analysis: { evidenceMatrix: "Evidence matrix", compareRuns: "Compare runs" },
     settings: { health: "Health", access: "Access", preferences: "Preferences" },
   },
@@ -694,7 +694,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "开始使用", prepareData: "准备数据", runAndAnalyze: "运行与分析" },
     models: { modelInventory: "模型清单", addEndpoint: "添加端点", inventoryDescription: "测试并检查已配置的端点", endpointDescription: "连接、限制、成本和凭据" },
     datasets: { datasetInventory: "数据集清单", registerDataset: "注册数据集" },
-    runs: { runInventory: "运行清单", launchEvaluation: "启动评测", runDetails: "运行详情" },
+    runs: { runInventory: "运行清单", quickStart: "快速开始", datasetEvaluation: "数据集评测", runDetails: "运行详情" },
     analysis: { evidenceMatrix: "证据矩阵", compareRuns: "比较运行" },
     settings: { health: "健康状态", access: "访问", preferences: "偏好设置" },
   },
@@ -703,7 +703,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Bien démarrer", prepareData: "Préparer les données", runAndAnalyze: "Exécuter et analyser" },
     models: { modelInventory: "Inventaire des modèles", addEndpoint: "Ajouter un point de terminaison", inventoryDescription: "Tester et inspecter les points de terminaison configurés", endpointDescription: "Connexion, limites, coûts et identifiants" },
     datasets: { datasetInventory: "Inventaire des jeux de données", registerDataset: "Enregistrer un jeu de données" },
-    runs: { runInventory: "Inventaire des exécutions", launchEvaluation: "Lancer une évaluation", runDetails: "Détails de l’exécution" },
+    runs: { runInventory: "Inventaire des exécutions", quickStart: "Démarrage rapide", datasetEvaluation: "Évaluation du jeu de données", runDetails: "Détails de l’exécution" },
     analysis: { evidenceMatrix: "Matrice de preuves", compareRuns: "Comparer les exécutions" },
     settings: { health: "Santé", access: "Accès", preferences: "Préférences" },
   },
@@ -712,7 +712,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Erste Schritte", prepareData: "Daten vorbereiten", runAndAnalyze: "Ausführen und analysieren" },
     models: { modelInventory: "Modellübersicht", addEndpoint: "Endpunkt hinzufügen", inventoryDescription: "Konfigurierte Endpunkte testen und prüfen", endpointDescription: "Verbindung, Limits, Kosten und Zugangsdaten" },
     datasets: { datasetInventory: "Datensatzübersicht", registerDataset: "Datensatz registrieren" },
-    runs: { runInventory: "Ausführungsübersicht", launchEvaluation: "Evaluierung starten", runDetails: "Ausführungsdetails" },
+    runs: { runInventory: "Ausführungsübersicht", quickStart: "Schnellstart", datasetEvaluation: "Datensatz-Evaluierung", runDetails: "Ausführungsdetails" },
     analysis: { evidenceMatrix: "Evidenzmatrix", compareRuns: "Ausführungen vergleichen" },
     settings: { health: "Systemzustand", access: "Zugriff", preferences: "Einstellungen" },
   },
@@ -721,7 +721,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Начало работы", prepareData: "Подготовка данных", runAndAnalyze: "Запуск и анализ" },
     models: { modelInventory: "Инвентарь моделей", addEndpoint: "Добавить конечную точку", inventoryDescription: "Тестирование и проверка настроенных конечных точек", endpointDescription: "Подключение, ограничения, стоимость и учётные данные" },
     datasets: { datasetInventory: "Инвентарь наборов данных", registerDataset: "Зарегистрировать набор данных" },
-    runs: { runInventory: "Инвентарь запусков", launchEvaluation: "Запустить оценку", runDetails: "Сведения о запуске" },
+    runs: { runInventory: "Инвентарь запусков", quickStart: "Быстрый запуск", datasetEvaluation: "Оценка набора данных", runDetails: "Сведения о запуске" },
     analysis: { evidenceMatrix: "Матрица доказательств", compareRuns: "Сравнить запуски" },
     settings: { health: "Состояние", access: "Доступ", preferences: "Настройки" },
   },
@@ -730,7 +730,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "はじめに", prepareData: "データを準備", runAndAnalyze: "実行と分析" },
     models: { modelInventory: "モデル一覧", addEndpoint: "エンドポイントを追加", inventoryDescription: "設定済みエンドポイントのテストと確認", endpointDescription: "接続、制限、コスト、認証情報" },
     datasets: { datasetInventory: "データセット一覧", registerDataset: "データセットを登録" },
-    runs: { runInventory: "実行一覧", launchEvaluation: "評価を開始", runDetails: "実行の詳細" },
+    runs: { runInventory: "実行一覧", quickStart: "クイックスタート", datasetEvaluation: "データセット評価", runDetails: "実行の詳細" },
     analysis: { evidenceMatrix: "証拠マトリクス", compareRuns: "実行を比較" },
     settings: { health: "正常性", access: "アクセス", preferences: "設定" },
   },
@@ -739,7 +739,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "시작하기", prepareData: "데이터 준비", runAndAnalyze: "실행 및 분석" },
     models: { modelInventory: "모델 인벤토리", addEndpoint: "엔드포인트 추가", inventoryDescription: "구성된 엔드포인트 테스트 및 검사", endpointDescription: "연결, 제한, 비용 및 자격 증명" },
     datasets: { datasetInventory: "데이터 세트 인벤토리", registerDataset: "데이터 세트 등록" },
-    runs: { runInventory: "실행 인벤토리", launchEvaluation: "평가 시작", runDetails: "실행 세부 정보" },
+    runs: { runInventory: "실행 인벤토리", quickStart: "빠른 시작", datasetEvaluation: "데이터 세트 평가", runDetails: "실행 세부 정보" },
     analysis: { evidenceMatrix: "증거 매트릭스", compareRuns: "실행 비교" },
     settings: { health: "상태", access: "액세스", preferences: "기본 설정" },
   },
@@ -748,7 +748,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Bermula", prepareData: "Sediakan data", runAndAnalyze: "Jalankan dan analisis" },
     models: { modelInventory: "Inventori model", addEndpoint: "Tambah titik akhir", inventoryDescription: "Uji dan periksa titik akhir yang dikonfigurasi", endpointDescription: "Sambungan, had, kos dan kelayakan" },
     datasets: { datasetInventory: "Inventori set data", registerDataset: "Daftar set data" },
-    runs: { runInventory: "Inventori larian", launchEvaluation: "Lancarkan penilaian", runDetails: "Butiran larian" },
+    runs: { runInventory: "Inventori larian", quickStart: "Mula pantas", datasetEvaluation: "Penilaian set data", runDetails: "Butiran larian" },
     analysis: { evidenceMatrix: "Matriks bukti", compareRuns: "Bandingkan larian" },
     settings: { health: "Kesihatan", access: "Akses", preferences: "Keutamaan" },
   },
