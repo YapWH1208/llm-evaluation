@@ -200,15 +200,14 @@ describe("workspace tab routing", () => {
     expect(screen.queryByLabelText("Quick-start benchmark")).not.toBeInTheDocument();
   });
 
-  it("direct-loads a lower-density Guide section from the URL", () => {
+  it("ignores stale guide tab params and always renders the full workflow", () => {
     mockWorkspace();
     window.history.replaceState(null, "", "/guide?tab=prepare-data");
     render(<LocaleProvider><App /></LocaleProvider>);
 
-    expect(screen.getByRole("tab", { name: "Prepare data" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/2\. Register a dataset/i)).toBeVisible();
-    expect(screen.queryByText(/1\. Add a model endpoint/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/4\. Queue a dataset run/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How to use this workspace" })).toBeVisible();
+    expect(screen.getByText(/1\. Add a model endpoint/i)).toBeVisible();
+    expect(screen.getByText(/4\. Queue a dataset run/i)).toBeVisible();
   });
 
   it("direct-loads the Dashboard readiness tab", () => {

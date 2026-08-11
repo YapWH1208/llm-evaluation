@@ -1,4 +1,4 @@
-import type { WorkspaceNavigate, WorkspaceTabFor } from "../dashboard/routing";
+import type { WorkspaceNavigate } from "../dashboard/routing";
 import { PageHeader } from "./workspace/PageHeader";
 import { WorkspacePanel } from "./workspace/WorkspacePanel";
 
@@ -12,9 +12,7 @@ const steps = [
 ] as const;
 
 type GuideProps = {
-  activeTab: WorkspaceTabFor<"guide">;
   onOpenView: WorkspaceNavigate;
-  onTabChange: (tab: WorkspaceTabFor<"guide">) => void;
 };
 
 export function Guide({ onOpenView }: GuideProps) {

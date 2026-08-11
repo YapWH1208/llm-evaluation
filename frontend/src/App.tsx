@@ -775,7 +775,7 @@ export default function App() {
       <StaticCopy>
 
       {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("datasets", { tab: "register-dataset" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
-      {view === "guide" && <Guide activeTab={route.tab as WorkspaceTabFor<"guide">} onOpenView={navigate} onTabChange={(tab) => navigate("guide", { tab })} />}
+      {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
         activeTab={route.tab as WorkspaceTabFor<"models">}

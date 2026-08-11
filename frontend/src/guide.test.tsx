@@ -29,7 +29,6 @@ describe("usage guide", () => {
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Guide" }));
     expect(screen.getByRole("heading", { name: /How to use this workspace/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Getting started" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/1\. Add a model endpoint/i)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Open Models" }));
     expect(window.location.search).toBe("?tab=add-endpoint");
@@ -68,13 +67,9 @@ describe("usage guide", () => {
   it("keeps every workflow action inside the retained workspace", async () => {
     const user = userEvent.setup();
     const onOpenView = vi.fn();
-    const { rerender } = render(<LocaleProvider><Guide activeTab="getting-started" onOpenView={onOpenView} onTabChange={vi.fn()} /></LocaleProvider>);
+    render(<LocaleProvider><Guide onOpenView={onOpenView} /></LocaleProvider>);
 
     for (const action of screen.getAllByRole("button")) await user.click(action);
-    rerender(<LocaleProvider><Guide activeTab="prepare-data" onOpenView={onOpenView} onTabChange={vi.fn()} /></LocaleProvider>);
-    for (const action of screen.getAllByRole("button").filter((button) => button.getAttribute("role") !== "tab")) await user.click(action);
-    rerender(<LocaleProvider><Guide activeTab="run-and-analyze" onOpenView={onOpenView} onTabChange={vi.fn()} /></LocaleProvider>);
-    for (const action of screen.getAllByRole("button").filter((button) => button.getAttribute("role") !== "tab")) await user.click(action);
 
     expect(onOpenView.mock.calls).toEqual([
       ["models", { tab: "add-endpoint" }],

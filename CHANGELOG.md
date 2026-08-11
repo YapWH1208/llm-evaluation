@@ -61,6 +61,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Analysis page titles translate in every supported locale.
 - The Dashboard guide now counts six stages and renames the run queue and
   evidence steps so each stage opens an essential evaluation destination.
+- The guide renders as one continuous evaluation workflow instead of tabbed
+  sections: all six stages are visible at once, and each stage opens the
+  matching Models, Datasets, Runs, or Analysis task tab directly.
 
 ### Fixed
 
