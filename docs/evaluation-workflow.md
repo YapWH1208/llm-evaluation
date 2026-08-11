@@ -7,22 +7,26 @@ but every step applies to any supported dataset source.
 
 The retained browser workspace is available through these direct paths:
 
-| Path | Purpose |
+| Path | Task tabs |
 | --- | --- |
-| `/dashboard` | Readiness, recent runs, and operating signals. |
-| `/guide` | In-product walkthrough of this workflow. |
-| `/models` | Model endpoints and capability evidence. |
-| `/datasets` | Dataset registration, preparation, and preview. |
-| `/runs` | Quick-start and dataset launches, evidence, reviews, and reports. |
-| `/analysis` | Evaluation matrices and run comparisons. |
-| `/settings` | Service health, access token, locale, and theme. |
+| `/dashboard` | Summary (default), `?tab=evaluations`, and `?tab=readiness`. |
+| `/guide` | Getting started (default), `?tab=prepare-data`, and `?tab=run-and-analyze`. |
+| `/models` | Model inventory (default) and `?tab=add-endpoint`. |
+| `/datasets` | Dataset inventory (default) and `?tab=register-dataset`. |
+| `/runs` | Run inventory (default), `?tab=launch-evaluation`, and `?tab=run-details`. |
+| `/analysis` | Evidence matrix (default) and `?tab=compare-runs`. |
+| `/settings` | Health (default), `?tab=access`, and `?tab=preferences`. |
 
 Opening `/` or an unknown workspace path resolves to `/dashboard`.
+The default tab uses the bare page path; non-default tabs use the `tab` query
+parameter and participate in direct loading and browser back/forward history.
+Run details are selected from Run inventory, so a detail deep link without an
+in-memory run selection shows guidance to choose a run.
 
 ## 1. Register a model endpoint
 
-Open **Models** at `/models` and register the endpoint you want to evaluate
-with:
+Open **Models → Add endpoint** at `/models?tab=add-endpoint` and register the
+endpoint you want to evaluate with:
 
 - **Protocol profile** — the provider adapter (for example OpenAI-compatible
   Chat Completions, Anthropic Messages, or Custom HTTP JSON).
@@ -38,7 +42,8 @@ provider declared.
 
 ## 2. Register a dataset version
 
-Open **Datasets** at `/datasets` and fill in the registration form:
+Open **Datasets → Register dataset** at `/datasets?tab=register-dataset` and
+fill in the registration form:
 
 | Field | Example | Meaning |
 | --- | --- | --- |
@@ -118,7 +123,8 @@ same way.
 
 ## 4. Quick start without a dataset
 
-For a first endpoint check, open **Runs** at `/runs`, choose an available
+For a first endpoint check, open **Runs → Launch evaluation** at
+`/runs?tab=launch-evaluation`, choose an available
 endpoint in the shared **Launch context**, and use the **Quick start** card. Its
 selector lists only available built-in benchmarks. The registry includes small
 deterministic fixtures for text, image, silent audio, minimal video, and
@@ -152,7 +158,8 @@ The input and reference fields must name different columns.
 
 ## 6. Queue a dataset evaluation run
 
-In **Runs** at `/runs`, choose the shared endpoint and configure the **Dataset
+In **Runs → Launch evaluation** at `/runs?tab=launch-evaluation`, choose the
+shared endpoint and configure the **Dataset
 evaluation** card:
 
 - **Dataset** — a dataset version with status `ready`.
@@ -182,7 +189,8 @@ checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.
 
 ## 7. Watch and inspect
 
-Track the run from **Runs** at `/runs`:
+Track the run from **Runs → Run inventory** at `/runs`, then select it to open
+**Run details**:
 
 - **Run status** — the run moves through queued → running → completed (or a
   terminal failure state) as the task queue schedules it against the endpoint.
@@ -197,8 +205,9 @@ Track the run from **Runs** at `/runs`:
 Failed samples can be retried, and the run's evidence remains inspectable even
 after the run itself is archived.
 
-Open **Analysis** at `/analysis` to inspect capability matrices or compare two
-completed run snapshots without switching to a separate comparison page.
+Open **Analysis** at `/analysis` to inspect capability matrices, or use
+`/analysis?tab=compare-runs` to compare two completed run snapshots without
+switching to a separate comparison page.
 
 ## Troubleshooting
 

@@ -13,6 +13,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   package rule; Default defers to the package and then exact match.
 - The retained workspace pages have stable direct URLs: `/dashboard`, `/guide`,
   `/models`, `/datasets`, `/runs`, `/analysis`, and `/settings`.
+- Every retained page now exposes URL-backed task tabs so inventory, creation,
+  launch, evidence, analysis, health, access, and preference workflows can be
+  opened directly without rendering unrelated page content alongside them.
 
 ### Changed
 
@@ -20,6 +23,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keeping Dashboard and Guide. Endpoint capabilities live under Models,
   registration lives under Datasets, run review/report evidence stays under
   Runs, and comparisons live under Analysis. Backend APIs remain available.
+- Model inventory uses a compact selector with one detailed endpoint inspector;
+  run selection and dataset-to-run handoffs open the relevant detail or launch
+  tab while preserving browser back/forward history.
 
 ### Fixed
 
