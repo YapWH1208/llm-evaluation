@@ -1,7 +1,8 @@
-import { ReactNode, useState } from "react";
+import { type MouseEvent, ReactNode, useState } from "react";
 
 import { localeIds, localeNames, navigationCopy, shellCopy, type Locale } from "../i18n/catalog";
 import { navigationGroupFor, navigationGroups, navigationItem, View } from "../dashboard/navigation";
+import { workspacePath } from "../dashboard/routing";
 import { useTranslation } from "../i18n/LocaleProvider";
 import { SystemHealth } from "../api";
 import { MenuIcon, NavigationIcon } from "./NavigationIcon";
@@ -44,7 +45,9 @@ export function AppShell({
   const navigation = navigationCopy[locale];
   const healthLabel = systemHealth?.status === "ok" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
 
-  function navigate(nextView: View) {
+  function navigate(event: MouseEvent<HTMLAnchorElement>, nextView: View) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
     onViewChange(nextView);
     setIsNavigationOpen(false);
   }
@@ -71,17 +74,17 @@ export function AppShell({
             <section className="navigation-group" key={group.id} aria-label={navigation.groups[group.id]}>
               <p className="navigation-group-label">{navigation.groups[group.id]}</p>
               {group.items.map((item) => (
-                <button
+                <a
                   aria-current={view === item.view ? "page" : undefined}
                   className={view === item.view ? "navigation-item is-active" : "navigation-item"}
+                  href={workspacePath(item.view)}
                   key={item.view}
-                  onClick={() => navigate(item.view)}
+                  onClick={(event) => navigate(event, item.view)}
                   title={navigation.items[item.view].description}
-                  type="button"
                 >
                   <NavigationIcon view={item.view} />
                   <span>{navigation.items[item.view].label}</span>
-                </button>
+                </a>
               ))}
             </section>
           ))}

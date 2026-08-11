@@ -767,9 +767,11 @@ def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:
         assert created.status_code == 201
         body = created.json()
         assert body["input_field"] == "q"
+        assert body["revision"] == "main"
         updated = api.put(f"/api/v1/datasets/{body['id']}", json={"dataset_id": "m2", "version": "2", "revision": "default"})
         assert updated.status_code == 200
         assert updated.json()["dataset_id"] == "m2"
+        assert updated.json()["revision"] == "default"
         deleted = api.delete(f"/api/v1/datasets/{body['id']}")
         assert deleted.status_code == 200
         assert api.get("/api/v1/datasets").json() == []
@@ -855,6 +857,87 @@ def test_mongo_dataset_run_uses_and_freezes_selected_input_field(tmp_path: Path)
         assert run["configuration_snapshot"]["reference_field"] == "answer"
         attempts = store.list_documents("sample_attempts", query={"run_id": run["id"]})
         assert attempts[0]["input_snapshot"]["messages"][-1]["content"] == "chosen"
+
+
+def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        document_store=store,
+    )
+    content = b'{"question":"blue sky","answer":"BLUE"}\n'
+    with TestClient(app) as api:
+        endpoint = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://models.example.test/v1",
+            "api_key": "secret",
+            "model_name": "model",
+        }).json()
+        assert api.post(
+            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
+        ).status_code == 200
+        dataset = api.post("/api/v1/datasets", json={
+            "dataset_id": "mongo-scoring",
+            "version": "1",
+        }).json()
+        assert api.post(f"/api/v1/datasets/{dataset['id']}/upload", json={
+            "filename": "samples.jsonl",
+            "base64_data": base64.b64encode(content).decode("ascii"),
+        }).status_code == 200
+        package_rule = {"type": "regex_match", "pattern": "BLUE"}
+        package = api.post("/api/v1/prompt-packages", json={
+            "name": "mongo-scoring-template",
+            "version": "1.0.0",
+            "user_template": "Q: {{question}}",
+            "scoring_rule": package_rule,
+        })
+        assert package.status_code == 201
+        base_payload = {
+            "model_endpoint_id": endpoint["id"],
+            "dataset_version_id": dataset["id"],
+            "input_field": "question",
+            "reference_field": "answer",
+            "sample_limit": 10,
+        }
+
+        expected_rules = [
+            (base_payload, {"type": "exact_match"}),
+            ({**base_payload, "prompt_package_id": package.json()["id"]}, package_rule),
+            ({
+                **base_payload,
+                "prompt_package_id": package.json()["id"],
+                "scoring_rule": {"type": "token_f1"},
+            }, {"type": "token_f1"}),
+        ]
+        for payload, expected_rule in expected_rules:
+            preflight = api.post("/api/v1/evaluation-runs/dataset/preflight", json=payload)
+            assert preflight.status_code == 200
+            assert preflight.json()["can_queue"] is True
+            created = api.post("/api/v1/evaluation-runs/dataset", json=payload)
+            assert created.status_code == 201
+            run = created.json()
+            assert run["configuration_snapshot"]["scoring_rule"] == expected_rule
+            attempts = store.list_documents("sample_attempts", query={"run_id": run["id"]})
+            assert attempts
+            assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
+
+        run_count = len(store.list_documents("evaluation_runs"))
+        invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
+        assert api.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json=invalid_rule,
+        ).status_code == 422
+        assert api.post(
+            "/api/v1/evaluation-runs/dataset",
+            json=invalid_rule,
+        ).status_code == 422
+        assert len(store.list_documents("evaluation_runs")) == run_count
 
 
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:

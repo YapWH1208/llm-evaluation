@@ -9,6 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/dashboard");
 });
 
 describe("dataset registration", () => {
@@ -19,17 +20,16 @@ describe("dataset registration", () => {
     vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
     vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
     vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listSuites").mockResolvedValue([]);
     vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
     vi.spyOn(api, "listTasks").mockResolvedValue([]);
     vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "listUsers").mockResolvedValue([]);
-    vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
     vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
     const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
-    await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("link", { name: "Datasets" }));
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
+    expect(screen.getByLabelText("Revision")).toHaveValue("main");
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
     await user.type(screen.getByLabelText("Credential binding ID"), "private-dataset");
@@ -38,7 +38,7 @@ describe("dataset registration", () => {
     expect(createDataset).toHaveBeenCalledWith({
       dataset_id: "private-corpus",
       version: "1",
-      revision: "default",
+      revision: "main",
       source_url: "https://datasets.example.test/corpus.jsonl",
       checksum: null,
       credential_binding_id: "private-dataset",
@@ -55,17 +55,15 @@ describe("dataset registration", () => {
     vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
     vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
     vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listSuites").mockResolvedValue([]);
     vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
     vi.spyOn(api, "listTasks").mockResolvedValue([]);
     vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "listUsers").mockResolvedValue([]);
-    vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
     vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
     const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
-    await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("link", { name: "Datasets" }));
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     await user.type(screen.getByLabelText("Dataset ID"), "fields-demo");
     await user.type(screen.getByLabelText("Input field"), "question");
     await user.type(screen.getByLabelText("Reference (output) field"), "answer");

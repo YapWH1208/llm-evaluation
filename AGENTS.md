@@ -4,7 +4,7 @@ LLM/SLM evaluation platform: FastAPI backend (`backend/`, Python ≥3.12, SQLite
 
 ## Skills — STOP. Load a skill before you act.
 
-Skills (playbooks) are user-level, in `~/.agents/skills/`, loaded via the `skill` tool — never `run_skill`, and the names have no `superpowers-` prefix.
+Skills (playbooks) are user-level, in `~/.agents/skills/`, loaded via the `skill` tool — never `run_skill`, and the names have no `superpowers-` prefix. A repo-local skill (`superdesign`) may live in `.agents/skills/` (gitignored, pinned via `skills-lock.json`).
 
 **The rule:** before you do ANYTHING non-trivial — before you `explore`, run `bash`,
 write code, or answer — STOP and check the skills index. If a skill might fit, load it.
@@ -33,10 +33,11 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 ## Commands (repo root)
 
-- Install backend deps: `python -m pip install -e ".[dev]"` (editable install from repo root; `pythonpath=["backend"]` comes from pyproject.toml). No requirements.txt.
+- Install backend deps: `python -m pip install -e ".[dev]"` (editable install from repo root; `pythonpath=["backend"]` comes from pyproject.toml). No requirements.txt. PostgreSQL/MongoDB backends need extras: `"…[dev,postgresql]"` / `"…[dev,mongodb]"` (psycopg/pymongo are not in the base dev install).
 - Backend tests: `python -m pytest -q` (config sets `pythonpath=["backend"]`, `testpaths=["tests"]`). Single file: `python -m pytest tests/test_x.py -q`.
 - Run API: `uvicorn app.main:app --app-dir backend --reload` (docs at `/docs` on port 8000).
 - DB CLI: `python -m app.cli database preview|initialize|validate` (migrations also run automatically at startup).
+- PostgreSQL team deploy: `docker-compose.yml` (Postgres 16 + API container) needs `LLE_POSTGRES_PASSWORD`, `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`; see docs/deployment.md.
 - Frontend deps/dev server: `npm ci` / `npm run dev` **inside `frontend/`** (vite, port 5173). Root `package-lock.json` is a stub — never `npm install` at repo root. Node 22 is what CI uses.
 - Frontend tests: `npm test -- --run` in `frontend/` — bare `npm test` is vitest **watch mode** (config lives in `vite.config.ts`: jsdom, `src/test-setup.ts`).
 - Frontend typecheck + build: `npm run build` (runs `tsc -b && vite build`). No lint script exists for either end.

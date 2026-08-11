@@ -8,6 +8,49 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Dataset evaluation runs can select Default, exact match, normalized exact
+  match, token F1, BLEU, or ROUGE-L. Explicit selections override the prompt
+  package rule; Default defers to the package and then exact match. The run
+  launcher now shows a hint when a chosen metric overrides the selected prompt
+  package's scoring rule.
+- The retained workspace pages have stable direct URLs: `/dashboard`, `/guide`,
+  `/models`, `/datasets`, `/runs`, `/analysis`, and `/settings`.
+- Every retained page now exposes URL-backed task tabs so inventory, creation,
+  launch, evidence, analysis, health, access, and preference workflows can be
+  opened directly without rendering unrelated page content alongside them.
+
+### Changed
+
+- The browser workspace is reduced to its essential evaluation workflow while
+  keeping Dashboard and Guide. Endpoint capabilities live under Models,
+  registration lives under Datasets, run review/report evidence stays under
+  Runs, and comparisons live under Analysis. Backend APIs remain available.
+- Model inventory uses a compact selector with one detailed endpoint inspector;
+  run selection and dataset-to-run handoffs open the relevant detail or launch
+  tab while preserving browser back/forward history.
+- The Dashboard guide and retained page headers are localized: the guide
+  describes the queue, inspect, and analysis stages, and the Runs, Datasets,
+  and Analysis page titles translate in every supported locale.
+- The Dashboard guide now counts six stages and renames the run queue and
+  evidence steps so each stage opens an essential evaluation destination.
+
+### Fixed
+
+- New dataset registrations default their source revision to `main` without
+  rewriting revision values already stored for existing datasets.
+- Browser navigation now supports direct loads and back/forward history, with
+  root and unknown workspace paths canonicalized to `/dashboard`.
+- Queuing a quick-start run now refreshes the run inventory before navigating
+  to run details, so the newly queued run no longer flashes away on arrival.
+- The Dashboard "Set up an evaluation" action opens dataset registration
+  directly instead of landing on the dataset inventory.
+- Workspace tabs only link `aria-controls` from the active tab to its rendered
+  panel, avoiding references to panels that are not in the document.
+
+## 0.3.0 — 2026-08-09
+
+### Added
+
 - The Runs workspace now offers a compact shared endpoint/preflight context
   with separate quick-start and dataset launch cards. Quick start exposes the
   small deterministic built-in text, image, audio, video, and multimodal
@@ -76,6 +119,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Workspace tabs expose their tab panels to assistive technology, and the
   setup workbench maps inputs, assets, suites, and catalog panes by name
   instead of by section position.
+
+### Docs
+
+- The end-to-end evaluation workflow guide covers dataset quick-start runs
+  and handoff of prepared datasets from the catalog into the Runs workspace.
 
 ## 0.2.0 — 2026-08-07
 

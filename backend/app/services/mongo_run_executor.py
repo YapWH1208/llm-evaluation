@@ -33,6 +33,7 @@ from app.services.dataset_runs import (
     _effective_dataset_input_field,
     _empty_dataset_samples_message,
     _validate_distinct_dataset_fields,
+    effective_dataset_scoring_rule,
 )
 from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
@@ -352,6 +353,7 @@ def create_mongo_dataset_run(
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
+    scoring_rule: dict[str, object] | None = None,
     created_by: str | None = None,
     max_concurrency: int | None = None,
 ) -> dict[str, Any]:
@@ -396,11 +398,13 @@ def create_mongo_dataset_run(
         raise MongoRunExecutionError(
             "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
         )
-    scoring_rule = dict(prompt_package.get("scoring_rule")) if prompt_package and isinstance(prompt_package.get("scoring_rule"), dict) and prompt_package.get("scoring_rule") else {"type": "exact_match"}
     try:
-        validate_scoring_rule(scoring_rule)
-    except ScoringError as error:
-        raise MongoRunExecutionError(f"Scoring rule is invalid: {error}") from error
+        effective_scoring_rule = effective_dataset_scoring_rule(
+            scoring_rule,
+            _proxy(prompt_package) if prompt_package else None,
+        )
+    except DatasetRunError as error:
+        raise MongoRunExecutionError(str(error)) from error
     request_body_evidence = _mongo_request_body_evidence(
         endpoint=endpoint,
         benchmark_manifest=_dataset_run_manifest(),
@@ -434,6 +438,7 @@ def create_mongo_dataset_run(
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
+        "scoring_rule": effective_scoring_rule,
         "capability_compatibility": compatibility,
         "prompt_package": (
             {"id": prompt_package["id"], "name": prompt_package["name"], "version": prompt_package["version"],
@@ -544,7 +549,7 @@ def create_mongo_dataset_run(
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
                     "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                    "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    "reference_snapshot": {"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule},
                     "request_snapshot": None,
                     "raw_response": None,
                     "parsed_prediction": None,
@@ -575,6 +580,7 @@ def preflight_mongo_dataset_run(
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
+    scoring_rule: dict[str, object] | None = None,
 ) -> dict[str, object]:
     issues: list[str] = []
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
@@ -587,14 +593,22 @@ def preflight_mongo_dataset_run(
         issues.append("Dataset version not found.")
     elif dataset.get("status") != "ready" or not dataset.get("prepared_path"):
         issues.append(f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it first.")
-    if prompt_package_id and store.get_document("prompt_packages", prompt_package_id) is None:
+    prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
+    if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
     if not reference_field.strip():
         issues.append("A reference field is required.")
     selected_input_field = _effective_dataset_input_field(
         input_field,
-        _proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
+        _proxy(prompt_package) if prompt_package else None,
     )
+    try:
+        effective_dataset_scoring_rule(
+            scoring_rule,
+            _proxy(prompt_package) if prompt_package else None,
+        )
+    except DatasetRunError as error:
+        issues.append(str(error))
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
@@ -607,7 +621,7 @@ def preflight_mongo_dataset_run(
                 sample_limit=sample_limit,
                 input_field=selected_input_field,
                 reference_field=normalized_reference_field,
-                prompt_package=_proxy(store.get_document("prompt_packages", prompt_package_id)) if prompt_package_id else None,
+                prompt_package=_proxy(prompt_package) if prompt_package else None,
                 dataset_id=dataset["dataset_id"],
                 dataset_version=dataset["version"],
             )

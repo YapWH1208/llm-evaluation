@@ -235,7 +235,7 @@ class DatasetVersion(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     dataset_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
-    revision: Mapped[str] = mapped_column(String(128), nullable=False, default="default")
+    revision: Mapped[str] = mapped_column(String(128), nullable=False, default="main")
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     credential_env_var: Mapped[str | None] = mapped_column(String(128), nullable=True)
     credential_binding_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AnalyticsMatrix, Comparison, EvaluationRun } from "./api";
-import { AnalysisPage, CapabilityChart, ComparePage, ComparisonEvidence, HeatmapBreakdown } from "./components/pages/InsightsPages";
+import { AnalysisPage, CapabilityChart, ComparisonEvidence, HeatmapBreakdown } from "./components/pages/InsightsPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(cleanup);
@@ -80,6 +80,24 @@ const comparison = {
   differences: { accuracy: .08, success_rate: .09, error_rate: -.09, average_latency_ms: -60, p95_latency_ms: -60, estimated_cost: -.01, output_tokens: -100 },
 } as Comparison;
 
+function analysisProps(overrides: Partial<React.ComponentProps<typeof AnalysisPage>> = {}) {
+  return {
+    activeTab: "evidence-matrix" as const,
+    analytics,
+    busy: null,
+    comparison,
+    completedRuns: [completedRun, secondRun],
+    onRunAChange: vi.fn(),
+    onRunBChange: vi.fn(),
+    onSelectBaseline: vi.fn().mockResolvedValue(analytics),
+    onSubmitComparison: vi.fn((event: React.FormEvent) => event.preventDefault()),
+    onTabChange: vi.fn(),
+    runA: completedRun.id,
+    runB: secondRun.id,
+    ...overrides,
+  };
+}
+
 function renderInsightsPage(page: React.ReactNode) {
   return render(<LocaleProvider>{page}</LocaleProvider>);
 }
@@ -90,7 +108,7 @@ describe("insight workspace pages", () => {
     renderInsightsPage(<CapabilityChart cells={[capabilityCell]} />);
 
     await user.click(screen.getByRole("button", { name: "model-a reasoning: 80%" }));
-    expect(screen.getByText(/Selected reasoning: 80% accuracy across 10 samples/)).toBeVisible();
+    expect(screen.getByText(/Selected reasoning: 80% score across 10 samples/)).toBeVisible();
   });
 
   it("renders the selected heatmap evidence as a directly inspectable breakdown", () => {
@@ -109,7 +127,7 @@ describe("insight workspace pages", () => {
 
   it("switches analysis dimensions while keeping the supplied evidence table synchronized", async () => {
     const user = userEvent.setup();
-    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={vi.fn().mockResolvedValue(analytics)} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ completedRuns: [completedRun] })} />);
 
     await user.click(screen.getByRole("tab", { name: "Model × language" }));
 
@@ -118,10 +136,23 @@ describe("insight workspace pages", () => {
     expect(screen.getByText("English")).toBeVisible();
   });
 
+  it("keeps the evidence matrix exclusive and routes top-level tab changes", async () => {
+    const user = userEvent.setup();
+    const props = analysisProps({ completedRuns: [completedRun] });
+    renderInsightsPage(<AnalysisPage {...props} />);
+
+    expect(screen.getByRole("tab", { name: "Evidence matrix" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Baseline run")).toBeVisible();
+    expect(screen.queryByLabelText("Run A")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Compare runs" }));
+    expect(props.onTabChange).toHaveBeenCalledWith("compare-runs");
+  });
+
   it("routes baseline selection through the existing controller callback", async () => {
     const user = userEvent.setup();
     const onSelectBaseline = vi.fn().mockResolvedValue({ ...analytics, baseline_run_id: completedRun.id });
-    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ completedRuns: [completedRun], onSelectBaseline })} />);
 
     await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
 
@@ -133,14 +164,14 @@ describe("insight workspace pages", () => {
     const baselineCell = { ...languageCell, baseline_score: .9, delta: -.01 };
     const baselineMatrix = { ...analytics, baseline_run_id: completedRun.id, heatmaps: { ...analytics.heatmaps, model_language: [baselineCell] } } as AnalyticsMatrix;
     const onSelectBaseline = vi.fn().mockResolvedValue(baselineMatrix);
-    const { rerender } = render(<LocaleProvider><AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} /></LocaleProvider>);
+    const { rerender } = render(<LocaleProvider><AnalysisPage {...analysisProps({ completedRuns: [completedRun], onSelectBaseline })} /></LocaleProvider>);
 
     await user.click(screen.getByRole("tab", { name: "Model × language" }));
     await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
 
     expect(screen.getByRole("cell", { name: "90% / -1%" })).toBeVisible();
 
-    rerender(<LocaleProvider><AnalysisPage analytics={{ ...analytics, heatmaps: { ...analytics.heatmaps, model_language: [languageCell] } }} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} /></LocaleProvider>);
+    rerender(<LocaleProvider><AnalysisPage {...analysisProps({ analytics: { ...analytics, heatmaps: { ...analytics.heatmaps, model_language: [languageCell] } }, completedRuns: [completedRun], onSelectBaseline })} /></LocaleProvider>);
 
     expect((screen.getByLabelText("Baseline run") as HTMLSelectElement).value).toBe(completedRun.id);
     expect(screen.getByRole("cell", { name: "90% / -1%" })).toBeVisible();
@@ -149,7 +180,7 @@ describe("insight workspace pages", () => {
   it("reverts the baseline selector when the requested matrix fails", async () => {
     const user = userEvent.setup();
     const onSelectBaseline = vi.fn().mockRejectedValue(new Error("baseline unavailable"));
-    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={onSelectBaseline} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ completedRuns: [completedRun], onSelectBaseline })} />);
 
     await user.selectOptions(screen.getByLabelText("Baseline run"), completedRun.id);
 
@@ -158,7 +189,7 @@ describe("insight workspace pages", () => {
 
   it("wires the active analysis dimension to its tab panel", async () => {
     const user = userEvent.setup();
-    renderInsightsPage(<AnalysisPage analytics={analytics} completedRuns={[completedRun]} onSelectBaseline={vi.fn().mockResolvedValue(analytics)} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ completedRuns: [completedRun] })} />);
 
     expect(screen.getByRole("tabpanel", { name: "Model × benchmark" })).toBeVisible();
 
@@ -167,13 +198,15 @@ describe("insight workspace pages", () => {
     expect(screen.getByRole("tabpanel", { name: "Model × language" })).toBeVisible();
   });
 
-  it("keeps both comparison sources, the submit path, and result evidence in one investigation surface", async () => {
+  it("keeps comparison sources, submission, and evidence in the Analysis workspace", async () => {
     const user = userEvent.setup();
     const onRunAChange = vi.fn();
     const onRunBChange = vi.fn();
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
-    renderInsightsPage(<ComparePage busy={null} comparison={comparison} completedRuns={[completedRun, secondRun]} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmit} runA={completedRun.id} runB={secondRun.id} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ activeTab: "compare-runs", onRunAChange, onRunBChange, onSubmitComparison: onSubmit })} />);
 
+    expect(screen.getByRole("tab", { name: "Compare runs" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByLabelText("Baseline run")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Run A"), secondRun.id);
     await user.selectOptions(screen.getByLabelText("Run B"), completedRun.id);
     await user.click(screen.getByRole("button", { name: "Compare runs" }));
@@ -183,5 +216,6 @@ describe("insight workspace pages", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/math-check v1/)).toBeVisible();
     expect(screen.getByRole("cell", { name: "8%" })).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });

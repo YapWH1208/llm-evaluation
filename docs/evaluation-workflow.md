@@ -5,9 +5,28 @@ workspace, from registering a model endpoint to inspecting scored runs. It uses
 the Hugging Face example dataset `hf://lhoestq/demo1/data/train.csv` throughout,
 but every step applies to any supported dataset source.
 
+The retained browser workspace is available through these direct paths:
+
+| Path | Task tabs |
+| --- | --- |
+| `/dashboard` | Summary (default), `?tab=evaluations`, and `?tab=readiness`. |
+| `/guide` | Getting started (default), `?tab=prepare-data`, and `?tab=run-and-analyze`. |
+| `/models` | Model inventory (default) and `?tab=add-endpoint`. |
+| `/datasets` | Dataset inventory (default) and `?tab=register-dataset`. |
+| `/runs` | Run inventory (default), `?tab=launch-evaluation`, and `?tab=run-details`. |
+| `/analysis` | Evidence matrix (default) and `?tab=compare-runs`. |
+| `/settings` | Health (default), `?tab=access`, and `?tab=preferences`. |
+
+Opening `/` or an unknown workspace path resolves to `/dashboard`.
+The default tab uses the bare page path; non-default tabs use the `tab` query
+parameter and participate in direct loading and browser back/forward history.
+Run details are selected from Run inventory, so a detail deep link without an
+in-memory run selection shows guidance to choose a run.
+
 ## 1. Register a model endpoint
 
-Open the **Models** view and register the endpoint you want to evaluate with:
+Open **Models → Add endpoint** at `/models?tab=add-endpoint` and register the
+endpoint you want to evaluate with:
 
 - **Protocol profile** — the provider adapter (for example OpenAI-compatible
   Chat Completions, Anthropic Messages, or Custom HTTP JSON).
@@ -23,7 +42,8 @@ provider declared.
 
 ## 2. Register a dataset version
 
-Open the **Datasets** view and fill in the registration form:
+Open **Datasets → Register dataset** at `/datasets?tab=register-dataset` and
+fill in the registration form:
 
 | Field | Example | Meaning |
 | --- | --- | --- |
@@ -50,7 +70,9 @@ hf://datasets/owner/repository/path/to/file
   `hf://hf-internal-testing/textfolder/hello.txt`), not
   `hf://hf-internal-testing/textfolder/train/hello.txt`.
 - The **revision** selects the branch, tag, or commit to resolve the file from
-  (for example `main`).
+  and defaults to `main` for new registrations. Existing stored registrations
+  keep their original revision value; the new default does not rewrite legacy
+  records.
 - HTTPS source URLs are also supported; local files are added through the
   dataset **upload** action instead of a URL.
 
@@ -101,22 +123,26 @@ same way.
 
 ## 4. Quick start without a dataset
 
-For a first endpoint check, open **Runs**, choose an available endpoint in the
-shared **Launch context**, and use the **Quick start** card. Its selector lists
-only available built-in benchmarks. The registry includes small deterministic
-fixtures for text, image, silent audio, minimal video, and combined multimodal
-requests; they require no dataset download and remain available offline.
+For a first endpoint check, open **Runs → Launch evaluation** at
+`/runs?tab=launch-evaluation`, choose an available
+endpoint in the shared **Launch context**, and use the **Quick start** card. Its
+selector lists only available built-in benchmarks. The registry includes small
+deterministic fixtures for text, image, silent audio, minimal video, and
+combined multimodal requests; they require no dataset download and remain
+available offline.
 
 Choose an optional prompt package and sample limit, run **Preflight quick
 start**, then queue the evaluation. Preflight checks endpoint compatibility and
 capacity without creating a run.
 
-## 5. (Optional) Create a prompt package
+## 5. (Optional) Use a prompt package
 
-If you want to control how each record is turned into a model prompt, create a
-prompt package from the workspace. The template uses `{{field}}` placeholders
-that are substituted with the corresponding record fields at sample-build time.
-For the example dataset, whose records contain a `review` and a `star` field:
+If you want to control how each record is turned into a model prompt, select a
+pre-provisioned prompt package in **Runs**. Prompt packages can be managed
+through `POST /api/v1/prompt-packages`; the focused browser workspace only
+selects existing packages. The template uses `{{field}}` placeholders that are
+substituted with the corresponding record fields at sample-build time. For the
+example dataset, whose records contain a `review` and a `star` field:
 
 ```
 Rate this review: {{review}}
@@ -132,7 +158,8 @@ The input and reference fields must name different columns.
 
 ## 6. Queue a dataset evaluation run
 
-In the **Runs** view, choose the shared endpoint and configure the **Dataset
+In **Runs → Launch evaluation** at `/runs?tab=launch-evaluation`, choose the
+shared endpoint and configure the **Dataset
 evaluation** card:
 
 - **Dataset** — a dataset version with status `ready`.
@@ -143,6 +170,12 @@ evaluation** card:
   snapshot with the input selection.
 - **Prompt package** (optional) — the package whose template is rendered per
   record; leave empty to use the selected input field directly.
+- **Evaluation metric** — Default, Exact match, Normalized exact match, Token
+  F1, BLEU, or ROUGE-L. An explicit selection is frozen into the run and sample
+  evidence. **Default** sends no override, so the selected prompt package's
+  scoring rule wins when present; otherwise the service falls back to exact
+  match. In precedence order: explicit selection → prompt-package rule → exact
+  match.
 - **Sample limit** — how many records (1–10,000, default 100) to draw from the
   dataset.
 
@@ -156,13 +189,14 @@ checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.
 
 ## 7. Watch and inspect
 
-Track the run from the **Runs** view:
+Track the run from **Runs → Run inventory** at `/runs`, then select it to open
+**Run details**:
 
 - **Run status** — the run moves through queued → running → completed (or a
   terminal failure state) as the task queue schedules it against the endpoint.
 - **Sample attempts** — each record becomes a sample attempt with the fully
   rendered prompt, the request sent, the raw provider response, the parsed
-  prediction, the reference answer, latency, token usage, and the exact-match
+  prediction, the reference answer, latency, token usage, and the frozen metric
   score.
 - **Reports** — once the run finishes, generate report artifacts (HTML, JSON,
   CSV, Parquet) from the run's evidence, and share them with read-only links
@@ -170,6 +204,10 @@ Track the run from the **Runs** view:
 
 Failed samples can be retried, and the run's evidence remains inspectable even
 after the run itself is archived.
+
+Open **Analysis** at `/analysis` to inspect capability matrices, or use
+`/analysis?tab=compare-runs` to compare two completed run snapshots without
+switching to a separate comparison page.
 
 ## Troubleshooting
 

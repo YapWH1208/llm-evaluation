@@ -24,6 +24,7 @@ from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
 from app.services.reports import delete_report_artifact
+from app.services.scoring import ScoringError, validate_scoring_rule
 from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
@@ -80,6 +81,7 @@ class DatasetRunCreate(BaseModel):
     sample_limit: Annotated[int, Field(ge=1, le=10_000)] = 100
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     request_body_override: dict[str, Any] = Field(default_factory=dict)
+    scoring_rule: dict[str, Any] | None = None
 
     @field_validator("input_field", "reference_field")
     @classmethod
@@ -90,6 +92,17 @@ class DatasetRunCreate(BaseModel):
         if not normalized:
             raise ValueError("Dataset field selections must not be blank.")
         return normalized
+
+    @field_validator("scoring_rule")
+    @classmethod
+    def validate_dataset_scoring_rule(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return value
+        try:
+            validate_scoring_rule(value)
+        except ScoringError as error:
+            raise ValueError(str(error)) from error
+        return value
 
 
 class EvaluationRunResponse(BaseModel):
@@ -334,6 +347,7 @@ def create_dataset_evaluation_run(
                 reference_field=payload.reference_field,
                 sample_limit=payload.sample_limit,
                 request_body_override=payload.request_body_override,
+                scoring_rule=payload.scoring_rule,
                 created_by=getattr(request.state, "actor_id", None),
                 max_concurrency=payload.max_concurrency,
             )
@@ -352,6 +366,7 @@ def create_dataset_evaluation_run(
             reference_field=payload.reference_field,
             sample_limit=payload.sample_limit,
             request_body_override=payload.request_body_override,
+            scoring_rule=payload.scoring_rule,
             created_by=getattr(request.state, "actor_id", None),
             max_concurrency=payload.max_concurrency,
         )
@@ -378,6 +393,7 @@ def preflight_dataset_evaluation_run(
             reference_field=payload.reference_field,
             sample_limit=payload.sample_limit,
             request_body_override=payload.request_body_override,
+            scoring_rule=payload.scoring_rule,
         )
     assert session is not None
     return preflight_dataset_run(
@@ -390,6 +406,7 @@ def preflight_dataset_evaluation_run(
         reference_field=payload.reference_field,
         sample_limit=payload.sample_limit,
         request_body_override=payload.request_body_override,
+        scoring_rule=payload.scoring_rule,
     )
 
 

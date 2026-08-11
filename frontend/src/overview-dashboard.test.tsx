@@ -158,6 +158,7 @@ const task: Task = {
 
 function renderOverview(overrides: Partial<React.ComponentProps<typeof OverviewDashboard>> = {}) {
   const props = {
+    activeTab: "summary" as const,
     dashboard,
     analytics,
     systemHealth,
@@ -166,6 +167,8 @@ function renderOverview(overrides: Partial<React.ComponentProps<typeof OverviewD
     tasks: [task],
     onInspectRun: vi.fn(),
     onOpenView: vi.fn(),
+    onOpenSetup: vi.fn(),
+    onTabChange: vi.fn(),
     ...overrides,
   };
   render(<LocaleProvider><OverviewDashboard {...props} /></LocaleProvider>);
@@ -180,11 +183,12 @@ describe("OverviewDashboard", () => {
     expect(document.querySelector(".overview-dashboard.workspace-page")).not.toBeInTheDocument();
   });
 
-  it("prioritizes live performance evidence and preserves run and insight actions", async () => {
+  it("shows performance evidence only on the summary tab", async () => {
     const user = userEvent.setup();
     const props = renderOverview();
 
     expect(screen.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("Keep every evaluation moving")).not.toBeInTheDocument();
     expect(screen.getAllByText("Accuracy").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Success rate").length).toBeGreaterThan(0);
@@ -192,26 +196,68 @@ describe("OverviewDashboard", () => {
     expect(screen.getByText("API errors")).toBeVisible();
     expect(screen.getByRole("img", { name: "Evaluation trend" })).toBeVisible();
     expect(screen.getByText("Model / benchmark comparison")).toBeVisible();
-    expect(screen.getAllByText("Production evaluator").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Evaluation model").length).toBeGreaterThan(0);
     expect(screen.getByText("Latency, cost & errors")).toBeVisible();
-    expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
-    expect(screen.getByRole("heading", { level: 2, name: "System readiness" })).toBeVisible();
-    expect(document.querySelector(".dashboard-status-badge.completed")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "Recent evaluations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Inspect active-run" }));
     await user.click(screen.getAllByRole("button", { name: "Open analysis" })[0]);
+    await user.click(screen.getByRole("tab", { name: "Evaluations" }));
 
-    expect(props.onInspectRun).toHaveBeenCalledWith("active-run");
     expect(props.onOpenView).toHaveBeenCalledWith("analysis");
+    expect(props.onTabChange).toHaveBeenCalledWith("evaluations");
   });
 
-  it("keeps sparse analytics honest while leaving operations and readiness available", () => {
+  it("shows recent evaluations only on the evaluations tab", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview({ activeTab: "evaluations" });
+
+    expect(screen.getByRole("tab", { name: "Evaluations" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
+    expect(document.querySelector(".dashboard-status-badge.completed")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Evaluation trend" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Inspect active-run" }));
+    expect(props.onInspectRun).toHaveBeenCalledWith("active-run");
+  });
+
+  it("shows operational readiness only on the readiness tab", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview({ activeTab: "readiness" });
+
+    expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "System readiness" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 2, name: "Recent evaluations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Evaluation trend" })).not.toBeInTheDocument();
+
+    const queue = screen.getByText("Queue pressure").closest("article");
+    const workers = screen.getByText("Workers").closest("article");
+    await user.click(within(queue as HTMLElement).getByRole("button", { name: "Manage" }));
+    await user.click(within(workers as HTMLElement).getByRole("button", { name: "Manage" }));
+    expect(props.onOpenView).toHaveBeenNthCalledWith(1, "runs");
+    expect(props.onOpenView).toHaveBeenNthCalledWith(2, "runs");
+  });
+
+  it("keeps sparse analytics honest on the summary tab", () => {
     renderOverview({ analytics: { ...analytics, heatmap: [] } });
 
     expect(screen.getAllByText("Evaluation history is not available yet.").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
-    expect(screen.getByRole("heading", { level: 2, name: "System readiness" })).toBeVisible();
-    expect(screen.getAllByText("--").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { level: 2, name: "Recent evaluations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
+  });
+
+  it("routes setup through dataset registration and comparison through analysis", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview();
+
+    const comparison = screen.getByRole("heading", { name: "Model / benchmark comparison" }).closest("section");
+    await user.click(within(comparison as HTMLElement).getByRole("button", { name: "Open analysis" }));
+    await user.click(screen.getByRole("button", { name: "Set up an evaluation" }));
+
+    expect(props.onOpenView).toHaveBeenCalledTimes(1);
+    expect(props.onOpenView).toHaveBeenCalledWith("analysis");
+    expect(props.onOpenSetup).toHaveBeenCalledTimes(1);
   });
 
   it("keeps localized recovery actions available when the live dashboard summary is unavailable", async () => {
@@ -229,7 +275,7 @@ describe("OverviewDashboard", () => {
   });
 
   it("keeps system readiness neutral while health is unknown", () => {
-    renderOverview({ systemHealth: null });
+    renderOverview({ activeTab: "readiness", systemHealth: null });
 
     const grid = document.querySelector(".readiness-grid");
     expect(grid).not.toBeNull();
@@ -241,7 +287,7 @@ describe("OverviewDashboard", () => {
   });
 
   it("flags degraded system health for attention instead of leaving it neutral", () => {
-    renderOverview({ systemHealth: { ...systemHealth, status: "degraded", database_connected: false } });
+    renderOverview({ activeTab: "readiness", systemHealth: { ...systemHealth, status: "degraded", database_connected: false } });
 
     const systemItem = screen.getByText("Attention needed").closest("article");
 
@@ -250,7 +296,7 @@ describe("OverviewDashboard", () => {
   });
 
   it("reports an operational system without raising attention", () => {
-    renderOverview();
+    renderOverview({ activeTab: "readiness" });
 
     const grid = document.querySelector(".readiness-grid");
     const systemItem = within(grid as HTMLElement).getByText("Operational").closest("article");

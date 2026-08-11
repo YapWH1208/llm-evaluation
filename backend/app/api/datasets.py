@@ -19,7 +19,7 @@ from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mong
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 class DatasetCreate(BaseModel):
     dataset_id: str = Field(min_length=1, max_length=128); version: str = Field(min_length=1, max_length=64)
-    revision: str = "default"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
+    revision: str = "main"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
     input_field: str | None = None; reference_field: str | None = None
     credential_binding_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
     credential_env_var: str | None = None

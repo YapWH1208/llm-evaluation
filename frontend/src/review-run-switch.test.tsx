@@ -9,6 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/dashboard");
 });
 
 function deferred<T>() {
@@ -56,12 +57,9 @@ describe("review run switching", () => {
     vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
     vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
     vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listSuites").mockResolvedValue([]);
     vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
     vi.spyOn(api, "listTasks").mockResolvedValue([]);
     vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "listUsers").mockResolvedValue([]);
-    vi.spyOn(api, "listAuditEvents").mockResolvedValue([]);
     vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
     vi.spyOn(api, "listAttempts")
       .mockResolvedValueOnce([firstAttempt] as never)
@@ -71,19 +69,16 @@ describe("review run switching", () => {
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
 
     render(<LocaleProvider><App /></LocaleProvider>);
-    await user.click(screen.getByRole("button", { name: "Human review" }));
-    await waitFor(() => expect(screen.getByLabelText("Review run")).toBeEnabled());
+    await user.click(screen.getByRole("link", { name: "Runs" }));
+    await user.click(screen.getByRole("button", { name: /math-check v1/ }));
+    await waitFor(() => expect(screen.getByText(/sample-7 · attempt 1/)).toBeInTheDocument());
 
-    await user.selectOptions(screen.getByLabelText("Review run"), "run-a");
-    await waitFor(() => expect(screen.getByRole("option", { name: /sample-7/ })).toBeInTheDocument());
+    await user.click(screen.getByRole("tab", { name: "Run inventory" }));
+    await user.click(screen.getByRole("button", { name: /code-check v1/ }));
 
-    await user.selectOptions(screen.getByLabelText("Review run"), "run-b");
-
-    expect(screen.getByLabelText("Review sample")).toBeDisabled();
-    expect(screen.queryByRole("option", { name: /sample-7/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/sample-7 · attempt 1/)).not.toBeInTheDocument();
 
     secondAttempts.resolve([secondAttempt]);
-    await waitFor(() => expect(screen.getByRole("option", { name: /sample-9/ })).toBeInTheDocument());
-    expect(screen.getByLabelText("Review sample")).toBeEnabled();
+    await waitFor(() => expect(screen.getByText(/sample-9 · attempt 1/)).toBeInTheDocument());
   }, 10_000);
 });

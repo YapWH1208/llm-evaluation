@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import * as catalogModule from "./catalog";
 import { catalogs, isLocale, localeIds, navigationCopy, overviewCopy, resolveLocale } from "./catalog";
 import { hasExplicitStaticTranslation, staticSourceTexts, translateStaticTemplate, translateStaticText } from "./operationalCopy";
 
@@ -28,7 +29,49 @@ const analyticsOverviewKeys = [
   "unknownValue",
 ] as const;
 
+const datasetMetricKeys = [
+  "datasetRun.metric",
+  "datasetRun.metricDefault",
+  "datasetRun.metricExactMatch",
+  "datasetRun.metricNormalizedExactMatch",
+  "datasetRun.metricTokenF1",
+  "datasetRun.metricBleu",
+  "datasetRun.metricRougeL",
+  "datasetRun.metricDefaultHint",
+  "datasetRun.metricOverrideHint",
+  "datasetRun.effectiveMetric",
+] as const;
+
 describe("workspace locale catalog", () => {
+  it("provides the approved page-tab structure in every shipped locale", () => {
+    const tabCopy = (catalogModule as typeof catalogModule & {
+      workspacePageTabCopy?: Record<string, Record<string, Record<string, string>>>;
+    }).workspacePageTabCopy;
+    const expectedKeys = {
+      dashboard: ["summary", "evaluations", "readiness"],
+      guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
+      models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
+      datasets: ["datasetInventory", "registerDataset"],
+      runs: ["runInventory", "launchEvaluation", "runDetails"],
+      analysis: ["evidenceMatrix", "compareRuns"],
+      settings: ["health", "access", "preferences"],
+    };
+
+    expect(tabCopy?.en).toEqual(expect.objectContaining({
+      dashboard: { summary: "Summary", evaluations: "Evaluations", readiness: "Readiness" },
+      models: expect.objectContaining({ modelInventory: "Model inventory", addEndpoint: "Add endpoint" }),
+      runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+    }));
+    for (const locale of localeIds) {
+      const localizedCopy = tabCopy?.[locale] as Record<string, Record<string, string>> | undefined;
+      expect(Object.keys(localizedCopy ?? {})).toEqual(Object.keys(expectedKeys));
+      for (const [page, keys] of Object.entries(expectedKeys)) {
+        expect(Object.keys(localizedCopy?.[page] ?? {})).toEqual(keys);
+        expect(Object.values(localizedCopy?.[page] ?? {}).every((value) => value.trim().length > 0)).toBe(true);
+      }
+    }
+  });
+
   it("ships the requested locales with the complete English key set", () => {
     expect(localeIds).toEqual(["en", "zh-CN", "fr", "de", "ru", "ja", "ko", "ms"]);
     const englishKeys = Object.keys(catalogs.en).sort();
@@ -47,8 +90,8 @@ describe("workspace locale catalog", () => {
     expect(resolveLocale(null)).toBe("en");
   });
 
-  it("keeps corrected French worker language and localized templates intact", () => {
-    expect(navigationCopy.fr.items.workers).toEqual({ label: "Agents", description: "Baux et agents actifs" });
+  it("keeps corrected French operational language and localized templates intact", () => {
+    expect(navigationCopy.fr.items.runs).toEqual({ label: "Exécutions", description: "Exécution, résultats et preuves" });
     expect(overviewCopy.fr.workers).toBe("Agents");
     expect(translateStaticTemplate("fr", "configured")).toBe("configuré");
     expect(translateStaticTemplate("ja", "{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: "benchmark-a" })).toContain("benchmark-a");
@@ -63,13 +106,20 @@ describe("workspace locale catalog", () => {
     }
   });
 
+  it("provides every dataset scoring metric label in each shipped locale", () => {
+    for (const locale of localeIds) {
+      for (const key of datasetMetricKeys) {
+        expect(catalogs[locale][key].trim(), `${locale}.${key}`).not.toBe("");
+      }
+    }
+  });
+
   it("keeps redesigned workspace labels eligible for the static-copy bridge", () => {
     const workspaceLabels = [
-      "Report context", "Review context", "User inventory", "Application and storage", "Operating guidance",
-      "Filter benchmarks", "Name, source, status…", "Find run", "Benchmark, status, or ID", "Run status", "No runs match the current filters.",
+      "Operating guidance",
+      "Find run", "Benchmark, status, or ID", "Run status", "No runs match the current filters.",
       "Pause download", "Validate cache", "Clear cache", "Retry download", "Upload local revision",
-      "Benchmark composition", "Queue suite", "Uses each selected endpoint’s saved connection and capacity configuration.", "No available endpoints are ready to receive this suite.",
-      "Loading disk usage…", "No events available.", "Comparing…", "registered versions", "total runs", "tasks visible",
+      "Loading disk usage…", "Comparing…", "total runs",
     ];
 
     for (const locale of localeIds.filter((locale) => locale !== "en")) {
@@ -92,20 +142,41 @@ describe("workspace locale catalog", () => {
   });
 
   it("renders redesigned workspace guidance without falling back to isolated words", () => {
-    const guidance = [
-      "Each stage opens the existing workspace destination, so the guide remains an actionable path rather than a static checklist.",
-      "Filters affect this inventory only; registry records and their operational controls remain available in the loaded catalog.",
-      "Monitor queued work, prioritise eligible tasks, and trace each task back to its immutable run.",
-      "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.",
+    const guidance = "Each stage opens an essential evaluation destination, so the guide remains an actionable path rather than a static checklist." as const;
+
+    expect(translateStaticText("zh-CN", guidance)).toBe("每个阶段都会打开一个必要的评测目标，因此指南仍是一条可执行的路径，而非静态清单。");
+    expect(translateStaticText("fr", guidance)).toBe("Chaque étape ouvre une destination d’évaluation essentielle, si bien que le guide reste un parcours actionnable plutôt qu’une liste statique.");
+    expect(translateStaticText("de", guidance)).toBe("Jede Stufe öffnet ein wesentliches Bewertungsziel, sodass der Leitfaden ein ausführbarer Pfad und keine statische Checkliste bleibt.");
+    expect(translateStaticText("ru", guidance)).toBe("Каждый этап открывает важный целевой раздел оценки, поэтому руководство остаётся действующим планом, а не статичным списком.");
+    expect(translateStaticText("ja", guidance)).toBe("各段階で不可欠な評価先が開くため、このガイドは静的なチェックリストではなく実行可能な手順として機能します。");
+    expect(translateStaticText("ko", guidance)).toBe("각 단계는 필수 평가 목적지를 열므로 가이드는 정적 체크리스트가 아닌 실행 가능한 경로로 유지됩니다.");
+    expect(translateStaticText("ms", guidance)).toBe("Setiap peringkat membuka destinasi penilaian penting, jadi panduan kekal sebagai laluan boleh laksana dan bukan senarai semak statik.");
+  });
+
+  it("renders redesigned guide steps and action labels as complete phrases", () => {
+    const guideSteps = [
+      "6 steps",
+      "4. Queue a dataset run",
+      "5. Inspect evidence",
+      "6. Analyze results",
+      "Runs · pick the dataset, evaluation metric, reference field, and endpoint, then queue the run.",
+      "Runs · open the run to review samples, scores, latency, cost, and errors.",
+      "Analysis · inspect evaluation dimensions or compare two completed runs.",
+      "Open Models",
+      "Open Datasets",
+      "Review Datasets",
+      "Open Runs",
+      "Inspect Runs",
+      "Open Analysis",
     ] as const;
 
-    expect(translateStaticText("zh-CN", guidance[0])).toBe("每个阶段都会打开现有的工作区目标，因此指南仍是一条可执行的路径，而非静态清单。");
-    expect(translateStaticText("fr", guidance[1])).toBe("Les filtres n’affectent que cet inventaire ; les entrées du registre et leurs contrôles opérationnels restent disponibles dans le catalogue chargé.");
-    expect(translateStaticText("de", guidance[2])).toBe("Überwachen Sie die wartende Arbeit, priorisieren Sie berechtigte Aufgaben und verfolgen Sie jede Aufgabe zu ihrem unveränderlichen Lauf zurück.");
-    expect(translateStaticText("ru", guidance[3])).toBe("Создавайте переносимые артефакты оценки, а затем управляйте их контролируемыми политиками общего доступа только для чтения.");
-    expect(translateStaticText("ja", guidance[0])).toBe("各段階で既存のワークスペース画面を開くため、このガイドは静的なチェックリストではなく実行可能な手順として機能します。");
-    expect(translateStaticText("ko", guidance[1])).toBe("필터는 이 인벤토리에만 적용되며 레지스트리 레코드와 운영 제어 기능은 로드된 카탈로그에서 계속 사용할 수 있습니다.");
-    expect(translateStaticText("ms", guidance[2])).toBe("Pantau kerja beratur, utamakan tugas yang layak dan jejak setiap tugas kembali kepada larian tidak berubahnya.");
+    expect(translateStaticText("zh-CN", guideSteps[0])).toBe("6 个步骤");
+    expect(translateStaticText("fr", guideSteps[4])).toBe("Exécutions · choisissez le jeu de données, la métrique d’évaluation, le champ de référence et le point de terminaison, puis mettez l’exécution en file.");
+    expect(translateStaticText("de", guideSteps[5])).toBe("Ausführungen · Öffnen Sie den Lauf, um Stichproben, Punktzahlen, Latenz, Kosten und Fehler zu prüfen.");
+    expect(translateStaticText("ru", guideSteps[6])).toBe("Анализ · изучите измерения оценки или сравните два завершённых запуска.");
+    expect(translateStaticText("ja", guideSteps[11])).toBe("実行を確認");
+    expect(translateStaticText("ko", guideSteps[12])).toBe("분석 열기");
+    expect(translateStaticText("ms", guideSteps[7])).toBe("Buka model");
   });
 
   it("renders endpoint and catalog guidance as complete phrases", () => {
@@ -114,138 +185,70 @@ describe("workspace locale catalog", () => {
       "These defaults are merged into a newly queued benchmark run without changing a saved endpoint.",
       "Inspect detected capability evidence separately from the declarations used by run compatibility checks.",
       "No endpoints available",
-      "Choose an endpoint to inspect its detection and declaration evidence.",
+      "Select a configured endpoint to inspect it.",
       "Inspect versioned benchmark packs, their supported modalities, and the availability state used by new runs.",
       "Manage source versions, cached data, licenses, and field mapping while keeping the selected dataset’s evidence in view.",
+      "Selected model endpoint",
     ] as const;
 
     expect(translateStaticText("zh-CN", phrases[0])).toBe("连接、速率限制和成本设置仍可编辑，同时不会暴露已存储的凭据。");
     expect(translateStaticText("fr", phrases[1])).toBe("Ces valeurs par défaut sont fusionnées dans une nouvelle exécution de benchmark mise en file sans modifier un point de terminaison enregistré.");
     expect(translateStaticText("de", phrases[2])).toBe("Prüfen Sie erkannte Fähigkeitsnachweise getrennt von den Deklarationen, die von Kompatibilitätsprüfungen für Ausführungen verwendet werden.");
     expect(translateStaticText("ru", phrases[3])).toBe("Нет доступных конечных точек");
-    expect(translateStaticText("ja", phrases[4])).toBe("エンドポイントを選択して、その検出および宣言の証拠を確認します。");
+    expect(translateStaticText("ja", phrases[4])).toBe("設定済みのエンドポイントを選択して確認します。");
     expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 팩, 지원되는 모달리티 및 새 실행에 사용되는 가용성 상태를 검토합니다.");
     expect(translateStaticText("ms", phrases[6])).toBe("Urus versi sumber, data cache, lesen dan pemetaan medan sambil mengekalkan bukti set data yang dipilih dalam paparan.");
+    expect(translateStaticText("zh-CN", phrases[7])).toBe("所选模型端点");
   });
 
-  it("renders dataset and suite guidance as complete phrases", () => {
+  it("renders dataset inventory guidance as complete phrases", () => {
     const phrases = [
       "No dataset versions",
-      "Register a dataset source from the Workspace catalog, then return here to prepare, validate, and inspect it.",
+      "Register a source, then prepare, validate, and inspect it here.",
       "Dataset inventory",
       "Select a source version to inspect its cache, metadata, and lifecycle actions.",
-      "Open suite builder",
-      "Compose versioned benchmark sets and queue them on ready endpoints without losing the benchmark evidence behind each suite.",
-      "No evaluation suites",
     ] as const;
 
     expect(translateStaticText("zh-CN", phrases[0])).toBe("没有数据集版本");
-    expect(translateStaticText("fr", phrases[1])).toBe("Enregistrez une source de jeu de données depuis le catalogue de l’espace de travail, puis revenez ici pour la préparer, la valider et l’examiner.");
+    expect(translateStaticText("fr", phrases[1])).toBe("Enregistrez une source, puis préparez-la, validez-la et examinez-la ici.");
     expect(translateStaticText("de", phrases[2])).toBe("Datensatzübersicht");
     expect(translateStaticText("ru", phrases[3])).toBe("Выберите версию источника, чтобы изучить её кэш, метаданные и действия жизненного цикла.");
-    expect(translateStaticText("ja", phrases[4])).toBe("スイートビルダーを開く");
-    expect(translateStaticText("ko", phrases[5])).toBe("버전이 지정된 벤치마크 세트를 구성하고 각 스위트의 벤치마크 증거를 유지한 채 준비된 엔드포인트에서 대기열에 추가합니다.");
-    expect(translateStaticText("ms", phrases[6])).toBe("Tiada set penilaian");
   });
 
-  it("renders setup and run inventory guidance as complete phrases", () => {
+  it("renders run inventory guidance as complete phrases", () => {
     const phrases = [
-      "Create a suite from the Workspace catalog to define versioned benchmark composition and default execution settings.",
-      "Suite inventory",
-      "Choose a versioned suite to inspect composition and queue it on an available endpoint.",
-      "Build versioned inputs, attach validated media, compose suites, and inspect the catalog without leaving setup.",
-      "4 workbench modes",
       "Run inventory",
       "Select a snapshot to inspect lifecycle evidence and exportable artifacts.",
     ] as const;
 
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("从工作区目录创建套件，以定义版本化基准测试组合和默认执行设置。");
-    expect(translateStaticText("fr", phrases[1])).toBe("Inventaire des suites");
-    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie eine versionierte Suite aus, um ihre Zusammensetzung zu prüfen und sie bei einem verfügbaren Endpunkt einzureihen.");
-    expect(translateStaticText("ru", phrases[3])).toBe("Создавайте версионированные входные данные, прикрепляйте проверенные медиафайлы, составляйте наборы и изучайте каталог, не покидая настройку.");
-    expect(translateStaticText("ja", phrases[4])).toBe("4 つのワークベンチモード");
-    expect(translateStaticText("ko", phrases[5])).toBe("실행 인벤토리");
-    expect(translateStaticText("ms", phrases[6])).toBe("Pilih petikan untuk memeriksa bukti kitar hayat dan artifak yang boleh dieksport.");
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("运行清单");
+    expect(translateStaticText("fr", phrases[1])).toBe("Sélectionnez un instantané pour examiner les preuves de cycle de vie et les artefacts exportables.");
   });
 
-  it("renders run launch and queue guidance as complete phrases", () => {
+  it("renders run launch and inventory guidance as complete phrases", () => {
     const phrases = [
       "Launch immutable evaluation snapshots, then inspect their operational and evidence trail.",
-      "Queue dataset evaluation",
-      "Choose an available dataset, prompt version, and endpoint for a new evaluation.",
       "Selected run inspector",
-      "Select a run from the persistent inventory to open its summary, evidence, and lifecycle history.",
-      "Queue inventory",
-      "Virtualised rows keep high-volume queues responsive while retaining task-level operational controls.",
+      "Select a run from Run inventory to open its summary, evidence, and lifecycle history.",
     ] as const;
 
     expect(translateStaticText("zh-CN", phrases[0])).toBe("启动不可变的评测快照，然后检查其运行和证据轨迹。");
-    expect(translateStaticText("fr", phrases[1])).toBe("Mettre l’évaluation du jeu de données en file");
-    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie einen verfügbaren Datensatz, eine Prompt-Version und einen Endpunkt für eine neue Evaluierung aus.");
-    expect(translateStaticText("ru", phrases[3])).toBe("Проверка выбранного запуска");
-    expect(translateStaticText("ja", phrases[4])).toBe("永続的な一覧から実行を選択して、概要、証拠、ライフサイクル履歴を開きます。");
-    expect(translateStaticText("ko", phrases[5])).toBe("대기열 인벤토리");
-    expect(translateStaticText("ms", phrases[6])).toBe("Baris maya memastikan baris berjumlah tinggi responsif sambil mengekalkan kawalan operasi pada peringkat tugas.");
+    expect(translateStaticText("fr", phrases[1])).toBe("Inspecteur de l’exécution sélectionnée");
+    expect(translateStaticText("ja", phrases[2])).toBe("実行一覧から実行を選択して、概要、証拠、ライフサイクル履歴を開きます。");
   });
 
-  it("renders task and worker guidance as complete phrases", () => {
+  it("renders analysis guidance and page titles as complete phrases", () => {
     const phrases = [
-      "Find task",
-      "Task status",
-      "No tasks match the current filters.",
-      "Track active task leases and the worker capacity currently consuming evaluation work.",
-      "No active worker leases",
-      "No worker has an active lease at the moment. Inspect the queue and system health before changing deployment capacity.",
-      "Open task queue",
+      "Investigate supplied quality, reliability, latency, cost, and run-to-run evidence.",
+      "Runs",
+      "Datasets",
+      "Analysis",
     ] as const;
 
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("查找任务");
-    expect(translateStaticText("fr", phrases[1])).toBe("État de la tâche");
-    expect(translateStaticText("de", phrases[2])).toBe("Keine Aufgaben entsprechen den aktuellen Filtern.");
-    expect(translateStaticText("ru", phrases[3])).toBe("Отслеживайте активные аренды задач и ресурсы работников, которые сейчас выполняют оценочную работу.");
-    expect(translateStaticText("ja", phrases[4])).toBe("アクティブなワーカーリースはありません");
-    expect(translateStaticText("ko", phrases[5])).toBe("현재 활성 임대를 가진 작업자가 없습니다. 배포 용량을 변경하기 전에 대기열과 시스템 상태를 확인하세요.");
-    expect(translateStaticText("ms", phrases[6])).toBe("Buka baris tugas");
-  });
-
-  it("renders worker summary and lease diagnostics as complete phrases", () => {
-    const phrases = [
-      "Active leases",
-      "Connected workers",
-      "Tasks currently leased or running",
-      "Distinct workers with an active lease",
-      "Pending tasks reported by system health",
-      "Health signal unavailable",
-      "Active worker leases",
-    ] as const;
-
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("活动租约");
-    expect(translateStaticText("fr", phrases[1])).toBe("Agents connectés");
-    expect(translateStaticText("de", phrases[2])).toBe("Derzeit geleaste oder laufende Aufgaben");
-    expect(translateStaticText("ru", phrases[3])).toBe("Отдельные работники с активной арендой");
-    expect(translateStaticText("ja", phrases[4])).toBe("システムの健全性が報告した保留中のタスク");
-    expect(translateStaticText("ko", phrases[5])).toBe("상태 신호를 사용할 수 없음");
-    expect(translateStaticText("ms", phrases[6])).toBe("Pajakan pekerja aktif");
-  });
-
-  it("renders lease-detail and analysis guidance as complete phrases", () => {
-    const phrases = [
-      "Lease expiry is recorded with each task so stalled workers can be diagnosed without altering queue state.",
-      "Investigate supplied quality, reliability, latency, and cost evidence across evaluation dimensions.",
-      "Loading analysis",
-      "Analysis matrix",
-      "The analysis matrix is loading from the evaluation service.",
-      "Analysis context",
-      "The selected baseline applies to every evidence cell and delta shown below.",
-    ] as const;
-
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("每项任务都会记录租约到期时间，因此可以诊断停滞的工作器而无需更改队列状态。");
-    expect(translateStaticText("fr", phrases[1])).toBe("Examinez les preuves fournies de qualité, de fiabilité, de latence et de coût dans toutes les dimensions d’évaluation.");
-    expect(translateStaticText("de", phrases[2])).toBe("Analyse wird geladen");
-    expect(translateStaticText("ru", phrases[3])).toBe("Матрица анализа");
-    expect(translateStaticText("ja", phrases[4])).toBe("分析マトリクスを評価サービスから読み込んでいます。");
-    expect(translateStaticText("ko", phrases[5])).toBe("분석 컨텍스트");
-    expect(translateStaticText("ms", phrases[6])).toBe("Garis asas yang dipilih digunakan pada setiap sel bukti dan delta yang dipaparkan di bawah.");
+    expect(translateStaticText("zh-CN", phrases[0])).toBe("检查所提供的质量、可靠性、延迟、成本和运行间证据。");
+    expect(translateStaticText("fr", phrases[1])).toBe("Exécutions");
+    expect(translateStaticText("ja", phrases[2])).toBe("データセット");
+    expect(translateStaticText("ko", phrases[3])).toBe("분석");
   });
 
   it("renders comparison workspace guidance as complete phrases", () => {
@@ -268,26 +271,6 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ms", phrases[6])).toBe("Pilih dua larian sumber dan bandingkannya untuk mendedahkan hasil sampel dikongsi serta delta metrik.");
   });
 
-  it("renders report-source guidance as complete phrases", () => {
-    const phrases = [
-      "Choose two completed runs to begin an evidence-backed comparison.",
-      "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.",
-      "Report context",
-      "Select the run whose immutable evidence snapshot should anchor this report.",
-      "Report source run",
-      "Select a report source",
-      "Choose an evaluation run above to generate and manage its artifacts without returning to a separate page.",
-    ] as const;
-
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("选择两个已完成运行以开始有证据支持的比较。");
-    expect(translateStaticText("fr", phrases[1])).toBe("Générez des artefacts d’évaluation portables, puis gérez leurs politiques de partage contrôlées en lecture seule.");
-    expect(translateStaticText("de", phrases[2])).toBe("Berichtskontext");
-    expect(translateStaticText("ru", phrases[3])).toBe("Выберите запуск, чей неизменяемый снимок доказательств должен служить основой для этого отчёта.");
-    expect(translateStaticText("ja", phrases[4])).toBe("レポートのソース実行");
-    expect(translateStaticText("ko", phrases[5])).toBe("보고서 소스 선택");
-    expect(translateStaticText("ms", phrases[6])).toBe("Pilih larian penilaian di atas untuk menjana dan mengurus artifaknya tanpa kembali ke halaman berasingan.");
-  });
-
   it("renders redesigned workspace navigation headers as complete phrases", () => {
     expect(translateStaticText("zh-CN", "Overview")).toBe("概览");
     expect(translateStaticText("fr", "Configure")).toBe("Configurer");
@@ -296,50 +279,6 @@ describe("workspace locale catalog", () => {
     expect(translateStaticText("ja", "Insights")).toBe("インサイト");
     expect(translateStaticText("ko", "Reporting")).toBe("보고");
     expect(translateStaticText("ms", "Quality review")).toBe("Semakan kualiti");
-  });
-
-  it("renders report-generation and review-entry guidance as complete phrases", () => {
-    const phrases = [
-      "Select a run to generate a portable report or inspect saved artifacts.",
-      "Generate report",
-      "Select the report shape, then generate the download format needed by the next review or handoff.",
-      "Download a generated artifact or create a scoped share link with explicit evidence and download controls.",
-      "Keep human scoring and judge assessments tied to the precise run snapshot and sample under review.",
-      "Select an evidence sample",
-      "Review context",
-    ] as const;
-
-    expect(translateStaticText("zh-CN", phrases[0])).toBe("选择一个运行以生成可移植报告或检查已保存的工件。");
-    expect(translateStaticText("fr", phrases[1])).toBe("Générer le rapport");
-    expect(translateStaticText("de", phrases[2])).toBe("Wählen Sie die Berichtsform und erzeugen Sie anschließend das für die nächste Überprüfung oder Übergabe benötigte Downloadformat.");
-    expect(translateStaticText("ru", phrases[3])).toBe("Скачайте созданный артефакт или создайте ограниченную ссылку общего доступа с явными элементами управления доказательствами и загрузкой.");
-    expect(translateStaticText("ja", phrases[4])).toBe("人による採点と判定者の評価を、確認中の正確な実行スナップショットとサンプルに結び付けます。");
-    expect(translateStaticText("ko", phrases[5])).toBe("증거 샘플 선택");
-    expect(translateStaticText("ms", phrases[6])).toBe("Konteks semakan");
-  });
-
-  it("renders review workflow guidance as complete phrases", () => {
-    expect(translateStaticText("zh-CN", "Choose the evaluation snapshot and sample before opening human or independent judge workflows.")).toBe("在打开人工或独立评审工作流前，选择评测快照和样本。");
-    expect(translateStaticText("fr", "Review run")).toBe("Exécution à examiner");
-    expect(translateStaticText("de", "Review sample")).toBe("Zu prüfende Stichprobe");
-    expect(translateStaticText("ru", "Select a run to begin a human or judge review.")).toBe("Выберите запуск, чтобы начать проверку человеком или судьёй.");
-    expect(translateStaticText("ja", "Human review workflow")).toBe("人によるレビューのワークフロー");
-  });
-
-  it("renders administration guidance as complete phrases", () => {
-    expect(translateStaticText("zh-CN", "Provision constrained API users and keep recent administrative activity alongside the current inventory.")).toBe("配置受限的 API 用户，并将最近的管理活动与当前清单一同保留。");
-    expect(translateStaticText("fr", "User inventory")).toBe("Inventaire des utilisateurs");
-    expect(translateStaticText("de", "Create a token-bearing account with the least-privileged role and an optional concurrency ceiling.")).toBe("Erstellen Sie ein tokenbasiertes Konto mit der geringsten Berechtigung und einer optionalen Parallelitätsobergrenze.");
-    expect(translateStaticText("ru", "Roles, rate ceilings, and status remain visible before issuing additional credentials.")).toBe("Роли, ограничения частоты и статус остаются видимыми перед выпуском дополнительных учётных данных.");
-    expect(translateStaticText("ja", "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.")).toBe("最新の記録済み管理変更は、ユーザー作成値とは分けて監査証跡として保持されます。");
-  });
-
-  it("renders settings and filter placeholders as complete phrases", () => {
-    expect(translateStaticText("zh-CN", "Access and preferences")).toBe("访问和偏好设置");
-    expect(translateStaticText("fr", "Operating guidance")).toBe("Guide d’utilisation");
-    expect(translateStaticText("de", "Name, source, status…")).toBe("Name, Quelle, Status…");
-    expect(translateStaticText("ru", "Benchmark, status, or ID")).toBe("Бенчмарк, статус или идентификатор");
-    expect(translateStaticText("ja", "total runs")).toBe("総実行数");
   });
 
   it("requires direct translations for every bridged static phrase", () => {
