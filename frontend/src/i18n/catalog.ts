@@ -626,7 +626,7 @@ export function resolveLocale(value: string | null | undefined): Locale {
   return isLocale(value) ? value : "en";
 }
 
-export const workspaceViews = ["dashboard", "guide", "models", "datasets", "runs", "analysis", "settings"] as const;
+export const workspaceViews = ["dashboard", "guide", "models", "datasets", "runs", "leaderboard", "analysis", "settings"] as const;
 export type WorkspaceView = typeof workspaceViews[number];
 export type NavigationGroupId = "overview" | "configure" | "operations" | "insights" | "system";
 
@@ -644,28 +644,28 @@ function navigation(groups: [string, string, string, string, string], items: Arr
 
 export const navigationCopy: Record<Locale, NavigationCopy> = {
   en: navigation(["Overview", "Configure", "Operations", "Insights", "System"], [
-    ["Dashboard", "Operational status and recent work"], ["Guide", "Step-by-step usage walkthrough"], ["Models", "Endpoints and capabilities"], ["Datasets", "Versioned data sources"], ["Runs", "Execution, results, and evidence"], ["Analysis", "Matrices and run comparisons"], ["Settings", "Health, access, and preferences"],
+    ["Dashboard", "Operational status and recent work"], ["Guide", "Step-by-step usage walkthrough"], ["Models", "Endpoints and capabilities"], ["Datasets", "Versioned data sources"], ["Runs", "Execution, results, and evidence"], ["Leaderboard", "Global rankings and run discovery"], ["Analysis", "Evidence plots and run comparisons"], ["Settings", "Health, access, and preferences"],
   ]),
   "zh-CN": navigation(["概览", "配置", "运营", "洞察", "系统"], [
-    ["仪表盘", "运行状态和近期工作"], ["指南", "分步使用说明"], ["模型", "端点与能力"], ["数据集", "版本化数据源"], ["运行", "执行、结果与证据"], ["分析", "矩阵与运行对比"], ["设置", "运行状况、访问和偏好设置"],
+    ["仪表盘", "运行状态和近期工作"], ["指南", "分步使用说明"], ["模型", "端点与能力"], ["数据集", "版本化数据源"], ["运行", "执行、结果与证据"], ["排行榜", "全局排名和运行发现"], ["分析", "证据图和运行对比"], ["设置", "运行状况、访问和偏好设置"],
   ]),
   fr: navigation(["Aperçu", "Configuration", "Opérations", "Analyses", "Système"], [
-    ["Tableau de bord", "État opérationnel et travaux récents"], ["Guide", "Parcours d’utilisation pas à pas"], ["Modèles", "Points de terminaison et capacités"], ["Jeux de données", "Sources de données versionnées"], ["Exécutions", "Exécution, résultats et preuves"], ["Analyse", "Matrices et comparaisons d’exécutions"], ["Paramètres", "État, accès et préférences"],
+    ["Tableau de bord", "État opérationnel et travaux récents"], ["Guide", "Parcours d’utilisation pas à pas"], ["Modèles", "Points de terminaison et capacités"], ["Jeux de données", "Sources de données versionnées"], ["Exécutions", "Exécution, résultats et preuves"], ["Classement", "Classement global et recherche d’exécutions"], ["Analyse", "Graphiques de preuves et comparaisons"], ["Paramètres", "État, accès et préférences"],
   ]),
   de: navigation(["Übersicht", "Konfiguration", "Betrieb", "Einblicke", "System"], [
-    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Leitfaden", "Schritt-für-Schritt-Anleitung"], ["Modelle", "Endpunkte und Fähigkeiten"], ["Datensätze", "Versionierte Datenquellen"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Analyse", "Matrizen und Ausführungsvergleiche"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
+    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Leitfaden", "Schritt-für-Schritt-Anleitung"], ["Modelle", "Endpunkte und Fähigkeiten"], ["Datensätze", "Versionierte Datenquellen"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Rangliste", "Globale Rangfolge und Ausführungssuche"], ["Analyse", "Evidenzdiagramme und Ausführungsvergleiche"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
   ]),
   ru: navigation(["Обзор", "Настройка", "Операции", "Аналитика", "Система"], [
-    ["Панель", "Рабочее состояние и недавние задачи"], ["Руководство", "Пошаговое руководство по использованию"], ["Модели", "Конечные точки и возможности"], ["Наборы данных", "Версионируемые источники данных"], ["Запуски", "Выполнение, результаты и доказательства"], ["Анализ", "Матрицы и сравнения запусков"], ["Настройки", "Состояние, доступ и предпочтения"],
+    ["Панель", "Рабочее состояние и недавние задачи"], ["Руководство", "Пошаговое руководство по использованию"], ["Модели", "Конечные точки и возможности"], ["Наборы данных", "Версионируемые источники данных"], ["Запуски", "Выполнение, результаты и доказательства"], ["Рейтинг", "Общий рейтинг и поиск запусков"], ["Анализ", "Графики данных и сравнения запусков"], ["Настройки", "Состояние, доступ и предпочтения"],
   ]),
   ja: navigation(["概要", "設定", "運用", "分析情報", "システム"], [
-    ["ダッシュボード", "運用状況と最近の作業"], ["ガイド", "ステップバイステップの使い方"], ["モデル", "エンドポイントと機能"], ["データセット", "バージョン管理されたデータソース"], ["実行", "実行、結果、証拠"], ["分析", "マトリクスと実行比較"], ["設定", "状態、アクセス、設定"],
+    ["ダッシュボード", "運用状況と最近の作業"], ["ガイド", "ステップバイステップの使い方"], ["モデル", "エンドポイントと機能"], ["データセット", "バージョン管理されたデータソース"], ["実行", "実行、結果、証拠"], ["ランキング", "全体順位と実行の検索"], ["分析", "証拠プロットと実行比較"], ["設定", "状態、アクセス、設定"],
   ]),
   ko: navigation(["개요", "구성", "운영", "인사이트", "시스템"], [
-    ["대시보드", "운영 상태 및 최근 작업"], ["가이드", "단계별 사용 안내"], ["모델", "엔드포인트 및 기능"], ["데이터 세트", "버전 관리 데이터 원본"], ["실행", "실행, 결과 및 증거"], ["분석", "매트릭스 및 실행 비교"], ["설정", "상태, 액세스 및 기본 설정"],
+    ["대시보드", "운영 상태 및 최근 작업"], ["가이드", "단계별 사용 안내"], ["모델", "엔드포인트 및 기능"], ["데이터 세트", "버전 관리 데이터 원본"], ["실행", "실행, 결과 및 증거"], ["순위표", "전체 순위 및 실행 검색"], ["분석", "증거 플롯 및 실행 비교"], ["설정", "상태, 액세스 및 기본 설정"],
   ]),
   ms: navigation(["Gambaran keseluruhan", "Konfigurasi", "Operasi", "Wawasan", "Sistem"], [
-    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Panduan", "Panduan penggunaan langkah demi langkah"], ["Model", "Titik akhir dan keupayaan"], ["Set data", "Sumber data berversi"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Analisis", "Matriks dan perbandingan larian"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
+    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Panduan", "Panduan penggunaan langkah demi langkah"], ["Model", "Titik akhir dan keupayaan"], ["Set data", "Sumber data berversi"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Papan kedudukan", "Kedudukan global dan penemuan larian"], ["Analisis", "Plot bukti dan perbandingan larian"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
   ]),
 };
 
@@ -810,6 +810,35 @@ export const comparisonCopy: Record<Locale, ComparisonCopy> = {
   ja: { ...comparisonEnglish, sourcesTitle: "比較元", runA: "実行 A", runB: "実行 B", selectCompleted: "完了した実行を選択", compare: "実行を比較", comparing: "比較中…", sameRun: "異なる2件の実行を選択してください。", incompatible: "同じベンチマーク バージョンの実行を選択してください。", title: "比較証拠", loading: "選択した実行を比較中…", empty: "完了した実行を2件選択して比較を開始します。", sharedSamples: "件の共有サンプル", notAvailable: "利用不可", tokens: "トークン", metricCharts: "指標比較", quality: "品質", performance: "性能", cost: "コスト", usage: "使用量", languageModeling: "言語モデリング", otherMetrics: "その他の指標", outcomeTitle: "結果分布", bothCorrect: "両方正解", aOnlyCorrect: "A のみ正解", bOnlyCorrect: "B のみ正解", bothIncorrect: "両方不正解", exactTitle: "正確な指標値", metrics: "指標", metric: "指標", samples: "サンプル", delta: "A - B", unit: "単位" },
   ko: { ...comparisonEnglish, sourcesTitle: "비교 원본", runA: "실행 A", runB: "실행 B", selectCompleted: "완료된 실행 선택", compare: "실행 비교", comparing: "비교 중…", sameRun: "서로 다른 두 실행을 선택하세요.", incompatible: "같은 벤치마크 버전의 실행을 선택하세요.", title: "비교 증거", loading: "선택한 실행 비교 중…", empty: "완료된 실행 두 개를 선택하여 비교를 시작하세요.", sharedSamples: "개 공유 샘플", notAvailable: "해당 없음", tokens: "토큰", metricCharts: "지표 비교", quality: "품질", performance: "성능", cost: "비용", usage: "사용량", languageModeling: "언어 모델링", otherMetrics: "기타 지표", outcomeTitle: "결과 분포", bothCorrect: "둘 다 정답", aOnlyCorrect: "A만 정답", bOnlyCorrect: "B만 정답", bothIncorrect: "둘 다 오답", exactTitle: "정확한 지표 값", metrics: "개 지표", metric: "지표", samples: "샘플", delta: "A - B", unit: "단위" },
   ms: { ...comparisonEnglish, sourcesTitle: "Sumber perbandingan", runA: "Larian A", runB: "Larian B", selectCompleted: "Pilih larian selesai", compare: "Bandingkan larian", comparing: "Membandingkan…", sameRun: "Pilih dua larian berbeza.", incompatible: "Pilih larian daripada versi penanda aras yang sama.", title: "Bukti perbandingan", loading: "Membandingkan larian dipilih…", empty: "Pilih dua larian selesai untuk memulakan perbandingan.", sharedSamples: "sampel dikongsi", notAvailable: "T/T", tokens: "token", metricCharts: "Perbandingan metrik", quality: "Kualiti", performance: "Prestasi", cost: "Kos", usage: "Penggunaan", languageModeling: "Pemodelan bahasa", otherMetrics: "Metrik lain", outcomeTitle: "Taburan hasil", bothCorrect: "Kedua-dua betul", aOnlyCorrect: "A sahaja betul", bOnlyCorrect: "B sahaja betul", bothIncorrect: "Kedua-dua salah", exactTitle: "Nilai metrik tepat", metrics: "metrik", metric: "Metrik", samples: "Sampel", delta: "A - B", unit: "Unit" },
+};
+
+export type LeaderboardCopy = {
+  eyebrow: string; title: string; description: string; rankingExplanation: string;
+  filtersTitle: string; filtersDescription: string; dataset: string; model: string; status: string; fromDate: string; toDate: string; capability: string; language: string; evaluationType: string; availableMetric: string; all: string;
+  apply: string; applying: string; reset: string; activeFilters: string; removeFilter: string;
+  resultsTitle: string; resultsDescription: string; runs: string; loading: string; loadError: string; retry: string; empty: string;
+  name: string; averageLatency: string; p95Latency: string; score: string; cost: string; samples: string; created: string; inspect: string; notAvailable: string;
+  page: string; of: string; previous: string; next: string; sortBy: string; direction: string; ascending: string; descending: string; defaultOrder: string; restoreDefault: string;
+};
+
+const leaderboardEnglish: LeaderboardCopy = {
+  eyebrow: "Operations", title: "Leaderboard", description: "Rank and discover every non-archived evaluation run with server-backed filters, ordering, and bounded pages.", rankingExplanation: "Completed and scored runs rank first by primary score, then p95 latency, cost, and recency. Unscored and incomplete runs remain visible below them.",
+  filtersTitle: "Leaderboard filters", filtersDescription: "Combine dataset, model, lifecycle, date, capability, language, task type, and metric-availability filters.", dataset: "Dataset", model: "Model", status: "Status", fromDate: "From date", toDate: "To date", capability: "Capability", language: "Language", evaluationType: "Evaluation type", availableMetric: "Available metric", all: "All",
+  apply: "Apply filters", applying: "Applying…", reset: "Reset filters", activeFilters: "Active filters", removeFilter: "Remove",
+  resultsTitle: "Ranked runs", resultsDescription: "All ordering and pagination is evaluated by the service; unavailable values are never treated as zero.", runs: "runs", loading: "Loading leaderboard…", loadError: "The leaderboard could not be loaded.", retry: "Retry", empty: "No runs match the current filters.",
+  name: "Name", averageLatency: "Average latency", p95Latency: "p95 latency", score: "Score", cost: "Cost", samples: "Samples", created: "Created", inspect: "Inspect", notAvailable: "N/A",
+  page: "Page", of: "of", previous: "Previous page", next: "Next page", sortBy: "Sort by", direction: "Sort direction", ascending: "Ascending", descending: "Descending", defaultOrder: "Ranked order", restoreDefault: "Restore ranked order",
+};
+
+export const leaderboardCopy: Record<Locale, LeaderboardCopy> = {
+  en: leaderboardEnglish,
+  "zh-CN": { ...leaderboardEnglish, eyebrow: "运营", title: "排行榜", description: "使用服务端筛选、排序和分页，对所有未归档评测运行进行排名与查找。", rankingExplanation: "已完成且有评分的运行按主要分数、p95 延迟、成本和时间排序；未评分和未完成运行仍显示在其后。", filtersTitle: "排行榜筛选", apply: "应用筛选", applying: "正在应用…", reset: "重置筛选", resultsTitle: "运行排名", runs: "个运行", loading: "正在加载排行榜…", retry: "重试", empty: "没有运行符合当前筛选。", name: "名称", score: "分数", cost: "成本", samples: "样本", created: "创建时间", inspect: "查看", previous: "上一页", next: "下一页" },
+  fr: { ...leaderboardEnglish, eyebrow: "Opérations", title: "Classement", description: "Classez et retrouvez chaque exécution non archivée avec des filtres, un tri et des pages gérés par le service.", rankingExplanation: "Les exécutions terminées et notées sont classées par score principal, latence p95, coût et récence. Les autres restent visibles ensuite.", filtersTitle: "Filtres du classement", apply: "Appliquer les filtres", applying: "Application…", reset: "Réinitialiser", resultsTitle: "Exécutions classées", runs: "exécutions", loading: "Chargement du classement…", retry: "Réessayer", empty: "Aucune exécution ne correspond aux filtres.", name: "Nom", score: "Score", cost: "Coût", samples: "Échantillons", created: "Créée", inspect: "Inspecter", previous: "Page précédente", next: "Page suivante" },
+  de: { ...leaderboardEnglish, eyebrow: "Betrieb", title: "Rangliste", description: "Ordnen und finden Sie alle nicht archivierten Ausführungen mit serverseitigen Filtern, Sortierung und begrenzten Seiten.", rankingExplanation: "Abgeschlossene bewertete Ausführungen werden nach Primärwert, p95-Latenz, Kosten und Aktualität geordnet; alle anderen bleiben darunter sichtbar.", filtersTitle: "Ranglistenfilter", apply: "Filter anwenden", applying: "Wird angewendet…", reset: "Filter zurücksetzen", resultsTitle: "Geordnete Ausführungen", runs: "Ausführungen", loading: "Rangliste wird geladen…", retry: "Erneut versuchen", empty: "Keine Ausführung entspricht den Filtern.", name: "Name", score: "Wert", cost: "Kosten", samples: "Stichproben", created: "Erstellt", inspect: "Prüfen", previous: "Vorherige Seite", next: "Nächste Seite" },
+  ru: { ...leaderboardEnglish, eyebrow: "Операции", title: "Рейтинг", filtersTitle: "Фильтры рейтинга", apply: "Применить фильтры", applying: "Применение…", reset: "Сбросить фильтры", resultsTitle: "Рейтинг запусков", runs: "запусков", loading: "Загрузка рейтинга…", retry: "Повторить", empty: "Нет запусков, соответствующих фильтрам.", name: "Название", score: "Балл", cost: "Стоимость", samples: "Примеры", created: "Создан", inspect: "Открыть", previous: "Предыдущая страница", next: "Следующая страница" },
+  ja: { ...leaderboardEnglish, eyebrow: "運用", title: "ランキング", filtersTitle: "ランキング フィルター", apply: "フィルターを適用", applying: "適用中…", reset: "フィルターをリセット", resultsTitle: "実行ランキング", runs: "件の実行", loading: "ランキングを読み込み中…", retry: "再試行", empty: "現在のフィルターに一致する実行はありません。", name: "名前", score: "スコア", cost: "コスト", samples: "サンプル", created: "作成日時", inspect: "確認", previous: "前のページ", next: "次のページ" },
+  ko: { ...leaderboardEnglish, eyebrow: "운영", title: "순위표", filtersTitle: "순위표 필터", apply: "필터 적용", applying: "적용 중…", reset: "필터 재설정", resultsTitle: "실행 순위", runs: "개 실행", loading: "순위표 불러오는 중…", retry: "다시 시도", empty: "현재 필터와 일치하는 실행이 없습니다.", name: "이름", score: "점수", cost: "비용", samples: "샘플", created: "생성됨", inspect: "검사", previous: "이전 페이지", next: "다음 페이지" },
+  ms: { ...leaderboardEnglish, eyebrow: "Operasi", title: "Papan kedudukan", filtersTitle: "Penapis papan kedudukan", apply: "Gunakan penapis", applying: "Menggunakan…", reset: "Tetapkan semula penapis", resultsTitle: "Kedudukan larian", runs: "larian", loading: "Memuatkan papan kedudukan…", retry: "Cuba lagi", empty: "Tiada larian sepadan dengan penapis semasa.", name: "Nama", score: "Skor", cost: "Kos", samples: "Sampel", created: "Dicipta", inspect: "Periksa", previous: "Halaman sebelumnya", next: "Halaman seterusnya" },
 };
 
 export type ShellCopy = {

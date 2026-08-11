@@ -6,6 +6,7 @@ export const workspacePaths = {
   models: "/models",
   datasets: "/datasets",
   runs: "/runs",
+  leaderboard: "/leaderboard",
   analysis: "/analysis",
   settings: "/settings",
 } as const satisfies Record<WorkspaceView, `/${string}`>;
@@ -16,6 +17,7 @@ export const workspaceTabIds = {
   models: ["model-inventory", "add-endpoint"],
   datasets: ["dataset-inventory", "register-dataset"],
   runs: ["run-inventory", "quick-start", "dataset-evaluation", "run-details"],
+  leaderboard: ["rankings"],
   analysis: ["evidence-matrix", "compare-runs"],
   settings: ["health", "access", "preferences"],
 } as const satisfies Record<WorkspaceView, readonly string[]>;
@@ -24,7 +26,7 @@ export type WorkspaceTabFor<V extends WorkspaceView> = (typeof workspaceTabIds)[
 export type WorkspaceTab = { [V in WorkspaceView]: WorkspaceTabFor<V> }[WorkspaceView];
 export type WorkspaceNavigate = <V extends WorkspaceView>(
   view: V,
-  options?: { replace?: boolean; tab?: WorkspaceTabFor<V> },
+  options?: { replace?: boolean; runId?: string; tab?: WorkspaceTabFor<V> },
 ) => void;
 
 export type WorkspaceRoute = {
@@ -46,9 +48,17 @@ function isWorkspaceTab<V extends WorkspaceView>(view: V, value: string | null):
 export function workspacePath<V extends WorkspaceView>(
   view: V,
   tab: WorkspaceTabFor<V> = defaultWorkspaceTab(view),
+  options: { runId?: string } = {},
 ): string {
   const pathname = workspacePaths[view];
-  return tab === defaultWorkspaceTab(view) ? pathname : `${pathname}?tab=${encodeURIComponent(tab)}`;
+  const params = new URLSearchParams();
+  if (tab !== defaultWorkspaceTab(view)) params.set("tab", tab);
+  if (view === "runs" && tab === "run-details" && validRunId(options.runId)) params.set("run", options.runId);
+  return params.size ? `${pathname}?${params.toString()}` : pathname;
+}
+
+function validRunId(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }
 
 export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
@@ -62,7 +72,10 @@ export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
         ? "quick-start"
         : rawRequestedTab;
       const tab = isWorkspaceTab(view, requestedTab) ? requestedTab : defaultWorkspaceTab(view);
-      const canonicalSearch = tab === defaultWorkspaceTab(view) ? "" : `?tab=${encodeURIComponent(tab)}`;
+      const requestedRunId = new URLSearchParams(normalizedSearch).get("run");
+      const canonicalSearch = workspacePath(view, tab, {
+        runId: view === "runs" && tab === "run-details" && validRunId(requestedRunId) ? requestedRunId : undefined,
+      }).slice(path.length);
       return {
         view,
         tab,

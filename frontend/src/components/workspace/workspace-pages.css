@@ -1384,6 +1384,166 @@ button.dataset-value-chip {
   padding-top: .85rem;
 }
 
+.workspace-leaderboard-explainer {
+  border-left: .22rem solid var(--primary);
+}
+
+.workspace-leaderboard-results {
+  overflow: hidden;
+}
+
+.workspace-leaderboard-filter-grid {
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workspace-leaderboard-filter-grid label,
+.workspace-leaderboard-ordering label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: .75rem;
+  font-weight: 700;
+  gap: .28rem;
+}
+
+.workspace-leaderboard-statuses {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .7rem;
+  margin: .8rem 0 0;
+  padding: 0;
+}
+
+.workspace-leaderboard-statuses legend {
+  color: var(--text-muted);
+  font-size: .75rem;
+  font-weight: 700;
+  margin-bottom: .38rem;
+}
+
+.workspace-leaderboard-statuses label {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: flex;
+  font-size: .72rem;
+  gap: .32rem;
+  padding: .28rem .52rem;
+}
+
+.workspace-leaderboard-statuses input {
+  margin: 0;
+  width: auto;
+}
+
+.workspace-leaderboard-filter-actions,
+.workspace-leaderboard-chips,
+.workspace-leaderboard-ordering,
+.workspace-leaderboard-pagination,
+.workspace-leaderboard-pagination > div,
+.workspace-leaderboard-state {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.workspace-leaderboard-filter-actions,
+.workspace-leaderboard-chips {
+  margin-top: .8rem;
+}
+
+.workspace-filter-chip {
+  align-items: center;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  color: var(--text);
+  display: inline-flex;
+  font-size: .7rem;
+  gap: .4rem;
+  padding: .32rem .5rem;
+}
+
+.workspace-filter-chip b {
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+.workspace-leaderboard-ordering {
+  align-items: end;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 .7rem;
+  padding: 0 0 .7rem;
+}
+
+.workspace-leaderboard-ordering label {
+  min-width: min(14rem, 100%);
+}
+
+.workspace-leaderboard-table table {
+  min-width: 78rem;
+}
+
+.workspace-leaderboard-table td:first-child {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.workspace-leaderboard-table td strong,
+.workspace-leaderboard-table td small {
+  display: block;
+}
+
+.workspace-leaderboard-table td small {
+  color: var(--text-muted);
+  font-size: .68rem;
+  margin-top: .12rem;
+}
+
+.workspace-sort-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  font-size: inherit;
+  gap: .28rem;
+  padding: .12rem;
+}
+
+.workspace-sort-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.button-link {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: inline-block;
+  font-size: .72rem;
+  padding: .4rem .58rem;
+  text-decoration: none;
+}
+
+.workspace-leaderboard-pagination {
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: .76rem;
+  justify-content: space-between;
+  margin-top: .8rem;
+  padding-top: .8rem;
+}
+
+.workspace-leaderboard-state {
+  align-items: flex-start;
+  flex-direction: column;
+  padding: .8rem 0;
+}
+
 
 @media (max-width: 42rem) {
   .workspace-page-header {
@@ -1410,6 +1570,24 @@ button.dataset-value-chip {
   .workspace-field-grid--three,
   .workspace-field-grid--five {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-leaderboard-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-leaderboard-ordering {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-leaderboard-ordering label {
+    width: 100%;
+  }
+
+  .workspace-leaderboard-pagination {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .workspace-model-metadata {

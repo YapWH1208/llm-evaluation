@@ -31,6 +31,7 @@ import { DatasetRegistrationForm, type DatasetRegistrationFormValues } from "./c
 import { DatasetsPage, type DatasetEditFormValues } from "./components/pages/CatalogPages";
 import { ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
 import { AnalysisPage } from "./components/pages/InsightsPages";
+import { LeaderboardPage } from "./components/pages/LeaderboardPage";
 import { RunsPage } from "./components/pages/OperationsPages";
 import { SettingsPage } from "./components/pages/SystemPages";
 import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
@@ -217,7 +218,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
-    const href = workspacePath(nextView, options.tab);
+    const href = workspacePath(nextView, options.tab, { runId: options.runId });
     if (`${window.location.pathname}${window.location.search}` !== href) {
       window.history[options.replace ? "replaceState" : "pushState"](null, "", href);
     }
@@ -310,6 +311,12 @@ export default function App() {
     };
     return api.subscribeToRunEvents(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
+
+  useEffect(() => {
+    if (route.view !== "runs" || route.tab !== "run-details") return;
+    const runId = new URLSearchParams(route.search).get("run");
+    if (runId && runId !== selectedRun) void selectRun(runId);
+  }, [route.view, route.tab, route.search, selectedRun]);
 
   function showNotice(template: string, values?: Record<string, string | number>) {
     setNotice(translateStaticTemplate(locale, template, values));
@@ -519,7 +526,7 @@ export default function App() {
 
   function inspectRun(runId: string) {
     void selectRun(runId);
-    navigate("runs", { tab: "run-details" });
+    navigate("runs", { tab: "run-details", runId });
   }
 
   async function loadMoreAttempts() {
@@ -805,6 +812,7 @@ export default function App() {
       />}
 
       {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={api.analyticsScatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
+      {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={api.leaderboard} onInspectRun={inspectRun} />}
       {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
