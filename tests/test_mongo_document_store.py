@@ -486,6 +486,11 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert scatter.status_code == 200
         assert scatter.json()["plotted_count"] == 1
         assert scatter.json()["points"][0]["run_id"] == run.json()["id"]
+        leaderboard = api.get("/api/v1/leaderboard")
+        assert leaderboard.status_code == 200
+        assert leaderboard.json()["total"] == 1
+        assert leaderboard.json()["items"][0]["run_id"] == run.json()["id"]
+        assert leaderboard.json()["items"][0]["score"] == 1.0
         assert captured == [("https://models.example.test/v1", "model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 

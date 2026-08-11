@@ -96,4 +96,29 @@ describe("authenticated browser transport", () => {
       expect.any(Object),
     );
   });
+
+  it("encodes leaderboard filters, ordering, and pagination", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      items: [], total: 0, page: 2, page_size: 25, total_pages: 0, sort: "score", direction: "desc",
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await api.leaderboard({
+      dataset: "dataset-a",
+      model_endpoint_id: "endpoint-a",
+      statuses: ["completed", "completed_with_errors"],
+      capability: "reasoning",
+      language: "en",
+      evaluation_type: "classification",
+      available_metric: "f1_macro",
+      sort: "score",
+      direction: "desc",
+      page: 2,
+      page_size: 25,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/leaderboard?dataset=dataset-a&model_endpoint_id=endpoint-a&status=completed&status=completed_with_errors&capability=reasoning&language=en&evaluation_type=classification&available_metric=f1_macro&sort=score&direction=desc&page=2&page_size=25",
+      expect.any(Object),
+    );
+  });
 });

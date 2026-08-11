@@ -151,6 +151,24 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         )
         assert invalid_scatter.status_code == 422
 
+        leaderboard = client.get("/api/v1/leaderboard")
+        assert leaderboard.status_code == 200
+        assert leaderboard.json()["total"] == 2
+        assert {item["run_id"] for item in leaderboard.json()["items"]} == {run_a, run_b}
+        assert all(item["display_name"] for item in leaderboard.json()["items"])
+        model_a_endpoint = next(
+            item["model_endpoint_id"]
+            for item in leaderboard.json()["items"]
+            if item["model_name"] == "model-a"
+        )
+        filtered_leaderboard = client.get(
+            "/api/v1/leaderboard",
+            params={"model_endpoint_id": model_a_endpoint, "available_metric": "accuracy"},
+        )
+        assert filtered_leaderboard.status_code == 200
+        assert [item["run_id"] for item in filtered_leaderboard.json()["items"]] == [run_a]
+        assert client.get("/api/v1/leaderboard", params={"sort": "unknown"}).status_code == 422
+
         comparison = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_b})
         assert comparison.status_code == 200
         compared = comparison.json()

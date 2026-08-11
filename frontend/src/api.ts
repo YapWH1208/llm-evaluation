@@ -166,6 +166,64 @@ export type ScatterResponse = {
   max_points: number;
   points: ScatterPoint[];
 };
+export type LeaderboardQuery = {
+  dataset?: string;
+  model_endpoint_id?: string;
+  statuses?: string[];
+  created_from?: string;
+  created_to?: string;
+  capability?: string;
+  language?: string;
+  evaluation_type?: Dataset["evaluation_type"];
+  available_metric?: string;
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
+  page_size?: number;
+};
+export type LeaderboardMetric = {
+  metric_name: string;
+  label: string;
+  unit: string;
+  value: number | null;
+  sample_count: number;
+  availability_reason: string | null;
+};
+export type LeaderboardRow = {
+  run_id: string;
+  display_name: string;
+  model_endpoint_id: string;
+  model_name: string;
+  dataset: string;
+  benchmark_id: string;
+  benchmark_version: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: Dataset["evaluation_type"];
+  score: number | null;
+  primary_metric: string;
+  average_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  estimated_cost: number | null;
+  sample_count: number;
+  completed_samples: number;
+  successful_samples: number;
+  failed_samples: number;
+  available_metrics: string[];
+  named_metrics: Record<string, LeaderboardMetric>;
+};
+export type LeaderboardResponse = {
+  items: LeaderboardRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  sort: string;
+  direction: "asc" | "desc";
+};
 
 export type RunSummary = {
   samples: { total: number; completed: number; successful: number; failed: number; completion_rate: number | null; success_rate: number | null; accuracy: number | null };
@@ -434,6 +492,24 @@ export const api = {
     if (query.max_points !== undefined) params.set("max_points", String(query.max_points));
     const suffix = params.size ? `?${params.toString()}` : "";
     return request<ScatterResponse>(`/analytics/scatter${suffix}`);
+  },
+  leaderboard: (query: LeaderboardQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.dataset) params.set("dataset", query.dataset);
+    if (query.model_endpoint_id) params.set("model_endpoint_id", query.model_endpoint_id);
+    query.statuses?.forEach((status) => params.append("status", status));
+    if (query.created_from) params.set("created_from", query.created_from);
+    if (query.created_to) params.set("created_to", query.created_to);
+    if (query.capability) params.set("capability", query.capability);
+    if (query.language) params.set("language", query.language);
+    if (query.evaluation_type) params.set("evaluation_type", query.evaluation_type);
+    if (query.available_metric) params.set("available_metric", query.available_metric);
+    if (query.sort) params.set("sort", query.sort);
+    if (query.direction) params.set("direction", query.direction);
+    if (query.page !== undefined) params.set("page", String(query.page));
+    if (query.page_size !== undefined) params.set("page_size", String(query.page_size));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<LeaderboardResponse>(`/leaderboard${suffix}`);
   },
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };
