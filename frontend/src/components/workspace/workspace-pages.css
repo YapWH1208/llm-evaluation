@@ -664,11 +664,13 @@ button.dataset-value-chip {
 }
 
 .workspace-run-row {
+  align-items: center;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   display: grid;
   gap: .7rem;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: .78rem;
 }
 
@@ -706,11 +708,12 @@ button.dataset-value-chip {
 
 .workspace-run-actions {
   align-items: center;
-  border-top: 1px solid var(--border);
+  border-top: 0;
   display: flex;
   flex-wrap: wrap;
   gap: .42rem;
-  padding-top: .68rem;
+  justify-content: flex-end;
+  padding-top: 0;
 }
 
 .workspace-run-actions button {
@@ -1623,6 +1626,17 @@ button.dataset-value-chip {
 
   .workspace-run-list {
     max-height: none;
+  }
+
+  .workspace-run-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-run-actions {
+    border-top: 1px solid var(--border);
+    justify-content: flex-start;
+    padding-top: .68rem;
   }
 
   .workspace-analysis-context {

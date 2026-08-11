@@ -78,6 +78,10 @@ describe("dashboard visualizations", () => {
 
     expect(screen.getByRole("img", { name: labels.evaluationTrend })).toBeVisible();
     expect(document.querySelectorAll("[data-trend-series]")).toHaveLength(2);
+    expect(document.querySelectorAll("[data-trend-point]")).toHaveLength(4);
+    expect(document.querySelector('[data-trend-point="accuracy"][data-value="0"]')).toHaveAttribute("cy", "104");
+    expect(document.querySelectorAll(".trend-axis-label")).toHaveLength(3);
+    expect(document.querySelector("[data-trend-point='accuracy'] title")).toHaveTextContent("Evaluator A · text-quick-check · v1.0.0 · Accuracy 0%");
     expect(document.querySelectorAll("tbody tr")).toHaveLength(2);
     expect(document.body).toHaveTextContent("80%");
     expect(document.body).toHaveTextContent("90%");
@@ -91,5 +95,18 @@ describe("dashboard visualizations", () => {
     expect(screen.getByText("EUR 1.25")).toBeVisible();
     expect(screen.getByText("10%")).toBeVisible();
     expect(screen.queryByText(labels.unknownValue)).not.toBeInTheDocument();
+    expect(document.querySelector('.efficiency-row:first-child [data-signal="error"] .signal-fill')).toHaveStyle({ width: "10%" });
+  });
+
+  it("never compares cost bar lengths across currencies", () => {
+    render(<EfficiencySignals formatters={formatters} labels={labels} points={[
+      { ...points[0], estimatedCost: 1, currency: "USD" },
+      { ...points[1], estimatedCost: 100, currency: "EUR" },
+    ]} />);
+
+    const costFills = [...document.querySelectorAll('[data-signal="cost"] .signal-fill')];
+    expect(costFills).toHaveLength(2);
+    expect(costFills[0]).toHaveStyle({ width: "100%" });
+    expect(costFills[1]).toHaveStyle({ width: "100%" });
   });
 });

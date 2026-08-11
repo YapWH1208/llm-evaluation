@@ -74,6 +74,7 @@ const activeRun: EvaluationRun = {
 const completedRun: EvaluationRun = {
   ...activeRun,
   id: "completed-run",
+  display_name: "evaluation-model_release-check_20260801T090000Z",
   status: "completed",
   completed_samples: 12,
   successful_samples: 11,
@@ -86,6 +87,7 @@ const completedRun: EvaluationRun = {
 const olderRun: EvaluationRun = {
   ...completedRun,
   id: "older-run",
+  display_name: "evaluation-model_release-check_20260731T090000Z",
   created_at: "2026-07-31T09:00:00Z",
   started_at: "2026-07-31T09:01:00Z",
   completed_at: "2026-07-31T09:03:00Z",
@@ -182,6 +184,7 @@ describe("OverviewDashboard", () => {
 
     expect(document.querySelector(".overview-dashboard")).toBeInTheDocument();
     expect(document.querySelector(".overview-dashboard.workspace-page")).not.toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveClass("dashboard-tabpanel");
   });
 
   it("shows performance evidence only on the summary tab", async () => {
@@ -216,6 +219,8 @@ describe("OverviewDashboard", () => {
     expect(screen.getByRole("tab", { name: "Evaluations" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
     expect(document.querySelector(".dashboard-status-badge.completed")).toBeInTheDocument();
+    expect(screen.getByText("evaluation-model_release-check_20260802T090000Z")).toBeVisible();
+    expect(screen.getByText("evaluation-model_release-check_20260801T090000Z")).toBeVisible();
     expect(screen.queryByRole("img", { name: "Evaluation trend" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
 

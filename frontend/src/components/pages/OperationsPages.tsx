@@ -28,7 +28,7 @@ export function RunInventory({ onSelect, renderActions, runs, selectedRunId }: P
   const [status, setStatus] = useState("all");
   const statuses = useMemo(() => Array.from(new Set(runs.map((run) => run.status))).sort(), [runs]);
   const visibleRuns = useMemo(() => runs.filter((run) => {
-    const searchable = `${run.benchmark_id} ${run.benchmark_version} ${run.status} ${run.id}`.toLowerCase();
+    const searchable = `${run.display_name} ${run.benchmark_id} ${run.benchmark_version} ${run.status} ${run.id}`.toLowerCase();
     return (status === "all" || run.status === status) && searchable.includes(query.trim().toLowerCase());
   }), [query, runs, status]);
 
@@ -38,7 +38,7 @@ export function RunInventory({ onSelect, renderActions, runs, selectedRunId }: P
       <label className="workspace-filter-control">Run status<select aria-label="Run status" onChange={(event) => setStatus(event.target.value)} value={status}><option value="all">All states</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></label>
     </div>
     {runs.length === 0 ? <p className="empty">Verify a model endpoint to create the first run.</p> : visibleRuns.length === 0 ? <p className="empty">No runs match the current filters.</p> : <div className="workspace-run-list">{visibleRuns.map((run) => <article className={selectedRunId === run.id ? "workspace-run-row is-selected" : "workspace-run-row"} key={run.id}>
-      <button aria-pressed={selectedRunId === run.id} className="workspace-run-summary" onClick={() => onSelect(run.id)} type="button"><strong data-i18n-preserve>{run.benchmark_id} v{run.benchmark_version}</strong><span><span className={`badge ${run.status}`}>{run.status.replaceAll("_", " ")}</span>{run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button>
+      <button aria-pressed={selectedRunId === run.id} className="workspace-run-summary" onClick={() => onSelect(run.id)} type="button"><strong data-i18n-preserve>{run.display_name || `${run.benchmark_id} v${run.benchmark_version}`}</strong><span><span data-i18n-preserve>{run.benchmark_id} v{run.benchmark_version}</span><span className={`badge ${run.status}`}>{run.status.replaceAll("_", " ")}</span>{run.completed_samples}/{run.total_samples} samples · {formatDate(run.created_at)}</span></button>
       <div className="workspace-run-actions">{renderActions(run)}</div>
     </article>)}</div>}
   </WorkspacePanel>;

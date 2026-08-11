@@ -98,7 +98,7 @@ function RecentEvaluationsTable({ copy, formatDate, formatters, onInspectRun, ro
             <th>{copy.model}</th>
             <th>{copy.progress}</th>
             <th>{copy.accuracy}</th>
-            <th>{copy.p95Latency}</th>
+            <th>{copy.latency}</th>
             <th>{copy.started}</th>
             <th aria-label={copy.inspect} />
           </tr>
@@ -110,7 +110,8 @@ function RecentEvaluationsTable({ copy, formatDate, formatters, onInspectRun, ro
               <tr key={row.run.id}>
                 <td>
                   <span className={`dashboard-status-badge ${row.run.status}`}>{row.run.status}</span>
-                  <strong data-i18n-preserve title={`${row.run.benchmark_id} · v${row.run.benchmark_version}`}>{row.run.benchmark_id}</strong>
+                  <strong data-i18n-preserve title={row.run.display_name}>{row.run.display_name}</strong>
+                  <small data-i18n-preserve>{row.run.benchmark_id} · v{row.run.benchmark_version}</small>
                 </td>
                 <td data-i18n-preserve title={row.modelName}>{row.modelName}</td>
                 <td>{formatters.percent(progress)}</td>
@@ -176,7 +177,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
       <section className="overview-dashboard" aria-labelledby="dashboard-title">
         <DashboardHeader copy={copy} onOpenSetup={onOpenSetup} onOpenView={onOpenView} />
         <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
-        <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
+        <div aria-labelledby={workspaceTabId("dashboard", activeTab)} className="dashboard-tabpanel" id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
           <section className="dashboard-panel overview-unavailable" aria-label={copy.unavailableRegion}>
             <div>
               <p className="eyebrow">{copy.currentWork}</p>
@@ -220,7 +221,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
     <section className="overview-dashboard" aria-labelledby="dashboard-title">
       <DashboardHeader copy={copy} onOpenSetup={onOpenSetup} onOpenView={onOpenView} />
       <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
-      <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
+      <div aria-labelledby={workspaceTabId("dashboard", activeTab)} className="dashboard-tabpanel" id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
         {activeTab === "summary" && <>
           <section className="overview-kpis" aria-labelledby="performance-summary-title">
             <h2 className="sr-only" id="performance-summary-title">{copy.performanceSummary}</h2>
