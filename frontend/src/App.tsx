@@ -450,7 +450,7 @@ export default function App() {
       const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
       const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       await selectRun(run.id);
-      navigate("runs");
+      navigate("runs", { tab: "run-details" });
       showNotice("{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: `${benchmarkId}@${benchmarkVersion}` });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -515,6 +515,11 @@ export default function App() {
       setReports(nextReports);
       setRunLogs(nextLogs);
     } catch (error) { showError(error); }
+  }
+
+  function inspectRun(runId: string) {
+    void selectRun(runId);
+    navigate("runs", { tab: "run-details" });
   }
 
   async function loadMoreAttempts() {
@@ -721,7 +726,7 @@ export default function App() {
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={(runId) => { void selectRun(runId); navigate("runs"); }} onOpenView={navigate} />}
+      {view === "dashboard" && <OverviewDashboard analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenView={navigate} />}
       {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
@@ -747,6 +752,7 @@ export default function App() {
 
 
       {view === "runs" && <RunsPage
+        activeTab={route.tab as WorkspaceTabFor<"runs">}
         inspector={selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
         launcher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
           <label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => { setDatasetHandoffId(null); setLaunchPreflight(null); setDatasetRunForm((current) => ({ ...current, dataset_version_id: event.target.value, input_field: "", reference_field: "" })); }}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>
@@ -766,7 +772,8 @@ export default function App() {
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
           <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}
-        onSelect={(runId) => void selectRun(runId)}
+        onSelect={inspectRun}
+        onTabChange={(tab) => navigate("runs", { tab })}
         preflight={<div className="workspace-run-context-controls">
           <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
           <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
@@ -780,7 +787,7 @@ export default function App() {
           <p className="workspace-launch-note">{t("runLauncher.offlineHint")}</p>
           <button className="primary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === `run-${datasetRunForm.model_endpoint_id}`}>{t("runLauncher.queueQuickStart")}</button>
         </form>}
-        renderActions={(run) => <><button className="secondary" onClick={() => void selectRun(run.id)} type="button">Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}</>}
+        renderActions={(run) => <><button className="secondary" onClick={() => inspectRun(run.id)} type="button">Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}</>}
         runs={runs}
         selectedRunId={selectedRun}
       />}

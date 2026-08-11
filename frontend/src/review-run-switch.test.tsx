@@ -73,6 +73,7 @@ describe("review run switching", () => {
     await user.click(screen.getByRole("button", { name: /math-check v1/ }));
     await waitFor(() => expect(screen.getByText(/sample-7 · attempt 1/)).toBeInTheDocument());
 
+    await user.click(screen.getByRole("tab", { name: "Run inventory" }));
     await user.click(screen.getByRole("button", { name: /code-check v1/ }));
 
     expect(screen.queryByText(/sample-7 · attempt 1/)).not.toBeInTheDocument();

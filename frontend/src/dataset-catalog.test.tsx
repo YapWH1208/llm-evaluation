@@ -155,6 +155,7 @@ describe("dataset catalog", () => {
     const { user } = await renderApp();
 
     await user.click(screen.getByRole("link", { name: "Runs" }));
+    await user.click(screen.getByRole("tab", { name: "Launch evaluation" }));
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
     await user.click(screen.getByRole("link", { name: "Datasets" }));

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, type Endpoint } from "./api";
+import { api, type Endpoint, type EvaluationRun } from "./api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 const endpoint: Endpoint = {
@@ -32,9 +32,27 @@ const endpoint: Endpoint = {
   tokens_per_minute: null,
 };
 
-function mockWorkspace() {
+const run: EvaluationRun = {
+  archived_at: null,
+  benchmark_id: "math-check",
+  benchmark_version: "1",
+  completed_at: "2026-08-08T12:05:00Z",
+  completed_samples: 1,
+  created_at: "2026-08-08T12:00:00Z",
+  created_by: null,
+  failed_samples: 0,
+  id: "run-1",
+  max_concurrency: null,
+  model_endpoint_id: endpoint.id,
+  started_at: "2026-08-08T12:00:01Z",
+  status: "completed",
+  successful_samples: 1,
+  total_samples: 1,
+};
+
+function mockWorkspace({ runs = [] }: { runs?: EvaluationRun[] } = {}) {
   vi.spyOn(api, "listEndpoints").mockResolvedValue([endpoint]);
-  vi.spyOn(api, "listRuns").mockResolvedValue([]);
+  vi.spyOn(api, "listRuns").mockResolvedValue(runs);
   vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
   vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
   vi.spyOn(api, "listDatasets").mockResolvedValue([]);
@@ -43,6 +61,10 @@ function mockWorkspace() {
   vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
   vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
   vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 0, root: "/data", total_bytes: 2000 });
+  vi.spyOn(api, "listAttempts").mockResolvedValue([]);
+  vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
+  vi.spyOn(api, "listReports").mockResolvedValue([]);
+  vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
 }
 
 afterEach(() => {
@@ -79,5 +101,28 @@ describe("workspace tab routing", () => {
     expect(window.location.search).toBe("?tab=register-dataset");
     expect(screen.getByRole("heading", { name: "Register dataset version" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "No dataset versions" })).not.toBeInTheDocument();
+  });
+
+  it("opens a selected run in its URL-backed detail tab", async () => {
+    mockWorkspace({ runs: [run] });
+    window.history.replaceState(null, "", "/runs");
+    const user = userEvent.setup();
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    await user.click(await screen.findByRole("button", { name: /math-check v1/i }));
+
+    expect(window.location.pathname).toBe("/runs");
+    expect(window.location.search).toBe("?tab=run-details");
+    expect(screen.getByRole("tab", { name: "Run details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Selected run inspector" })).toBeVisible();
+  });
+
+  it("shows run-detail guidance when a deep link has no selected run", () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/runs?tab=run-details");
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    expect(screen.getByRole("tab", { name: "Run details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Select a run" })).toBeVisible();
   });
 });

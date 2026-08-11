@@ -71,6 +71,7 @@ async function openRuns() {
   const user = userEvent.setup();
   render(<LocaleProvider><App /></LocaleProvider>);
   await user.click(screen.getByRole("link", { name: "Runs" }));
+  await user.click(screen.getByRole("tab", { name: "Launch evaluation" }));
   return user;
 }
 
@@ -267,6 +268,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
     const user = await openRuns();
 
+    await user.click(screen.getByRole("tab", { name: "Run inventory" }));
     await user.click(screen.getByRole("button", { name: /dataset-evaluation v1.0.0/i }));
 
     const inspector = await screen.findByRole("region", { name: "Selected run inspector" });
