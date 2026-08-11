@@ -837,6 +837,11 @@
   gap: .8rem;
 }
 
+.workspace-settings-preferences {
+  display: grid;
+  gap: .85rem;
+}
+
 .workspace-settings-guidance > p {
   color: var(--text-muted);
   font-size: .84rem;

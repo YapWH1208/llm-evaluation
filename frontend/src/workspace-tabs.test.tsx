@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -143,5 +143,20 @@ describe("workspace tab routing", () => {
     render(<LocaleProvider><App /></LocaleProvider>);
 
     expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("direct-loads Analysis comparison and Settings preferences", async () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/analysis?tab=compare-runs");
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    expect(screen.getByRole("tab", { name: "Compare runs" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Run A")).toBeVisible();
+
+    window.history.pushState(null, "", "/settings?tab=preferences");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Preferences" })).toHaveAttribute("aria-selected", "true"));
+    expect(within(screen.getByRole("tabpanel", { name: "Preferences" })).getByLabelText("Workspace language")).toBeVisible();
   });
 });

@@ -792,8 +792,8 @@ export default function App() {
         selectedRunId={selectedRun}
       />}
 
-      {view === "analysis" && <AnalysisPage analytics={analytics} busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSelectBaseline={(runId) => api.analyticsMatrix(runId || undefined)} onSubmitComparison={compareRuns} runA={comparisonRunA} runB={comparisonRunB} />}
-      {view === "settings" && <SettingsPage apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
+      {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} analytics={analytics} busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSelectBaseline={(runId) => api.analyticsMatrix(runId || undefined)} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} />}
+      {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
   );

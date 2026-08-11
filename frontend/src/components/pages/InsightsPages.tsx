@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { AnalyticsCell, AnalyticsMatrix, Comparison, EvaluationRun } from "../../api";
+import type { WorkspaceTabFor } from "../../dashboard/routing";
+import { workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
-import { WorkspaceTabs } from "../workspace/WorkspaceTabs";
+import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
 
 type AnalysisDimension = keyof AnalyticsMatrix["heatmaps"];
 
@@ -18,6 +20,7 @@ export const analysisDimensions: ReadonlyArray<{ id: AnalysisDimension; label: s
 ];
 
 type AnalysisPageProps = {
+  activeTab: WorkspaceTabFor<"analysis">;
   analytics: AnalyticsMatrix | null;
   busy: string | null;
   comparison: Comparison | null;
@@ -26,22 +29,17 @@ type AnalysisPageProps = {
   onRunBChange: (runId: string) => void;
   onSelectBaseline: (runId: string) => Promise<AnalyticsMatrix>;
   onSubmitComparison: (event: FormEvent<HTMLFormElement>) => void;
+  onTabChange: (tab: WorkspaceTabFor<"analysis">) => void;
   runA: string;
   runB: string;
 };
 
-type AnalysisMode = "matrix" | "compare";
-
-const analysisModes: ReadonlyArray<{ id: AnalysisMode; label: string }> = [
-  { id: "matrix", label: "Evidence matrix" },
-  { id: "compare", label: "Compare runs" },
-];
-
-export function AnalysisPage({ analytics, busy, comparison, completedRuns, onRunAChange, onRunBChange, onSelectBaseline, onSubmitComparison, runA, runB }: AnalysisPageProps) {
+export function AnalysisPage({ activeTab, analytics, busy, comparison, completedRuns, onRunAChange, onRunBChange, onSelectBaseline, onSubmitComparison, onTabChange, runA, runB }: AnalysisPageProps) {
+  const { locale } = useTranslation();
+  const copy = workspacePageTabCopy[locale].analysis;
   const [matrix, setMatrix] = useState<AnalyticsMatrix | null>(analytics);
   const [baselineRunId, setBaselineRunId] = useState(analytics?.baseline_run_id ?? "");
   const [dimension, setDimension] = useState<AnalysisDimension>("model_benchmark");
-  const [mode, setMode] = useState<AnalysisMode>("matrix");
   const requestedBaselineRunId = useRef<string | null>(null);
   useEffect(() => {
     if ((analytics?.baseline_run_id ?? "") !== baselineRunId) return;
@@ -66,15 +64,15 @@ export function AnalysisPage({ analytics, busy, comparison, completedRuns, onRun
   const selectedDimension = analysisDimensions.find((item) => item.id === dimension) ?? analysisDimensions[0];
 
   return <div className="workspace-page analysis-page">
-    <PageHeader description="Investigate supplied quality, reliability, latency, cost, and run-to-run evidence." eyebrow="Insights" status={<>{mode === "compare" ? `${completedRuns.length} completed runs` : matrix ? `${cells.length} ${selectedDimension.label.toLowerCase()} cells` : "Loading analysis"}</>} title="Analysis" />
-    <WorkspaceTabs onChange={setMode} tabs={analysisModes} value={mode} />
-    <div aria-labelledby={`workspace-tab-${mode}`} id={`workspace-tabpanel-${mode}`} role="tabpanel">
-    {mode === "compare" ? <ComparisonWorkspace busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmitComparison} runA={runA} runB={runB} /> : !matrix ? <WorkspacePanel description="The analysis matrix is loading from the evaluation service." title="Analysis matrix"><p className="empty">Loading analysis matrix...</p></WorkspacePanel> : <>
+    <PageHeader description="Investigate supplied quality, reliability, latency, cost, and run-to-run evidence." eyebrow="Insights" status={<>{activeTab === "compare-runs" ? `${completedRuns.length} completed runs` : matrix ? `${cells.length} ${selectedDimension.label.toLowerCase()} cells` : "Loading analysis"}</>} title="Analysis" />
+    <WorkspaceTabs ariaLabel="Analysis sections" idPrefix="analysis" onChange={onTabChange} tabs={[{ id: "evidence-matrix", label: copy.evidenceMatrix }, { id: "compare-runs", label: copy.compareRuns }]} value={activeTab} />
+    <div aria-labelledby={workspaceTabId("analysis", activeTab)} id={workspaceTabPanelId("analysis", activeTab)} role="tabpanel" tabIndex={0}>
+    {activeTab === "compare-runs" ? <ComparisonWorkspace busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={onRunAChange} onRunBChange={onRunBChange} onSubmit={onSubmitComparison} runA={runA} runB={runB} /> : !matrix ? <WorkspacePanel description="The analysis matrix is loading from the evaluation service." title="Analysis matrix"><p className="empty">Loading analysis matrix...</p></WorkspacePanel> : <>
       <WorkspacePanel className="workspace-analysis-context" description="The selected baseline applies to every evidence cell and delta shown below." title="Analysis context">
         <label className="workspace-filter-control">Baseline run<select onChange={(event) => applyBaseline(event.target.value)} value={baselineRunId}><option value="">No baseline</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)}</option>)}</select></label>
       </WorkspacePanel>
-      <WorkspaceTabs onChange={setDimension} tabs={analysisDimensions} value={dimension} />
-      <div aria-labelledby={`workspace-tab-${dimension}`} className="workspace-insights-grid" id={`workspace-tabpanel-${dimension}`} role="tabpanel">
+      <WorkspaceTabs ariaLabel="Evidence dimensions" idPrefix="analysis-dimension" onChange={setDimension} tabs={analysisDimensions} value={dimension} />
+      <div aria-labelledby={workspaceTabId("analysis-dimension", dimension)} className="workspace-insights-grid" id={workspaceTabPanelId("analysis-dimension", dimension)} role="tabpanel" tabIndex={0}>
         <CapabilityChart cells={matrix.capability_matrix} />
         <HeatmapBreakdown cells={cells} dimension={selectedDimension.label} />
       </div>

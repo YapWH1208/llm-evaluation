@@ -82,6 +82,7 @@ const comparison = {
 
 function analysisProps(overrides: Partial<React.ComponentProps<typeof AnalysisPage>> = {}) {
   return {
+    activeTab: "evidence-matrix" as const,
     analytics,
     busy: null,
     comparison,
@@ -90,6 +91,7 @@ function analysisProps(overrides: Partial<React.ComponentProps<typeof AnalysisPa
     onRunBChange: vi.fn(),
     onSelectBaseline: vi.fn().mockResolvedValue(analytics),
     onSubmitComparison: vi.fn((event: React.FormEvent) => event.preventDefault()),
+    onTabChange: vi.fn(),
     runA: completedRun.id,
     runB: secondRun.id,
     ...overrides,
@@ -132,6 +134,19 @@ describe("insight workspace pages", () => {
     expect(screen.getByRole("heading", { name: "Model × language breakdown" })).toBeVisible();
     expect(screen.getByText("Evaluator A")).toBeVisible();
     expect(screen.getByText("English")).toBeVisible();
+  });
+
+  it("keeps the evidence matrix exclusive and routes top-level tab changes", async () => {
+    const user = userEvent.setup();
+    const props = analysisProps({ completedRuns: [completedRun] });
+    renderInsightsPage(<AnalysisPage {...props} />);
+
+    expect(screen.getByRole("tab", { name: "Evidence matrix" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Baseline run")).toBeVisible();
+    expect(screen.queryByLabelText("Run A")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Compare runs" }));
+    expect(props.onTabChange).toHaveBeenCalledWith("compare-runs");
   });
 
   it("routes baseline selection through the existing controller callback", async () => {
@@ -188,10 +203,10 @@ describe("insight workspace pages", () => {
     const onRunAChange = vi.fn();
     const onRunBChange = vi.fn();
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
-    renderInsightsPage(<AnalysisPage {...analysisProps({ onRunAChange, onRunBChange, onSubmitComparison: onSubmit })} />);
+    renderInsightsPage(<AnalysisPage {...analysisProps({ activeTab: "compare-runs", onRunAChange, onRunBChange, onSubmitComparison: onSubmit })} />);
 
-    await user.click(screen.getByRole("tab", { name: "Compare runs" }));
-
+    expect(screen.getByRole("tab", { name: "Compare runs" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByLabelText("Baseline run")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Run A"), secondRun.id);
     await user.selectOptions(screen.getByLabelText("Run B"), completedRun.id);
     await user.click(screen.getByRole("button", { name: "Compare runs" }));
