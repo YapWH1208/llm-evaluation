@@ -2,8 +2,9 @@ import type { FormEvent } from "react";
 
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
+import { DatasetMetadataFields, type DatasetMetadataValues } from "./DatasetMetadataFields";
 
-export type DatasetRegistrationFormValues = {
+export type DatasetRegistrationFormValues = DatasetMetadataValues & {
   checksum: string;
   credential_binding_id: string;
   dataset_id: string;
@@ -37,6 +38,7 @@ export function DatasetRegistrationForm({ busy, onChange, onSubmit, values }: Da
         <label>License text<textarea value={values.license_text} onChange={(event) => onChange({ ...values, license_text: event.target.value })} /></label>
         <label>{t("datasetRegister.inputField")}<input value={values.input_field} onChange={(event) => onChange({ ...values, input_field: event.target.value })} placeholder={t("datasetRegister.inputFieldHint")} /></label>
         <label>{t("datasetRegister.referenceField")}<input value={values.reference_field} onChange={(event) => onChange({ ...values, reference_field: event.target.value })} placeholder={t("datasetRegister.referenceFieldHint")} /></label>
+        <DatasetMetadataFields onChange={onChange} values={values} />
         <button disabled={busy}>Register dataset</button>
       </form>
     </WorkspacePanel>

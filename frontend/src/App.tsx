@@ -27,8 +27,8 @@ import {
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { Guide } from "./components/Guide";
-import { DatasetRegistrationForm } from "./components/datasets/DatasetRegistrationForm";
-import { DatasetsPage } from "./components/pages/CatalogPages";
+import { DatasetRegistrationForm, type DatasetRegistrationFormValues } from "./components/datasets/DatasetRegistrationForm";
+import { DatasetsPage, type DatasetEditFormValues } from "./components/pages/CatalogPages";
 import { ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
 import { AnalysisPage } from "./components/pages/InsightsPages";
 import { RunsPage } from "./components/pages/OperationsPages";
@@ -67,7 +67,7 @@ const initialEndpoint: EndpointForm = {
   input_tokens_per_minute: "",
   output_tokens_per_minute: "",
 };
-const initialDataset = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "" };
+const initialDataset: DatasetRegistrationFormValues = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "", capabilities: [], languages: [], evaluation_type: "custom" };
 const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "", metric: "default" as DatasetMetricId };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
@@ -639,7 +639,7 @@ export default function App() {
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function updateDatasetRecord(dataset: Dataset, payload: Record<string, string>) {
+  async function updateDatasetRecord(dataset: Dataset, payload: DatasetEditFormValues) {
     setBusy(`dataset-edit-${dataset.id}`);
     try { await api.updateDataset(dataset.id, { ...payload, source_url: payload.source_url || null, checksum: payload.checksum || null, license_text: payload.license_text || null, credential_binding_id: payload.credential_binding_id || null, input_field: payload.input_field || null, reference_field: payload.reference_field || null }); showNotice("Dataset version updated."); await refresh(); }
     catch (error) { showError(error); }

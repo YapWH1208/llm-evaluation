@@ -70,7 +70,7 @@ describe("catalog workspace pages", () => {
   it("keeps cache validation available in the selected dataset inspector", async () => {
     const user = userEvent.setup();
     const onValidate = vi.fn();
-    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={onValidate} preview={null} previewing={false} />);
+    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={datasetEditForm(readyDataset)} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={onValidate} preview={null} previewing={false} />);
 
     expect(screen.getByText("SHA-256 a1b2c3d4…")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Validate cache" }));
@@ -86,7 +86,7 @@ describe("catalog workspace pages", () => {
     };
     const onDelete = vi.fn();
     const onStartEdit = vi.fn();
-    renderCatalogPage(<DatasetInspector busy={null} dataset={failedDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={onDelete} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={onStartEdit} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+    renderCatalogPage(<DatasetInspector busy={null} dataset={failedDataset} editForm={datasetEditForm(failedDataset)} editing={false} onClear={vi.fn()} onDelete={onDelete} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={onStartEdit} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -108,7 +108,7 @@ describe("catalog workspace pages", () => {
   it("starts an evaluation handoff for a ready dataset without queueing it", async () => {
     const user = userEvent.setup();
     const onStartEvaluation = vi.fn();
-    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={{}} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStartEvaluation={onStartEvaluation} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
+    renderCatalogPage(<DatasetInspector busy={null} dataset={readyDataset} editForm={datasetEditForm(readyDataset)} editing={false} onClear={vi.fn()} onDelete={vi.fn()} onEditForm={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onPreview={vi.fn()} onStartEdit={vi.fn()} onStartEvaluation={onStartEvaluation} onStopEdit={vi.fn()} onSubmitEdit={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} preview={null} previewing={false} />);
 
     await user.click(screen.getByRole("button", { name: "Start evaluation" }));
 
