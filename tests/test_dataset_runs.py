@@ -201,6 +201,20 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
     )
     with TestClient(app) as client:
         dataset = _register_ready_dataset(client)
+        profiled = client.put(
+            f"/api/v1/datasets/{dataset['id']}",
+            json={
+                "dataset_id": "demo",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en"],
+                "evaluation_type": "classification",
+            },
+        )
+        assert profiled.status_code == 200
+        dataset = profiled.json()
         endpoint_id = _create_available_endpoint(client)
         package_id = _prompt_package(client)
         created = client.post(
@@ -236,6 +250,13 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
         assert {attempt["reference_snapshot"]["answer"] for attempt in attempts} == {"4", "6"}
         assert {attempt["score"] for attempt in attempts} == {1.0}
+        metrics = client.get(f"/api/v1/analytics/runs/{run['id']}/metrics")
+        assert metrics.status_code == 200
+        metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}
+        assert metrics_by_name["accuracy"]["metric_value"] == 1.0
+        assert metrics_by_name["precision_macro"]["metric_value"] == 1.0
+        assert metrics_by_name["recall_macro"]["metric_value"] == 1.0
+        assert metrics_by_name["f1_macro"]["metric_value"] == 1.0
 
 
 def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:

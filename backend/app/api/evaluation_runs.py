@@ -166,6 +166,7 @@ class SampleAttemptResponse(BaseModel):
     request_snapshot: dict[str, Any] | None
     raw_response: str | None
     parsed_prediction: str | None
+    metric_evidence: dict[str, Any] | None = None
     score: float | None
     latency_ms: float | None
     input_tokens: int | None
@@ -177,7 +178,7 @@ class SampleAttemptResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
-    sample_metadata: dict[str, str] = Field(default_factory=dict)
+    sample_metadata: dict[str, Any] = Field(default_factory=dict)
     judge_disagreement: bool = False
     human_review_status: str = "unreviewed"
 

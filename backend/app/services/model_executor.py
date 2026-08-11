@@ -4,6 +4,7 @@ import base64
 import binascii
 import ipaddress
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -39,6 +40,7 @@ class SampleExecutionResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     retry_after_seconds: float | None = None
+    token_logprobs: tuple[float, ...] | None = None
 
 
 class ModelExecutor(Protocol):
@@ -145,6 +147,7 @@ class OpenAIChatCompletionsExecutor:
             payload = json.loads(body)
             prediction = _extract_prediction(payload, _protocol_profile(endpoint))
             input_tokens, output_tokens = _extract_usage(payload)
+            token_logprobs = _extract_token_logprobs(payload, _protocol_profile(endpoint))
         except (IndexError, KeyError, TypeError, ValueError):
             return SampleExecutionResult(
                 False,
@@ -175,6 +178,7 @@ class OpenAIChatCompletionsExecutor:
             latency_ms=_elapsed_ms(started_at),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            token_logprobs=token_logprobs,
         )
 
     @staticmethod
@@ -598,6 +602,31 @@ def _extract_usage(payload: dict[str, Any]) -> tuple[int | None, int | None]:
     input_value = payload.get("prompt_eval_count")
     output_value = payload.get("eval_count")
     return _nonnegative_int(input_value), _nonnegative_int(output_value)
+
+
+def _extract_token_logprobs(payload: dict[str, Any], protocol_profile: str) -> tuple[float, ...] | None:
+    """Extract complete provider-returned token log probabilities without inferring them."""
+
+    candidates: object = None
+    if protocol_profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
+        choices = payload.get("choices")
+        first = choices[0] if isinstance(choices, list) and choices else None
+        logprobs = first.get("logprobs") if isinstance(first, dict) else None
+        candidates = logprobs.get("content") if isinstance(logprobs, dict) else None
+    elif protocol_profile == "ollama_chat":
+        candidates = payload.get("logprobs")
+    if not isinstance(candidates, list) or not candidates:
+        return None
+    values: list[float] = []
+    for candidate in candidates:
+        value = candidate.get("logprob") if isinstance(candidate, dict) else None
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            return None
+        parsed = float(value)
+        if not math.isfinite(parsed) or parsed > 0:
+            return None
+        values.append(parsed)
+    return tuple(values)
 
 
 def _nonnegative_int(value: object) -> int | None:

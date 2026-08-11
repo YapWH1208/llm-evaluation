@@ -469,8 +469,16 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert completed.json()["status"] == "completed"
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
+        assert attempts.json()[0]["metric_evidence"] == {"profile_version": "1.0.0"}
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
         assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
+        metrics = api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics")
+        assert metrics.status_code == 200
+        metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}
+        assert metrics_by_name["score"]["metric_value"] == 1.0
+        assert metrics_by_name["f1_macro"]["metric_value"] is None
+        assert metrics_by_name["f1_macro"]["availability_reason"]
+        assert metrics_by_name["score"]["aggregation_version"] == "2.0.0"
         assert captured == [("https://models.example.test/v1", "model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 

@@ -10,10 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AggregateMetric, EvaluationRun, SampleAttempt, SampleAttemptStatus
 from app.db.mongo import MongoDocumentStore
+from app.services.metric_profiles import (
+    MetricResult,
+    compute_profile_metrics,
+    evaluation_type_from_snapshot,
+)
 from app.services.run_analysis import latest_attempts, summarize_attempts
 
 
-AGGREGATION_VERSION = "1.0.0"
+AGGREGATION_VERSION = "2.0.0"
 
 
 class AggregationError(ValueError):
@@ -32,7 +37,11 @@ def recompute_aggregate_metrics(
     if run is None:
         raise AggregationError("Evaluation run not found.")
     attempts = latest_attempts(session, run.id)
-    metrics = _metrics_for_attempts(attempts, total_samples=run.total_samples)
+    metrics = _metrics_for_attempts(
+        attempts,
+        total_samples=run.total_samples,
+        evaluation_type=evaluation_type_from_snapshot(run.configuration_snapshot),
+    )
     session.execute(
         delete(AggregateMetric).where(
             AggregateMetric.run_id == run.id,
@@ -44,13 +53,14 @@ def recompute_aggregate_metrics(
             run_id=run.id,
             benchmark_id=run.benchmark_id,
             model_endpoint_id=run.model_endpoint_id,
-            metric_name=metric_name,
-            metric_value=value,
-            sample_count=sample_count,
-            confidence_interval=confidence_interval,
+            metric_name=metric.metric_name,
+            metric_value=metric.value,
+            availability_reason=metric.availability_reason,
+            sample_count=metric.sample_count,
+            confidence_interval=metric.confidence_interval,
             aggregation_version=AGGREGATION_VERSION,
         )
-        for metric_name, value, sample_count, confidence_interval in metrics
+        for metric in metrics
     ]
     session.add_all(rows)
     if commit:
@@ -63,13 +73,17 @@ def recompute_aggregate_metrics(
 
 
 def list_aggregate_metrics(session: Session, run_id: str) -> list[AggregateMetric]:
-    return list(
+    rows = list(
         session.scalars(
             select(AggregateMetric)
             .where(AggregateMetric.run_id == run_id)
             .order_by(AggregateMetric.metric_name, AggregateMetric.aggregation_version.desc())
         )
     )
+    latest: dict[str, AggregateMetric] = {}
+    for row in rows:
+        latest.setdefault(row.metric_name, row)
+    return list(latest.values())
 
 
 def recompute_mongo_aggregate_metrics(
@@ -87,7 +101,11 @@ def recompute_mongo_aggregate_metrics(
     latest: dict[str, dict[str, Any]] = {}
     for attempt in attempts:
         latest.setdefault(str(attempt["sample_id"]), attempt)
-    metrics = _metrics_for_attempts(list(latest.values()), total_samples=int(run.get("total_samples", len(latest))))
+    metrics = _metrics_for_attempts(
+        list(latest.values()),
+        total_samples=int(run.get("total_samples", len(latest))),
+        evaluation_type=evaluation_type_from_snapshot(run.get("configuration_snapshot")),
+    )
     store.delete_documents(
         "aggregate_metrics",
         {"run_id": run_id, "aggregation_version": AGGREGATION_VERSION},
@@ -99,29 +117,35 @@ def recompute_mongo_aggregate_metrics(
                 "run_id": run_id,
                 "benchmark_id": run["benchmark_id"],
                 "model_endpoint_id": run["model_endpoint_id"],
-                "metric_name": metric_name,
-                "metric_value": value,
-                "sample_count": sample_count,
-                "confidence_interval": confidence_interval,
+                "metric_name": metric.metric_name,
+                "metric_value": metric.value,
+                "availability_reason": metric.availability_reason,
+                "sample_count": metric.sample_count,
+                "confidence_interval": metric.confidence_interval,
                 "aggregation_version": AGGREGATION_VERSION,
                 "created_at": datetime.now(timezone.utc),
             },
         )
-        for metric_name, value, sample_count, confidence_interval in metrics
+        for metric in metrics
     ]
 
 
 def list_mongo_aggregate_metrics(store: MongoDocumentStore, run_id: str) -> list[dict[str, Any]]:
-    return store.list_documents(
+    rows = store.list_documents(
         "aggregate_metrics", query={"run_id": run_id}, sort=[("metric_name", 1), ("aggregation_version", -1)]
     )
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        latest.setdefault(str(row["metric_name"]), row)
+    return list(latest.values())
 
 
 def _metrics_for_attempts(
     attempts: list[Any],
     *,
     total_samples: int,
-) -> list[tuple[str, float | None, int, dict[str, object] | None]]:
+    evaluation_type: str,
+) -> list[MetricResult]:
     summary_attempts = [
         SimpleNamespace(**attempt) if isinstance(attempt, dict) else attempt
         for attempt in attempts
@@ -141,18 +165,45 @@ def _metrics_for_attempts(
     completed = len(terminal)
     failed = len(terminal) - len(successful)
 
-    return [
-        ("accuracy", _as_float(summary["samples"]["accuracy"]), len(scored), _mean_confidence_interval(scored)),
-        ("completion_rate", _as_float(summary["samples"]["completion_rate"]), total_samples, _binomial_confidence_interval(completed, total_samples)),
-        ("success_rate", _as_float(summary["samples"]["success_rate"]), completed, _binomial_confidence_interval(len(successful), completed)),
-        ("error_rate", _as_float(summary["errors"]["rate"]), completed, _binomial_confidence_interval(failed, completed)),
-        ("average_latency_ms", _as_float(summary["latency_ms"]["average"]), len(latencies), _mean_confidence_interval(latencies)),
-        ("p50_latency_ms", _as_float(summary["latency_ms"]["p50"]), len(latencies), None),
-        ("p95_latency_ms", _as_float(summary["latency_ms"]["p95"]), len(latencies), None),
-        ("p99_latency_ms", _as_float(summary["latency_ms"]["p99"]), len(latencies), None),
-        ("input_tokens", _as_float(summary["tokens"]["input"]), len(input_tokens), None),
-        ("output_tokens", _as_float(summary["tokens"]["output"]), len(output_tokens), None),
-        ("estimated_cost", _as_float(summary["cost"]["estimated"]), len(costs), None),
+    profile_metrics = compute_profile_metrics(attempts, evaluation_type=evaluation_type)
+    profile_names = {metric.metric_name for metric in profile_metrics}
+    score_interval = _mean_confidence_interval(scored)
+    profile_metrics = [
+        MetricResult(
+            metric.metric_name,
+            metric.value,
+            metric.sample_count,
+            metric.availability_reason,
+            score_interval
+            if metric.value is not None and (
+                metric.metric_name == "score"
+                or (metric.metric_name == "accuracy" and evaluation_type != "classification")
+            )
+            else metric.confidence_interval,
+        )
+        for metric in profile_metrics
+    ]
+    if "accuracy" not in profile_names:
+        profile_metrics.append(
+            MetricResult(
+                "accuracy",
+                _as_float(summary["samples"]["accuracy"]),
+                len(scored),
+                None if scored else "No successful samples contain a compatibility score.",
+                score_interval,
+            )
+        )
+    return profile_metrics + [
+        MetricResult("completion_rate", _as_float(summary["samples"]["completion_rate"]), total_samples, None, _binomial_confidence_interval(completed, total_samples)),
+        MetricResult("success_rate", _as_float(summary["samples"]["success_rate"]), completed, None, _binomial_confidence_interval(len(successful), completed)),
+        MetricResult("error_rate", _as_float(summary["errors"]["rate"]), completed, None, _binomial_confidence_interval(failed, completed)),
+        MetricResult("average_latency_ms", _as_float(summary["latency_ms"]["average"]), len(latencies), None, _mean_confidence_interval(latencies)),
+        MetricResult("p50_latency_ms", _as_float(summary["latency_ms"]["p50"]), len(latencies)),
+        MetricResult("p95_latency_ms", _as_float(summary["latency_ms"]["p95"]), len(latencies)),
+        MetricResult("p99_latency_ms", _as_float(summary["latency_ms"]["p99"]), len(latencies)),
+        MetricResult("input_tokens", _as_float(summary["tokens"]["input"]), len(input_tokens)),
+        MetricResult("output_tokens", _as_float(summary["tokens"]["output"]), len(output_tokens)),
+        MetricResult("estimated_cost", _as_float(summary["cost"]["estimated"]), len(costs)),
     ]
 
 

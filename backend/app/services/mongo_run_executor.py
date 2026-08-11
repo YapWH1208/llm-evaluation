@@ -41,7 +41,8 @@ from app.services.dataset_runs import (
 from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
-from app.services.aggregation import recompute_mongo_aggregate_metrics
+from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError
 from app.services.run_analysis import add_summary_insights, summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
@@ -1250,7 +1251,7 @@ def _execute_mongo_aggregation_task(
     task = store.update_task_if_current_lease(
         task,
         lease_token,
-        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": "1.0.0"}, "status": "succeeded", **_lease_values()},
+        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": AGGREGATION_VERSION}, "status": "succeeded", **_lease_values()},
     )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before finalization.")
@@ -1439,6 +1440,10 @@ def _record_result(
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "estimated_cost": _estimate_cost(endpoint, result.input_tokens, result.output_tokens),
+        "metric_evidence": build_execution_metric_evidence(
+            token_logprobs=result.token_logprobs,
+            existing=attempt.get("metric_evidence") if isinstance(attempt.get("metric_evidence"), dict) else None,
+        ),
         "completed_at": _utc_now(),
     }
     if result.success and result.prediction is not None:

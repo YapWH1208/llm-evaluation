@@ -76,6 +76,7 @@ export type SampleAttempt = {
   request_snapshot: Record<string, unknown> | null;
   raw_response: string | null;
   parsed_prediction: string | null;
+  metric_evidence?: Record<string, unknown> | null;
   score: number | null;
   latency_ms: number | null;
   input_tokens: number | null;
@@ -89,6 +90,24 @@ export type SampleAttempt = {
   sample_metadata: Record<string, string>;
   judge_disagreement: boolean;
   human_review_status: "unreviewed" | "reviewed" | "adjudicated";
+};
+export type AggregateMetric = {
+  id: string;
+  run_id: string;
+  benchmark_id: string;
+  model_endpoint_id: string;
+  metric_name: string;
+  metric_label: string;
+  metric_value: number | null;
+  availability_reason: string | null;
+  sample_count: number;
+  confidence_interval: { method: string; lower: number; upper: number } | null;
+  aggregation_version: string;
+  profile_version: string;
+  unit: import("./metrics").MetricUnit;
+  profile: import("./metrics").MetricProfile;
+  required_evidence: string[];
+  created_at: string;
 };
 
 export type RunSummary = {

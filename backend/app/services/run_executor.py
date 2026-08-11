@@ -21,7 +21,8 @@ from app.db import (
     TaskUnit,
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
-from app.services.aggregation import recompute_aggregate_metrics
+from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
+from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease
@@ -270,7 +271,7 @@ def _execute_leased_aggregation_task(
 
     metrics = recompute_aggregate_metrics(session, run.id, commit=False)
     _require_current_lease(session, task, lease_token)
-    task.payload = {**(task.payload or {}), "metric_count": len(metrics), "aggregation_version": "1.0.0"}
+    task.payload = {**(task.payload or {}), "metric_count": len(metrics), "aggregation_version": AGGREGATION_VERSION}
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
     run.status = RunStatus.GENERATING_REPORT.value
@@ -432,6 +433,10 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoi
     attempt.input_tokens = result.input_tokens
     attempt.output_tokens = result.output_tokens
     attempt.estimated_cost = _estimate_cost(endpoint, result.input_tokens, result.output_tokens)
+    attempt.metric_evidence = build_execution_metric_evidence(
+        token_logprobs=result.token_logprobs,
+        existing=attempt.metric_evidence,
+    )
     attempt.completed_at = datetime.now(timezone.utc)
     if result.success and result.prediction is not None:
         try:

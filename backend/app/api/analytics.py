@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.services.aggregation import (
 )
 from app.services.run_analysis import build_run_summary
 from app.services.mongo_run_executor import build_mongo_run_summary
+from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -49,10 +50,32 @@ class AggregateMetricResponse(BaseModel):
     model_endpoint_id: str
     metric_name: str
     metric_value: float | None
+    availability_reason: str | None = None
     sample_count: int
     confidence_interval: dict[str, object] | None
     aggregation_version: str
     created_at: datetime
+    metric_label: str = ""
+    unit: str = ""
+    profile: str = ""
+    required_evidence: list[str] = Field(default_factory=list)
+    profile_version: str = METRIC_PROFILE_VERSION
+
+    @model_validator(mode="after")
+    def add_metric_definition(self) -> "AggregateMetricResponse":
+        try:
+            definition = metric_definition(self.metric_name)
+        except ValueError:
+            self.metric_label = self.metric_name.replace("_", " ").title()
+            self.unit = "value"
+            self.profile = "custom"
+            self.required_evidence = []
+            return self
+        self.metric_label = definition.label
+        self.unit = definition.unit
+        self.profile = definition.profile
+        self.required_evidence = list(definition.required_evidence)
+        return self
 
 
 @router.get("/runs/{run_id}/metrics", response_model=list[AggregateMetricResponse])
