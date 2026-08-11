@@ -158,3 +158,21 @@ def test_execution_metric_evidence_is_bounded_and_rejects_invalid_log_probabilit
     invalid = build_execution_metric_evidence(token_logprobs=(float("nan"),))
     assert invalid["token_logprobs_complete"] is False
     assert "invalid" in str(invalid["token_logprobs_reason"]).lower()
+
+
+def test_execution_metric_evidence_clears_stale_log_probabilities_when_a_response_has_none() -> None:
+    evidence = build_execution_metric_evidence(
+        token_logprobs=None,
+        existing={
+            "token_logprobs": [-0.1, -0.2],
+            "token_logprobs_complete": True,
+            "token_logprobs_reason": "Previous attempt evidence.",
+            "trusted_test_result": {"passed": True, "source": "trusted:sandbox"},
+        },
+    )
+
+    assert "token_logprobs" not in evidence
+    assert "token_logprobs_complete" not in evidence
+    assert "token_logprobs_reason" not in evidence
+    assert evidence["profile_version"] == METRIC_PROFILE_VERSION
+    assert evidence["trusted_test_result"] == {"passed": True, "source": "trusted:sandbox"}

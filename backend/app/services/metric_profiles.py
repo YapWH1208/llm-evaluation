@@ -92,6 +92,9 @@ def build_execution_metric_evidence(
     evidence = dict(existing or {})
     evidence["profile_version"] = METRIC_PROFILE_VERSION
     if token_logprobs is None:
+        evidence.pop("token_logprobs", None)
+        evidence.pop("token_logprobs_complete", None)
+        evidence.pop("token_logprobs_reason", None)
         return evidence
     values = list(token_logprobs)
     if len(values) > MAX_RETAINED_TOKEN_LOGPROBS:
