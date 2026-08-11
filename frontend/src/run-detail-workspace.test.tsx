@@ -36,7 +36,7 @@ const summary: RunSummary = {
 
 const metrics: AggregateMetric[] = [
   { id: "metric-1", run_id: run.id, benchmark_id: run.benchmark_id, model_endpoint_id: run.model_endpoint_id, metric_name: "pass_at_1", metric_label: "Pass@1", metric_value: .8, availability_reason: null, sample_count: 10, confidence_interval: null, aggregation_version: "2", profile_version: "1", unit: "ratio", profile: "code", required_evidence: [], created_at: run.completed_at! },
-  { id: "metric-2", run_id: run.id, benchmark_id: run.benchmark_id, model_endpoint_id: run.model_endpoint_id, metric_name: "perplexity", metric_label: "Perplexity", metric_value: null, availability_reason: "Token log probabilities were not recorded.", sample_count: 0, confidence_interval: null, aggregation_version: "2", profile_version: "1", unit: "perplexity", profile: "language_modeling", required_evidence: ["token_logprobs"], created_at: run.completed_at! },
+  { id: "metric-2", run_id: run.id, benchmark_id: run.benchmark_id, model_endpoint_id: run.model_endpoint_id, metric_name: "perplexity", metric_label: "Perplexity", metric_value: null, availability_reason: "Token log probabilities were not recorded.", sample_count: 5482, confidence_interval: null, aggregation_version: "2", profile_version: "1", unit: "perplexity", profile: "language_modeling", required_evidence: ["token_logprobs"], created_at: run.completed_at! },
   { id: "metric-3", run_id: run.id, benchmark_id: run.benchmark_id, model_endpoint_id: run.model_endpoint_id, metric_name: "average_latency_ms", metric_label: "Average latency", metric_value: 125, availability_reason: null, sample_count: 8, confidence_interval: { method: "bootstrap", lower: 100, upper: 140 }, aggregation_version: "2", profile_version: "1", unit: "milliseconds", profile: "operational", required_evidence: ["latency_ms"], created_at: run.completed_at! },
 ];
 
@@ -77,7 +77,6 @@ describe("run detail workspace", () => {
     expect(screen.getAllByRole("cell", { name: "80%" })).not.toHaveLength(0);
     expect(screen.getByText("Token log probabilities were not recorded.")).toBeVisible();
     expect(screen.getByRole("cell", { name: "100–140 ms" })).toBeVisible();
-
     await user.click(screen.getByRole("tab", { name: "Evidence" }));
     expect(screen.getByText("Evidence slot")).toBeVisible();
     await user.keyboard("{ArrowRight}");
@@ -96,5 +95,13 @@ describe("run detail workspace", () => {
 
     expect(screen.getByRole("tab", { name: "Reviews" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Reviews slot")).toBeVisible();
+  });
+
+  it("labels the perplexity token count instead of presenting it as samples", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    await user.click(screen.getByRole("tab", { name: "Metrics" }));
+    expect(screen.getByRole("cell", { name: "5,482 tokens" })).toBeVisible();
   });
 });
