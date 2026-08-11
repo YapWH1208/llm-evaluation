@@ -227,7 +227,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
             <h2 className="sr-only" id="performance-summary-title">{copy.performanceSummary}</h2>
             {kpis.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
           </section>
-          <div className="overview-analytics-grid">
+          <div className="overview-analytics-grid" style={{ marginTop: "1rem" }}>
             <section className="dashboard-panel dashboard-panel--trend" aria-labelledby="evaluation-trend-title">
               <div className="dashboard-panel__heading"><h2 id="evaluation-trend-title">{copy.evaluationTrend}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
               <EvaluationTrendChart formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
@@ -237,7 +237,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
               <ComparisonTable copy={copy} formatters={formatters} points={analyticsPoints.slice(-6).reverse()} />
             </section>
           </div>
-          <section className="dashboard-panel" aria-labelledby="efficiency-title">
+          <section className="dashboard-panel" aria-labelledby="efficiency-title" style={{ marginTop: "1rem" }}>
             <div className="dashboard-panel__heading"><h2 id="efficiency-title">{copy.latencyCostErrors}</h2></div>
             <EfficiencySignals formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
           </section>
