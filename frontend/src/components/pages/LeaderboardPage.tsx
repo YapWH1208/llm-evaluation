@@ -9,7 +9,7 @@ import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 
 const PAGE_SIZE = 50;
-const statuses = ["queued", "running", "paused", "completed", "completed_with_errors", "failed", "cancelled"];
+const statuses = ["waiting_for_dataset", "queued", "running", "pausing", "paused", "cancelling", "completed", "completed_with_errors", "failed", "cancelled", "scoring", "aggregating", "generating_report"];
 const evaluationTypes: Dataset["evaluation_type"][] = ["classification", "generation", "code", "language_modeling", "custom"];
 
 type FilterState = {

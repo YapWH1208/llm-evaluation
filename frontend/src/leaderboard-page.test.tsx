@@ -158,4 +158,13 @@ describe("leaderboard workspace", () => {
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No runs match the current filters.")).toBeVisible();
   });
+
+  it("exposes every backend run status as a filter checkbox", async () => {
+    renderLeaderboard();
+    await screen.findByRole("row", { name: /model-a_math-check/i });
+
+    for (const status of ["waiting_for_dataset", "queued", "running", "pausing", "paused", "cancelling", "completed", "completed_with_errors", "failed", "cancelled", "scoring", "aggregating", "generating_report"]) {
+      expect(screen.getByRole("checkbox", { name: status })).toBeInTheDocument();
+    }
+  });
 });
