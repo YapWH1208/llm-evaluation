@@ -162,6 +162,50 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         }
         assert compared["differences"]["average_latency_ms"] == -50.0
         assert len(compared["sample_outcomes"]) == 2
+        assert compared["runs"]["a"]["id"] == run_a
+        assert compared["runs"]["b"]["id"] == run_b
+        assert compared["runs"]["a"]["display_name"]
+        assert compared["runs"]["a"]["model_name"] == "model-a"
+        named_metrics = {metric["metric_name"]: metric for metric in compared["named_metrics"]}
+        assert named_metrics["score"]["run_a"]["value"] == 1.0
+        assert named_metrics["score"]["run_b"]["value"] == 0.0
+        assert named_metrics["score"]["delta"] == 1.0
+        assert named_metrics["score"]["unit"] == "ratio"
+        assert named_metrics["f1_macro"]["run_a"]["value"] is None
+        assert named_metrics["f1_macro"]["run_a"]["availability_reason"]
+        assert any(group["unit"] == "milliseconds" for group in compared["metric_groups"])
+        assert {item["outcome"] for item in compared["outcome_distribution"]} == {
+            "both_correct", "run_a_only_correct", "run_b_only_correct", "both_incorrect",
+        }
+        assert sum(item["count"] for item in compared["outcome_distribution"]) == 2
+        same_run = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_a})
+        assert same_run.status_code == 409
+        other_endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "test-secret-key",
+                "model_name": "model-c",
+            },
+        ).json()
+        assert client.post(
+            f"/api/v1/model-endpoints/{other_endpoint['id']}/connection-test"
+        ).status_code == 200
+        incompatible_run = client.post(
+            "/api/v1/evaluation-runs",
+            json={
+                "model_endpoint_id": other_endpoint["id"],
+                "benchmark_id": "coding-evaluation",
+                "benchmark_version": "1.0.0",
+                "sample_limit": 1,
+            },
+        )
+        assert incompatible_run.status_code == 201
+        incompatible = client.get(
+            "/api/v1/comparisons",
+            params={"run_a": run_a, "run_b": incompatible_run.json()["id"]},
+        )
+        assert incompatible.status_code == 409
 
         multi_report = client.post(
             "/api/v1/reports",

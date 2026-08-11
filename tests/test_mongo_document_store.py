@@ -760,6 +760,16 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         comparison = api.get("/api/v1/comparisons", params={"run_a": first["id"], "run_b": second["id"]})
         assert comparison.status_code == 200
         assert comparison.json()["shared_samples"] == 1
+        assert comparison.json()["runs"]["a"]["display_name"] == first["display_name"]
+        assert comparison.json()["runs"]["b"]["display_name"] == second["display_name"]
+        comparison_metrics = {
+            metric["metric_name"]: metric
+            for metric in comparison.json()["named_metrics"]
+        }
+        assert comparison_metrics["score"]["run_a"]["value"] == 1.0
+        assert comparison_metrics["score"]["run_b"]["value"] == 1.0
+        assert comparison_metrics["score"]["delta"] == 0.0
+        assert comparison.json()["outcome_distribution"][0]["count"] in {0, 1}
 
         attempt = api.get(f"/api/v1/evaluation-runs/{first['id']}/attempts").json()[0]
         assessment = api.post(

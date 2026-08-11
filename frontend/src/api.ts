@@ -247,6 +247,18 @@ export type Comparison = {
   run_a_summary: RunSummary;
   run_b_summary: RunSummary;
   differences: { accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; p95_latency_ms: number | null; estimated_cost: number | null; output_tokens: number };
+  runs: Record<"a" | "b", { id: string; display_name: string; model_endpoint_id: string; model_name: string; status: string; created_at: string | null }>;
+  named_metrics: Array<{
+    metric_name: string;
+    label: string;
+    unit: string;
+    profile: string;
+    run_a: { value: number | null; availability_reason: string | null; sample_count: number };
+    run_b: { value: number | null; availability_reason: string | null; sample_count: number };
+    delta: number | null;
+  }>;
+  metric_groups: Array<{ unit: string; metrics: Comparison["named_metrics"] }>;
+  outcome_distribution: Array<{ outcome: keyof Comparison["outcomes"]; count: number }>;
 };
 
 export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: string[]; notes: string | null; review_stage: "primary" | "secondary" | "adjudication"; adjudicates_review_ids: string[]; created_at: string };
