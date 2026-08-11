@@ -175,6 +175,31 @@ describe("evaluation run launch workspace", () => {
     );
   }, 10_000);
 
+  it("refreshes run inventory before navigating away from a queued quick start", async () => {
+    mockWorkspace();
+    const createRunSpy = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run-1" } as never);
+    vi.spyOn(api, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
+    vi.spyOn(api, "listReports").mockResolvedValue([]);
+    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    let releaseRefresh: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    let listRunsCalls = 0;
+    const listRunsSpy = vi.spyOn(api, "listRuns").mockImplementation(() => {
+      listRunsCalls += 1;
+      return listRunsCalls === 1 ? Promise.resolve([]) : gate.then(() => []);
+    });
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.click(screen.getByRole("button", { name: "Queue quick start" }));
+    expect(createRunSpy).toHaveBeenCalled();
+    await waitFor(() => expect(listRunsSpy.mock.calls.length).toBeGreaterThan(1));
+    expect(window.location.search).not.toContain("tab=run-details");
+    releaseRefresh?.();
+    await waitFor(() => expect(window.location.search).toBe("?tab=run-details"));
+  }, 10_000);
+
   it("supports quick-start and dataset preflight from the shared endpoint context", async () => {
     mockWorkspace();
     vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });

@@ -52,7 +52,8 @@ describe("workspace presentation primitives", () => {
     expect(screen.getByRole("tab", { name: "Outputs" })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tablist", { name: "Evidence sections" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("id", "evidence-tab-inputs");
-    expect(screen.getByRole("tab", { name: /Outputs/ })).toHaveAttribute("aria-controls", "evidence-tabpanel-outputs");
+    expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("aria-controls", "evidence-tabpanel-inputs");
+    expect(screen.getByRole("tab", { name: /Outputs/ })).not.toHaveAttribute("aria-controls");
     expect(screen.getByText("Generated model evidence")).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: /Outputs/ }));

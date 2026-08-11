@@ -450,9 +450,9 @@ export default function App() {
       const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
       const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       await selectRun(run.id);
+      await refresh();
       navigate("runs", { tab: "run-details" });
       showNotice("{{benchmark}} queued with an immutable configuration snapshot.", { benchmark: `${benchmarkId}@${benchmarkVersion}` });
-      await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -726,7 +726,7 @@ export default function App() {
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
+      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("datasets", { tab: "register-dataset" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
       {view === "guide" && <Guide activeTab={route.tab as WorkspaceTabFor<"guide">} onOpenView={navigate} onTabChange={(tab) => navigate("guide", { tab })} />}
 
       {view === "models" && <ModelsPage

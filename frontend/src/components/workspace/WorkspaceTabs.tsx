@@ -53,7 +53,6 @@ export function WorkspaceTabs<T extends string>({
     <div aria-label={ariaLabel} className="workspace-tabs" role="tablist">
       {tabs.map((tab, index) => (
         <button
-          aria-controls={workspaceTabPanelId(idPrefix, tab.id)}
           aria-label={tab.label}
           aria-selected={tab.id === value}
           className={tab.id === value ? "workspace-tab is-active" : "workspace-tab"}
@@ -65,6 +64,7 @@ export function WorkspaceTabs<T extends string>({
           role="tab"
           tabIndex={tab.id === value ? 0 : -1}
           type="button"
+          {...(tab.id === value ? { "aria-controls": workspaceTabPanelId(idPrefix, tab.id) } : {})}
         >
           <span className="workspace-tab-label">{tab.label}</span>
           {tab.description && <small className="workspace-tab-description">{tab.description}</small>}

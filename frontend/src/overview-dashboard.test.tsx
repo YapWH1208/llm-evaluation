@@ -167,6 +167,7 @@ function renderOverview(overrides: Partial<React.ComponentProps<typeof OverviewD
     tasks: [task],
     onInspectRun: vi.fn(),
     onOpenView: vi.fn(),
+    onOpenSetup: vi.fn(),
     onTabChange: vi.fn(),
     ...overrides,
   };
@@ -246,7 +247,7 @@ describe("OverviewDashboard", () => {
     expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
   });
 
-  it("routes setup and comparison through retained pages", async () => {
+  it("routes setup through dataset registration and comparison through analysis", async () => {
     const user = userEvent.setup();
     const props = renderOverview();
 
@@ -254,8 +255,9 @@ describe("OverviewDashboard", () => {
     await user.click(within(comparison as HTMLElement).getByRole("button", { name: "Open analysis" }));
     await user.click(screen.getByRole("button", { name: "Set up an evaluation" }));
 
-    expect(props.onOpenView).toHaveBeenNthCalledWith(1, "analysis");
-    expect(props.onOpenView).toHaveBeenNthCalledWith(2, "datasets");
+    expect(props.onOpenView).toHaveBeenCalledTimes(1);
+    expect(props.onOpenView).toHaveBeenCalledWith("analysis");
+    expect(props.onOpenSetup).toHaveBeenCalledTimes(1);
   });
 
   it("keeps localized recovery actions available when the live dashboard summary is unavailable", async () => {

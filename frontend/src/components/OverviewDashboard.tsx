@@ -17,6 +17,7 @@ type OverviewDashboardProps = {
   runs: EvaluationRun[];
   tasks: Task[];
   onInspectRun: (runId: string) => void;
+  onOpenSetup: () => void;
   onOpenView: (view: View) => void;
   onTabChange: (tab: WorkspaceTabFor<"dashboard">) => void;
 };
@@ -143,7 +144,7 @@ function ReadinessGrid({ copy, items, onOpenView }: { copy: OverviewCopy; items:
   );
 }
 
-export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenView, onTabChange }: OverviewDashboardProps) {
+export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenSetup, onOpenView, onTabChange }: OverviewDashboardProps) {
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = overviewCopy[locale];
   const tabCopy = workspacePageTabCopy[locale].dashboard;
@@ -173,7 +174,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
   if (!dashboard) {
     return (
       <section className="overview-dashboard" aria-labelledby="dashboard-title">
-        <DashboardHeader copy={copy} onOpenView={onOpenView} />
+        <DashboardHeader copy={copy} onOpenSetup={onOpenSetup} onOpenView={onOpenView} />
         <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
         <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
           <section className="dashboard-panel overview-unavailable" aria-label={copy.unavailableRegion}>
@@ -217,7 +218,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
 
   return (
     <section className="overview-dashboard" aria-labelledby="dashboard-title">
-      <DashboardHeader copy={copy} onOpenView={onOpenView} />
+      <DashboardHeader copy={copy} onOpenSetup={onOpenSetup} onOpenView={onOpenView} />
       <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
       <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
         {activeTab === "summary" && <>
@@ -253,7 +254,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
   );
 }
 
-function DashboardHeader({ copy, onOpenView }: { copy: OverviewCopy; onOpenView: (view: View) => void }) {
+function DashboardHeader({ copy, onOpenSetup, onOpenView }: { copy: OverviewCopy; onOpenSetup: () => void; onOpenView: (view: View) => void }) {
   return (
     <header className="overview-dashboard__header">
       <div>
@@ -262,7 +263,7 @@ function DashboardHeader({ copy, onOpenView }: { copy: OverviewCopy; onOpenView:
         <p>{copy.dashboardDescription}</p>
       </div>
       <div className="overview-dashboard__actions">
-        <button onClick={() => onOpenView("datasets")} type="button">{copy.setupEvaluation}</button>
+        <button onClick={() => onOpenSetup()} type="button">{copy.setupEvaluation}</button>
         <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button>
       </div>
     </header>

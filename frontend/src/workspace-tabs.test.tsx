@@ -145,6 +145,16 @@ describe("workspace tab routing", () => {
     expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("links aria-controls only from the active tab to its rendered panel", () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/dashboard");
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-controls", "dashboard-tabpanel-summary");
+    expect(screen.getByRole("tab", { name: "Evaluations" })).not.toHaveAttribute("aria-controls");
+    expect(screen.getByRole("tab", { name: "Readiness" })).not.toHaveAttribute("aria-controls");
+  });
+
   it("direct-loads Analysis comparison and Settings preferences", async () => {
     mockWorkspace();
     window.history.replaceState(null, "", "/analysis?tab=compare-runs");

@@ -26,6 +26,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Model inventory uses a compact selector with one detailed endpoint inspector;
   run selection and dataset-to-run handoffs open the relevant detail or launch
   tab while preserving browser back/forward history.
+- The Dashboard guide and retained page headers are localized: the guide
+  describes the queue, inspect, and analysis stages, and the Runs, Datasets,
+  and Analysis page titles translate in every supported locale.
+- The Dashboard guide now counts six stages and renames the run queue and
+  evidence steps so each stage opens an essential evaluation destination.
 
 ### Fixed
 
@@ -33,6 +38,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rewriting revision values already stored for existing datasets.
 - Browser navigation now supports direct loads and back/forward history, with
   root and unknown workspace paths canonicalized to `/dashboard`.
+- Queuing a quick-start run now refreshes the run inventory before navigating
+  to run details, so the newly queued run no longer flashes away on arrival.
+- The Dashboard "Set up an evaluation" action opens dataset registration
+  directly instead of landing on the dataset inventory.
+- Workspace tabs only link `aria-controls` from the active tab to its rendered
+  panel, avoiding references to panels that are not in the document.
 
 ## 0.3.0 — 2026-08-09
 
