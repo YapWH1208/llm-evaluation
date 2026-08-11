@@ -522,7 +522,7 @@ def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -
     return {"fields": fields, "rows": rows}
 
 
-def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None) -> DatasetVersion:
+def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None, capabilities: list[str], languages: list[str], evaluation_type: str) -> DatasetVersion:
     values = {
         "dataset_id": dataset_id,
         "version": version,
@@ -533,6 +533,9 @@ def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str
         "credential_binding_id": credential_binding_id,
         "input_field": input_field,
         "reference_field": reference_field,
+        "capabilities": capabilities,
+        "languages": languages,
+        "evaluation_type": evaluation_type,
     }
     current = {
         field: getattr(dataset, field)

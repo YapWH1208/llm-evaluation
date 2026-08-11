@@ -150,6 +150,9 @@ export type Dataset = {
   error_message: string | null;
   input_field: string | null;
   reference_field: string | null;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: "classification" | "generation" | "code" | "language_modeling" | "custom";
 };
 export type Capability = {
   id: string;

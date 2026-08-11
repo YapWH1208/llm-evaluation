@@ -201,6 +201,9 @@ def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: di
         "credential_binding_id": payload.get("credential_binding_id"),
         "input_field": payload.get("input_field"),
         "reference_field": payload.get("reference_field"),
+        "capabilities": payload.get("capabilities", []),
+        "languages": payload.get("languages", []),
+        "evaluation_type": payload.get("evaluation_type", "custom"),
     }
     duplicates = store.list_documents("dataset_versions", query={
         "dataset_id": values["dataset_id"], "version": values["version"], "revision": values["revision"],

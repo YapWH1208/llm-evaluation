@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api } from "./api";
+import { api, type Dataset } from "./api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -12,7 +12,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/dashboard");
 });
 
-const readyDataset = {
+const readyDataset: Dataset = {
   id: "ds-1",
   dataset_id: "demo",
   version: "1",
@@ -28,6 +28,9 @@ const readyDataset = {
   error_message: null,
   input_field: "question",
   reference_field: "answer",
+  capabilities: [],
+  languages: [],
+  evaluation_type: "custom",
 };
 
 async function renderApp(datasets = [readyDataset]) {

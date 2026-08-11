@@ -13,12 +13,15 @@ afterEach(() => {
 
 
 const readyDataset: Dataset = {
+  capabilities: [],
   checksum: "a1b2c3d4",
   credential_binding_id: null,
   dataset_id: "support-set",
   error_message: null,
+  evaluation_type: "custom",
   id: "dataset-1",
   input_field: "question",
+  languages: [],
   license_accepted_at: null,
   license_text: null,
   local_path: "/data/support-set.jsonl",
