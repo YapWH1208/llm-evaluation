@@ -479,6 +479,13 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert metrics_by_name["f1_macro"]["metric_value"] is None
         assert metrics_by_name["f1_macro"]["availability_reason"]
         assert metrics_by_name["score"]["aggregation_version"] == "2.0.0"
+        scatter = api.get(
+            "/api/v1/analytics/scatter",
+            params={"x_axis": "score", "y_axis": "average_latency_ms"},
+        )
+        assert scatter.status_code == 200
+        assert scatter.json()["plotted_count"] == 1
+        assert scatter.json()["points"][0]["run_id"] == run.json()["id"]
         assert captured == [("https://models.example.test/v1", "model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")]
 
 

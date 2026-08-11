@@ -109,6 +109,63 @@ export type AggregateMetric = {
   required_evidence: string[];
   created_at: string;
 };
+export type ScatterQuery = {
+  x_axis?: string;
+  y_axis?: string;
+  run_ids?: string[];
+  date_from?: string;
+  date_to?: string;
+  model_endpoint_id?: string;
+  dataset?: string;
+  statuses?: string[];
+  capability?: string;
+  language?: string;
+  evaluation_type?: Dataset["evaluation_type"];
+  min_score?: number;
+  max_score?: number;
+  min_accuracy?: number;
+  max_accuracy?: number;
+  min_latency_ms?: number;
+  max_latency_ms?: number;
+  min_cost?: number;
+  max_cost?: number;
+  max_points?: number;
+};
+export type ScatterAxis = { metric_name: string; label: string; unit: string; profile: string };
+export type ScatterPoint = {
+  run_id: string;
+  display_name: string;
+  model_endpoint_id: string;
+  model_name: string;
+  dataset: string;
+  benchmark_id: string;
+  benchmark_version: string;
+  status: string;
+  created_at: string;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: Dataset["evaluation_type"];
+  x: number;
+  y: number;
+  x_metric: string;
+  y_metric: string;
+  x_availability_reason: string | null;
+  y_availability_reason: string | null;
+};
+export type ScatterResponse = {
+  x_axis: ScatterAxis;
+  y_axis: ScatterAxis;
+  selected_run_ids: string[];
+  eligible_run_count: number;
+  plottable_count: number;
+  plotted_count: number;
+  unavailable_count: number;
+  unavailable_by_axis: { x: number; y: number; both: number };
+  unavailable_reasons: Array<{ axis: "x" | "y"; reason: string; count: number }>;
+  truncated_count: number;
+  max_points: number;
+  points: ScatterPoint[];
+};
 
 export type RunSummary = {
   samples: { total: number; completed: number; successful: number; failed: number; completion_rate: number | null; success_rate: number | null; accuracy: number | null };
@@ -341,5 +398,30 @@ export const api = {
   assetPreviewObjectUrl: (assetId: string) => requestObjectUrl(`/assets/${assetId}/download`),
   listTasks: () => request<Task[]>("/tasks"),
   analyticsMatrix: (baselineRunId?: string) => request<AnalyticsMatrix>(`/analytics/matrix${baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : ""}`),
+  analyticsScatter: (query: ScatterQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.x_axis) params.set("x_axis", query.x_axis);
+    if (query.y_axis) params.set("y_axis", query.y_axis);
+    query.run_ids?.forEach((runId) => params.append("run_ids", runId));
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    if (query.model_endpoint_id) params.set("model_endpoint_id", query.model_endpoint_id);
+    if (query.dataset) params.set("dataset", query.dataset);
+    query.statuses?.forEach((status) => params.append("status", status));
+    if (query.capability) params.set("capability", query.capability);
+    if (query.language) params.set("language", query.language);
+    if (query.evaluation_type) params.set("evaluation_type", query.evaluation_type);
+    if (query.min_score !== undefined) params.set("min_score", String(query.min_score));
+    if (query.max_score !== undefined) params.set("max_score", String(query.max_score));
+    if (query.min_accuracy !== undefined) params.set("min_accuracy", String(query.min_accuracy));
+    if (query.max_accuracy !== undefined) params.set("max_accuracy", String(query.max_accuracy));
+    if (query.min_latency_ms !== undefined) params.set("min_latency_ms", String(query.min_latency_ms));
+    if (query.max_latency_ms !== undefined) params.set("max_latency_ms", String(query.max_latency_ms));
+    if (query.min_cost !== undefined) params.set("min_cost", String(query.min_cost));
+    if (query.max_cost !== undefined) params.set("max_cost", String(query.max_cost));
+    if (query.max_points !== undefined) params.set("max_points", String(query.max_points));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<ScatterResponse>(`/analytics/scatter${suffix}`);
+  },
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };

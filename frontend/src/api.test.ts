@@ -72,4 +72,28 @@ describe("authenticated browser transport", () => {
     await api.deleteDataset("ds-1");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1", expect.objectContaining({ method: "DELETE" }));
   });
+
+  it("encodes scatter axes and repeated run/status filters", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      x_axis: { metric_name: "score", label: "Primary score", unit: "ratio", profile: "all" },
+      y_axis: { metric_name: "p95_latency_ms", label: "p95 latency", unit: "milliseconds", profile: "operational" },
+      selected_run_ids: [], eligible_run_count: 0, plottable_count: 0, plotted_count: 0,
+      unavailable_count: 0, unavailable_by_axis: { x: 0, y: 0, both: 0 }, unavailable_reasons: [],
+      truncated_count: 0, max_points: 500, points: [],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await api.analyticsScatter({
+      x_axis: "score",
+      y_axis: "p95_latency_ms",
+      run_ids: ["run-a", "run-b"],
+      statuses: ["completed", "failed"],
+      min_score: 0.5,
+      max_cost: 0.1,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/analytics/scatter?x_axis=score&y_axis=p95_latency_ms&run_ids=run-a&run_ids=run-b&status=completed&status=failed&min_score=0.5&max_cost=0.1",
+      expect.any(Object),
+    );
+  });
 });

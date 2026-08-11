@@ -136,6 +136,21 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert heatmaps["model_difficulty"][0]["y_key"] == "basic"
         assert heatmaps["model_modality"][0]["y_key"] == "text"
 
+        scatter = client.get(
+            "/api/v1/analytics/scatter",
+            params={"x_axis": "score", "y_axis": "p95_latency_ms"},
+        )
+        assert scatter.status_code == 200
+        assert scatter.json()["eligible_run_count"] == 2
+        assert scatter.json()["plotted_count"] == 2
+        assert {point["run_id"] for point in scatter.json()["points"]} == {run_a, run_b}
+        assert all(point["display_name"] for point in scatter.json()["points"])
+        invalid_scatter = client.get(
+            "/api/v1/analytics/scatter",
+            params={"x_axis": "unknown", "y_axis": "score"},
+        )
+        assert invalid_scatter.status_code == 422
+
         comparison = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_b})
         assert comparison.status_code == 200
         compared = comparison.json()

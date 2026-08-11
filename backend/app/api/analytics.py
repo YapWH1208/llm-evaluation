@@ -6,7 +6,7 @@ from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +23,12 @@ from app.services.aggregation import (
 from app.services.run_analysis import build_run_summary
 from app.services.mongo_run_executor import build_mongo_run_summary
 from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
+from app.services.analytics_scatter import (
+    ScatterFilters,
+    ScatterQueryError,
+    build_scatter_response,
+)
+from app.services.dataset_metadata import EVALUATION_TYPES
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -109,6 +115,114 @@ def recompute_run_aggregate_metrics(
         return recompute_aggregate_metrics(session, run_id)
     except AggregationError as error:
         raise HTTPException(404, str(error)) from error
+
+
+@router.get("/scatter")
+def evidence_scatter(
+    request: Request,
+    session: SessionDependency,
+    x_axis: str = Query(default="score", min_length=1, max_length=128),
+    y_axis: str = Query(default="average_latency_ms", min_length=1, max_length=128),
+    run_ids: list[str] | None = Query(default=None),
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    model_endpoint_id: str | None = Query(default=None, max_length=128),
+    dataset: str | None = Query(default=None, max_length=128),
+    statuses: list[str] | None = Query(default=None, alias="status"),
+    capability: str | None = Query(default=None, max_length=64),
+    language: str | None = Query(default=None, max_length=64),
+    evaluation_type: str | None = Query(default=None, max_length=32),
+    min_score: float | None = None,
+    max_score: float | None = None,
+    min_accuracy: float | None = None,
+    max_accuracy: float | None = None,
+    min_latency_ms: float | None = None,
+    max_latency_ms: float | None = None,
+    min_cost: float | None = None,
+    max_cost: float | None = None,
+    max_points: int = Query(default=500, ge=1, le=500),
+) -> dict[str, object]:
+    """Return a bounded, deterministic run-level scatter representation."""
+
+    if run_ids is not None and len(run_ids) > 1_000:
+        raise HTTPException(422, "At most 1,000 run IDs may be selected.")
+    allowed_statuses = {
+        "waiting_for_dataset", "queued", "running", "pausing", "paused",
+        "cancelling", "cancelled", "completed", "completed_with_errors", "failed",
+        "scoring", "aggregating", "generating_report",
+    }
+    unknown_statuses = sorted(set(statuses or ()) - allowed_statuses)
+    if unknown_statuses:
+        raise HTTPException(422, f"Unknown run status: {', '.join(unknown_statuses)}.")
+    if evaluation_type is not None and evaluation_type not in EVALUATION_TYPES:
+        raise HTTPException(422, "Unknown evaluation type.")
+
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        runs: list[Any] = store.list_documents("evaluation_runs")
+        endpoints = {
+            str(endpoint["id"]): endpoint
+            for endpoint in store.list_documents("model_endpoints")
+        }
+        metric_rows: list[Any] = store.list_documents(
+            "aggregate_metrics",
+            sort=[("run_id", 1), ("metric_name", 1), ("aggregation_version", -1)],
+        )
+    else:
+        assert session is not None
+        runs = list(session.scalars(select(EvaluationRun)))
+        endpoints = {
+            endpoint.id: endpoint
+            for endpoint in session.scalars(select(ModelEndpoint))
+        }
+        metric_rows = list(session.scalars(
+            select(AggregateMetric).order_by(
+                AggregateMetric.run_id,
+                AggregateMetric.metric_name,
+                AggregateMetric.aggregation_version.desc(),
+            )
+        ))
+    metrics_by_run = _latest_metrics_by_run(metric_rows)
+    filters = ScatterFilters(
+        run_ids=frozenset(run_ids) if run_ids is not None else None,
+        created_from=date_from,
+        created_to=date_to,
+        model_endpoint_id=model_endpoint_id,
+        dataset=dataset,
+        statuses=frozenset(statuses) if statuses is not None else None,
+        capability=capability,
+        language=language,
+        evaluation_type=evaluation_type,
+        min_score=min_score,
+        max_score=max_score,
+        min_accuracy=min_accuracy,
+        max_accuracy=max_accuracy,
+        min_latency_ms=min_latency_ms,
+        max_latency_ms=max_latency_ms,
+        min_cost=min_cost,
+        max_cost=max_cost,
+        max_points=max_points,
+    )
+    try:
+        return build_scatter_response(
+            runs,
+            endpoints,
+            metrics_by_run,
+            x_axis=x_axis,
+            y_axis=y_axis,
+            filters=filters,
+        )
+    except ScatterQueryError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+def _latest_metrics_by_run(rows: list[Any]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = defaultdict(dict)
+    for row in rows:
+        run_id = str(_value(row, "run_id"))
+        metric_name = str(_value(row, "metric_name"))
+        grouped[run_id].setdefault(metric_name, row)
+    return grouped
 
 
 @router.get("/matrix")
