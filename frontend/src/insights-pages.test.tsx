@@ -10,6 +10,7 @@ afterEach(cleanup);
 
 const completedRun = {
   id: "run-a",
+  display_name: "model-a_math-check_20260808-120000",
   benchmark_id: "math-check",
   benchmark_version: "1",
   status: "completed",
@@ -19,7 +20,15 @@ const completedRun = {
 const secondRun = {
   ...completedRun,
   id: "run-b",
+  display_name: "model-b_math-check_20260808-130000",
   benchmark_id: "math-check",
+} as EvaluationRun;
+
+const incompatibleRun = {
+  ...secondRun,
+  id: "run-c",
+  display_name: "model-c_truthful-qa_20260808-140000",
+  benchmark_id: "truthful-qa",
 } as EvaluationRun;
 
 const endpoint = {
@@ -111,7 +120,27 @@ const comparison = {
   run_a_summary: { samples: { accuracy: .83, success_rate: .92 }, latency_ms: { p95: 320 }, tokens: { output: 1000 } },
   run_b_summary: { samples: { accuracy: .75, success_rate: .83 }, latency_ms: { p95: 380 }, tokens: { output: 1100 } },
   differences: { accuracy: .08, success_rate: .09, error_rate: -.09, average_latency_ms: -60, p95_latency_ms: -60, estimated_cost: -.01, output_tokens: -100 },
-} as Comparison;
+  runs: {
+    a: { id: "run-a", display_name: "model-a_math-check_20260808-120000", model_endpoint_id: "endpoint-a", model_name: "model-a", status: "completed", created_at: "2026-08-08T12:00:00Z" },
+    b: { id: "run-b", display_name: "model-b_math-check_20260808-130000", model_endpoint_id: "endpoint-b", model_name: "model-b", status: "completed", created_at: "2026-08-08T13:00:00Z" },
+  },
+  named_metrics: [
+    { metric_name: "score", label: "Primary score", unit: "ratio", profile: "all", run_a: { value: .83, availability_reason: null, sample_count: 12 }, run_b: { value: .75, availability_reason: null, sample_count: 12 }, delta: .08 },
+    { metric_name: "f1_macro", label: "Macro F1", unit: "ratio", profile: "classification", run_a: { value: .8, availability_reason: null, sample_count: 12 }, run_b: { value: null, availability_reason: "Labels were unavailable.", sample_count: 0 }, delta: null },
+    { metric_name: "p95_latency_ms", label: "p95 latency", unit: "milliseconds", profile: "operational", run_a: { value: 320, availability_reason: null, sample_count: 12 }, run_b: { value: 380, availability_reason: null, sample_count: 12 }, delta: -60 },
+    { metric_name: "estimated_cost", label: "Estimated cost", unit: "currency", profile: "operational", run_a: { value: .04, availability_reason: null, sample_count: 12 }, run_b: { value: .05, availability_reason: null, sample_count: 12 }, delta: -.01 },
+    { metric_name: "output_tokens", label: "Output tokens", unit: "tokens", profile: "operational", run_a: { value: 1000, availability_reason: null, sample_count: 12 }, run_b: { value: 1100, availability_reason: null, sample_count: 12 }, delta: -100 },
+  ],
+  metric_groups: [],
+  outcome_distribution: [
+    { outcome: "both_correct", count: 8 },
+    { outcome: "run_a_only_correct", count: 2 },
+    { outcome: "run_b_only_correct", count: 1 },
+    { outcome: "both_incorrect", count: 1 },
+  ],
+} as unknown as Comparison;
+
+comparison.metric_groups = ["ratio", "milliseconds", "currency", "tokens"].map((unit) => ({ unit, metrics: comparison.named_metrics.filter((metric) => metric.unit === unit) }));
 
 function analysisProps(overrides: Partial<React.ComponentProps<typeof AnalysisPage>> = {}) {
   return {
@@ -287,11 +316,40 @@ describe("insight workspace pages", () => {
     expect(screen.getByRole("cell", { name: "English" })).toBeVisible();
   });
 
-  it("presents comparison evidence independently from the source selector state", () => {
+  it("renders unit-aware comparison bars, outcomes, missing reasons, and exact values", () => {
     renderInsightsPage(<ComparisonEvidence comparison={comparison} loading={false} />);
 
     expect(screen.getByText(/math-check v1/)).toBeVisible();
-    expect(screen.getByRole("cell", { name: "8%" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Quality · ratio" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Performance · milliseconds" })).toBeVisible();
+    expect(screen.getByRole("img", { name: /Primary score.*Run A 83%.*Run B 75%/ })).toBeVisible();
+    expect(screen.getByRole("img", { name: /p95 latency.*Run A 320 ms.*Run B 380 ms/ })).toBeVisible();
+    expect(screen.getByRole("img", { name: /Outcome distribution.*Both correct 8.*A only correct 2.*B only correct 1.*Both incorrect 1/ })).toBeVisible();
+    expect(screen.getAllByText("Labels were unavailable.")).toHaveLength(2);
+    expect(screen.getByRole("row", { name: /Primary score.*83%.*75%.*8%/ })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "N/A" })).toBeVisible();
+  });
+
+  it("uses immutable display names and blocks incompatible benchmark selections", async () => {
+    const user = userEvent.setup();
+    const props = analysisProps({ activeTab: "compare-runs", completedRuns: [completedRun, secondRun, incompatibleRun], runB: incompatibleRun.id });
+    renderInsightsPage(<AnalysisPage {...props} />);
+
+    expect(screen.getAllByRole("option", { name: /model-a_math-check_20260808-120000/ })).toHaveLength(2);
+    expect(screen.getAllByRole("option", { name: /model-c_truthful-qa_20260808-140000/ })).toHaveLength(2);
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose runs from the same benchmark version.");
+    expect(screen.getByRole("button", { name: "Compare runs" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Run B"), secondRun.id);
+    expect(props.onRunBChange).toHaveBeenCalledWith(secondRun.id);
+  });
+
+  it("keeps comparison loading and empty states explicit", () => {
+    const { rerender } = render(<LocaleProvider><ComparisonEvidence comparison={null} loading /></LocaleProvider>);
+    expect(screen.getByText("Comparing selected runs…")).toBeVisible();
+
+    rerender(<LocaleProvider><ComparisonEvidence comparison={null} loading={false} /></LocaleProvider>);
+    expect(screen.getByText("Choose two completed runs to begin an evidence-backed comparison.")).toBeVisible();
   });
 
   it("keeps the scatter workspace exclusive and routes top-level tab changes", async () => {

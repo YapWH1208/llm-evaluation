@@ -2,14 +2,16 @@ import { FormEvent, useState } from "react";
 
 import { AnalyticsCell, AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterQuery, ScatterResponse } from "../../api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
-import { workspacePageTabCopy } from "../../i18n/catalog";
+import { comparisonCopy, workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
 import { EvidenceScatterWorkspace } from "../analysis/EvidenceScatter";
+import { ComparisonEvidence } from "../analysis/ComparisonCharts";
 
 export { EvidenceScatterWorkspace } from "../analysis/EvidenceScatter";
+export { ComparisonEvidence } from "../analysis/ComparisonCharts";
 
 type AnalysisDimension = keyof AnalyticsMatrix["heatmaps"];
 
@@ -83,26 +85,24 @@ type ComparisonWorkspaceProps = {
 
 
 function ComparisonWorkspace({ busy, comparison, completedRuns, onRunAChange, onRunBChange, onSubmit, runA, runB }: ComparisonWorkspaceProps) {
-  const { formatDate } = useTranslation();
+  const { formatDate, locale } = useTranslation();
+  const copy = comparisonCopy[locale];
+  const selectedA = completedRuns.find((run) => run.id === runA);
+  const selectedB = completedRuns.find((run) => run.id === runB);
+  const issue = selectedA && selectedB
+    ? selectedA.id === selectedB.id
+      ? copy.sameRun
+      : selectedA.benchmark_id !== selectedB.benchmark_id || selectedA.benchmark_version !== selectedB.benchmark_version
+        ? copy.incompatible
+        : null
+    : null;
+  const selectedComparison = comparison?.run_a === runA && comparison.run_b === runB ? comparison : null;
+  const runLabel = (run: EvaluationRun) => `${run.display_name || `${run.benchmark_id} · ${run.id.slice(0, 8)}`} · ${formatDate(run.completed_at)}`;
   return <>
-    <WorkspacePanel className="workspace-compare-sources" description="Choose two distinct completed snapshots. Differences are always calculated as Run A minus Run B." title="Comparison sources">
-      <form className="workspace-compare-form" onSubmit={onSubmit}><label>Run A<select required onChange={(event) => onRunAChange(event.target.value)} value={runA}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><span aria-hidden="true" className="workspace-compare-versus">A / B</span><label>Run B<select required onChange={(event) => onRunBChange(event.target.value)} value={runB}><option value="">Select completed run</option>{completedRuns.map((run) => <option key={run.id} value={run.id}>{run.benchmark_id} · {run.id.slice(0, 8)} · {formatDate(run.completed_at)}</option>)}</select></label><button disabled={busy === "compare"} type="submit">{busy === "compare" ? "Comparing…" : "Compare runs"}</button></form>
+    <WorkspacePanel className="workspace-compare-sources" description={copy.sourcesDescription} title={copy.sourcesTitle}>
+      <form className="workspace-compare-form" onSubmit={(event) => issue ? event.preventDefault() : onSubmit(event)}><label>{copy.runA}<select required onChange={(event) => onRunAChange(event.target.value)} value={runA}><option value="">{copy.selectCompleted}</option>{completedRuns.map((run) => <option data-i18n-preserve key={run.id} value={run.id}>{runLabel(run)}</option>)}</select></label><span aria-hidden="true" className="workspace-compare-versus">A / B</span><label>{copy.runB}<select required onChange={(event) => onRunBChange(event.target.value)} value={runB}><option value="">{copy.selectCompleted}</option>{completedRuns.map((run) => <option data-i18n-preserve key={run.id} value={run.id}>{runLabel(run)}</option>)}</select></label><button disabled={busy === "compare" || Boolean(issue) || !runA || !runB} type="submit">{busy === "compare" ? copy.comparing : copy.compare}</button></form>
+      {issue && <p className="workspace-compare-error" role="alert">{issue}</p>}
     </WorkspacePanel>
-    <ComparisonEvidence comparison={comparison} loading={busy === "compare"} />
+    <ComparisonEvidence comparison={selectedComparison} loading={busy === "compare"} />
   </>;
-}
-
-export function ComparisonEvidence({ comparison, loading }: { comparison: Comparison | null; loading: boolean }) {
-  const { formatNumber: display, formatPercent: percent } = useTranslation();
-  if (!comparison) return <WorkspacePanel description="Select two source runs and compare them to expose shared-sample outcomes and metric deltas." title="Comparison evidence"><p className="empty">{loading ? "Comparing selected runs..." : "Choose two completed runs to begin an evidence-backed comparison."}</p></WorkspacePanel>;
-  const metrics = [
-    ["A-only correct", comparison.outcomes.run_a_only_correct, "sample outcomes"],
-    ["B-only correct", comparison.outcomes.run_b_only_correct, "sample outcomes"],
-    ["Latency difference", `${display(comparison.differences.average_latency_ms)} ms`, "A minus B"],
-    ["Cost difference", display(comparison.differences.estimated_cost, 6), "A minus B"],
-  ];
-  return <WorkspacePanel className="workspace-comparison-evidence" description={<span data-i18n-preserve>{comparison.benchmark.id} v{comparison.benchmark.version} · {comparison.shared_samples} shared samples</span>} title="Comparison evidence">
-    <div className="workspace-insight-metrics">{metrics.map(([label, value, detail]) => <article key={String(label)}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>)}</div>
-    <div className="table-wrap workspace-dense-table"><table><thead><tr><th>Metric</th><th>Run A</th><th>Run B</th><th>A - B</th></tr></thead><tbody><tr><td>Score</td><td>{percent(comparison.run_a_summary.samples.accuracy)}</td><td>{percent(comparison.run_b_summary.samples.accuracy)}</td><td>{percent(comparison.differences.accuracy)}</td></tr><tr><td>Success rate</td><td>{percent(comparison.run_a_summary.samples.success_rate)}</td><td>{percent(comparison.run_b_summary.samples.success_rate)}</td><td>{percent(comparison.differences.success_rate)}</td></tr><tr><td>P95 latency</td><td>{display(comparison.run_a_summary.latency_ms.p95)} ms</td><td>{display(comparison.run_b_summary.latency_ms.p95)} ms</td><td>{display(comparison.differences.p95_latency_ms)} ms</td></tr><tr><td>Output tokens</td><td>{display(comparison.run_a_summary.tokens.output)}</td><td>{display(comparison.run_b_summary.tokens.output)}</td><td>{display(comparison.differences.output_tokens)}</td></tr></tbody></table></div>
-  </WorkspacePanel>;
 }

@@ -1025,6 +1025,16 @@ button.dataset-value-chip {
   gap: .32rem;
 }
 
+.workspace-compare-error {
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: .76rem;
+  margin: .7rem 0 0;
+  padding: .55rem .65rem;
+}
+
 .workspace-compare-versus {
   align-items: center;
   background: var(--accent-soft);
@@ -1038,6 +1048,178 @@ button.dataset-value-chip {
   justify-content: center;
   letter-spacing: .08em;
   min-width: 3.25rem;
+}
+
+.workspace-comparison-stack {
+  display: grid;
+  gap: .85rem;
+  min-width: 0;
+}
+
+.workspace-comparison-runs {
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-comparison-runs article {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .24rem;
+  min-width: 0;
+  padding: .75rem;
+}
+
+.workspace-comparison-runs span,
+.workspace-comparison-runs small {
+  color: var(--text-muted);
+  font-size: .71rem;
+}
+
+.workspace-comparison-runs strong {
+  font-size: .83rem;
+  overflow-wrap: anywhere;
+}
+
+.workspace-comparison-groups {
+  display: grid;
+  gap: .85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-comparison-bars {
+  display: grid;
+  gap: .8rem;
+}
+
+.workspace-comparison-bars article {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: .38rem;
+  padding-top: .7rem;
+}
+
+.workspace-comparison-bars article:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.workspace-comparison-bars article > strong {
+  font-size: .77rem;
+}
+
+.workspace-comparison-bars article > small {
+  color: var(--warning);
+  font-size: .67rem;
+}
+
+.workspace-comparison-bar-row {
+  align-items: center;
+  display: grid;
+  gap: .45rem;
+  grid-template-columns: 3rem minmax(5rem, 1fr) minmax(4.5rem, auto);
+}
+
+.workspace-comparison-bar-row > span,
+.workspace-comparison-bar-row > em {
+  color: var(--text-muted);
+  font-size: .69rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-comparison-bar-row > em {
+  color: var(--text);
+  text-align: right;
+}
+
+.workspace-comparison-bar-row > i {
+  background: var(--surface-subtle);
+  border-radius: 999px;
+  display: block;
+  height: .6rem;
+  overflow: hidden;
+}
+
+.workspace-comparison-bar-row b {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.workspace-comparison-bar-row b.run-a {
+  background: var(--primary);
+}
+
+.workspace-comparison-bar-row b.run-b {
+  background: #60a5fa;
+}
+
+.workspace-outcome-chart {
+  display: grid;
+  gap: .7rem;
+}
+
+.workspace-outcome-stack {
+  background: var(--surface-subtle);
+  border-radius: 999px;
+  display: flex;
+  height: 1rem;
+  overflow: hidden;
+}
+
+.workspace-outcome-stack span {
+  min-width: 0;
+}
+
+.workspace-outcome-legend {
+  display: grid;
+  gap: .55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workspace-outcome-legend span {
+  align-items: center;
+  color: var(--text-muted);
+  display: grid;
+  font-size: .69rem;
+  gap: .3rem;
+  grid-template-columns: auto auto 1fr;
+}
+
+.workspace-outcome-legend i {
+  border-radius: 999px;
+  height: .58rem;
+  width: .58rem;
+}
+
+.workspace-outcome-legend strong {
+  color: var(--text);
+  font-size: .76rem;
+}
+
+.outcome-0 { background: var(--success); }
+.outcome-1 { background: var(--primary); }
+.outcome-2 { background: #60a5fa; }
+.outcome-3 { background: var(--danger); }
+
+.workspace-comparison-table-panel .workspace-dense-table table {
+  min-width: 58rem;
+}
+
+.workspace-comparison-table-panel td strong,
+.workspace-comparison-table-panel td small {
+  display: block;
+}
+
+.workspace-comparison-table-panel td small {
+  color: var(--text-muted);
+  font-size: .65rem;
+  margin-top: .18rem;
+  max-width: 18rem;
+  white-space: normal;
 }
 
 .workspace-insight-metrics {
@@ -1298,12 +1480,18 @@ button.dataset-value-chip {
   }
 
   .workspace-compare-form,
+  .workspace-comparison-runs,
+  .workspace-comparison-groups,
   .workspace-insight-metrics,
   .workspace-report-context,
   .workspace-review-context,
   .workspace-report-controls,
   .workspace-system-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-outcome-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .workspace-compare-versus {
