@@ -16,21 +16,48 @@ describe("workspace routing", () => {
     expect(new Set(Object.values(workspacePaths)).size).toBe(7);
     for (const [view, pathname] of Object.entries(workspacePaths)) {
       expect(workspacePath(view as keyof typeof workspacePaths)).toBe(pathname);
-      expect(workspaceRoute(pathname)).toEqual({ view, pathname, replace: false });
+      expect(workspaceRoute(pathname)).toEqual({
+        view,
+        tab: expect.any(String),
+        pathname,
+        search: "",
+        replace: false,
+      });
     }
   });
 
   it("canonicalizes root, trailing slashes, and unknown paths", () => {
-    expect(workspaceRoute("/")).toEqual({ view: "dashboard", pathname: "/dashboard", replace: true });
-    expect(workspaceRoute("/models/")).toEqual({ view: "models", pathname: "/models", replace: true });
-    expect(workspaceRoute("/not-a-page")).toEqual({ view: "dashboard", pathname: "/dashboard", replace: true });
+    expect(workspaceRoute("/")).toEqual({ view: "dashboard", tab: "summary", pathname: "/dashboard", search: "", replace: true });
+    expect(workspaceRoute("/models/")).toEqual({ view: "models", tab: "model-inventory", pathname: "/models", search: "", replace: true });
+    expect(workspaceRoute("/not-a-page")).toEqual({ view: "dashboard", tab: "summary", pathname: "/dashboard", search: "", replace: true });
   });
 
-  it("uses only the pathname and remains independent of query and hash text", () => {
-    expect(workspaceRoute(new URL("https://example.test/datasets?source=hf#register").pathname)).toEqual({
-      view: "datasets",
-      pathname: "/datasets",
+  it("deep-links non-default tabs and leaves default tabs on bare paths", () => {
+    expect(workspaceRoute("/models", "?tab=add-endpoint")).toEqual({
+      view: "models",
+      tab: "add-endpoint",
+      pathname: "/models",
+      search: "?tab=add-endpoint",
       replace: false,
+    });
+    expect(workspacePath("analysis", "compare-runs")).toBe("/analysis?tab=compare-runs");
+    expect(workspacePath("analysis", "evidence-matrix")).toBe("/analysis");
+  });
+
+  it("falls back to the page default and canonicalizes unsupported tab text", () => {
+    expect(workspaceRoute("/runs", "?tab=unknown&token=secret")).toEqual({
+      view: "runs",
+      tab: "run-inventory",
+      pathname: "/runs",
+      search: "",
+      replace: true,
+    });
+    expect(workspaceRoute("/datasets", "?source=hf#register")).toEqual({
+      view: "datasets",
+      tab: "dataset-inventory",
+      pathname: "/datasets",
+      search: "",
+      replace: true,
     });
   });
 });

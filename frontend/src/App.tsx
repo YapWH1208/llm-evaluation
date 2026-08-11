@@ -35,7 +35,7 @@ import { RunsPage } from "./components/pages/OperationsPages";
 import { SettingsPage } from "./components/pages/SystemPages";
 import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
 import type { View } from "./dashboard/navigation";
-import { workspacePath, workspaceRoute } from "./dashboard/routing";
+import { workspacePath, workspaceRoute, type WorkspaceNavigate } from "./dashboard/routing";
 import { reportCopy, type TranslationKey } from "./i18n/catalog";
 import { translateStaticTemplate } from "./i18n/operationalCopy";
 import { useTranslation } from "./i18n/LocaleProvider";
@@ -166,7 +166,8 @@ function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
 
 export default function App() {
   const { formatCurrency: money, formatNumber: display, formatPercent: percent, locale, setLocale, t } = useTranslation();
-  const [view, setRoutedView] = useState<View>(() => workspaceRoute(window.location.pathname).view);
+  const [route, setRoute] = useState(() => workspaceRoute(window.location.pathname, window.location.search));
+  const view: View = route.view;
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
   const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
@@ -215,19 +216,19 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const navigate = useCallback((nextView: View, options: { replace?: boolean } = {}) => {
-    const pathname = workspacePath(nextView);
-    if (window.location.pathname !== pathname) {
-      window.history[options.replace ? "replaceState" : "pushState"](null, "", pathname);
+  const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
+    const href = workspacePath(nextView, options.tab);
+    if (`${window.location.pathname}${window.location.search}` !== href) {
+      window.history[options.replace ? "replaceState" : "pushState"](null, "", href);
     }
-    setRoutedView(nextView);
+    setRoute(workspaceRoute(window.location.pathname, window.location.search));
   }, []);
 
   useEffect(() => {
     const syncRoute = () => {
-      const route = workspaceRoute(window.location.pathname);
-      if (route.replace) window.history.replaceState(null, "", `${route.pathname}${window.location.search}${window.location.hash}`);
-      setRoutedView(route.view);
+      const nextRoute = workspaceRoute(window.location.pathname, window.location.search);
+      if (nextRoute.replace) window.history.replaceState(null, "", `${nextRoute.pathname}${nextRoute.search}${window.location.hash}`);
+      setRoute(nextRoute);
     };
     syncRoute();
     window.addEventListener("popstate", syncRoute);

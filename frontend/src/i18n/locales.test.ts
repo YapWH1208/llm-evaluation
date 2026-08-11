@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import * as catalogModule from "./catalog";
 import { catalogs, isLocale, localeIds, navigationCopy, overviewCopy, resolveLocale } from "./catalog";
 import { hasExplicitStaticTranslation, staticSourceTexts, translateStaticTemplate, translateStaticText } from "./operationalCopy";
 
@@ -41,6 +42,35 @@ const datasetMetricKeys = [
 ] as const;
 
 describe("workspace locale catalog", () => {
+  it("provides the approved page-tab structure in every shipped locale", () => {
+    const tabCopy = (catalogModule as typeof catalogModule & {
+      workspacePageTabCopy?: Record<string, Record<string, Record<string, string>>>;
+    }).workspacePageTabCopy;
+    const expectedKeys = {
+      dashboard: ["summary", "evaluations", "readiness"],
+      guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
+      models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
+      datasets: ["datasetInventory", "registerDataset"],
+      runs: ["runInventory", "launchEvaluation", "runDetails"],
+      analysis: ["evidenceMatrix", "compareRuns"],
+      settings: ["health", "access", "preferences"],
+    };
+
+    expect(tabCopy?.en).toEqual(expect.objectContaining({
+      dashboard: { summary: "Summary", evaluations: "Evaluations", readiness: "Readiness" },
+      models: expect.objectContaining({ modelInventory: "Model inventory", addEndpoint: "Add endpoint" }),
+      runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+    }));
+    for (const locale of localeIds) {
+      const localizedCopy = tabCopy?.[locale] as Record<string, Record<string, string>> | undefined;
+      expect(Object.keys(localizedCopy ?? {})).toEqual(Object.keys(expectedKeys));
+      for (const [page, keys] of Object.entries(expectedKeys)) {
+        expect(Object.keys(localizedCopy?.[page] ?? {})).toEqual(keys);
+        expect(Object.values(localizedCopy?.[page] ?? {}).every((value) => value.trim().length > 0)).toBe(true);
+      }
+    }
+  });
+
   it("ships the requested locales with the complete English key set", () => {
     expect(localeIds).toEqual(["en", "zh-CN", "fr", "de", "ru", "ja", "ko", "ms"]);
     const englishKeys = Object.keys(catalogs.en).sort();

@@ -37,10 +37,12 @@ describe("workspace presentation primitives", () => {
     const onChange = vi.fn();
     render(
       <WorkspaceTabs
+        ariaLabel="Evidence sections"
+        idPrefix="evidence"
         onChange={onChange}
         tabs={[
           { id: "inputs", label: "Inputs" },
-          { id: "outputs", label: "Outputs" },
+          { id: "outputs", label: "Outputs", description: "Generated model evidence" },
         ]}
         value="inputs"
       />,
@@ -48,11 +50,47 @@ describe("workspace presentation primitives", () => {
 
     expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Outputs" })).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("id", "workspace-tab-inputs");
-    expect(screen.getByRole("tab", { name: "Outputs" })).toHaveAttribute("aria-controls", "workspace-tabpanel-outputs");
+    expect(screen.getByRole("tablist", { name: "Evidence sections" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Inputs" })).toHaveAttribute("id", "evidence-tab-inputs");
+    expect(screen.getByRole("tab", { name: /Outputs/ })).toHaveAttribute("aria-controls", "evidence-tabpanel-outputs");
+    expect(screen.getByText("Generated model evidence")).toBeVisible();
 
-    await user.click(screen.getByRole("tab", { name: "Outputs" }));
+    await user.click(screen.getByRole("tab", { name: /Outputs/ }));
 
     expect(onChange).toHaveBeenCalledWith("outputs");
+  });
+
+  it("automatically activates adjacent, first, and last tabs from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <WorkspaceTabs
+        ariaLabel="Models sections"
+        idPrefix="models"
+        onChange={onChange}
+        tabs={[
+          { id: "inventory", label: "Inventory" },
+          { id: "add", label: "Add" },
+          { id: "limits", label: "Limits" },
+        ]}
+        value="inventory"
+      />,
+    );
+
+    screen.getByRole("tab", { name: "Inventory" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenLastCalledWith("add");
+    expect(screen.getByRole("tab", { name: "Add" })).toHaveFocus();
+
+    await user.keyboard("{End}");
+    expect(onChange).toHaveBeenLastCalledWith("limits");
+    expect(screen.getByRole("tab", { name: "Limits" })).toHaveFocus();
+
+    await user.keyboard("{Home}");
+    expect(onChange).toHaveBeenLastCalledWith("inventory");
+    expect(screen.getByRole("tab", { name: "Inventory" })).toHaveFocus();
+
+    await user.keyboard("{ArrowLeft}");
+    expect(onChange).toHaveBeenLastCalledWith("limits");
   });
 });
