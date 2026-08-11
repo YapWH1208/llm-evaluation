@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Capability, Endpoint } from "./api";
 import { Guide } from "./components/Guide";
 import { CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(cleanup);
 
@@ -169,10 +170,10 @@ describe("configure workspace pages", () => {
   it("routes an actionable guide step through the supplied view callback", async () => {
     const user = userEvent.setup();
     const onOpenView = vi.fn();
-    render(<Guide onOpenView={onOpenView} />);
+    render(<LocaleProvider><Guide activeTab="getting-started" onOpenView={onOpenView} onTabChange={vi.fn()} /></LocaleProvider>);
 
     await user.click(screen.getByRole("button", { name: "Open Models" }));
 
-    expect(onOpenView).toHaveBeenCalledWith("models");
+    expect(onOpenView).toHaveBeenCalledWith("models", { tab: "add-endpoint" });
   });
 });

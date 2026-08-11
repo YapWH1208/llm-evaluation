@@ -1,12 +1,15 @@
 import type { AnalyticsMatrix, Dashboard, Endpoint, EvaluationRun, SystemHealth, Task } from "../api";
 import { buildDashboardAnalytics, buildRecentRunRows, type DashboardAnalyticsPoint, type RecentRunRow } from "../dashboard/analytics";
 import type { View } from "../dashboard/navigation";
-import { overviewCopy, type OverviewCopy } from "../i18n/catalog";
+import type { WorkspaceTabFor } from "../dashboard/routing";
+import { overviewCopy, workspacePageTabCopy, type OverviewCopy } from "../i18n/catalog";
 import { useTranslation } from "../i18n/LocaleProvider";
 import { EfficiencySignals, EvaluationTrendChart, type DashboardVisualizationFormatters, type DashboardVisualizationLabels } from "./DashboardVisualizations";
+import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "./workspace/WorkspaceTabs";
 import "./overview-dashboard.css";
 
 type OverviewDashboardProps = {
+  activeTab: WorkspaceTabFor<"dashboard">;
   dashboard: Dashboard | null;
   analytics: AnalyticsMatrix | null;
   systemHealth: SystemHealth | null;
@@ -15,6 +18,7 @@ type OverviewDashboardProps = {
   tasks: Task[];
   onInspectRun: (runId: string) => void;
   onOpenView: (view: View) => void;
+  onTabChange: (tab: WorkspaceTabFor<"dashboard">) => void;
 };
 
 type Metric = {
@@ -139,9 +143,10 @@ function ReadinessGrid({ copy, items, onOpenView }: { copy: OverviewCopy; items:
   );
 }
 
-export function OverviewDashboard({ analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenView }: OverviewDashboardProps) {
+export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenView, onTabChange }: OverviewDashboardProps) {
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = overviewCopy[locale];
+  const tabCopy = workspacePageTabCopy[locale].dashboard;
   const analyticsPoints = buildDashboardAnalytics(runs, analytics);
   const recentRows = buildRecentRunRows(runs, endpoints, analytics);
   const activeTasks = tasks.filter((task) => ["pending", "leased", "running", "retry_scheduled"].includes(task.status));
@@ -169,17 +174,20 @@ export function OverviewDashboard({ analytics, dashboard, endpoints, runs, syste
     return (
       <section className="overview-dashboard" aria-labelledby="dashboard-title">
         <DashboardHeader copy={copy} onOpenView={onOpenView} />
-        <section className="dashboard-panel overview-unavailable" aria-label={copy.unavailableRegion}>
-          <div>
-            <p className="eyebrow">{copy.currentWork}</p>
-            <h2>{copy.unavailableTitle}</h2>
-            <p className="dashboard-empty">{copy.unavailableDescription}</p>
-          </div>
-          <div className="overview-actions">
-            <button onClick={() => onOpenView("models")} type="button">{copy.configureModel}</button>
-            <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.openRuns}</button>
-          </div>
-        </section>
+        <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
+        <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
+          <section className="dashboard-panel overview-unavailable" aria-label={copy.unavailableRegion}>
+            <div>
+              <p className="eyebrow">{copy.currentWork}</p>
+              <h2>{copy.unavailableTitle}</h2>
+              <p className="dashboard-empty">{copy.unavailableDescription}</p>
+            </div>
+            <div className="overview-actions">
+              <button onClick={() => onOpenView("models")} type="button">{copy.configureModel}</button>
+              <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.openRuns}</button>
+            </div>
+          </section>
+        </div>
       </section>
     );
   }
@@ -210,32 +218,37 @@ export function OverviewDashboard({ analytics, dashboard, endpoints, runs, syste
   return (
     <section className="overview-dashboard" aria-labelledby="dashboard-title">
       <DashboardHeader copy={copy} onOpenView={onOpenView} />
-      <section className="overview-kpis" aria-labelledby="performance-summary-title">
-        <h2 className="sr-only" id="performance-summary-title">{copy.performanceSummary}</h2>
-        {kpis.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
-      </section>
-      <div className="overview-analytics-grid">
-        <section className="dashboard-panel dashboard-panel--trend" aria-labelledby="evaluation-trend-title">
-          <div className="dashboard-panel__heading"><h2 id="evaluation-trend-title">{copy.evaluationTrend}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
-          <EvaluationTrendChart formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
-        </section>
-        <section className="dashboard-panel dashboard-panel--comparison" aria-labelledby="comparison-title">
-          <div className="dashboard-panel__heading"><h2 id="comparison-title">{copy.modelBenchmarkComparison}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
-          <ComparisonTable copy={copy} formatters={formatters} points={analyticsPoints.slice(-6).reverse()} />
-        </section>
+      <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
+      <div aria-labelledby={workspaceTabId("dashboard", activeTab)} id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
+        {activeTab === "summary" && <>
+          <section className="overview-kpis" aria-labelledby="performance-summary-title">
+            <h2 className="sr-only" id="performance-summary-title">{copy.performanceSummary}</h2>
+            {kpis.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
+          </section>
+          <div className="overview-analytics-grid">
+            <section className="dashboard-panel dashboard-panel--trend" aria-labelledby="evaluation-trend-title">
+              <div className="dashboard-panel__heading"><h2 id="evaluation-trend-title">{copy.evaluationTrend}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
+              <EvaluationTrendChart formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
+            </section>
+            <section className="dashboard-panel dashboard-panel--comparison" aria-labelledby="comparison-title">
+              <div className="dashboard-panel__heading"><h2 id="comparison-title">{copy.modelBenchmarkComparison}</h2><button className="secondary" onClick={() => onOpenView("analysis")} type="button">{copy.openAnalysis}</button></div>
+              <ComparisonTable copy={copy} formatters={formatters} points={analyticsPoints.slice(-6).reverse()} />
+            </section>
+          </div>
+          <section className="dashboard-panel" aria-labelledby="efficiency-title">
+            <div className="dashboard-panel__heading"><h2 id="efficiency-title">{copy.latencyCostErrors}</h2></div>
+            <EfficiencySignals formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
+          </section>
+        </>}
+        {activeTab === "evaluations" && <section className="dashboard-panel" aria-labelledby="recent-evaluations-title">
+          <div className="dashboard-panel__heading"><h2 id="recent-evaluations-title">{copy.recentEvaluations}</h2><button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button></div>
+          <RecentEvaluationsTable copy={copy} formatDate={(value) => value ? formatDate(value) : "--"} formatters={formatters} onInspectRun={onInspectRun} rows={recentRows} />
+        </section>}
+        {activeTab === "readiness" && <section className="dashboard-panel" aria-labelledby="system-readiness-title">
+          <div className="dashboard-panel__heading"><h2 id="system-readiness-title">{copy.systemReadiness}</h2><span>{interpolate(copy.verified, { count: verifiedEndpoints.length })}</span></div>
+          <ReadinessGrid copy={copy} items={readinessItems} onOpenView={onOpenView} />
+        </section>}
       </div>
-      <section className="dashboard-panel" aria-labelledby="efficiency-title">
-        <div className="dashboard-panel__heading"><h2 id="efficiency-title">{copy.latencyCostErrors}</h2></div>
-        <EfficiencySignals formatters={formatters} labels={visualizationLabels} points={analyticsPoints} />
-      </section>
-      <section className="dashboard-panel" aria-labelledby="recent-evaluations-title">
-        <div className="dashboard-panel__heading"><h2 id="recent-evaluations-title">{copy.recentEvaluations}</h2><button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button></div>
-        <RecentEvaluationsTable copy={copy} formatDate={(value) => value ? formatDate(value) : "--"} formatters={formatters} onInspectRun={onInspectRun} rows={recentRows} />
-      </section>
-      <section className="dashboard-panel" aria-labelledby="system-readiness-title">
-        <div className="dashboard-panel__heading"><h2 id="system-readiness-title">{copy.systemReadiness}</h2><span>{interpolate(copy.verified, { count: verifiedEndpoints.length })}</span></div>
-        <ReadinessGrid copy={copy} items={readinessItems} onOpenView={onOpenView} />
-      </section>
     </section>
   );
 }

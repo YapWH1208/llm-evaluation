@@ -125,4 +125,23 @@ describe("workspace tab routing", () => {
     expect(screen.getByRole("tab", { name: "Run details" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Select a run" })).toBeVisible();
   });
+
+  it("direct-loads a lower-density Guide section from the URL", () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/guide?tab=prepare-data");
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    expect(screen.getByRole("tab", { name: "Prepare data" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/2\. Register a dataset/i)).toBeVisible();
+    expect(screen.queryByText(/1\. Add a model endpoint/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/4\. Queue a dataset run/i)).not.toBeInTheDocument();
+  });
+
+  it("direct-loads the Dashboard readiness tab", () => {
+    mockWorkspace();
+    window.history.replaceState(null, "", "/dashboard?tab=readiness");
+    render(<LocaleProvider><App /></LocaleProvider>);
+
+    expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute("aria-selected", "true");
+  });
 });
