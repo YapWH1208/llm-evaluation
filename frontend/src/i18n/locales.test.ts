@@ -52,7 +52,7 @@ describe("workspace locale catalog", () => {
       guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
       models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
       datasets: ["datasetInventory", "registerDataset"],
-      runs: ["runInventory", "launchEvaluation", "runDetails"],
+      runs: ["runInventory", "quickStart", "datasetEvaluation", "runDetails"],
       analysis: ["evidenceMatrix", "compareRuns"],
       settings: ["health", "access", "preferences"],
     };
@@ -60,7 +60,7 @@ describe("workspace locale catalog", () => {
     expect(tabCopy?.en).toEqual(expect.objectContaining({
       dashboard: { summary: "Summary", evaluations: "Evaluations", readiness: "Readiness" },
       models: expect.objectContaining({ modelInventory: "Model inventory", addEndpoint: "Add endpoint" }),
-      runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+      runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
     }));
     for (const locale of localeIds) {
       const localizedCopy = tabCopy?.[locale] as Record<string, Record<string, string>> | undefined;
@@ -103,6 +103,42 @@ describe("workspace locale catalog", () => {
       for (const key of analyticsOverviewKeys) {
         expect(overviewCopy[locale][key].trim(), `${locale}.${key}`).not.toBe("");
       }
+    }
+  });
+
+  it("provides complete evidence-scatter terminology in every shipped locale", () => {
+    const scatterCopy = catalogModule.analysisScatterCopy;
+    const englishKeys = Object.keys(scatterCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(scatterCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(scatterCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+    }
+  });
+
+  it("provides complete run-comparison terminology in every shipped locale", () => {
+    const comparisonCopy = catalogModule.comparisonCopy;
+    const englishKeys = Object.keys(comparisonCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(comparisonCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(comparisonCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+    }
+  });
+
+  it("provides complete run-detail terminology in every shipped locale", () => {
+    const detailCopy = catalogModule.runDetailCopy;
+    const englishKeys = Object.keys(detailCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(detailCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(detailCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+    }
+  });
+
+  it("provides complete leaderboard terminology in every shipped locale", () => {
+    const leaderboardCopy = catalogModule.leaderboardCopy;
+    const englishKeys = Object.keys(leaderboardCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(leaderboardCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(leaderboardCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
     }
   });
 

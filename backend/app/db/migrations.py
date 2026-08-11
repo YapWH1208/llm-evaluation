@@ -177,6 +177,37 @@ def _upgrade_v24_dataset_field_defaults(connection: Connection) -> None:
     _add_column_if_missing(connection, "dataset_versions", "reference_field", "reference_field VARCHAR(255)")
 
 
+def _upgrade_v25_evaluation_experience_persistence(connection: Connection) -> None:
+    """Add compatibility-safe fields for names, dataset metadata, and metric evidence."""
+
+    _add_column_if_missing(connection, "evaluation_runs", "display_name", "display_name VARCHAR(500)")
+    _add_column_if_missing(
+        connection,
+        "dataset_versions",
+        "capabilities",
+        "capabilities JSON NOT NULL DEFAULT '[]'",
+    )
+    _add_column_if_missing(
+        connection,
+        "dataset_versions",
+        "languages",
+        "languages JSON NOT NULL DEFAULT '[]'",
+    )
+    _add_column_if_missing(
+        connection,
+        "dataset_versions",
+        "evaluation_type",
+        "evaluation_type VARCHAR(32) NOT NULL DEFAULT 'custom'",
+    )
+    _add_column_if_missing(connection, "sample_attempts", "metric_evidence", "metric_evidence JSON")
+    _add_column_if_missing(
+        connection,
+        "aggregate_metrics",
+        "availability_reason",
+        "availability_reason VARCHAR(500)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -315,6 +346,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260807_add_dataset_field_defaults",
         description="Add optional input and reference field defaults to dataset versions.",
         upgrade=_upgrade_v24_dataset_field_defaults,
+    ),
+    Migration(
+        version=25,
+        migration_id="20260811_add_evaluation_experience_persistence",
+        description="Add run names, dataset metadata, and named-metric evidence fields.",
+        upgrade=_upgrade_v25_evaluation_experience_persistence,
     ),
 )
 

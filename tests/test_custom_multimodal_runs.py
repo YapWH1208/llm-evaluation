@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -8,6 +9,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_names import format_run_display_name
 
 
 class SuccessfulTester:
@@ -55,6 +57,11 @@ def test_custom_multimodal_run_resolves_uploaded_assets_and_uses_normal_executio
         )
         assert created.status_code == 201
         assert created.json()["benchmark_id"] == "custom-multimodal"
+        assert created.json()["display_name"] == format_run_display_name(
+            "example-model",
+            "custom-multimodal",
+            datetime.fromisoformat(created.json()["created_at"]),
+        )
         assert client.post(f"/api/v1/evaluation-runs/{created.json()['id']}/execute").json()["status"] == "completed"
         attempt = client.get(f"/api/v1/evaluation-runs/{created.json()['id']}/attempts").json()[0]
         assert attempt["status"] == "succeeded"

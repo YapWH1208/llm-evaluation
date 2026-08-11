@@ -4,6 +4,10 @@
   min-width: 0;
 }
 
+.dashboard-tabpanel {
+  min-width: 0;
+}
+
 .overview-dashboard__header {
   align-items: end;
   display: flex;
@@ -197,6 +201,13 @@
   text-overflow: ellipsis;
 }
 
+.dashboard-table td small {
+  color: var(--text-subtle);
+  display: block;
+  font-size: .65rem;
+  margin-top: .14rem;
+}
+
 .dashboard-table tr:last-child td { border-bottom: 0; }
 .dashboard-table .metric-danger { color: var(--danger); }
 .dashboard-table--runs { min-width: 46rem; }
@@ -237,11 +248,11 @@
 }
 
 .readiness-item {
-  align-items: start;
+  align-items: center;
   border-right: 1px solid var(--border);
   display: grid;
   gap: .55rem;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-width: 0;
   padding: .15rem .85rem;
 }
@@ -275,9 +286,9 @@
 }
 
 .readiness-item button {
-  grid-column: 2;
-  justify-self: start;
-  margin-top: .25rem;
+  grid-column: auto;
+  justify-self: end;
+  margin-top: 0;
   min-height: 1.75rem;
   padding: .25rem .4rem;
 }
@@ -300,6 +311,21 @@
   stroke-width: 1;
 }
 
+.trend-axis-label,
+.trend-date-label {
+  fill: var(--text-subtle);
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-axis-label {
+  text-anchor: end;
+}
+
+.trend-date-label--end {
+  text-anchor: end;
+}
+
 .trend-series {
   fill: none;
   stroke-linecap: round;
@@ -309,6 +335,20 @@
 
 .trend-series--accuracy { stroke: var(--primary); }
 .trend-series--success { stroke: #60a5fa; }
+
+.trend-point {
+  stroke: var(--surface);
+  stroke-width: 1.4;
+}
+
+.trend-point:focus {
+  outline: none;
+  stroke: var(--text);
+  stroke-width: 2.4;
+}
+
+.trend-point--accuracy { fill: var(--primary); }
+.trend-point--success { fill: #60a5fa; }
 
 .trend-legend {
   display: flex;
@@ -346,11 +386,13 @@
 }
 
 .efficiency-row {
+  align-items: center;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   display: grid;
   gap: .7rem;
+  grid-template-columns: minmax(10rem, .45fr) minmax(0, 1.55fr);
   padding: .75rem;
 }
 
@@ -437,6 +479,9 @@
   .readiness-item:nth-child(3),
   .readiness-item:nth-child(4) { border-bottom: 1px solid var(--border); border-right: 0; padding: .7rem 0; }
   .readiness-item:last-child { border-bottom: 0; }
+  .readiness-item { grid-template-columns: auto minmax(0, 1fr); }
+  .readiness-item button { grid-column: 2; justify-self: start; }
+  .efficiency-row { align-items: stretch; grid-template-columns: 1fr; }
   .efficiency-row__metrics { grid-template-columns: 1fr; }
 }
 

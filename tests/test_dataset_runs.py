@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.services.connection_tester import ConnectionTestResult
 from app.services.model_executor import SampleExecutionResult
+from app.services.run_names import format_run_display_name
 from cryptography.fernet import Fernet
 
 
@@ -199,6 +201,20 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
     )
     with TestClient(app) as client:
         dataset = _register_ready_dataset(client)
+        profiled = client.put(
+            f"/api/v1/datasets/{dataset['id']}",
+            json={
+                "dataset_id": "demo",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en"],
+                "evaluation_type": "classification",
+            },
+        )
+        assert profiled.status_code == 200
+        dataset = profiled.json()
         endpoint_id = _create_available_endpoint(client)
         package_id = _prompt_package(client)
         created = client.post(
@@ -214,6 +230,11 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         assert created.status_code == 201
         run = created.json()
         assert run["benchmark_id"] == "dataset-evaluation"
+        assert run["display_name"] == format_run_display_name(
+            "example-model",
+            "demo",
+            datetime.fromisoformat(run["created_at"]),
+        )
         assert run["total_samples"] == 2
         assert run["configuration_snapshot"]["reference_field"] == "answer"
         executed = client.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
@@ -229,6 +250,13 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
         assert {attempt["reference_snapshot"]["answer"] for attempt in attempts} == {"4", "6"}
         assert {attempt["score"] for attempt in attempts} == {1.0}
+        metrics = client.get(f"/api/v1/analytics/runs/{run['id']}/metrics")
+        assert metrics.status_code == 200
+        metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}
+        assert metrics_by_name["accuracy"]["metric_value"] == 1.0
+        assert metrics_by_name["precision_macro"]["metric_value"] == 1.0
+        assert metrics_by_name["recall_macro"]["metric_value"] == 1.0
+        assert metrics_by_name["f1_macro"]["metric_value"] == 1.0
 
 
 def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:
@@ -415,3 +443,92 @@ def test_dataset_run_rejects_identical_input_and_reference_fields(tmp_path: Path
         })
         assert created.status_code == 409
         assert "different" in created.json()["detail"]
+
+
+def test_dataset_run_inherits_dataset_defaults_without_overwriting_record_metadata(
+    tmp_path: Path,
+) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+    )
+    content = (
+        b'{"question":"first","answer":"1","metadata":{"capabilities":["record_reasoning"],"languages":["fr"],"evaluation_type":"generation"}}\n'
+        b'{"question":"second","answer":"2"}\n'
+        b'{"question":"third","answer":"3","metadata":{"capabilities":[]}}\n'
+    )
+    with TestClient(app) as client:
+        created_dataset = client.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "profiled",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en-US"],
+                "evaluation_type": "classification",
+            },
+        )
+        uploaded = client.post(
+            f"/api/v1/datasets/{created_dataset.json()['id']}/upload",
+            json={
+                "filename": "profiled.jsonl",
+                "base64_data": base64.b64encode(content).decode("ascii"),
+            },
+        )
+        assert uploaded.status_code == 200
+        endpoint_id = _create_available_endpoint(client)
+
+        created = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": uploaded.json()["id"],
+                "sample_limit": 10,
+            },
+        )
+        assert created.status_code == 201
+        snapshot = created.json()["configuration_snapshot"]
+        assert snapshot["input_field"] == "question"
+        assert snapshot["reference_field"] == "answer"
+        assert snapshot["dataset_profile"] == {
+            "capabilities": ["classification"],
+            "languages": ["en-US"],
+            "evaluation_type": "classification",
+            "input_field": "question",
+            "reference_field": "answer",
+        }
+
+        attempts = client.get(
+            f"/api/v1/evaluation-runs/{created.json()['id']}/attempts"
+        ).json()
+        by_prompt = {
+            attempt["input_snapshot"]["messages"][-1]["content"]: attempt
+            for attempt in attempts
+        }
+        explicit = by_prompt["first"]
+        inherited = by_prompt["second"]
+        explicit_empty = by_prompt["third"]
+        assert explicit["input_snapshot"]["metadata"]["dataset"] == "profiled"
+        assert explicit["input_snapshot"]["metadata"]["record_number"] == "1"
+        assert explicit["input_snapshot"]["metadata"]["capabilities"] == ["record_reasoning"]
+        assert explicit["input_snapshot"]["metadata"]["languages"] == ["fr"]
+        assert explicit["input_snapshot"]["metadata"]["evaluation_type"] == "generation"
+        assert inherited["input_snapshot"]["metadata"]["capabilities"] == ["classification"]
+        assert inherited["input_snapshot"]["metadata"]["languages"] == ["en-US"]
+        assert inherited["input_snapshot"]["metadata"]["evaluation_type"] == "classification"
+        assert explicit_empty["input_snapshot"]["metadata"]["capabilities"] == []
+        assert explicit_empty["input_snapshot"]["metadata"]["languages"] == ["en-US"]
+        assert explicit_empty["input_snapshot"]["metadata"]["evaluation_type"] == "classification"
+        assert explicit["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "generation"
+        assert inherited["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "classification"
+        assert explicit_empty["reference_snapshot"]["dataset_profile"]["capabilities"] == []
+        assert all(
+            attempt["reference_snapshot"]["scoring"] == {"type": "exact_match"}
+            for attempt in attempts
+        )

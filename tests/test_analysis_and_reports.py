@@ -95,14 +95,21 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert evidence.json()[0]["sample_metadata"] == {"capability": "reasoning", "language": "en", "difficulty": "basic"}
         assert evidence.json()[0]["human_review_status"] == "unreviewed"
         assert evidence.json()[0]["judge_disagreement"] is False
+        assert evidence.json()[0]["metric_evidence"] == {"profile_version": "1.0.0"}
 
         metrics = client.get(f"/api/v1/analytics/runs/{run_a}/metrics")
         assert metrics.status_code == 200
         metrics_by_name = {metric["metric_name"]: metric for metric in metrics.json()}
+        assert metrics_by_name["score"]["metric_value"] == 1.0
         assert metrics_by_name["accuracy"]["metric_value"] == 1.0
         assert metrics_by_name["accuracy"]["sample_count"] == 2
         assert metrics_by_name["accuracy"]["confidence_interval"]["method"] == "normal_95"
         assert metrics_by_name["p95_latency_ms"]["metric_value"] == 75.0
+        assert metrics_by_name["f1_macro"]["metric_value"] is None
+        assert metrics_by_name["f1_macro"]["availability_reason"]
+        assert metrics_by_name["f1_macro"]["metric_label"] == "Macro F1"
+        assert metrics_by_name["score"]["aggregation_version"] == "2.0.0"
+        assert metrics_by_name["score"]["profile_version"] == "1.0.0"
         recomputed = client.post(f"/api/v1/analytics/runs/{run_a}/metrics/recompute")
         assert recomputed.status_code == 200
         assert len(recomputed.json()) == len(metrics_by_name)
@@ -129,6 +136,39 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert heatmaps["model_difficulty"][0]["y_key"] == "basic"
         assert heatmaps["model_modality"][0]["y_key"] == "text"
 
+        scatter = client.get(
+            "/api/v1/analytics/scatter",
+            params={"x_axis": "score", "y_axis": "p95_latency_ms"},
+        )
+        assert scatter.status_code == 200
+        assert scatter.json()["eligible_run_count"] == 2
+        assert scatter.json()["plotted_count"] == 2
+        assert {point["run_id"] for point in scatter.json()["points"]} == {run_a, run_b}
+        assert all(point["display_name"] for point in scatter.json()["points"])
+        invalid_scatter = client.get(
+            "/api/v1/analytics/scatter",
+            params={"x_axis": "unknown", "y_axis": "score"},
+        )
+        assert invalid_scatter.status_code == 422
+
+        leaderboard = client.get("/api/v1/leaderboard")
+        assert leaderboard.status_code == 200
+        assert leaderboard.json()["total"] == 2
+        assert {item["run_id"] for item in leaderboard.json()["items"]} == {run_a, run_b}
+        assert all(item["display_name"] for item in leaderboard.json()["items"])
+        model_a_endpoint = next(
+            item["model_endpoint_id"]
+            for item in leaderboard.json()["items"]
+            if item["model_name"] == "model-a"
+        )
+        filtered_leaderboard = client.get(
+            "/api/v1/leaderboard",
+            params={"model_endpoint_id": model_a_endpoint, "available_metric": "accuracy"},
+        )
+        assert filtered_leaderboard.status_code == 200
+        assert [item["run_id"] for item in filtered_leaderboard.json()["items"]] == [run_a]
+        assert client.get("/api/v1/leaderboard", params={"sort": "unknown"}).status_code == 422
+
         comparison = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_b})
         assert comparison.status_code == 200
         compared = comparison.json()
@@ -140,6 +180,50 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         }
         assert compared["differences"]["average_latency_ms"] == -50.0
         assert len(compared["sample_outcomes"]) == 2
+        assert compared["runs"]["a"]["id"] == run_a
+        assert compared["runs"]["b"]["id"] == run_b
+        assert compared["runs"]["a"]["display_name"]
+        assert compared["runs"]["a"]["model_name"] == "model-a"
+        named_metrics = {metric["metric_name"]: metric for metric in compared["named_metrics"]}
+        assert named_metrics["score"]["run_a"]["value"] == 1.0
+        assert named_metrics["score"]["run_b"]["value"] == 0.0
+        assert named_metrics["score"]["delta"] == 1.0
+        assert named_metrics["score"]["unit"] == "ratio"
+        assert named_metrics["f1_macro"]["run_a"]["value"] is None
+        assert named_metrics["f1_macro"]["run_a"]["availability_reason"]
+        assert any(group["unit"] == "milliseconds" for group in compared["metric_groups"])
+        assert {item["outcome"] for item in compared["outcome_distribution"]} == {
+            "both_correct", "run_a_only_correct", "run_b_only_correct", "both_incorrect",
+        }
+        assert sum(item["count"] for item in compared["outcome_distribution"]) == 2
+        same_run = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_a})
+        assert same_run.status_code == 409
+        other_endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "test-secret-key",
+                "model_name": "model-c",
+            },
+        ).json()
+        assert client.post(
+            f"/api/v1/model-endpoints/{other_endpoint['id']}/connection-test"
+        ).status_code == 200
+        incompatible_run = client.post(
+            "/api/v1/evaluation-runs",
+            json={
+                "model_endpoint_id": other_endpoint["id"],
+                "benchmark_id": "coding-evaluation",
+                "benchmark_version": "1.0.0",
+                "sample_limit": 1,
+            },
+        )
+        assert incompatible_run.status_code == 201
+        incompatible = client.get(
+            "/api/v1/comparisons",
+            params={"run_a": run_a, "run_b": incompatible_run.json()["id"]},
+        )
+        assert incompatible.status_code == 409
 
         multi_report = client.post(
             "/api/v1/reports",

@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.services.model_executor import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.services.run_names import resolve_run_display_name
 from app.services.reports import delete_report_artifact
 from app.services.scoring import ScoringError, validate_scoring_rule
 from app.services.mongo_run_executor import (
@@ -77,7 +78,7 @@ class DatasetRunCreate(BaseModel):
     dataset_version_id: str
     prompt_package_id: str | None = None
     input_field: Annotated[str, Field(min_length=1, max_length=255)] | None = None
-    reference_field: Annotated[str, Field(min_length=1, max_length=255)]
+    reference_field: Annotated[str, Field(min_length=1, max_length=255)] | None = None
     sample_limit: Annotated[int, Field(ge=1, le=10_000)] = 100
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     request_body_override: dict[str, Any] = Field(default_factory=dict)
@@ -116,6 +117,7 @@ class EvaluationRunResponse(BaseModel):
     max_concurrency: int | None = None
     benchmark_id: str
     benchmark_version: str
+    display_name: str | None = None
     configuration_snapshot: dict[str, Any]
     status: str
     total_samples: int
@@ -126,6 +128,11 @@ class EvaluationRunResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     archived_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def populate_legacy_display_name(self) -> "EvaluationRunResponse":
+        self.display_name = resolve_run_display_name(self)
+        return self
 
 
 class EvaluationRunPreflightResponse(BaseModel):
@@ -159,6 +166,7 @@ class SampleAttemptResponse(BaseModel):
     request_snapshot: dict[str, Any] | None
     raw_response: str | None
     parsed_prediction: str | None
+    metric_evidence: dict[str, Any] | None = None
     score: float | None
     latency_ms: float | None
     input_tokens: int | None
@@ -170,7 +178,7 @@ class SampleAttemptResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
-    sample_metadata: dict[str, str] = Field(default_factory=dict)
+    sample_metadata: dict[str, Any] = Field(default_factory=dict)
     judge_disagreement: bool = False
     human_review_status: str = "unreviewed"
 

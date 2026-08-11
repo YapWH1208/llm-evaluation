@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from app.db.models import (
 from app.services.content_ir import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.request_body import resolve_request_body
+from app.services.run_names import format_run_display_name
 
 
 class CustomRunError(ValueError):
@@ -48,12 +50,15 @@ def create_custom_multimodal_run(
         protocol_profile=str(endpoint.protocol_profile),
         model_defaults=endpoint.default_request_body,
     )
+    created_at = datetime.now(timezone.utc)
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         created_by=created_by,
         max_concurrency=max_concurrency,
         benchmark_id="custom-multimodal",
         benchmark_version="1.0.0",
+        display_name=format_run_display_name(endpoint.model_name, "custom-multimodal", created_at),
+        created_at=created_at,
         configuration_snapshot={
             "benchmark": {"id": "custom-multimodal", "version": "1.0.0", "source": "user"},
             "endpoint": {

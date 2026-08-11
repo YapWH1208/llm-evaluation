@@ -9,7 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(cleanup);
 
 const dashboard: Dashboard = {
-  runs: { active: 1, completed: 3, recent_completed: [{ id: "completed-run", benchmark_id: "release-check", status: "completed", completed_samples: 12, total_samples: 12, completed_at: "2026-07-30T09:00:00Z" }] },
+  runs: { active: 1, completed: 3, recent_completed: [{ id: "completed-run", display_name: "evaluation-model_release-check_20260730T090000Z", benchmark_id: "release-check", status: "completed", completed_samples: 12, total_samples: 12, completed_at: "2026-07-30T09:00:00Z" }] },
   queue: { pending: 2, leased: 1 },
   workers: { active: 2 },
   endpoints: { available: 1, unavailable: 0, total: 1 },
@@ -54,6 +54,7 @@ const endpoint: Endpoint = {
 
 const activeRun: EvaluationRun = {
   id: "active-run",
+  display_name: "evaluation-model_release-check_20260802T090000Z",
   model_endpoint_id: "endpoint-id",
   created_by: null,
   max_concurrency: null,
@@ -73,6 +74,7 @@ const activeRun: EvaluationRun = {
 const completedRun: EvaluationRun = {
   ...activeRun,
   id: "completed-run",
+  display_name: "evaluation-model_release-check_20260801T090000Z",
   status: "completed",
   completed_samples: 12,
   successful_samples: 11,
@@ -85,6 +87,7 @@ const completedRun: EvaluationRun = {
 const olderRun: EvaluationRun = {
   ...completedRun,
   id: "older-run",
+  display_name: "evaluation-model_release-check_20260731T090000Z",
   created_at: "2026-07-31T09:00:00Z",
   started_at: "2026-07-31T09:01:00Z",
   completed_at: "2026-07-31T09:03:00Z",
@@ -181,6 +184,7 @@ describe("OverviewDashboard", () => {
 
     expect(document.querySelector(".overview-dashboard")).toBeInTheDocument();
     expect(document.querySelector(".overview-dashboard.workspace-page")).not.toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveClass("dashboard-tabpanel");
   });
 
   it("shows performance evidence only on the summary tab", async () => {
@@ -215,6 +219,8 @@ describe("OverviewDashboard", () => {
     expect(screen.getByRole("tab", { name: "Evaluations" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
     expect(document.querySelector(".dashboard-status-badge.completed")).toBeInTheDocument();
+    expect(screen.getByText("evaluation-model_release-check_20260802T090000Z")).toBeVisible();
+    expect(screen.getByText("evaluation-model_release-check_20260801T090000Z")).toBeVisible();
     expect(screen.queryByRole("img", { name: "Evaluation trend" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
 

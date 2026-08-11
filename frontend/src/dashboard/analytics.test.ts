@@ -42,6 +42,7 @@ function endpoint(id: string, displayName: string): Endpoint {
 
 function run(overrides: Partial<EvaluationRun> & Pick<EvaluationRun, "id">): EvaluationRun {
   return {
+    display_name: "example-model_text-quick-check_20260801T090000Z",
     model_endpoint_id: "endpoint-1",
     created_by: null,
     max_concurrency: null,

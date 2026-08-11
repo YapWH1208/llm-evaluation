@@ -71,7 +71,7 @@ async function openRuns() {
   const user = userEvent.setup();
   render(<LocaleProvider><App /></LocaleProvider>);
   await user.click(screen.getByRole("link", { name: "Runs" }));
-  await user.click(screen.getByRole("tab", { name: "Launch evaluation" }));
+  await user.click(screen.getByRole("tab", { name: "Dataset evaluation" }));
   return user;
 }
 
@@ -157,8 +157,10 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     const user = await openRuns();
 
+    await user.click(screen.getByRole("tab", { name: "Quick start" }));
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
     expect(screen.getByLabelText("Quick-start benchmark")).toHaveTextContent("Text Quick Check");
     expect(screen.getByLabelText("Quick-start benchmark")).not.toHaveTextContent("External Pack");
@@ -182,6 +184,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     let releaseRefresh: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
     let listRunsCalls = 0;
@@ -191,6 +194,7 @@ describe("evaluation run launch workspace", () => {
     });
     const user = await openRuns();
 
+    await user.click(screen.getByRole("tab", { name: "Quick start" }));
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
     await user.click(screen.getByRole("button", { name: "Queue quick start" }));
     expect(createRunSpy).toHaveBeenCalled();
@@ -207,10 +211,12 @@ describe("evaluation run launch workspace", () => {
     const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
     const user = await openRuns();
 
+    await user.click(screen.getByRole("tab", { name: "Quick start" }));
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
     await user.click(screen.getByRole("button", { name: "Preflight quick start" }));
     expect(validateRun).toHaveBeenCalled();
 
+    await user.click(screen.getByRole("tab", { name: "Dataset evaluation" }));
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Reference field")).toHaveValue("answer"));
     await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
@@ -270,6 +276,7 @@ describe("evaluation run launch workspace", () => {
   it("shows the immutable scoring metric in selected run evidence", async () => {
     const run = {
       id: "run-scored",
+      display_name: "example-model_dataset-evaluation_20260810T000000Z",
       model_endpoint_id: endpoint.id,
       created_by: null,
       max_concurrency: null,
@@ -291,6 +298,7 @@ describe("evaluation run launch workspace", () => {
     vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
     vi.spyOn(api, "listReports").mockResolvedValue([]);
     vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
+    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Run inventory" }));
@@ -319,8 +327,7 @@ describe("evaluation run launch workspace", () => {
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
-    const packageSelects = screen.getAllByLabelText("Prompt package (optional)");
-    await user.selectOptions(packageSelects[1], promptPackage.id);
+    await user.selectOptions(screen.getByLabelText("Prompt package (optional)"), promptPackage.id);
     expect(screen.getByLabelText("Input field")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
     await waitFor(() => expect(screen.getByText("Ready to queue")).toBeVisible());
@@ -348,8 +355,7 @@ describe("evaluation run launch workspace", () => {
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
-    const packageSelects = screen.getAllByLabelText("Prompt package (optional)");
-    await user.selectOptions(packageSelects[1], promptPackage.id);
+    await user.selectOptions(screen.getByLabelText("Prompt package (optional)"), promptPackage.id);
     await user.selectOptions(screen.getByLabelText("Evaluation metric"), "token_f1");
 
     expect(screen.getByText("Choosing a metric here overrides the prompt package scoring rule.")).toBeVisible();

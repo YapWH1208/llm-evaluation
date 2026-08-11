@@ -1,6 +1,7 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  AggregateMetric,
   ApiError,
   AnalyticsMatrix,
   Benchmark,
@@ -27,11 +28,13 @@ import {
 import { AppShell } from "./components/AppShell";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { Guide } from "./components/Guide";
-import { DatasetRegistrationForm } from "./components/datasets/DatasetRegistrationForm";
-import { DatasetsPage } from "./components/pages/CatalogPages";
+import { DatasetRegistrationForm, type DatasetRegistrationFormValues } from "./components/datasets/DatasetRegistrationForm";
+import { DatasetsPage, type DatasetEditFormValues } from "./components/pages/CatalogPages";
 import { ModelsPage, type EndpointForm } from "./components/pages/EndpointPages";
 import { AnalysisPage } from "./components/pages/InsightsPages";
+import { LeaderboardPage } from "./components/pages/LeaderboardPage";
 import { RunsPage } from "./components/pages/OperationsPages";
+import { RunDetailWorkspace } from "./components/runs/RunDetailWorkspace";
 import { SettingsPage } from "./components/pages/SystemPages";
 import { datasetMetricIds, datasetScoringRuleFor, type DatasetMetricId } from "./evaluations/scoringMetrics";
 import type { View } from "./dashboard/navigation";
@@ -67,7 +70,7 @@ const initialEndpoint: EndpointForm = {
   input_tokens_per_minute: "",
   output_tokens_per_minute: "",
 };
-const initialDataset = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "" };
+const initialDataset: DatasetRegistrationFormValues = { dataset_id: "", version: "1", revision: "main", source_url: "", checksum: "", credential_binding_id: "", license_text: "", input_field: "", reference_field: "", capabilities: [], languages: [], evaluation_type: "custom" };
 const initialDatasetRun = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "", metric: "default" as DatasetMetricId };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
@@ -181,6 +184,7 @@ export default function App() {
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
+  const [runMetrics, setRunMetrics] = useState<AggregateMetric[]>([]);
   const [runLogs, setRunLogs] = useState<RunLogEntry[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState<SampleAttempt | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -217,7 +221,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
-    const href = workspacePath(nextView, options.tab);
+    const href = workspacePath(nextView, options.tab, { runId: options.runId });
     if (`${window.location.pathname}${window.location.search}` !== href) {
       window.history[options.replace ? "replaceState" : "pushState"](null, "", href);
     }
@@ -310,6 +314,12 @@ export default function App() {
     };
     return api.subscribeToRunEvents(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
+
+  useEffect(() => {
+    if (route.view !== "runs" || route.tab !== "run-details") return;
+    const runId = new URLSearchParams(route.search).get("run");
+    if (runId && runId !== selectedRun) void selectRun(runId);
+  }, [route.view, route.tab, route.search, selectedRun]);
 
   function showNotice(template: string, values?: Record<string, string | number>) {
     setNotice(translateStaticTemplate(locale, template, values));
@@ -505,13 +515,21 @@ export default function App() {
     setSelectedRun(runId);
     setSelectedAttempt(null);
     setAttempts([]);
+    setRunSummary(null);
+    setRunMetrics([]);
+    setReports([]);
+    setRunLogs([]);
+    setReviews([]);
     setReviewAgreement(null);
+    setJudgeAssessments([]);
+    setJudgeAgreement(null);
     try {
-      const [nextAttempts, nextSummary, nextReports, nextLogs] = await Promise.all([
-        api.listAttempts(runId), api.getRunSummary(runId), api.listReports(runId), api.listRunLogs(runId),
+      const [nextAttempts, nextSummary, nextMetrics, nextReports, nextLogs] = await Promise.all([
+        api.listAttempts(runId), api.getRunSummary(runId), api.listRunMetrics(runId), api.listReports(runId), api.listRunLogs(runId),
       ]);
       setAttempts(nextAttempts);
       setRunSummary(nextSummary);
+      setRunMetrics(nextMetrics);
       setReports(nextReports);
       setRunLogs(nextLogs);
     } catch (error) { showError(error); }
@@ -519,7 +537,7 @@ export default function App() {
 
   function inspectRun(runId: string) {
     void selectRun(runId);
-    navigate("runs", { tab: "run-details" });
+    navigate("runs", { tab: "run-details", runId });
   }
 
   async function loadMoreAttempts() {
@@ -594,7 +612,7 @@ export default function App() {
     setDatasetRunSchemaRequest((current) => current + 1);
     setDatasetHandoffId(dataset.id);
     setLaunchPreflight(null);
-    navigate("runs", { tab: "launch-evaluation" });
+    navigate("runs", { tab: "dataset-evaluation" });
   }
 
 
@@ -639,7 +657,7 @@ export default function App() {
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function updateDatasetRecord(dataset: Dataset, payload: Record<string, string>) {
+  async function updateDatasetRecord(dataset: Dataset, payload: DatasetEditFormValues) {
     setBusy(`dataset-edit-${dataset.id}`);
     try { await api.updateDataset(dataset.id, { ...payload, source_url: payload.source_url || null, checksum: payload.checksum || null, license_text: payload.license_text || null, credential_binding_id: payload.credential_binding_id || null, input_field: payload.input_field || null, reference_field: payload.reference_field || null }); showNotice("Dataset version updated."); await refresh(); }
     catch (error) { showError(error); }
@@ -711,6 +729,36 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  function runPreflightControls(kind: "quick-start" | "dataset") {
+    const currentPreflight = launchPreflight?.kind === kind ? launchPreflight.result : null;
+    const checking = kind === "quick-start" ? busy === "preflight-quick-start" : busy === "preflight-dataset";
+    const datasetBlocked = datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field;
+    return <div className="workspace-run-context-controls">
+      <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
+      <div className="actions workspace-preflight-actions">
+        {kind === "quick-start"
+          ? <button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || checking} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button>
+          : <button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetBlocked || checking} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button>}
+      </div>
+      <div aria-live="polite" className={`workspace-preflight-state ${currentPreflight?.can_queue ? "is-ready" : currentPreflight ? "is-blocked" : ""}`} role="status"><strong>{checking ? t("runLauncher.checking") : currentPreflight?.can_queue ? t("runLauncher.ready") : currentPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{currentPreflight && !currentPreflight.can_queue && <span data-i18n-preserve>{currentPreflight.issues.join(" ")}</span>}</div>
+    </div>;
+  }
+
+  function runActions(run: EvaluationRun) {
+    const terminal = ["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status);
+    return <>
+      <button className="secondary" onClick={() => inspectRun(run.id)} type="button">Inspect</button>
+      {!terminal && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}
+      {run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}
+      {["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}
+      {run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}
+      {run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}
+      {run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}
+      {terminal && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}
+      {!terminal && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}
+    </>;
+  }
+
   return (
     <AppShell
       completedRunCount={dashboard?.runs.completed ?? 0}
@@ -727,7 +775,7 @@ export default function App() {
       <StaticCopy>
 
       {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("datasets", { tab: "register-dataset" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
-      {view === "guide" && <Guide activeTab={route.tab as WorkspaceTabFor<"guide">} onOpenView={navigate} onTabChange={(tab) => navigate("guide", { tab })} />}
+      {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
         activeTab={route.tab as WorkspaceTabFor<"models">}
@@ -753,8 +801,8 @@ export default function App() {
 
       {view === "runs" && <RunsPage
         activeTab={route.tab as WorkspaceTabFor<"runs">}
-        inspector={selectedRunInfo && <RunDetail run={selectedRunInfo} summary={runSummary} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
-        launcher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
+        inspector={selectedRunInfo && <RunDetailContainer actions={runActions(selectedRunInfo)} run={selectedRunInfo} summary={runSummary} metrics={runMetrics} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
+        datasetLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); void queueDatasetRun(); }}>
           <label>{t("datasetRun.dataset")}<select required value={datasetRunForm.dataset_version_id} onChange={(event) => { setDatasetHandoffId(null); setLaunchPreflight(null); setDatasetRunForm((current) => ({ ...current, dataset_version_id: event.target.value, input_field: "", reference_field: "" })); }}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>
           {datasetHandoffId === datasetRunForm.dataset_version_id && <p className="workspace-launch-note">{t("runLauncher.datasetHandoff")}</p>}
           {datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}
@@ -772,13 +820,9 @@ export default function App() {
           <label>{t("datasetRun.sampleLimit")}<input required type="number" min={1} max={10000} value={datasetRunForm.sample_limit} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, sample_limit: event.target.value }); }} /></label>
           <button className="primary" disabled={busy === "dataset-run" || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.model_endpoint_id || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field}>{t("datasetRun.queue")}</button>
         </form>}
+        datasetPreflight={runPreflightControls("dataset")}
         onSelect={inspectRun}
         onTabChange={(tab) => navigate("runs", { tab })}
-        preflight={<div className="workspace-run-context-controls">
-          <label>{t("datasetRun.endpoint")}<select required value={datasetRunForm.model_endpoint_id} onChange={(event) => { setLaunchPreflight(null); setDatasetRunForm({ ...datasetRunForm, model_endpoint_id: event.target.value }); }}><option value="">—</option>{availableEndpoints.map((endpoint) => <option data-i18n-preserve key={endpoint.id} value={endpoint.id}>{endpoint.display_name}</option>)}</select></label>
-          <div className="actions workspace-preflight-actions"><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === "preflight-quick-start"} onClick={() => void preflightRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark)} type="button">{t("runLauncher.preflightQuickStart")}</button><button className="secondary" disabled={!datasetRunForm.model_endpoint_id || datasetRunFieldsLoading || Boolean(datasetRunFieldsError) || datasetRunFieldsCollide || !datasetRunForm.dataset_version_id || (!datasetRunForm.input_field && !datasetRunForm.prompt_package_id) || !datasetRunForm.reference_field || busy === "preflight-dataset"} onClick={() => void preflightDatasetRun()} type="button">{t("runLauncher.preflightDataset")}</button></div>
-          <div aria-live="polite" className={`workspace-preflight-state ${launchPreflight?.result.can_queue ? "is-ready" : launchPreflight ? "is-blocked" : ""}`} role="status"><strong>{busy === "preflight-quick-start" || busy === "preflight-dataset" ? t("runLauncher.checking") : launchPreflight?.result.can_queue ? t("runLauncher.ready") : launchPreflight ? t("runLauncher.blocked") : t("runLauncher.notChecked")}</strong>{launchPreflight && !launchPreflight.result.can_queue && <span data-i18n-preserve>{launchPreflight.result.issues.join(" ")}</span>}</div>
-        </div>}
         quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>
           <label>{t("runLauncher.quickStartBenchmark")}<select aria-label={t("runLauncher.quickStartBenchmark")} required value={selectedQuickStart ? `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}` : ""} onChange={(event) => { const benchmark = quickStartBenchmarks.find((item) => `${item.benchmark_id}@${item.version}` === event.target.value); setSelectedQuickStartBenchmark(event.target.value); setQuickStartSampleLimit(String(Number(benchmark?.manifest.sample_count) || 1)); setLaunchPreflight(null); }}><option value="">—</option>{quickStartBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name}</option>)}</select></label>
           {selectedQuickStart && <div className="workspace-modality-tags">{(Array.isArray(selectedQuickStart.manifest.modalities) ? selectedQuickStart.manifest.modalities : []).map((modality) => <span className="badge" data-i18n-preserve key={String(modality)}>{String(modality)}</span>)}</div>}
@@ -787,23 +831,75 @@ export default function App() {
           <p className="workspace-launch-note">{t("runLauncher.offlineHint")}</p>
           <button className="primary" disabled={!datasetRunForm.model_endpoint_id || !selectedQuickStart || busy === `run-${datasetRunForm.model_endpoint_id}`}>{t("runLauncher.queueQuickStart")}</button>
         </form>}
-        renderActions={(run) => <><button className="secondary" onClick={() => inspectRun(run.id)} type="button">Inspect</button>{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <><label className="compact-field">Run cap<input type="number" min="1" max="1000" value={runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "")} onChange={(event) => setRunConcurrencyEdits((current) => ({ ...current, [run.id]: event.target.value }))} placeholder="Endpoint" /></label><button className="secondary" disabled={busy === `run-cap-${run.id}`} onClick={() => void updateRunConcurrency(run)} type="button">Set cap</button></>}{run.status === "queued" && <button disabled={busy === `execute-${run.id}`} onClick={() => void changeRun(run, "execute")} type="button">Execute</button>}{["queued", "running"].includes(run.status) && <button className="secondary" disabled={busy === `pause-${run.id}`} onClick={() => void changeRun(run, "pause")} type="button">Pause</button>}{run.status === "paused" && <button disabled={busy === `resume-${run.id}`} onClick={() => void changeRun(run, "resume")} type="button">Resume</button>}{run.status.startsWith("completed") && <><button className="secondary" disabled={busy === `clone-${run.id}`} onClick={() => void changeRun(run, "clone")} type="button">Clone</button><button className="secondary" disabled={busy === `rerun-${run.id}`} onClick={() => void changeRun(run, "rerun")} type="button">Rerun benchmark</button></>}{run.status === "completed_with_errors" && <button disabled={busy === `retry-${run.id}`} onClick={() => void changeRun(run, "retry")} type="button">Retry failed</button>}{["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="secondary" disabled={busy === `archive-${run.id}`} onClick={() => void changeRun(run, "archive")} type="button">Archive</button>}{!["completed", "completed_with_errors", "cancelled", "failed"].includes(run.status) && <button className="danger" disabled={busy === `cancel-${run.id}`} onClick={() => void changeRun(run, "cancel")} type="button">Cancel</button>}</>}
+        quickStartPreflight={runPreflightControls("quick-start")}
+        renderActions={runActions}
         runs={runs}
         selectedRunId={selectedRun}
       />}
 
-      {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} analytics={analytics} busy={busy} comparison={comparison} completedRuns={completedRuns} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSelectBaseline={(runId) => api.analyticsMatrix(runId || undefined)} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} />}
+      {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={api.analyticsScatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
+      {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={api.leaderboard} onInspectRun={inspectRun} />}
       {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: string | number; detail: string }) {
-  return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
+type RunDetailContainerProps = {
+  actions: ReactNode;
+  run: EvaluationRun;
+  summary: RunSummary | null;
+  metrics: AggregateMetric[];
+  logs: RunLogEntry[];
+  attempts: SampleAttempt[];
+  reports: Report[];
+  selectedAttempt: SampleAttempt | null;
+  reviews: Review[];
+  reviewAgreement: ReviewAgreement | null;
+  judgeAssessments: JudgeAssessment[];
+  judgeAgreement: JudgeAgreement | null;
+  judgeForm: typeof initialJudge;
+  endpoints: Endpoint[];
+  reviewForm: typeof initialReview;
+  busy: string | null;
+  onJudgeForm: (value: typeof initialJudge) => void;
+  onReviewForm: (value: typeof initialReview) => void;
+  onReview: (attempt: SampleAttempt) => void;
+  onLoadMoreAttempts: () => Promise<void>;
+  onCreateJudgeAssessment: (event: FormEvent) => void;
+  onCreateReview: (event: FormEvent) => void;
+  onGenerateReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") => void;
+};
+
+function RunDetailContainer({ actions, run, summary, metrics, logs, attempts, reports, selectedAttempt, reviews, reviewAgreement, judgeAssessments, judgeAgreement, judgeForm, endpoints, reviewForm, busy, onJudgeForm, onReviewForm, onReview, onLoadMoreAttempts, onCreateJudgeAssessment, onCreateReview, onGenerateReport }: RunDetailContainerProps) {
+  const { formatDate, formatNumber: display, formatPercent: percent, t } = useTranslation();
+  const runRule = run.configuration_snapshot?.scoring_rule;
+  const attemptRule = selectedAttempt?.reference_snapshot.scoring;
+  const frozenScoringType = runRule && typeof runRule === "object" && !Array.isArray(runRule) && typeof (runRule as Record<string, unknown>).type === "string"
+    ? String((runRule as Record<string, unknown>).type)
+    : attemptRule && typeof attemptRule === "object" && !Array.isArray(attemptRule) && typeof (attemptRule as Record<string, unknown>).type === "string"
+      ? String((attemptRule as Record<string, unknown>).type)
+      : null;
+  const frozenMetricKey = frozenScoringType ? datasetMetricLabelKeys[frozenScoringType as DatasetMetricId] : undefined;
+  const effectiveMetric = frozenScoringType ? (frozenMetricKey ? t(frozenMetricKey) : frozenScoringType) : null;
+
+  const evidence = <>
+    <SampleEvidenceBrowser attempts={attempts} onReview={onReview} />
+    <div className="actions"><button className="secondary" disabled={busy === "attempts-more"} onClick={() => void onLoadMoreAttempts()}>{busy === "attempts-more" ? "Loading next page…" : "Load next evidence page"}</button></div>
+    {selectedAttempt && <EvidenceMediaPreview attempt={selectedAttempt} />}
+  </>;
+
+  const reviewWorkspace = selectedAttempt ? <>
+    <JudgeWorkflow selectedAttempt={selectedAttempt} attempts={attempts} endpoints={endpoints} form={judgeForm} assessments={judgeAssessments} agreement={judgeAgreement} busy={busy} onForm={onJudgeForm} onSubmit={onCreateJudgeAssessment} />
+    <section className="grid two"><article className="panel"><h2>Human review: {selectedAttempt.sample_id}</h2><form className="form" onSubmit={onCreateReview}><label>Reviewer ID<input required value={reviewForm.reviewer_id} onChange={(event) => onReviewForm({ ...reviewForm, reviewer_id: event.target.value })} /></label><label>Review stage<select value={reviewForm.review_stage} onChange={(event) => onReviewForm({ ...reviewForm, review_stage: event.target.value as typeof reviewForm.review_stage })}><option value="primary">Primary review</option><option value="secondary">Secondary review</option><option value="adjudication">Adjudication</option></select></label><label>Rubric (JSON)<textarea value={reviewForm.rubric} onChange={(event) => onReviewForm({ ...reviewForm, rubric: event.target.value })} spellCheck={false} placeholder='{"quality":"high"}' /></label><label>Score<input type="number" min="0" max="1" step="0.01" value={reviewForm.score} onChange={(event) => onReviewForm({ ...reviewForm, score: event.target.value })} /></label><label>Labels (comma-separated)<input value={reviewForm.labels} onChange={(event) => onReviewForm({ ...reviewForm, labels: event.target.value })} /></label><label>Notes<textarea value={reviewForm.notes} onChange={(event) => onReviewForm({ ...reviewForm, notes: event.target.value })} /></label>{reviewForm.review_stage === "adjudication" && <p className="muted">This records a final decision over all saved primary and secondary reviews.</p>}<button disabled={busy === "review-submit"}>Save review</button></form></article><article className="panel"><h2>Review agreement</h2>{reviewAgreement ? <><p><strong>{reviewAgreement.status.replaceAll("_", " ")}</strong> · {reviewAgreement.distinct_reviewer_count} reviewer(s)</p><p className="muted">Score mean {display(reviewAgreement.numeric_score.mean)} · spread {display(reviewAgreement.numeric_score.range)} · label agreement {percent(reviewAgreement.label_agreement)}</p><p className="muted">Primary {reviewAgreement.review_stage_counts.primary} · secondary {reviewAgreement.review_stage_counts.secondary} · adjudication {reviewAgreement.review_stage_counts.adjudication}</p></> : <p className="empty">Open a sample to load review agreement.</p>}<h3>Saved reviews</h3>{reviews.length === 0 ? <p className="empty">No human review has been saved for this attempt.</p> : <div className="review-list">{reviews.map((review) => <article className="review" key={review.id}><strong>{review.review_stage} · {review.reviewer_id} · {review.score ?? "no score"}</strong><p>{review.notes || "No notes"}</p><small>{review.labels.join(", ") || "No labels"} · {formatDate(review.created_at)}</small></article>)}</div>}</article></section>
+  </> : <section className="panel run-detail-review-empty"><h2>Human and judge review</h2><p className="empty">Open a sample from Evidence to load review, agreement, and independent judge controls.</p></section>;
+
+  const reportWorkspace = <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "pdf")}>PDF</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button><button className="secondary" onClick={() => onGenerateReport(run.id, "parquet")}>Parquet</button></div></div><ReportsTable reports={reports} /></section>;
+
+  return <RunDetailWorkspace actions={actions} effectiveMetric={effectiveMetric} evidence={evidence} logs={logs} metrics={metrics} reports={reportWorkspace} reviewSelectionKey={selectedAttempt?.id ?? null} reviews={reviewWorkspace} run={run} summary={summary} />;
 }
 
-function SampleEvidenceBrowser({ attempts, onReview, onLoadMore, loadingMore }: { attempts: SampleAttempt[]; onReview: (attempt: SampleAttempt) => void; onLoadMore: () => Promise<void>; loadingMore: boolean }) {
+function SampleEvidenceBrowser({ attempts, onReview }: { attempts: SampleAttempt[]; onReview: (attempt: SampleAttempt) => void }) {
   const { formatNumber: display } = useTranslation();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -829,32 +925,7 @@ function SampleEvidenceBrowser({ attempts, onReview, onLoadMore, loadingMore }: 
   }), [anomaly, attempts, averages.cost, averages.latency, averages.tokens, capability, correctness, difficulty, errorKind, judgeState, language, modality, query, reviewState, status]);
   const visible = filtered.slice(0, visibleCount);
   const update = () => setVisibleCount(100);
-  return <section className="panel"><div className="section-title"><h2>Sample evidence</h2><span>{filtered.length}/{attempts.length} attempts</span></div>{attempts.length === 0 ? <p className="empty">This run has no saved attempts yet.</p> : <><div className="comparison-form"><label>Search samples<input value={query} onChange={(event) => { setQuery(event.target.value); update(); }} placeholder="sample, prediction, error" /></label><label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); update(); }}><option value="all">All states</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option><option value="pending">Pending</option><option value="running">Running</option></select></label><label>Correctness<select value={correctness} onChange={(event) => { setCorrectness(event.target.value); update(); }}><option value="all">All</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label><label>Capability<select value={capability} onChange={(event) => { setCapability(event.target.value); update(); }}><option value="all">All</option>{options("capability").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Modality<select value={modality} onChange={(event) => { setModality(event.target.value); update(); }}><option value="all">All</option>{modalities.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Language<select value={language} onChange={(event) => { setLanguage(event.target.value); update(); }}><option value="all">All</option>{options("language").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={(event) => { setDifficulty(event.target.value); update(); }}><option value="all">All</option>{options("difficulty").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Error type<select value={errorKind} onChange={(event) => { setErrorKind(event.target.value); update(); }}><option value="all">All</option><option value="any">Any error</option><option value="api">API error</option><option value="parser">Parser error</option></select></label><label>Judge<select value={judgeState} onChange={(event) => { setJudgeState(event.target.value); update(); }}><option value="all">All</option><option value="disagreement">Disagreement</option><option value="agreement">No disagreement</option></select></label><label>Human review<select value={reviewState} onChange={(event) => { setReviewState(event.target.value); update(); }}><option value="all">All</option><option value="unreviewed">Unreviewed</option><option value="reviewed">Reviewed</option><option value="adjudicated">Adjudicated</option></select></label><label>Anomaly<select value={anomaly} onChange={(event) => { setAnomaly(event.target.value); update(); }}><option value="all">None</option><option value="latency">Latency &gt; 2× mean</option><option value="tokens">Tokens &gt; 2× mean</option><option value="cost">Cost &gt; 2× mean</option></select></label></div>{visible.length === 0 ? <p className="empty">No samples match these filters.</p> : visible.map((attempt) => <details className="attempt" key={attempt.id}><summary><span>{attempt.sample_id} · attempt {attempt.attempt_number}</span><span className={`badge ${attempt.status}`}>{attempt.status}</span><span>{attempt.sample_metadata.capability ?? "unclassified"} · {attempt.sample_metadata.language ?? "unknown"}</span><span>score {attempt.score ?? "--"}</span><span>{display(attempt.latency_ms)} ms · {display(attempt.input_tokens)}/{display(attempt.output_tokens)} tokens · {display(attempt.estimated_cost, 6)}</span></summary><div className="evidence"><pre>{JSON.stringify({ input: attempt.input_snapshot, request: attempt.request_snapshot, reference: attempt.reference_snapshot, prediction: attempt.parsed_prediction, metadata: attempt.sample_metadata, judge_disagreement: attempt.judge_disagreement, human_review_status: attempt.human_review_status }, null, 2)}</pre><pre>{attempt.raw_response ?? attempt.error_message ?? "No response captured."}</pre></div><div className="actions"><button className="secondary" onClick={() => void onReview(attempt)}>Human review</button></div></details>)}{visible.length < filtered.length && <div className="actions"><button className="secondary" onClick={() => setVisibleCount((value) => value + 100)}>Load next 100 samples</button></div>}</>}</section>;
-}
-
-function RunDetail({ run, summary, logs, attempts, reports, selectedAttempt, reviews, reviewAgreement, judgeAssessments, judgeAgreement, judgeForm, endpoints, reviewForm, busy, onJudgeForm, onReviewForm, onReview, onLoadMoreAttempts, onCreateJudgeAssessment, onCreateReview, onGenerateReport }: { run: EvaluationRun; summary: RunSummary | null; logs: RunLogEntry[]; attempts: SampleAttempt[]; reports: Report[]; selectedAttempt: SampleAttempt | null; reviews: Review[]; reviewAgreement: ReviewAgreement | null; judgeAssessments: JudgeAssessment[]; judgeAgreement: JudgeAgreement | null; judgeForm: typeof initialJudge; endpoints: Endpoint[]; reviewForm: typeof initialReview; busy: string | null; onJudgeForm: (value: typeof initialJudge) => void; onReviewForm: (value: typeof initialReview) => void; onReview: (attempt: SampleAttempt) => void; onLoadMoreAttempts: () => Promise<void>; onCreateJudgeAssessment: (event: FormEvent) => void; onCreateReview: (event: FormEvent) => void; onGenerateReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") => void }) {
-  const { formatCurrency: money, formatDate, formatNumber: display, formatPercent: percent, t } = useTranslation();
-  const runRule = run.configuration_snapshot?.scoring_rule;
-  const attemptRule = selectedAttempt?.reference_snapshot.scoring;
-  const frozenScoringType = (
-    runRule && typeof runRule === "object" && !Array.isArray(runRule) && typeof (runRule as Record<string, unknown>).type === "string"
-      ? String((runRule as Record<string, unknown>).type)
-      : attemptRule && typeof attemptRule === "object" && !Array.isArray(attemptRule) && typeof (attemptRule as Record<string, unknown>).type === "string"
-        ? String((attemptRule as Record<string, unknown>).type)
-        : null
-  );
-  const frozenMetricKey = frozenScoringType ? datasetMetricLabelKeys[frozenScoringType as DatasetMetricId] : undefined;
-  return <>
-    <section className="panel"><div className="section-title"><h2>Run executive summary</h2><span>{run.id.slice(0, 8)}</span></div>{frozenScoringType && <p className="muted"><span>{t("datasetRun.effectiveMetric")}</span> <strong>{frozenMetricKey ? t(frozenMetricKey) : frozenScoringType}</strong></p>}{summary ? <div className="metric-grid"><Metric label="Completion" value={`${summary.samples.completed}/${summary.samples.total}`} detail={percent(summary.samples.completion_rate)} /><Metric label="Accuracy" value={percent(summary.samples.accuracy)} detail={percent(summary.samples.success_rate) + " success rate"} /><Metric label="Latency" value={`${display(summary.latency_ms.average)} ms`} detail={`P50 ${display(summary.latency_ms.p50)} · P95 ${display(summary.latency_ms.p95)}`} /><Metric label="Cost" value={money(summary.cost.estimated, summary.cost.currency)} detail={`${summary.tokens.input} input / ${summary.tokens.output} output tokens`} /></div> : <p className="empty">Loading summary...</p>}</section>
-    <section className="panel"><div className="section-title"><h2>Durable run log</h2><span>Refreshes with live run events</span></div>{logs.length === 0 ? <p className="empty">No task or sample lifecycle events have been recorded.</p> : <div className="review-list">{logs.slice(-50).reverse().map((entry, index) => <article className="review" key={`${entry.event}-${entry.timestamp}-${index}`}><strong>{entry.level.toUpperCase()} · {entry.event}</strong><p>{entry.message}</p><small>{formatDate(entry.timestamp)} · task {entry.task_id?.slice(0, 8) ?? "--"} · sample {entry.details.sample_id ? String(entry.details.sample_id) : "--"}</small></article>)}</div>}</section>
-    {summary && <section className="grid two"><article className="panel"><h2>Capability evidence</h2>{summary.insights.capabilities.length === 0 ? <p className="empty">No scored capability evidence yet.</p> : <div className="table-wrap"><table><thead><tr><th>Capability</th><th>Score</th><th>Samples</th></tr></thead><tbody>{summary.insights.capabilities.map((item) => <tr key={item.capability}><td>{item.capability}</td><td>{percent(item.score)}</td><td>{item.sample_count}</td></tr>)}</tbody></table></div>}<p className="muted">Strongest: {summary.insights.strongest_capability?.capability ?? "--"} · weakest: {summary.insights.weakest_capability?.capability ?? "--"}</p></article><article className="panel"><h2>Run signals</h2>{summary.insights.significant_anomalies.length === 0 && summary.insights.major_regressions.length === 0 ? <p className="empty">No significant anomalies or regressions detected.</p> : <>{summary.insights.significant_anomalies.map((item) => <p key={item.kind}><strong>{item.kind}</strong> {percent(item.value)} (threshold {percent(item.threshold)})</p>)}{summary.insights.major_regressions.map((item) => <p key={item.metric}><strong>{item.metric} regression</strong> {percent(item.delta)} versus baseline {percent(item.baseline)}</p>)}</>}</article></section>}
-    <SampleEvidenceBrowser attempts={attempts} onReview={onReview} onLoadMore={onLoadMoreAttempts} loadingMore={busy === "attempts-more"} />
-    <div className="actions"><button className="secondary" disabled={busy === "attempts-more"} onClick={() => void onLoadMoreAttempts()}>{busy === "attempts-more" ? "Loading next page…" : "Load next evidence page"}</button></div>
-    {selectedAttempt && <EvidenceMediaPreview attempt={selectedAttempt} />}
-    {selectedAttempt && <JudgeWorkflow selectedAttempt={selectedAttempt} attempts={attempts} endpoints={endpoints} form={judgeForm} assessments={judgeAssessments} agreement={judgeAgreement} busy={busy} onForm={onJudgeForm} onSubmit={onCreateJudgeAssessment} />}
-    {selectedAttempt && <><section className="grid two"><article className="panel"><h2>Human review: {selectedAttempt.sample_id}</h2><form className="form" onSubmit={onCreateReview}><label>Reviewer ID<input required value={reviewForm.reviewer_id} onChange={(event) => onReviewForm({ ...reviewForm, reviewer_id: event.target.value })} /></label><label>Review stage<select value={reviewForm.review_stage} onChange={(event) => onReviewForm({ ...reviewForm, review_stage: event.target.value as typeof reviewForm.review_stage })}><option value="primary">Primary review</option><option value="secondary">Secondary review</option><option value="adjudication">Adjudication</option></select></label><label>Rubric (JSON)<textarea value={reviewForm.rubric} onChange={(event) => onReviewForm({ ...reviewForm, rubric: event.target.value })} spellCheck={false} placeholder='{"quality":"high"}' /></label><label>Score<input type="number" min="0" max="1" step="0.01" value={reviewForm.score} onChange={(event) => onReviewForm({ ...reviewForm, score: event.target.value })} /></label><label>Labels (comma-separated)<input value={reviewForm.labels} onChange={(event) => onReviewForm({ ...reviewForm, labels: event.target.value })} /></label><label>Notes<textarea value={reviewForm.notes} onChange={(event) => onReviewForm({ ...reviewForm, notes: event.target.value })} /></label>{reviewForm.review_stage === "adjudication" && <p className="muted">This records a final decision over all saved primary and secondary reviews.</p>}<button disabled={busy === "review-submit"}>Save review</button></form></article><article className="panel"><h2>Review agreement</h2>{reviewAgreement ? <><p><strong>{reviewAgreement.status.replaceAll("_", " ")}</strong> · {reviewAgreement.distinct_reviewer_count} reviewer(s)</p><p className="muted">Score mean {display(reviewAgreement.numeric_score.mean)} · spread {display(reviewAgreement.numeric_score.range)} · label agreement {percent(reviewAgreement.label_agreement)}</p><p className="muted">Primary {reviewAgreement.review_stage_counts.primary} · secondary {reviewAgreement.review_stage_counts.secondary} · adjudication {reviewAgreement.review_stage_counts.adjudication}</p></> : <p className="empty">Open a sample to load review agreement.</p>}<h3>Saved reviews</h3>{reviews.length === 0 ? <p className="empty">No human review has been saved for this attempt.</p> : <div className="review-list">{reviews.map((review) => <article className="review" key={review.id}><strong>{review.review_stage} · {review.reviewer_id} · {review.score ?? "no score"}</strong><p>{review.notes || "No notes"}</p><small>{review.labels.join(", ") || "No labels"} · {formatDate(review.created_at)}</small></article>)}</div>}</article></section><section className="grid two"><article className="panel"><h2>LLM-as-judge</h2><form className="form" onSubmit={onCreateJudgeAssessment}><label>Independent judge endpoint<select required value={judgeForm.endpoint_id} onChange={(event) => onJudgeForm({ ...judgeForm, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available" && endpoint.id !== run.model_endpoint_id).map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Rubric (JSON)<textarea value={judgeForm.rubric} onChange={(event) => onJudgeForm({ ...judgeForm, rubric: event.target.value })} spellCheck={false} placeholder='{"criterion":"answer quality"}' /></label><button disabled={busy === "judge-submit"}>Request judge assessment</button></form></article><article className="panel"><h2>Judge evidence</h2>{judgeAssessments.length === 0 ? <p className="empty">No independent judge assessment has been recorded.</p> : <div className="review-list">{judgeAssessments.map((assessment) => <article className="review" key={assessment.id}><strong>{assessment.label || assessment.status} · {assessment.score ?? "--"}</strong><p>{assessment.rationale || assessment.error_message || "No rationale returned."}</p><small>{formatDate(assessment.created_at)}</small></article>)}</div>}</article></section></>}
-    <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "pdf")}>PDF</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button><button className="secondary" onClick={() => onGenerateReport(run.id, "parquet")}>Parquet</button></div></div><ReportsTable reports={reports} /></section>
-  </>;
+  return <section className="panel"><div className="section-title"><h2>Sample evidence</h2><span>{filtered.length}/{attempts.length} attempts</span></div>{attempts.length === 0 ? <p className="empty">This run has no saved attempts yet.</p> : <><div className="comparison-form" style={{ marginBottom: "1.5rem" }}><label>Search samples<input value={query} onChange={(event) => { setQuery(event.target.value); update(); }} placeholder="sample, prediction, error" /></label><label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); update(); }}><option value="all">All states</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option><option value="pending">Pending</option><option value="running">Running</option></select></label><label>Correctness<select value={correctness} onChange={(event) => { setCorrectness(event.target.value); update(); }}><option value="all">All</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label><label>Capability<select value={capability} onChange={(event) => { setCapability(event.target.value); update(); }}><option value="all">All</option>{options("capability").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Modality<select value={modality} onChange={(event) => { setModality(event.target.value); update(); }}><option value="all">All</option>{modalities.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Language<select value={language} onChange={(event) => { setLanguage(event.target.value); update(); }}><option value="all">All</option>{options("language").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={(event) => { setDifficulty(event.target.value); update(); }}><option value="all">All</option>{options("difficulty").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Error type<select value={errorKind} onChange={(event) => { setErrorKind(event.target.value); update(); }}><option value="all">All</option><option value="any">Any error</option><option value="api">API error</option><option value="parser">Parser error</option></select></label><label>Judge<select value={judgeState} onChange={(event) => { setJudgeState(event.target.value); update(); }}><option value="all">All</option><option value="disagreement">Disagreement</option><option value="agreement">No disagreement</option></select></label><label>Human review<select value={reviewState} onChange={(event) => { setReviewState(event.target.value); update(); }}><option value="all">All</option><option value="unreviewed">Unreviewed</option><option value="reviewed">Reviewed</option><option value="adjudicated">Adjudicated</option></select></label><label>Anomaly<select value={anomaly} onChange={(event) => { setAnomaly(event.target.value); update(); }}><option value="all">None</option><option value="latency">Latency &gt; 2× mean</option><option value="tokens">Tokens &gt; 2× mean</option><option value="cost">Cost &gt; 2× mean</option></select></label></div>{visible.length === 0 ? <p className="empty">No samples match these filters.</p> : visible.map((attempt) => <details className="attempt" key={attempt.id}><summary><span>{attempt.sample_id} · attempt {attempt.attempt_number}</span><span className={`badge ${attempt.status}`}>{attempt.status}</span><span>{attempt.sample_metadata.capability ?? "unclassified"} · {attempt.sample_metadata.language ?? "unknown"}</span><span>score {attempt.score ?? "--"}</span><span>{display(attempt.latency_ms)} ms · {display(attempt.input_tokens)}/{display(attempt.output_tokens)} tokens · {display(attempt.estimated_cost, 6)}</span></summary><div className="evidence"><pre>{JSON.stringify({ input: attempt.input_snapshot, request: attempt.request_snapshot, reference: attempt.reference_snapshot, prediction: attempt.parsed_prediction, metadata: attempt.sample_metadata, judge_disagreement: attempt.judge_disagreement, human_review_status: attempt.human_review_status }, null, 2)}</pre><pre>{attempt.raw_response ?? attempt.error_message ?? "No response captured."}</pre></div><div className="actions"><button className="secondary" onClick={() => void onReview(attempt)}>Human review</button></div></details>)}{visible.length < filtered.length && <div className="actions"><button className="secondary" onClick={() => setVisibleCount((value) => value + 100)}>Load next 100 samples</button></div>}</>}</section>;
 }
 
 function JudgeWorkflow({ selectedAttempt, attempts, endpoints, form, assessments, agreement, busy, onForm, onSubmit }: { selectedAttempt: SampleAttempt; attempts: SampleAttempt[]; endpoints: Endpoint[]; form: typeof initialJudge; assessments: JudgeAssessment[]; agreement: JudgeAgreement | null; busy: string | null; onForm: (value: typeof initialJudge) => void; onSubmit: (event: FormEvent) => void }) {

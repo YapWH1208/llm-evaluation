@@ -11,6 +11,8 @@ from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt
 from app.db.mongo import MongoDocumentStore
 from app.services.mongo_run_executor import build_mongo_run_summary
 from app.services.run_analysis import latest_attempts, summarize_attempts
+from app.services.aggregation import list_aggregate_metrics, list_mongo_aggregate_metrics
+from app.services.comparison_evidence import build_comparison_extension
 
 
 router = APIRouter(prefix="/api/v1/comparisons", tags=["comparisons"])
@@ -34,6 +36,8 @@ def compare(
     request: Request,
     session: Session | None = Depends(get_session),
 ) -> dict[str, Any]:
+    if run_a == run_b:
+        raise HTTPException(409, "Comparison requires two distinct evaluation runs")
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
         return _compare_documents(store, run_a, run_b)
@@ -92,17 +96,27 @@ def compare(
         total_samples=second.total_samples,
         currency=endpoint_b.currency if endpoint_b else None,
     )
+    outcome_counts = {
+        "both_correct": both_correct,
+        "run_a_only_correct": run_a_only_correct,
+        "run_b_only_correct": run_b_only_correct,
+        "both_incorrect": both_incorrect,
+    }
+    extension = build_comparison_extension(
+        first,
+        second,
+        endpoint_a,
+        endpoint_b,
+        list_aggregate_metrics(session, run_a),
+        list_aggregate_metrics(session, run_b),
+        outcome_counts,
+    )
     return {
         "run_a": run_a,
         "run_b": run_b,
         "benchmark": {"id": first.benchmark_id, "version": first.benchmark_version},
         "shared_samples": len(shared_ids),
-        "outcomes": {
-            "both_correct": both_correct,
-            "run_a_only_correct": run_a_only_correct,
-            "run_b_only_correct": run_b_only_correct,
-            "both_incorrect": both_incorrect,
-        },
+        "outcomes": outcome_counts,
         "run_a_summary": summary_a,
         "run_b_summary": summary_b,
         "differences": {
@@ -125,6 +139,7 @@ def compare(
             "output_tokens": summary_a["tokens"]["output"] - summary_b["tokens"]["output"],
         },
         "sample_outcomes": outcomes,
+        **extension,
     }
 
 
@@ -193,17 +208,29 @@ def _compare_documents(store: MongoDocumentStore, run_a: str, run_b: str) -> dic
         )
     summary_a = build_mongo_run_summary(store, run_a)
     summary_b = build_mongo_run_summary(store, run_b)
+    endpoint_a = store.get_document("model_endpoints", str(first["model_endpoint_id"]))
+    endpoint_b = store.get_document("model_endpoints", str(second["model_endpoint_id"]))
+    outcome_counts = {
+        "both_correct": both_correct,
+        "run_a_only_correct": run_a_only_correct,
+        "run_b_only_correct": run_b_only_correct,
+        "both_incorrect": both_incorrect,
+    }
+    extension = build_comparison_extension(
+        first,
+        second,
+        endpoint_a,
+        endpoint_b,
+        list_mongo_aggregate_metrics(store, run_a),
+        list_mongo_aggregate_metrics(store, run_b),
+        outcome_counts,
+    )
     return {
         "run_a": run_a,
         "run_b": run_b,
         "benchmark": {"id": first["benchmark_id"], "version": first["benchmark_version"]},
         "shared_samples": len(shared_ids),
-        "outcomes": {
-            "both_correct": both_correct,
-            "run_a_only_correct": run_a_only_correct,
-            "run_b_only_correct": run_b_only_correct,
-            "both_incorrect": both_incorrect,
-        },
+        "outcomes": outcome_counts,
         "run_a_summary": summary_a,
         "run_b_summary": summary_b,
         "differences": {
@@ -216,6 +243,7 @@ def _compare_documents(store: MongoDocumentStore, run_a: str, run_b: str) -> dic
             "output_tokens": summary_a["tokens"]["output"] - summary_b["tokens"]["output"],
         },
         "sample_outcomes": outcomes,
+        **extension,
     }
 
 

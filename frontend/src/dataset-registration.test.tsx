@@ -45,7 +45,45 @@ describe("dataset registration", () => {
       license_text: null,
       input_field: null,
       reference_field: null,
+      capabilities: [],
+      languages: [],
+      evaluation_type: "custom",
     });
+  }, 10_000);
+
+  it("submits capability, language, and evaluation metadata from multi-select controls", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
+    vi.spyOn(api, "listRuns").mockResolvedValue([]);
+    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
+    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
+    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
+    vi.spyOn(api, "listTasks").mockResolvedValue([]);
+    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
+    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+    const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
+
+    render(<LocaleProvider><App /></LocaleProvider>);
+    await user.click(screen.getByRole("link", { name: "Datasets" }));
+    await user.click(screen.getByRole("tab", { name: "Register dataset" }));
+    await user.type(screen.getByLabelText("Dataset ID"), "metadata-demo");
+    await user.type(screen.getByLabelText("Capabilities"), "reasoning{Enter}coding{Enter}");
+    await user.type(screen.getByLabelText("Languages"), "en{Enter}ms{Enter}");
+    await user.type(screen.getByLabelText("Languages"), "{Backspace}");
+    expect(screen.queryByRole("button", { name: "Remove language ms" })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Languages"), "ms{Enter}");
+    await user.selectOptions(screen.getByLabelText("Evaluation type"), "classification");
+
+    expect(screen.getByRole("button", { name: "Remove capability reasoning" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Remove capability coding" }));
+    await user.click(screen.getByRole("button", { name: "Register dataset" }));
+
+    expect(createDataset).toHaveBeenCalledWith(expect.objectContaining({
+      capabilities: ["reasoning"],
+      languages: ["en", "ms"],
+      evaluation_type: "classification",
+    }));
   }, 10_000);
 
   it("submits optional input and reference field defaults", async () => {

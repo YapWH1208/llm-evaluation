@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api } from "./api";
+import { api, type Dataset } from "./api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -12,7 +12,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/dashboard");
 });
 
-const readyDataset = {
+const readyDataset: Dataset = {
   id: "ds-1",
   dataset_id: "demo",
   version: "1",
@@ -28,6 +28,9 @@ const readyDataset = {
   error_message: null,
   input_field: "question",
   reference_field: "answer",
+  capabilities: [],
+  languages: [],
+  evaluation_type: "custom",
 };
 
 async function renderApp(datasets = [readyDataset]) {
@@ -58,6 +61,7 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("edits dataset metadata through the inline form", async () => {
+    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
     const update = vi.spyOn(api, "updateDataset").mockResolvedValue({ ...readyDataset, dataset_id: "renamed" });
     const list = vi.spyOn(api, "listDatasets");
     list.mockResolvedValue([readyDataset]);
@@ -76,6 +80,7 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("converts cleared optional fields to null when saving edits", async () => {
+    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
     const update = vi.spyOn(api, "updateDataset").mockResolvedValue({ ...readyDataset });
     vi.spyOn(api, "listDatasets").mockResolvedValue([readyDataset]);
     const { user } = await renderApp();
@@ -91,7 +96,62 @@ describe("dataset catalog", () => {
       license_text: null,
       input_field: "question",
       reference_field: "answer",
+      capabilities: [],
+      languages: [],
+      evaluation_type: "custom",
     }));
+  }, 10_000);
+
+  it("restores metadata and uses prepared schema selectors while editing", async () => {
+    const dataset: Dataset = {
+      ...readyDataset,
+      capabilities: ["reasoning"],
+      languages: ["en"],
+      evaluation_type: "classification",
+    };
+    const preview = vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "prompt", "answer"],
+      rows: [],
+    });
+    const update = vi.spyOn(api, "updateDataset").mockResolvedValue(dataset);
+    const { user } = await renderApp([dataset]);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledWith("ds-1", 5));
+    expect(screen.getByLabelText("Input field")).toHaveValue("question");
+    expect(screen.getByLabelText("Reference (output) field")).toHaveValue("answer");
+    expect(screen.getByRole("button", { name: "Remove capability reasoning" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove language en" })).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Reference (output) field"), "question");
+    expect(screen.getByRole("alert")).toHaveTextContent("Input and reference fields must be different.");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("Reference (output) field"), "answer");
+    await user.selectOptions(screen.getByLabelText("Input field"), "prompt");
+    await user.type(screen.getByLabelText("Capabilities"), "coding{Enter}");
+    await user.type(screen.getByLabelText("Languages"), "ms{Enter}");
+    await user.selectOptions(screen.getByLabelText("Evaluation type"), "generation");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(update).toHaveBeenCalledWith("ds-1", expect.objectContaining({
+      input_field: "prompt",
+      reference_field: "answer",
+      capabilities: ["reasoning", "coding"],
+      languages: ["en", "ms"],
+      evaluation_type: "generation",
+    }));
+  }, 10_000);
+
+  it("keeps manual field inputs available for an unprepared dataset", async () => {
+    const dataset = { ...readyDataset, status: "waiting", local_path: null };
+    const preview = vi.spyOn(api, "previewDataset");
+    const { user } = await renderApp([dataset]);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByLabelText("Input field").tagName).toBe("INPUT");
+    expect(screen.getByLabelText("Reference (output) field").tagName).toBe("INPUT");
+    expect(preview).not.toHaveBeenCalled();
   }, 10_000);
 
   it("disables the preview button while the preview request is in flight", async () => {
@@ -139,7 +199,7 @@ describe("dataset catalog", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
     expect(window.location.pathname).toBe("/runs");
-    expect(window.location.search).toBe("?tab=launch-evaluation");
+    expect(window.location.search).toBe("?tab=dataset-evaluation");
     expect(screen.getByText(/Selected from the dataset catalog/)).toBeVisible();
     expect(screen.getByLabelText("Dataset")).toHaveValue(readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
@@ -155,7 +215,7 @@ describe("dataset catalog", () => {
     const { user } = await renderApp();
 
     await user.click(screen.getByRole("link", { name: "Runs" }));
-    await user.click(screen.getByRole("tab", { name: "Launch evaluation" }));
+    await user.click(screen.getByRole("tab", { name: "Dataset evaluation" }));
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
     await waitFor(() => expect(screen.getByLabelText("Input field")).toHaveValue("question"));
     await user.click(screen.getByRole("link", { name: "Datasets" }));

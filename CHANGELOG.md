@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Every newly created evaluation run receives an immutable, URL-safe display name in
+  `<model_name>_<dataset_or_benchmark_name>_<UTC_datetime>` form. Existing runs derive
+  the same deterministic label without a destructive backfill.
+- Dataset registration and editing now support multi-select capabilities and
+  languages, a task-oriented evaluation type, and prepared-schema input/output field
+  selectors with custom values and validation.
+- Task-aware aggregate results now expose named metrics—including accuracy,
+  precision, recall, F1, pass@1, perplexity, BLEU, ROUGE-L, latency, token use, and
+  cost—with sample counts, confidence intervals, and explicit unavailable reasons.
+- A server-backed `/leaderboard` workspace lists every non-archived run with combined
+  dataset/model/status/capability/language/evaluation-type/date/quality filters,
+  sortable columns, pagination, and direct handoff to the selected run details.
 - Dataset evaluation runs can select Default, exact match, normalized exact
   match, token F1, BLEU, or ROUGE-L. Explicit selections override the prompt
   package rule; Default defers to the package and then exact match. The run
@@ -21,6 +33,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Analysis now uses an independent-axis evidence scatter plot with all eligible runs
+  selected by default, broad contextual and numeric filters, linked exact-value
+  evidence, bounded loading states, and accessible point inspection.
+- Two-run comparisons now visualize every compatible named metric in unit-aware bars,
+  preserve exact values and sample counts in a semantic table, and show outcome
+  distributions plus explicit missing-evidence reasons.
+- Dashboard charts now use honest metric domains, labeled axes, exact-value tooltips,
+  and unit-safe scaling. Recent evaluations and run inventory consistently show the
+  immutable run name.
+- Run details now use a responsive six-section hierarchy—Overview, Metrics, Evidence,
+  Lifecycle, Reports, and Reviews—while retaining all lifecycle, concurrency, retry,
+  evidence, judge, review, report, download, and sharing controls.
+- Quick start and Dataset evaluation are separate URL-backed Runs tabs with independent
+  preflight state, while legacy launch links continue to resolve to Quick start.
+- Scan-oriented result and inventory cards use left/right desktop rows and intentional
+  mobile stacking, with wide data confined to internal scroll regions.
 - The browser workspace is reduced to its essential evaluation workflow while
   keeping Dashboard and Guide. Endpoint capabilities live under Models,
   registration lives under Datasets, run review/report evidence stays under
@@ -33,9 +61,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Analysis page titles translate in every supported locale.
 - The Dashboard guide now counts six stages and renames the run queue and
   evidence steps so each stage opens an essential evaluation destination.
+- The guide renders as one continuous evaluation workflow instead of tabbed
+  sections: all six stages are visible at once, and each stage opens the
+  matching Models, Datasets, Runs, or Analysis task tab directly.
 
 ### Fixed
 
+- Transient application notices dismiss automatically after five seconds; replacing
+  a notice resets the timer, while manual dismissal and accessibility announcements
+  remain available.
 - New dataset registrations default their source revision to `main` without
   rewriting revision values already stored for existing datasets.
 - Browser navigation now supports direct loads and back/forward history, with

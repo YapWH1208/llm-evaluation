@@ -13,6 +13,12 @@ from sqlalchemy.orm import Session
 from app.db.models import DatasetStatus, DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.services.dataset_records import DatasetRecordError
+from app.services.dataset_metadata import (
+    DatasetMetadataError,
+    normalize_capabilities,
+    normalize_evaluation_type,
+    normalize_languages,
+)
 from app.services.datasets import DatasetError, accept_license, clear_dataset_cache, dataset_disk_usage, delete_dataset, download_dataset, pause_dataset_download, preview_dataset_records, store_uploaded_dataset, update_dataset, validate_dataset_cache
 from app.services.mongo_datasets import accept_mongo_dataset_license, clear_mongo_dataset_cache, delete_mongo_dataset, download_mongo_dataset, mongo_dataset_disk_usage, pause_mongo_dataset_download, store_mongo_uploaded_dataset, update_mongo_dataset, validate_mongo_dataset_cache
 
@@ -21,6 +27,9 @@ class DatasetCreate(BaseModel):
     dataset_id: str = Field(min_length=1, max_length=128); version: str = Field(min_length=1, max_length=64)
     revision: str = "main"; source_url: str | None = None; checksum: str | None = None; license_text: str | None = None
     input_field: str | None = None; reference_field: str | None = None
+    capabilities: list[str] = Field(default_factory=list, max_length=32)
+    languages: list[str] = Field(default_factory=list, max_length=32)
+    evaluation_type: str = "custom"
     credential_binding_id: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
     credential_env_var: str | None = None
 
@@ -39,6 +48,14 @@ class DatasetCreate(BaseModel):
             self.input_field = self.input_field.strip()
         if self.reference_field is not None:
             self.reference_field = self.reference_field.strip()
+        if self.input_field is not None and self.input_field == self.reference_field:
+            raise ValueError("Input and reference fields must name different dataset columns.")
+        try:
+            self.capabilities = normalize_capabilities(self.capabilities)
+            self.languages = normalize_languages(self.languages)
+            self.evaluation_type = normalize_evaluation_type(self.evaluation_type)
+        except DatasetMetadataError as error:
+            raise ValueError(str(error)) from error
         return self
 
 
@@ -47,6 +64,9 @@ class DatasetResponse(BaseModel):
     id: str; dataset_id: str; version: str; revision: str; source_url: str | None; credential_binding_id: str | None
     checksum: str | None; local_path: str | None; prepared_path: str | None = None; size_bytes: int | None = None; license_text: str | None
     license_accepted_at: datetime | None; input_field: str | None = None; reference_field: str | None = None; status: str; error_message: str | None; created_at: datetime
+    capabilities: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    evaluation_type: str = "custom"
 
 
 class DatasetUpload(BaseModel):
@@ -146,9 +166,19 @@ def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, requ
         raise HTTPException(404, "Dataset version not found")
     try:
         if store is not None:
-            return update_mongo_dataset(store, dataset_version_id, payload.model_dump())
+            return update_mongo_dataset(
+                store,
+                dataset_version_id,
+                payload.model_dump(),
+                data_root=request.app.state.settings.data_root,
+            )
         assert session is not None
-        return update_dataset(session, get_dataset_or_404(session, dataset_version_id), **payload.model_dump(exclude={"credential_env_var"}))
+        return update_dataset(
+            session,
+            get_dataset_or_404(session, dataset_version_id),
+            data_root=request.app.state.settings.data_root,
+            **payload.model_dump(exclude={"credential_env_var"}),
+        )
     except DatasetError as error:
         raise HTTPException(409, str(error)) from error
 @router.post("/{dataset_version_id}/accept-license",response_model=DatasetResponse)

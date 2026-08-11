@@ -1,4 +1,4 @@
-import { type MouseEvent, ReactNode, useState } from "react";
+import { type MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
 
 import { localeIds, localeNames, navigationCopy, shellCopy, type Locale } from "../i18n/catalog";
 import { navigationGroupFor, navigationGroups, navigationItem, View } from "../dashboard/navigation";
@@ -38,12 +38,23 @@ export function AppShell({
   onViewChange,
 }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+  const dismissNoticeRef = useRef(onDismissNotice);
   const { t } = useTranslation();
   const currentItem = navigationItem(view);
   const currentGroup = navigationGroupFor(view);
   const copy = shellCopy[locale];
   const navigation = navigationCopy[locale];
   const healthLabel = systemHealth?.status === "ok" ? copy.systemHealthy : systemHealth?.status ? copy.systemStatus.replace("{{status}}", systemHealth.status) : copy.systemUnavailable;
+
+  useEffect(() => {
+    dismissNoticeRef.current = onDismissNotice;
+  }, [onDismissNotice]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeoutId = window.setTimeout(() => dismissNoticeRef.current(), 5_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   function navigate(event: MouseEvent<HTMLAnchorElement>, nextView: View) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -128,7 +139,7 @@ export function AppShell({
         </header>
 
         <main className="workspace-main">
-          {notice && <button className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
+          {notice && <button aria-live="polite" className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
           <div className="workspace-page-content">{children}</div>
         </main>
       </div>

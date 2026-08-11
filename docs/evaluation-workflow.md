@@ -13,15 +13,17 @@ The retained browser workspace is available through these direct paths:
 | `/guide` | Getting started (default), `?tab=prepare-data`, and `?tab=run-and-analyze`. |
 | `/models` | Model inventory (default) and `?tab=add-endpoint`. |
 | `/datasets` | Dataset inventory (default) and `?tab=register-dataset`. |
-| `/runs` | Run inventory (default), `?tab=launch-evaluation`, and `?tab=run-details`. |
-| `/analysis` | Evidence matrix (default) and `?tab=compare-runs`. |
+| `/runs` | Run inventory (default), `?tab=quick-start`, `?tab=dataset-evaluation`, and `?tab=run-details&run=<run-id>`. |
+| `/analysis` | Evidence scatter (default) and `?tab=compare-runs`. |
+| `/leaderboard` | Filterable and sortable evaluation leaderboard. |
 | `/settings` | Health (default), `?tab=access`, and `?tab=preferences`. |
 
 Opening `/` or an unknown workspace path resolves to `/dashboard`.
 The default tab uses the bare page path; non-default tabs use the `tab` query
 parameter and participate in direct loading and browser back/forward history.
-Run details are selected from Run inventory, so a detail deep link without an
-in-memory run selection shows guidance to choose a run.
+Run details can be selected from Run inventory or Leaderboard. A bounded `run`
+query parameter restores the selected run after a direct load; omitting it shows
+guidance to choose a run.
 
 ## 1. Register a model endpoint
 
@@ -76,14 +78,22 @@ hf://datasets/owner/repository/path/to/file
 - HTTPS source URLs are also supported; local files are added through the
   dataset **upload** action instead of a URL.
 
+Choose the dataset's **evaluation type**, then add zero or more **capabilities**
+and **languages** with the multi-select controls. Curated suggestions are provided,
+and valid custom values can be added; saved values are normalized, deduplicated, and
+restored when editing the dataset. These fields describe the dataset as a whole and
+support Analysis and Leaderboard filtering; they do not overwrite sample-level facts.
+
 You can optionally provide an expected **SHA-256 checksum** — if omitted, the
 checksum is calculated and recorded after the first verified download. If the
 dataset is gated or private, supply the administrator-configured
 **credential binding ID** (never a raw token; see Troubleshooting below).
 
 Registered versions can declare an optional **input field** and **reference
-(output) field** used as run defaults; the run launcher reads the prepared
-schema and lets you select either field before queueing. Ready datasets expose
+(output) field** used as run defaults. Once a dataset is ready, registration editing
+reads the prepared schema and exposes distinct field selectors; missing, stale, or
+identical selections are rejected before save. The run launcher uses the same schema
+to let you select either field before queueing. Ready datasets expose
 a **Preview** action that shows the first five rows of the prepared cache, plus
 **Start evaluation**, **Edit**, and **Delete** actions. **Start evaluation**
 opens the Runs workspace with that dataset selected but does not queue anything.
@@ -123,9 +133,9 @@ same way.
 
 ## 4. Quick start without a dataset
 
-For a first endpoint check, open **Runs → Launch evaluation** at
-`/runs?tab=launch-evaluation`, choose an available
-endpoint in the shared **Launch context**, and use the **Quick start** card. Its
+For a first endpoint check, open **Runs → Quick start** at
+`/runs?tab=quick-start`, choose an available endpoint in the shared **Launch
+context**, and use the focused Quick start form. Its
 selector lists only available built-in benchmarks. The registry includes small
 deterministic fixtures for text, image, silent audio, minimal video, and
 combined multimodal requests; they require no dataset download and remain
@@ -158,9 +168,9 @@ The input and reference fields must name different columns.
 
 ## 6. Queue a dataset evaluation run
 
-In **Runs → Launch evaluation** at `/runs?tab=launch-evaluation`, choose the
-shared endpoint and configure the **Dataset
-evaluation** card:
+In **Runs → Dataset evaluation** at `/runs?tab=dataset-evaluation`, choose the
+shared endpoint and configure the dataset evaluation form. Quick start and dataset
+evaluation retain independent preflight state in separate URL-backed tabs:
 
 - **Dataset** — a dataset version with status `ready`.
 - **Input field** — selected from the fields read from the prepared dataset;
@@ -189,25 +199,44 @@ checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.
 
 ## 7. Watch and inspect
 
-Track the run from **Runs → Run inventory** at `/runs`, then select it to open
-**Run details**:
+Track the run from **Runs → Run inventory** at `/runs` or from `/leaderboard`, then
+select it to open **Run details**. New runs receive an immutable, URL-safe
+`<model_name>_<dataset_or_benchmark_name>_<UTC_datetime>` display name; the UUID
+remains visible for exact identity and legacy runs derive a deterministic fallback.
+The detail workspace separates Overview, Metrics, Evidence, Lifecycle, Reports, and
+Reviews without removing operational controls:
 
 - **Run status** — the run moves through queued → running → completed (or a
   terminal failure state) as the task queue schedules it against the endpoint.
+- **Named metrics** — task-aware aggregate metrics show exact values, sample counts,
+  confidence intervals, and an explicit N/A reason when required evidence is absent.
 - **Sample attempts** — each record becomes a sample attempt with the fully
   rendered prompt, the request sent, the raw provider response, the parsed
   prediction, the reference answer, latency, token usage, and the frozen metric
   score.
-- **Reports** — once the run finishes, generate report artifacts (HTML, JSON,
-  CSV, Parquet) from the run's evidence, and share them with read-only links
-  when needed.
+- **Reports** — once the run finishes, generate report artifacts (HTML, Markdown,
+  PDF, JSON, CSV, or Parquet) from the run's evidence, and share them with read-only
+  links when needed.
 
 Failed samples can be retried, and the run's evidence remains inspectable even
 after the run itself is archived.
 
-Open **Analysis** at `/analysis` to inspect capability matrices, or use
-`/analysis?tab=compare-runs` to compare two completed run snapshots without
-switching to a separate comparison page.
+Open **Analysis** at `/analysis` to explore a scatter plot with independent named-
+metric axes. All eligible runs are selected initially; narrow them with the run
+multi-select or date, model, dataset, status, capability, language, evaluation-type,
+quality, latency, and cost filters. The linked evidence table preserves exact values
+and unavailable reasons. Use `/analysis?tab=compare-runs` for unit-aware bars, exact
+metric deltas, sample counts, and outcome distributions across two compatible run
+snapshots.
+
+Open **Leaderboard** at `/leaderboard` to discover all non-archived runs through
+server-backed pagination. Filters can be combined, every visible data column can be
+sorted, and unscored or incomplete runs remain visible with explicit N/A values.
+Selecting a row restores that run in the Run details workspace.
+
+Transient success and error notices can still be dismissed manually and now clear
+automatically after five seconds; persistent inline validation remains visible until
+the underlying input is corrected.
 
 ## Troubleshooting
 

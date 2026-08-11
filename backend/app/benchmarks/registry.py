@@ -26,7 +26,7 @@ class BenchmarkSample:
     sample_id: str
     prompt: str
     reference_answer: str
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
     messages: tuple[dict[str, object], ...] = ()
 
 

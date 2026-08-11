@@ -35,6 +35,7 @@ export type ConnectionTest = {
 
 export type EvaluationRun = {
   id: string;
+  display_name: string;
   model_endpoint_id: string;
   created_by: string | null;
   max_concurrency: number | null;
@@ -75,6 +76,7 @@ export type SampleAttempt = {
   request_snapshot: Record<string, unknown> | null;
   raw_response: string | null;
   parsed_prediction: string | null;
+  metric_evidence?: Record<string, unknown> | null;
   score: number | null;
   latency_ms: number | null;
   input_tokens: number | null;
@@ -88,6 +90,139 @@ export type SampleAttempt = {
   sample_metadata: Record<string, string>;
   judge_disagreement: boolean;
   human_review_status: "unreviewed" | "reviewed" | "adjudicated";
+};
+export type AggregateMetric = {
+  id: string;
+  run_id: string;
+  benchmark_id: string;
+  model_endpoint_id: string;
+  metric_name: string;
+  metric_label: string;
+  metric_value: number | null;
+  availability_reason: string | null;
+  sample_count: number;
+  confidence_interval: { method: string; lower: number; upper: number } | null;
+  aggregation_version: string;
+  profile_version: string;
+  unit: import("./metrics").MetricUnit;
+  profile: import("./metrics").MetricProfile;
+  required_evidence: string[];
+  created_at: string;
+};
+export type ScatterQuery = {
+  x_axis?: string;
+  y_axis?: string;
+  run_ids?: string[];
+  date_from?: string;
+  date_to?: string;
+  model_endpoint_id?: string;
+  dataset?: string;
+  statuses?: string[];
+  capability?: string;
+  language?: string;
+  evaluation_type?: Dataset["evaluation_type"];
+  min_score?: number;
+  max_score?: number;
+  min_accuracy?: number;
+  max_accuracy?: number;
+  min_latency_ms?: number;
+  max_latency_ms?: number;
+  min_cost?: number;
+  max_cost?: number;
+  max_points?: number;
+};
+export type ScatterAxis = { metric_name: string; label: string; unit: string; profile: string };
+export type ScatterPoint = {
+  run_id: string;
+  display_name: string;
+  model_endpoint_id: string;
+  model_name: string;
+  dataset: string;
+  benchmark_id: string;
+  benchmark_version: string;
+  status: string;
+  created_at: string;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: Dataset["evaluation_type"];
+  x: number;
+  y: number;
+  x_metric: string;
+  y_metric: string;
+  x_availability_reason: string | null;
+  y_availability_reason: string | null;
+};
+export type ScatterResponse = {
+  x_axis: ScatterAxis;
+  y_axis: ScatterAxis;
+  selected_run_ids: string[];
+  eligible_run_count: number;
+  plottable_count: number;
+  plotted_count: number;
+  unavailable_count: number;
+  unavailable_by_axis: { x: number; y: number; both: number };
+  unavailable_reasons: Array<{ axis: "x" | "y"; reason: string; count: number }>;
+  truncated_count: number;
+  max_points: number;
+  points: ScatterPoint[];
+};
+export type LeaderboardQuery = {
+  dataset?: string;
+  model_endpoint_id?: string;
+  statuses?: string[];
+  created_from?: string;
+  created_to?: string;
+  capability?: string;
+  language?: string;
+  evaluation_type?: Dataset["evaluation_type"];
+  available_metric?: string;
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
+  page_size?: number;
+};
+export type LeaderboardMetric = {
+  metric_name: string;
+  label: string;
+  unit: string;
+  value: number | null;
+  sample_count: number;
+  availability_reason: string | null;
+};
+export type LeaderboardRow = {
+  run_id: string;
+  display_name: string;
+  model_endpoint_id: string;
+  model_name: string;
+  dataset: string;
+  benchmark_id: string;
+  benchmark_version: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: Dataset["evaluation_type"];
+  score: number | null;
+  primary_metric: string;
+  average_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  estimated_cost: number | null;
+  sample_count: number;
+  completed_samples: number;
+  successful_samples: number;
+  failed_samples: number;
+  available_metrics: string[];
+  named_metrics: Record<string, LeaderboardMetric>;
+};
+export type LeaderboardResponse = {
+  items: LeaderboardRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  sort: string;
+  direction: "asc" | "desc";
 };
 
 export type RunSummary = {
@@ -113,7 +248,7 @@ export type Report = { id: string; run_id: string; report_type: string; format: 
 export type ReportType = "single_model" | "multi_model_comparison" | "regression" | "prompt_comparison" | "benchmark" | "reliability" | "cost" | "human_review";
 export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
 export type Dashboard = {
-  runs: { active: number; completed: number; recent_completed: Array<{ id: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
+  runs: { active: number; completed: number; recent_completed: Array<{ id: string; display_name: string; benchmark_id: string; status: string; completed_samples: number; total_samples: number; completed_at: string | null }> };
   queue: { pending: number; leased: number };
   workers: { active: number };
   endpoints: { available: number; unavailable: number; total: number };
@@ -149,6 +284,9 @@ export type Dataset = {
   error_message: string | null;
   input_field: string | null;
   reference_field: string | null;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: "classification" | "generation" | "code" | "language_modeling" | "custom";
 };
 export type Capability = {
   id: string;
@@ -167,6 +305,18 @@ export type Comparison = {
   run_a_summary: RunSummary;
   run_b_summary: RunSummary;
   differences: { accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; p95_latency_ms: number | null; estimated_cost: number | null; output_tokens: number };
+  runs: Record<"a" | "b", { id: string; display_name: string; model_endpoint_id: string; model_name: string; status: string; created_at: string | null }>;
+  named_metrics: Array<{
+    metric_name: string;
+    label: string;
+    unit: string;
+    profile: string;
+    run_a: { value: number | null; availability_reason: string | null; sample_count: number };
+    run_b: { value: number | null; availability_reason: string | null; sample_count: number };
+    delta: number | null;
+  }>;
+  metric_groups: Array<{ unit: string; metrics: Comparison["named_metrics"] }>;
+  outcome_distribution: Array<{ outcome: keyof Comparison["outcomes"]; count: number }>;
 };
 
 export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: string[]; notes: string | null; review_stage: "primary" | "secondary" | "adjudication"; adjudicates_review_ids: string[]; created_at: string };
@@ -280,6 +430,7 @@ export const api = {
   deleteRun: (runId: string) => request<void>(`/evaluation-runs/${runId}`, { method: "DELETE" }),
   listAttempts: (runId: string, offset = 0, limit = 200) => request<SampleAttempt[]>(`/evaluation-runs/${runId}/attempts?offset=${offset}&limit=${limit}`),
   getRunSummary: (runId: string) => request<RunSummary>(`/evaluation-runs/${runId}/summary`),
+  listRunMetrics: (runId: string) => request<AggregateMetric[]>(`/analytics/runs/${encodeURIComponent(runId)}/metrics`),
   listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
   subscribeToRunEvents: (runId: string, onEvent: () => void) => subscribeToEvents("/evaluation-runs/" + runId + "/events", "run", onEvent),
   createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
@@ -318,5 +469,48 @@ export const api = {
   assetPreviewObjectUrl: (assetId: string) => requestObjectUrl(`/assets/${assetId}/download`),
   listTasks: () => request<Task[]>("/tasks"),
   analyticsMatrix: (baselineRunId?: string) => request<AnalyticsMatrix>(`/analytics/matrix${baselineRunId ? `?baseline_run_id=${encodeURIComponent(baselineRunId)}` : ""}`),
+  analyticsScatter: (query: ScatterQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.x_axis) params.set("x_axis", query.x_axis);
+    if (query.y_axis) params.set("y_axis", query.y_axis);
+    query.run_ids?.forEach((runId) => params.append("run_ids", runId));
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    if (query.model_endpoint_id) params.set("model_endpoint_id", query.model_endpoint_id);
+    if (query.dataset) params.set("dataset", query.dataset);
+    query.statuses?.forEach((status) => params.append("status", status));
+    if (query.capability) params.set("capability", query.capability);
+    if (query.language) params.set("language", query.language);
+    if (query.evaluation_type) params.set("evaluation_type", query.evaluation_type);
+    if (query.min_score !== undefined) params.set("min_score", String(query.min_score));
+    if (query.max_score !== undefined) params.set("max_score", String(query.max_score));
+    if (query.min_accuracy !== undefined) params.set("min_accuracy", String(query.min_accuracy));
+    if (query.max_accuracy !== undefined) params.set("max_accuracy", String(query.max_accuracy));
+    if (query.min_latency_ms !== undefined) params.set("min_latency_ms", String(query.min_latency_ms));
+    if (query.max_latency_ms !== undefined) params.set("max_latency_ms", String(query.max_latency_ms));
+    if (query.min_cost !== undefined) params.set("min_cost", String(query.min_cost));
+    if (query.max_cost !== undefined) params.set("max_cost", String(query.max_cost));
+    if (query.max_points !== undefined) params.set("max_points", String(query.max_points));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<ScatterResponse>(`/analytics/scatter${suffix}`);
+  },
+  leaderboard: (query: LeaderboardQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.dataset) params.set("dataset", query.dataset);
+    if (query.model_endpoint_id) params.set("model_endpoint_id", query.model_endpoint_id);
+    query.statuses?.forEach((status) => params.append("status", status));
+    if (query.created_from) params.set("created_from", query.created_from);
+    if (query.created_to) params.set("created_to", query.created_to);
+    if (query.capability) params.set("capability", query.capability);
+    if (query.language) params.set("language", query.language);
+    if (query.evaluation_type) params.set("evaluation_type", query.evaluation_type);
+    if (query.available_metric) params.set("available_metric", query.available_metric);
+    if (query.sort) params.set("sort", query.sort);
+    if (query.direction) params.set("direction", query.direction);
+    if (query.page !== undefined) params.set("page", String(query.page));
+    if (query.page_size !== undefined) params.set("page_size", String(query.page_size));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<LeaderboardResponse>(`/leaderboard${suffix}`);
+  },
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };

@@ -339,3 +339,31 @@ def test_request_body_resolution_filters_sensitive_default_keys() -> None:
     assert "api_key" not in allowed
     assert "secret_token" not in allowed
     assert allowed["temperature"] == 0.5
+
+
+def test_executor_retains_complete_openai_token_log_probabilities() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Log probabilities",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****test",
+    )
+    response = {
+        "choices": [{
+            "message": {"content": "blue"},
+            "logprobs": {
+                "content": [
+                    {"token": "bl", "logprob": -0.25},
+                    {"token": "ue", "logprob": -0.5},
+                ]
+            },
+        }],
+        "usage": {"prompt_tokens": 2, "completion_tokens": 2},
+    }
+    result = OpenAIChatCompletionsExecutor(
+        httpx.MockTransport(lambda _request: httpx.Response(200, json=response))
+    ).execute(endpoint, "secret", {"messages": [{"role": "user", "content": "Color?"}]})
+
+    assert result.success is True
+    assert result.token_logprobs == (-0.25, -0.5)

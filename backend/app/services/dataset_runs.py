@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from app.db.models import (
     TaskUnit,
 )
 from app.services.dataset_records import DatasetRecordError, iter_dataset_records
+from app.services.run_names import format_run_display_name
 from app.services.evaluation_runs import (
     RunCreationError,
     _build_sample_messages,
@@ -65,6 +67,54 @@ def _validate_distinct_dataset_fields(selected_input_field: str | None, referenc
     if selected_input_field is not None and selected_input_field == normalized:
         raise DatasetRunError("Input and reference fields must name different dataset columns.")
     return normalized
+
+
+_DATASET_PROFILE_KEYS = ("capabilities", "languages", "evaluation_type")
+_MISSING_PROFILE_VALUE = object()
+
+
+def _dataset_profile(
+    *,
+    capabilities: object,
+    languages: object,
+    evaluation_type: object,
+    input_field: str | None,
+    reference_field: str,
+) -> dict[str, object]:
+    return {
+        "capabilities": list(capabilities) if isinstance(capabilities, list) else [],
+        "languages": list(languages) if isinstance(languages, list) else [],
+        "evaluation_type": evaluation_type if isinstance(evaluation_type, str) else "custom",
+        "input_field": input_field,
+        "reference_field": reference_field,
+    }
+
+
+def _resolved_sample_metadata(
+    fields: dict[str, object],
+    dataset_profile: dict[str, object],
+    *,
+    source: str,
+    record_number: int,
+    dataset_id: str,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "source": source,
+        "record_number": str(record_number),
+        "dataset": dataset_id,
+    }
+    record_metadata = fields.get("metadata")
+    nested = record_metadata if isinstance(record_metadata, dict) else {}
+    for key in _DATASET_PROFILE_KEYS:
+        value = nested.get(key, _MISSING_PROFILE_VALUE)
+        if value is _MISSING_PROFILE_VALUE:
+            value = fields.get(key, _MISSING_PROFILE_VALUE)
+        metadata[key] = dataset_profile[key] if value is _MISSING_PROFILE_VALUE else value
+    return metadata
+
+
+def _sample_dataset_profile(sample: BenchmarkSample) -> dict[str, object]:
+    return {key: sample.metadata.get(key) for key in _DATASET_PROFILE_KEYS}
 
 
 def effective_dataset_scoring_rule(
@@ -113,7 +163,7 @@ def create_dataset_run(
     model_endpoint_id: str,
     dataset_version_id: str,
     prompt_package_id: str | None,
-    reference_field: str,
+    reference_field: str | None,
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
@@ -137,10 +187,19 @@ def create_dataset_run(
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise DatasetRunError("Prompt package not found.")
-    if not reference_field.strip():
+    resolved_reference_field = reference_field or dataset.reference_field
+    if not resolved_reference_field or not resolved_reference_field.strip():
         raise DatasetRunError("A reference field is required.")
-    selected_input_field = _effective_dataset_input_field(input_field, prompt_package)
-    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
+    resolved_input_field = input_field if input_field is not None else dataset.input_field
+    selected_input_field = _effective_dataset_input_field(resolved_input_field, prompt_package)
+    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, resolved_reference_field)
+    dataset_profile = _dataset_profile(
+        capabilities=dataset.capabilities,
+        languages=dataset.languages,
+        evaluation_type=dataset.evaluation_type,
+        input_field=selected_input_field,
+        reference_field=normalized_reference_field,
+    )
     try:
         samples, skipped = _build_dataset_samples(
             prepared_path=dataset.prepared_path,
@@ -151,6 +210,7 @@ def create_dataset_run(
             prompt_package=prompt_package,
             dataset_id=dataset.dataset_id,
             dataset_version=dataset.version,
+            dataset_profile=dataset_profile,
         )
     except DatasetRecordError as error:
         raise DatasetRunError(str(error)) from error
@@ -195,6 +255,7 @@ def create_dataset_run(
         "dataset_version": {"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision},
         "input_field": selected_input_field,
         "reference_field": normalized_reference_field,
+        "dataset_profile": dataset_profile,
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
@@ -208,6 +269,7 @@ def create_dataset_run(
         ),
         "request_body_evidence": request_body_evidence,
     }
+    created_at = datetime.now(timezone.utc)
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
         prompt_package_id=prompt_package.id if prompt_package else None,
@@ -215,6 +277,8 @@ def create_dataset_run(
         max_concurrency=max_concurrency,
         benchmark_id=DATASET_RUN_BENCHMARK_ID,
         benchmark_version=DATASET_RUN_BENCHMARK_VERSION,
+        display_name=format_run_display_name(endpoint.model_name, dataset.dataset_id, created_at),
+        created_at=created_at,
         configuration_snapshot=snapshot,
         status=RunStatus.QUEUED.value,
         total_samples=len(samples),
@@ -272,7 +336,7 @@ def create_dataset_run(
                         "metadata": dict(sample.metadata),
                         "request_body_evidence": request_body_evidence,
                     },
-                    reference_snapshot={"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule},
+                    reference_snapshot={"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule, "dataset_profile": _sample_dataset_profile(sample)},
                 )
                 for sample in shard_samples
             ]
@@ -288,7 +352,7 @@ def preflight_dataset_run(
     model_endpoint_id: str,
     dataset_version_id: str,
     prompt_package_id: str | None,
-    reference_field: str,
+    reference_field: str | None,
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
@@ -311,10 +375,12 @@ def preflight_dataset_run(
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
-    if not reference_field.strip():
+    resolved_reference_field = reference_field or (dataset.reference_field if dataset is not None else None)
+    if not resolved_reference_field or not resolved_reference_field.strip():
         issues.append("A reference field is required.")
+    resolved_input_field = input_field if input_field is not None else (dataset.input_field if dataset is not None else None)
     selected_input_field = _effective_dataset_input_field(
-        input_field,
+        resolved_input_field,
         prompt_package,
     )
     try:
@@ -326,7 +392,14 @@ def preflight_dataset_run(
     if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
         datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": False})
         try:
-            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
+            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, resolved_reference_field or "")
+            dataset_profile = _dataset_profile(
+                capabilities=dataset.capabilities,
+                languages=dataset.languages,
+                evaluation_type=dataset.evaluation_type,
+                input_field=selected_input_field,
+                reference_field=normalized_reference_field,
+            )
             samples, skipped = _build_dataset_samples(
                 prepared_path=dataset.prepared_path,
                 data_root=data_root,
@@ -336,6 +409,7 @@ def preflight_dataset_run(
                 prompt_package=prompt_package,
                 dataset_id=dataset.dataset_id,
                 dataset_version=dataset.version,
+                dataset_profile=dataset_profile,
             )
             if not samples:
                 issues.append(_empty_dataset_samples_message(
@@ -386,6 +460,7 @@ def _build_dataset_samples(
     prompt_package: PromptPackage | None,
     dataset_id: str,
     dataset_version: str,
+    dataset_profile: dict[str, object],
 ) -> tuple[list[BenchmarkSample], int]:
     """Materialize up to ``sample_limit`` usable records as benchmark samples.
 
@@ -409,7 +484,13 @@ def _build_dataset_samples(
                 sample_id=f"{dataset_id}:{dataset_version}:{entry['source']}#{entry['record_number']}",
                 prompt=prompt,
                 reference_answer=str(reference),
-                metadata={"source": entry["source"], "record_number": str(entry["record_number"]), "dataset": dataset_id},
+                metadata=_resolved_sample_metadata(
+                    fields,
+                    dataset_profile,
+                    source=str(entry["source"]),
+                    record_number=int(entry["record_number"]),
+                    dataset_id=dataset_id,
+                ),
                 messages=tuple(_build_record_messages(prompt_package, prompt)),
             )
         )

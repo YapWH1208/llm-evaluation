@@ -522,7 +522,13 @@ def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -
     return {"fields": fields, "rows": rows}
 
 
-def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None) -> DatasetVersion:
+def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None, capabilities: list[str], languages: list[str], evaluation_type: str, data_root: str) -> DatasetVersion:
+    validate_dataset_field_defaults(
+        dataset.prepared_path,
+        data_root,
+        input_field=input_field,
+        reference_field=reference_field,
+    )
     values = {
         "dataset_id": dataset_id,
         "version": version,
@@ -533,6 +539,9 @@ def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str
         "credential_binding_id": credential_binding_id,
         "input_field": input_field,
         "reference_field": reference_field,
+        "capabilities": capabilities,
+        "languages": languages,
+        "evaluation_type": evaluation_type,
     }
     current = {
         field: getattr(dataset, field)
@@ -555,6 +564,37 @@ def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str
         raise DatasetError("Dataset revision already exists.") from error
     session.refresh(dataset)
     return dataset
+
+
+def validate_dataset_field_defaults(
+    prepared_path: str | None,
+    data_root: str,
+    *,
+    input_field: str | None,
+    reference_field: str | None,
+) -> None:
+    """Validate persisted field defaults whenever a prepared preview exists."""
+
+    if input_field is not None and input_field == reference_field:
+        raise DatasetError("Input and reference fields must name different dataset columns.")
+    if prepared_path is None:
+        return
+    try:
+        preview = preview_dataset_records(prepared_path, data_root, limit=50)
+    except DatasetRecordError as error:
+        raise DatasetError(f"Dataset preview schema is unavailable: {error}") from error
+    fields = {str(field) for field in preview["fields"]}
+    missing = [
+        field
+        for field in (input_field, reference_field)
+        if field is not None and field not in fields
+    ]
+    if missing:
+        raise DatasetError(
+            "Dataset field selection is not present in the current preview schema: "
+            + ", ".join(missing)
+            + "."
+        )
 
 
 def dataset_edit_lifecycle_updates(

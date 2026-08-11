@@ -9,7 +9,7 @@ import httpx
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.mongo import MongoDocumentStore
-from app.services.datasets import DatasetDownloadPaused, DatasetError, clear_prepared_dataset_cache, dataset_disk_usage, dataset_edit_lifecycle_updates, dataset_source_suffix, prepare_dataset_cache, resolve_dataset_source, validate_prepared_dataset_cache, write_dataset_source
+from app.services.datasets import DatasetDownloadPaused, DatasetError, clear_prepared_dataset_cache, dataset_disk_usage, dataset_edit_lifecycle_updates, dataset_source_suffix, prepare_dataset_cache, resolve_dataset_source, validate_dataset_field_defaults, validate_prepared_dataset_cache, write_dataset_source
 
 
 def accept_mongo_dataset_license(store: MongoDocumentStore, dataset_id: str) -> dict[str, Any]:
@@ -189,7 +189,7 @@ def mongo_dataset_disk_usage(data_root: str) -> dict[str, int | str]:
     return dataset_disk_usage(data_root)
 
 
-def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: dict[str, Any], *, data_root: str) -> dict[str, Any]:
     dataset = _get_dataset(store, dataset_id)
     values = {
         "dataset_id": payload["dataset_id"],
@@ -201,12 +201,21 @@ def update_mongo_dataset(store: MongoDocumentStore, dataset_id: str, payload: di
         "credential_binding_id": payload.get("credential_binding_id"),
         "input_field": payload.get("input_field"),
         "reference_field": payload.get("reference_field"),
+        "capabilities": payload.get("capabilities", []),
+        "languages": payload.get("languages", []),
+        "evaluation_type": payload.get("evaluation_type", "custom"),
     }
     duplicates = store.list_documents("dataset_versions", query={
         "dataset_id": values["dataset_id"], "version": values["version"], "revision": values["revision"],
     })
     if any(str(item.get("id")) != dataset_id for item in duplicates):
         raise DatasetError("Dataset revision already exists.")
+    validate_dataset_field_defaults(
+        dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None,
+        data_root,
+        input_field=values["input_field"] if isinstance(values["input_field"], str) else None,
+        reference_field=values["reference_field"] if isinstance(values["reference_field"], str) else None,
+    )
     values.update(dataset_edit_lifecycle_updates(dataset, values))
     updated = store.update_document("dataset_versions", dataset_id, values)
     assert updated is not None

@@ -170,7 +170,7 @@ describe("configure workspace pages", () => {
   it("routes an actionable guide step through the supplied view callback", async () => {
     const user = userEvent.setup();
     const onOpenView = vi.fn();
-    render(<LocaleProvider><Guide activeTab="getting-started" onOpenView={onOpenView} onTabChange={vi.fn()} /></LocaleProvider>);
+    render(<LocaleProvider><Guide onOpenView={onOpenView} /></LocaleProvider>);
 
     await user.click(screen.getByRole("button", { name: "Open Models" }));
 

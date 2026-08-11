@@ -25,20 +25,24 @@ from app.services.evaluation_runs import (
     _sample_modality as _benchmark_sample_modality,
     _split_samples_for_endpoint_budget,
 )
+from app.services.run_names import format_run_display_name
 from app.services.dataset_runs import (
     DATASET_RUN_BENCHMARK_ID,
     DATASET_RUN_BENCHMARK_VERSION,
     DatasetRunError,
     _build_dataset_samples,
+    _dataset_profile,
     _effective_dataset_input_field,
     _empty_dataset_samples_message,
+    _sample_dataset_profile,
     _validate_distinct_dataset_fields,
     effective_dataset_scoring_rule,
 )
 from app.services.dataset_records import DatasetRecordError
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
-from app.services.aggregation import recompute_mongo_aggregate_metrics
+from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError
 from app.services.run_analysis import add_summary_insights, summarize_attempts
 from app.services.content_ir import ContentValidationError, normalize_content_parts
@@ -230,6 +234,7 @@ def create_mongo_benchmark_run(
             "max_concurrency": max_concurrency,
             "benchmark_id": benchmark_id,
             "benchmark_version": benchmark_version,
+            "display_name": format_run_display_name(str(endpoint["model_name"]), benchmark_id, now),
             "configuration_snapshot": snapshot,
             "status": "waiting_for_dataset" if frozen_datasets else "queued",
             "total_samples": len(samples),
@@ -349,7 +354,7 @@ def create_mongo_dataset_run(
     model_endpoint_id: str,
     dataset_version_id: str,
     prompt_package_id: str | None,
-    reference_field: str,
+    reference_field: str | None,
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
@@ -370,10 +375,20 @@ def create_mongo_dataset_run(
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise MongoRunExecutionError("Prompt package not found.")
-    if not reference_field.strip():
+    resolved_reference_field = reference_field or dataset.get("reference_field")
+    if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         raise MongoRunExecutionError("A reference field is required.")
-    selected_input_field = _effective_dataset_input_field(input_field, prompt_package)
-    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
+    stored_input_field = dataset.get("input_field")
+    resolved_input_field = input_field if input_field is not None else (stored_input_field if isinstance(stored_input_field, str) else None)
+    selected_input_field = _effective_dataset_input_field(resolved_input_field, prompt_package)
+    normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, resolved_reference_field)
+    dataset_profile = _dataset_profile(
+        capabilities=dataset.get("capabilities", []),
+        languages=dataset.get("languages", []),
+        evaluation_type=dataset.get("evaluation_type", "custom"),
+        input_field=selected_input_field,
+        reference_field=normalized_reference_field,
+    )
     try:
         samples, skipped = _build_dataset_samples(
             prepared_path=dataset["prepared_path"],
@@ -384,6 +399,7 @@ def create_mongo_dataset_run(
             prompt_package=_proxy(prompt_package) if prompt_package else None,
             dataset_id=dataset["dataset_id"],
             dataset_version=dataset["version"],
+            dataset_profile=dataset_profile,
         )
     except (DatasetRecordError, DatasetRunError) as error:
         raise MongoRunExecutionError(str(error)) from error
@@ -435,6 +451,7 @@ def create_mongo_dataset_run(
         "dataset_version": {"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default")},
         "input_field": selected_input_field,
         "reference_field": normalized_reference_field,
+        "dataset_profile": dataset_profile,
         "sample_limit": sample_limit,
         "skipped_records": skipped,
         "sample_ids": [sample.sample_id for sample in samples],
@@ -458,6 +475,7 @@ def create_mongo_dataset_run(
             "max_concurrency": max_concurrency,
             "benchmark_id": DATASET_RUN_BENCHMARK_ID,
             "benchmark_version": DATASET_RUN_BENCHMARK_VERSION,
+            "display_name": format_run_display_name(str(endpoint["model_name"]), str(dataset["dataset_id"]), now),
             "configuration_snapshot": snapshot,
             "status": "queued",
             "total_samples": len(samples),
@@ -549,7 +567,7 @@ def create_mongo_dataset_run(
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
                     "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                    "reference_snapshot": {"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule},
+                    "reference_snapshot": {"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule, "dataset_profile": _sample_dataset_profile(sample)},
                     "request_snapshot": None,
                     "raw_response": None,
                     "parsed_prediction": None,
@@ -576,7 +594,7 @@ def preflight_mongo_dataset_run(
     model_endpoint_id: str,
     dataset_version_id: str,
     prompt_package_id: str | None,
-    reference_field: str,
+    reference_field: str | None,
     sample_limit: int,
     input_field: str | None = None,
     request_body_override: dict[str, object] | None = None,
@@ -596,10 +614,13 @@ def preflight_mongo_dataset_run(
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
-    if not reference_field.strip():
+    resolved_reference_field = reference_field or (dataset.get("reference_field") if dataset is not None else None)
+    if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         issues.append("A reference field is required.")
+    stored_input_field = dataset.get("input_field") if dataset is not None else None
+    resolved_input_field = input_field if input_field is not None else (stored_input_field if isinstance(stored_input_field, str) else None)
     selected_input_field = _effective_dataset_input_field(
-        input_field,
+        resolved_input_field,
         _proxy(prompt_package) if prompt_package else None,
     )
     try:
@@ -614,7 +635,17 @@ def preflight_mongo_dataset_run(
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
         datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default"), "status": dataset["status"], "will_prepare": False})
         try:
-            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, reference_field)
+            normalized_reference_field = _validate_distinct_dataset_fields(
+                selected_input_field,
+                resolved_reference_field if isinstance(resolved_reference_field, str) else "",
+            )
+            dataset_profile = _dataset_profile(
+                capabilities=dataset.get("capabilities", []),
+                languages=dataset.get("languages", []),
+                evaluation_type=dataset.get("evaluation_type", "custom"),
+                input_field=selected_input_field,
+                reference_field=normalized_reference_field,
+            )
             samples, _skipped = _build_dataset_samples(
                 prepared_path=dataset["prepared_path"],
                 data_root=data_root,
@@ -624,6 +655,7 @@ def preflight_mongo_dataset_run(
                 prompt_package=_proxy(prompt_package) if prompt_package else None,
                 dataset_id=dataset["dataset_id"],
                 dataset_version=dataset["version"],
+                dataset_profile=dataset_profile,
             )
             if not samples:
                 issues.append(_empty_dataset_samples_message(
@@ -783,7 +815,7 @@ def create_mongo_custom_multimodal_run(
     normalized = _normalize_mongo_messages(store, data_root, messages)
     request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","display_name":format_run_display_name(str(endpoint["model_name"]),"custom-multimodal",now),"configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
     dataset_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":None,"task_type":"dataset_preparation","payload":{"source":"user","prepared_inline":True},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     benchmark_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":dataset_task["id"],"task_type":"benchmark","payload":{"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","planned_samples":1},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
     task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":benchmark_task["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
@@ -1219,7 +1251,7 @@ def _execute_mongo_aggregation_task(
     task = store.update_task_if_current_lease(
         task,
         lease_token,
-        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": "1.0.0"}, "status": "succeeded", **_lease_values()},
+        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": AGGREGATION_VERSION}, "status": "succeeded", **_lease_values()},
     )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before finalization.")
@@ -1408,6 +1440,10 @@ def _record_result(
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "estimated_cost": _estimate_cost(endpoint, result.input_tokens, result.output_tokens),
+        "metric_evidence": build_execution_metric_evidence(
+            token_logprobs=result.token_logprobs,
+            existing=attempt.get("metric_evidence") if isinstance(attempt.get("metric_evidence"), dict) else None,
+        ),
         "completed_at": _utc_now(),
     }
     if result.success and result.prediction is not None:

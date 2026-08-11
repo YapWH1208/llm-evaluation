@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   window.localStorage.clear();
 });
 
@@ -133,6 +134,104 @@ describe("AppShell", () => {
     expect(props.onThemeToggle).toHaveBeenCalledOnce();
     expect(props.onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(props.onDismissNotice).toHaveBeenCalledOnce();
+  });
+
+  it("auto-dismisses a transient notice at exactly five seconds", () => {
+    vi.useFakeTimers();
+    const props = renderShell({ notice: "Evaluation queued." });
+
+    act(() => vi.advanceTimersByTime(4_999));
+    expect(props.onDismissNotice).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(props.onDismissNotice).toHaveBeenCalledOnce();
+  });
+
+  it("restarts the dismissal timer when a notice is replaced", () => {
+    vi.useFakeTimers();
+    const onDismissNotice = vi.fn();
+    const shell = (notice: string | null) => (
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice={notice}
+          systemHealth={null}
+          theme="dark"
+          view="dashboard"
+          onDismissNotice={onDismissNotice}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <p>Workspace content</p>
+        </AppShell>
+      </LocaleProvider>
+    );
+    const { rerender } = render(shell("First notice"));
+
+    act(() => vi.advanceTimersByTime(3_000));
+    rerender(shell("Replacement notice"));
+    act(() => vi.advanceTimersByTime(4_999));
+    expect(onDismissNotice).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(onDismissNotice).toHaveBeenCalledOnce();
+  });
+
+  it("cancels the timer after manual dismissal", () => {
+    vi.useFakeTimers();
+    const onDismissNotice = vi.fn();
+    const baseProps = {
+      completedRunCount: 12,
+      locale: "en" as const,
+      systemHealth: null,
+      theme: "dark" as const,
+      view: "dashboard" as const,
+      onDismissNotice,
+      onLocaleChange: vi.fn(),
+      onThemeToggle: vi.fn(),
+      onViewChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <LocaleProvider><AppShell {...baseProps} notice="Dismiss me"><p>Content</p></AppShell></LocaleProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss me Dismiss" }));
+    rerender(
+      <LocaleProvider><AppShell {...baseProps} notice={null}><p>Content</p></AppShell></LocaleProvider>,
+    );
+    act(() => vi.advanceTimersByTime(5_000));
+
+    expect(onDismissNotice).toHaveBeenCalledOnce();
+  });
+
+  it("cleans up a pending dismissal timer when the shell unmounts", () => {
+    vi.useFakeTimers();
+    const onDismissNotice = vi.fn();
+    const { unmount } = render(
+      <LocaleProvider>
+        <AppShell
+          completedRunCount={12}
+          locale="en"
+          notice="Pending notice"
+          systemHealth={null}
+          theme="dark"
+          view="dashboard"
+          onDismissNotice={onDismissNotice}
+          onLocaleChange={vi.fn()}
+          onThemeToggle={vi.fn()}
+          onViewChange={vi.fn()}
+        >
+          <p>Content</p>
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    unmount();
+    act(() => vi.advanceTimersByTime(5_000));
+
+    expect(onDismissNotice).not.toHaveBeenCalled();
   });
 
   it("labels a healthy service from the deployed health response", () => {

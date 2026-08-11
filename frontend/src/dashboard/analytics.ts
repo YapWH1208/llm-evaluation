@@ -129,12 +129,13 @@ export function chartCoordinates(
   values: Array<number | null>,
   width = 100,
   height = 48,
+  domain?: { minimum: number; maximum: number },
 ): Array<{ x: number; y: number } | null> {
   const measured = values.filter((value): value is number => value !== null);
   if (measured.length === 0) return values.map(() => null);
 
-  const minimum = Math.min(...measured);
-  const maximum = Math.max(...measured);
+  const minimum = domain?.minimum ?? Math.min(...measured);
+  const maximum = domain?.maximum ?? Math.max(...measured);
   const denominator = Math.max(values.length - 1, 1);
 
   return values.map((value, index) => {

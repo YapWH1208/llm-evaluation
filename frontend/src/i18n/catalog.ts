@@ -70,6 +70,22 @@ const en = {
   "datasetRegister.referenceField": "Reference (output) field",
   "datasetRegister.inputFieldHint": "Optional record field used as the prompt input",
   "datasetRegister.referenceFieldHint": "Optional record field holding the expected answer",
+  "datasetRegister.metadata": "Evaluation profile",
+  "datasetRegister.metadataHint": "Attach reusable task and language metadata to this dataset version.",
+  "datasetRegister.capabilities": "Capabilities",
+  "datasetRegister.languages": "Languages",
+  "datasetRegister.evaluationType": "Evaluation type",
+  "datasetRegister.removeCapability": "Remove capability",
+  "datasetRegister.removeLanguage": "Remove language",
+  "datasetRegister.multiValueHint": "Press Enter or comma to add a value; Backspace removes the last value.",
+  "datasetRegister.typeClassification": "Classification",
+  "datasetRegister.typeGeneration": "Generation",
+  "datasetRegister.typeCode": "Code",
+  "datasetRegister.typeLanguageModeling": "Language modeling",
+  "datasetRegister.typeCustom": "Custom",
+  "datasetRegister.schemaLoading": "Reading prepared fields for selection…",
+  "datasetRegister.manualFieldHint": "Prepared fields are unavailable; enter field names manually.",
+  "datasetRegister.schemaChanged": "A saved field is not present in the prepared schema. Choose an available field before saving.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -132,6 +148,22 @@ const zhCN: TranslationCatalog = {
   "datasetRegister.referenceField": "参考答案（输出）字段",
   "datasetRegister.inputFieldHint": "可选：用作提示词输入的记录字段",
   "datasetRegister.referenceFieldHint": "可选：保存预期答案的记录字段",
+  "datasetRegister.metadata": "评测配置",
+  "datasetRegister.metadataHint": "为此数据集版本添加可复用的任务和语言元数据。",
+  "datasetRegister.capabilities": "能力",
+  "datasetRegister.languages": "语言",
+  "datasetRegister.evaluationType": "评测类型",
+  "datasetRegister.removeCapability": "移除能力",
+  "datasetRegister.removeLanguage": "移除语言",
+  "datasetRegister.multiValueHint": "按 Enter 或逗号添加值；按 Backspace 删除最后一个值。",
+  "datasetRegister.typeClassification": "分类",
+  "datasetRegister.typeGeneration": "生成",
+  "datasetRegister.typeCode": "代码",
+  "datasetRegister.typeLanguageModeling": "语言建模",
+  "datasetRegister.typeCustom": "自定义",
+  "datasetRegister.schemaLoading": "正在读取可选的已准备字段…",
+  "datasetRegister.manualFieldHint": "已准备字段不可用；请手动输入字段名称。",
+  "datasetRegister.schemaChanged": "保存的字段不在已准备架构中。请在保存前选择可用字段。",
 };
 
 const fr: TranslationCatalog = {
@@ -191,6 +223,22 @@ const fr: TranslationCatalog = {
   "datasetRegister.referenceField": "Champ de référence (sortie)",
   "datasetRegister.inputFieldHint": "Champ d’enregistrement facultatif utilisé comme entrée du prompt",
   "datasetRegister.referenceFieldHint": "Champ d’enregistrement facultatif contenant la réponse attendue",
+  "datasetRegister.metadata": "Profil d’évaluation",
+  "datasetRegister.metadataHint": "Ajoutez des métadonnées réutilisables de tâche et de langue à cette version.",
+  "datasetRegister.capabilities": "Capacités",
+  "datasetRegister.languages": "Langues",
+  "datasetRegister.evaluationType": "Type d’évaluation",
+  "datasetRegister.removeCapability": "Supprimer la capacité",
+  "datasetRegister.removeLanguage": "Supprimer la langue",
+  "datasetRegister.multiValueHint": "Appuyez sur Entrée ou virgule pour ajouter ; Retour arrière supprime la dernière valeur.",
+  "datasetRegister.typeClassification": "Classification",
+  "datasetRegister.typeGeneration": "Génération",
+  "datasetRegister.typeCode": "Code",
+  "datasetRegister.typeLanguageModeling": "Modélisation du langage",
+  "datasetRegister.typeCustom": "Personnalisé",
+  "datasetRegister.schemaLoading": "Lecture des champs préparés à sélectionner…",
+  "datasetRegister.manualFieldHint": "Les champs préparés sont indisponibles ; saisissez les noms manuellement.",
+  "datasetRegister.schemaChanged": "Un champ enregistré n’existe plus dans le schéma préparé. Choisissez un champ disponible.",
 };
 
 const de: TranslationCatalog = {
@@ -250,6 +298,22 @@ const de: TranslationCatalog = {
   "datasetRegister.referenceField": "Referenzfeld (Ausgabe)",
   "datasetRegister.inputFieldHint": "Optionaler Datensatzfeld als Prompt-Eingabe",
   "datasetRegister.referenceFieldHint": "Optionaler Datensatzfeld mit der erwarteten Antwort",
+  "datasetRegister.metadata": "Evaluierungsprofil",
+  "datasetRegister.metadataHint": "Fügen Sie dieser Version wiederverwendbare Aufgaben- und Sprachmetadaten hinzu.",
+  "datasetRegister.capabilities": "Fähigkeiten",
+  "datasetRegister.languages": "Sprachen",
+  "datasetRegister.evaluationType": "Evaluierungstyp",
+  "datasetRegister.removeCapability": "Fähigkeit entfernen",
+  "datasetRegister.removeLanguage": "Sprache entfernen",
+  "datasetRegister.multiValueHint": "Mit Eingabe oder Komma hinzufügen; Rücktaste entfernt den letzten Wert.",
+  "datasetRegister.typeClassification": "Klassifikation",
+  "datasetRegister.typeGeneration": "Generierung",
+  "datasetRegister.typeCode": "Code",
+  "datasetRegister.typeLanguageModeling": "Sprachmodellierung",
+  "datasetRegister.typeCustom": "Benutzerdefiniert",
+  "datasetRegister.schemaLoading": "Vorbereitete Felder werden zur Auswahl gelesen…",
+  "datasetRegister.manualFieldHint": "Vorbereitete Felder sind nicht verfügbar; geben Sie Feldnamen manuell ein.",
+  "datasetRegister.schemaChanged": "Ein gespeichertes Feld fehlt im vorbereiteten Schema. Wählen Sie vor dem Speichern ein verfügbares Feld.",
 };
 
 const ru: TranslationCatalog = {
@@ -309,6 +373,22 @@ const ru: TranslationCatalog = {
   "datasetRegister.referenceField": "Поле эталонного ответа (вывод)",
   "datasetRegister.inputFieldHint": "Необязательное поле записи, используемое как вход промпта",
   "datasetRegister.referenceFieldHint": "Необязательное поле записи с ожидаемым ответом",
+  "datasetRegister.metadata": "Профиль оценки",
+  "datasetRegister.metadataHint": "Добавьте к этой версии повторно используемые метаданные задачи и языка.",
+  "datasetRegister.capabilities": "Возможности",
+  "datasetRegister.languages": "Языки",
+  "datasetRegister.evaluationType": "Тип оценки",
+  "datasetRegister.removeCapability": "Удалить возможность",
+  "datasetRegister.removeLanguage": "Удалить язык",
+  "datasetRegister.multiValueHint": "Нажмите Enter или запятую для добавления; Backspace удаляет последнее значение.",
+  "datasetRegister.typeClassification": "Классификация",
+  "datasetRegister.typeGeneration": "Генерация",
+  "datasetRegister.typeCode": "Код",
+  "datasetRegister.typeLanguageModeling": "Языковое моделирование",
+  "datasetRegister.typeCustom": "Пользовательский",
+  "datasetRegister.schemaLoading": "Чтение подготовленных полей для выбора…",
+  "datasetRegister.manualFieldHint": "Подготовленные поля недоступны; введите имена полей вручную.",
+  "datasetRegister.schemaChanged": "Сохранённое поле отсутствует в подготовленной схеме. Выберите доступное поле перед сохранением.",
 };
 
 const ja: TranslationCatalog = {
@@ -368,6 +448,22 @@ const ja: TranslationCatalog = {
   "datasetRegister.referenceField": "参照フィールド（出力）",
   "datasetRegister.inputFieldHint": "プロンプト入力として使用するレコード フィールド（省略可能）",
   "datasetRegister.referenceFieldHint": "期待される回答を保持するレコード フィールド（省略可能）",
+  "datasetRegister.metadata": "評価プロファイル",
+  "datasetRegister.metadataHint": "このバージョンに再利用可能なタスクと言語のメタデータを追加します。",
+  "datasetRegister.capabilities": "機能",
+  "datasetRegister.languages": "言語",
+  "datasetRegister.evaluationType": "評価タイプ",
+  "datasetRegister.removeCapability": "機能を削除",
+  "datasetRegister.removeLanguage": "言語を削除",
+  "datasetRegister.multiValueHint": "Enter またはカンマで追加し、Backspace で最後の値を削除します。",
+  "datasetRegister.typeClassification": "分類",
+  "datasetRegister.typeGeneration": "生成",
+  "datasetRegister.typeCode": "コード",
+  "datasetRegister.typeLanguageModeling": "言語モデリング",
+  "datasetRegister.typeCustom": "カスタム",
+  "datasetRegister.schemaLoading": "選択可能な準備済みフィールドを読み込み中…",
+  "datasetRegister.manualFieldHint": "準備済みフィールドを利用できません。フィールド名を手動で入力してください。",
+  "datasetRegister.schemaChanged": "保存済みフィールドが準備済みスキーマにありません。保存前に利用可能なフィールドを選択してください。",
 };
 
 const ko: TranslationCatalog = {
@@ -427,6 +523,22 @@ const ko: TranslationCatalog = {
   "datasetRegister.referenceField": "참조 필드(출력)",
   "datasetRegister.inputFieldHint": "프롬프트 입력으로 사용되는 레코드 필드(선택 사항)",
   "datasetRegister.referenceFieldHint": "예상 답변이 포함된 레코드 필드(선택 사항)",
+  "datasetRegister.metadata": "평가 프로필",
+  "datasetRegister.metadataHint": "이 버전에 재사용 가능한 작업 및 언어 메타데이터를 추가합니다.",
+  "datasetRegister.capabilities": "기능",
+  "datasetRegister.languages": "언어",
+  "datasetRegister.evaluationType": "평가 유형",
+  "datasetRegister.removeCapability": "기능 제거",
+  "datasetRegister.removeLanguage": "언어 제거",
+  "datasetRegister.multiValueHint": "Enter 또는 쉼표로 추가하고 Backspace로 마지막 값을 제거합니다.",
+  "datasetRegister.typeClassification": "분류",
+  "datasetRegister.typeGeneration": "생성",
+  "datasetRegister.typeCode": "코드",
+  "datasetRegister.typeLanguageModeling": "언어 모델링",
+  "datasetRegister.typeCustom": "사용자 지정",
+  "datasetRegister.schemaLoading": "선택할 준비된 필드를 읽는 중…",
+  "datasetRegister.manualFieldHint": "준비된 필드를 사용할 수 없습니다. 필드 이름을 직접 입력하세요.",
+  "datasetRegister.schemaChanged": "저장된 필드가 준비된 스키마에 없습니다. 저장하기 전에 사용 가능한 필드를 선택하세요.",
 };
 
 const ms: TranslationCatalog = {
@@ -486,6 +598,22 @@ const ms: TranslationCatalog = {
   "datasetRegister.referenceField": "Medan rujukan (output)",
   "datasetRegister.inputFieldHint": "Medan rekod pilihan yang digunakan sebagai input prom",
   "datasetRegister.referenceFieldHint": "Medan rekod pilihan yang mengandungi jawapan yang dijangkakan",
+  "datasetRegister.metadata": "Profil penilaian",
+  "datasetRegister.metadataHint": "Lampirkan metadata tugas dan bahasa yang boleh diguna semula pada versi ini.",
+  "datasetRegister.capabilities": "Keupayaan",
+  "datasetRegister.languages": "Bahasa",
+  "datasetRegister.evaluationType": "Jenis penilaian",
+  "datasetRegister.removeCapability": "Alih keluar keupayaan",
+  "datasetRegister.removeLanguage": "Alih keluar bahasa",
+  "datasetRegister.multiValueHint": "Tekan Enter atau koma untuk menambah; Backspace membuang nilai terakhir.",
+  "datasetRegister.typeClassification": "Pengelasan",
+  "datasetRegister.typeGeneration": "Penjanaan",
+  "datasetRegister.typeCode": "Kod",
+  "datasetRegister.typeLanguageModeling": "Pemodelan bahasa",
+  "datasetRegister.typeCustom": "Tersuai",
+  "datasetRegister.schemaLoading": "Membaca medan yang disediakan untuk dipilih…",
+  "datasetRegister.manualFieldHint": "Medan yang disediakan tidak tersedia; masukkan nama medan secara manual.",
+  "datasetRegister.schemaChanged": "Medan tersimpan tiada dalam skema yang disediakan. Pilih medan tersedia sebelum menyimpan.",
 };
 
 export const catalogs: Record<Locale, TranslationCatalog> = { en, "zh-CN": zhCN, fr, de, ru, ja, ko, ms };
@@ -498,7 +626,7 @@ export function resolveLocale(value: string | null | undefined): Locale {
   return isLocale(value) ? value : "en";
 }
 
-export const workspaceViews = ["dashboard", "guide", "models", "datasets", "runs", "analysis", "settings"] as const;
+export const workspaceViews = ["dashboard", "guide", "models", "datasets", "runs", "leaderboard", "analysis", "settings"] as const;
 export type WorkspaceView = typeof workspaceViews[number];
 export type NavigationGroupId = "overview" | "configure" | "operations" | "insights" | "system";
 
@@ -516,28 +644,28 @@ function navigation(groups: [string, string, string, string, string], items: Arr
 
 export const navigationCopy: Record<Locale, NavigationCopy> = {
   en: navigation(["Overview", "Configure", "Operations", "Insights", "System"], [
-    ["Dashboard", "Operational status and recent work"], ["Guide", "Step-by-step usage walkthrough"], ["Models", "Endpoints and capabilities"], ["Datasets", "Versioned data sources"], ["Runs", "Execution, results, and evidence"], ["Analysis", "Matrices and run comparisons"], ["Settings", "Health, access, and preferences"],
+    ["Dashboard", "Operational status and recent work"], ["Guide", "Step-by-step usage walkthrough"], ["Models", "Endpoints and capabilities"], ["Datasets", "Versioned data sources"], ["Runs", "Execution, results, and evidence"], ["Leaderboard", "Global rankings and run discovery"], ["Analysis", "Evidence plots and run comparisons"], ["Settings", "Health, access, and preferences"],
   ]),
   "zh-CN": navigation(["概览", "配置", "运营", "洞察", "系统"], [
-    ["仪表盘", "运行状态和近期工作"], ["指南", "分步使用说明"], ["模型", "端点与能力"], ["数据集", "版本化数据源"], ["运行", "执行、结果与证据"], ["分析", "矩阵与运行对比"], ["设置", "运行状况、访问和偏好设置"],
+    ["仪表盘", "运行状态和近期工作"], ["指南", "分步使用说明"], ["模型", "端点与能力"], ["数据集", "版本化数据源"], ["运行", "执行、结果与证据"], ["排行榜", "全局排名和运行发现"], ["分析", "证据图和运行对比"], ["设置", "运行状况、访问和偏好设置"],
   ]),
   fr: navigation(["Aperçu", "Configuration", "Opérations", "Analyses", "Système"], [
-    ["Tableau de bord", "État opérationnel et travaux récents"], ["Guide", "Parcours d’utilisation pas à pas"], ["Modèles", "Points de terminaison et capacités"], ["Jeux de données", "Sources de données versionnées"], ["Exécutions", "Exécution, résultats et preuves"], ["Analyse", "Matrices et comparaisons d’exécutions"], ["Paramètres", "État, accès et préférences"],
+    ["Tableau de bord", "État opérationnel et travaux récents"], ["Guide", "Parcours d’utilisation pas à pas"], ["Modèles", "Points de terminaison et capacités"], ["Jeux de données", "Sources de données versionnées"], ["Exécutions", "Exécution, résultats et preuves"], ["Classement", "Classement global et recherche d’exécutions"], ["Analyse", "Graphiques de preuves et comparaisons"], ["Paramètres", "État, accès et préférences"],
   ]),
   de: navigation(["Übersicht", "Konfiguration", "Betrieb", "Einblicke", "System"], [
-    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Leitfaden", "Schritt-für-Schritt-Anleitung"], ["Modelle", "Endpunkte und Fähigkeiten"], ["Datensätze", "Versionierte Datenquellen"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Analyse", "Matrizen und Ausführungsvergleiche"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
+    ["Dashboard", "Betriebsstatus und aktuelle Arbeit"], ["Leitfaden", "Schritt-für-Schritt-Anleitung"], ["Modelle", "Endpunkte und Fähigkeiten"], ["Datensätze", "Versionierte Datenquellen"], ["Ausführungen", "Ausführung, Ergebnisse und Nachweise"], ["Rangliste", "Globale Rangfolge und Ausführungssuche"], ["Analyse", "Evidenzdiagramme und Ausführungsvergleiche"], ["Einstellungen", "Status, Zugriff und Präferenzen"],
   ]),
   ru: navigation(["Обзор", "Настройка", "Операции", "Аналитика", "Система"], [
-    ["Панель", "Рабочее состояние и недавние задачи"], ["Руководство", "Пошаговое руководство по использованию"], ["Модели", "Конечные точки и возможности"], ["Наборы данных", "Версионируемые источники данных"], ["Запуски", "Выполнение, результаты и доказательства"], ["Анализ", "Матрицы и сравнения запусков"], ["Настройки", "Состояние, доступ и предпочтения"],
+    ["Панель", "Рабочее состояние и недавние задачи"], ["Руководство", "Пошаговое руководство по использованию"], ["Модели", "Конечные точки и возможности"], ["Наборы данных", "Версионируемые источники данных"], ["Запуски", "Выполнение, результаты и доказательства"], ["Рейтинг", "Общий рейтинг и поиск запусков"], ["Анализ", "Графики данных и сравнения запусков"], ["Настройки", "Состояние, доступ и предпочтения"],
   ]),
   ja: navigation(["概要", "設定", "運用", "分析情報", "システム"], [
-    ["ダッシュボード", "運用状況と最近の作業"], ["ガイド", "ステップバイステップの使い方"], ["モデル", "エンドポイントと機能"], ["データセット", "バージョン管理されたデータソース"], ["実行", "実行、結果、証拠"], ["分析", "マトリクスと実行比較"], ["設定", "状態、アクセス、設定"],
+    ["ダッシュボード", "運用状況と最近の作業"], ["ガイド", "ステップバイステップの使い方"], ["モデル", "エンドポイントと機能"], ["データセット", "バージョン管理されたデータソース"], ["実行", "実行、結果、証拠"], ["ランキング", "全体順位と実行の検索"], ["分析", "証拠プロットと実行比較"], ["設定", "状態、アクセス、設定"],
   ]),
   ko: navigation(["개요", "구성", "운영", "인사이트", "시스템"], [
-    ["대시보드", "운영 상태 및 최근 작업"], ["가이드", "단계별 사용 안내"], ["모델", "엔드포인트 및 기능"], ["데이터 세트", "버전 관리 데이터 원본"], ["실행", "실행, 결과 및 증거"], ["분석", "매트릭스 및 실행 비교"], ["설정", "상태, 액세스 및 기본 설정"],
+    ["대시보드", "운영 상태 및 최근 작업"], ["가이드", "단계별 사용 안내"], ["모델", "엔드포인트 및 기능"], ["데이터 세트", "버전 관리 데이터 원본"], ["실행", "실행, 결과 및 증거"], ["순위표", "전체 순위 및 실행 검색"], ["분석", "증거 플롯 및 실행 비교"], ["설정", "상태, 액세스 및 기본 설정"],
   ]),
   ms: navigation(["Gambaran keseluruhan", "Konfigurasi", "Operasi", "Wawasan", "Sistem"], [
-    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Panduan", "Panduan penggunaan langkah demi langkah"], ["Model", "Titik akhir dan keupayaan"], ["Set data", "Sumber data berversi"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Analisis", "Matriks dan perbandingan larian"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
+    ["Papan pemuka", "Status operasi dan kerja terkini"], ["Panduan", "Panduan penggunaan langkah demi langkah"], ["Model", "Titik akhir dan keupayaan"], ["Set data", "Sumber data berversi"], ["Larian", "Pelaksanaan, hasil dan bukti"], ["Papan kedudukan", "Kedudukan global dan penemuan larian"], ["Analisis", "Plot bukti dan perbandingan larian"], ["Tetapan", "Kesihatan, akses dan keutamaan"],
   ]),
 };
 
@@ -546,7 +674,7 @@ export type WorkspacePageTabCopy = {
   guide: { gettingStarted: string; prepareData: string; runAndAnalyze: string };
   models: { modelInventory: string; addEndpoint: string; inventoryDescription: string; endpointDescription: string };
   datasets: { datasetInventory: string; registerDataset: string };
-  runs: { runInventory: string; launchEvaluation: string; runDetails: string };
+  runs: { runInventory: string; quickStart: string; datasetEvaluation: string; runDetails: string };
   analysis: { evidenceMatrix: string; compareRuns: string };
   settings: { health: string; access: string; preferences: string };
 };
@@ -557,7 +685,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Getting started", prepareData: "Prepare data", runAndAnalyze: "Run and analyze" },
     models: { modelInventory: "Model inventory", addEndpoint: "Add endpoint", inventoryDescription: "Test and inspect configured endpoints", endpointDescription: "Connection, limits, costs, and credentials" },
     datasets: { datasetInventory: "Dataset inventory", registerDataset: "Register dataset" },
-    runs: { runInventory: "Run inventory", launchEvaluation: "Launch evaluation", runDetails: "Run details" },
+    runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
     analysis: { evidenceMatrix: "Evidence matrix", compareRuns: "Compare runs" },
     settings: { health: "Health", access: "Access", preferences: "Preferences" },
   },
@@ -566,7 +694,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "开始使用", prepareData: "准备数据", runAndAnalyze: "运行与分析" },
     models: { modelInventory: "模型清单", addEndpoint: "添加端点", inventoryDescription: "测试并检查已配置的端点", endpointDescription: "连接、限制、成本和凭据" },
     datasets: { datasetInventory: "数据集清单", registerDataset: "注册数据集" },
-    runs: { runInventory: "运行清单", launchEvaluation: "启动评测", runDetails: "运行详情" },
+    runs: { runInventory: "运行清单", quickStart: "快速开始", datasetEvaluation: "数据集评测", runDetails: "运行详情" },
     analysis: { evidenceMatrix: "证据矩阵", compareRuns: "比较运行" },
     settings: { health: "健康状态", access: "访问", preferences: "偏好设置" },
   },
@@ -575,7 +703,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Bien démarrer", prepareData: "Préparer les données", runAndAnalyze: "Exécuter et analyser" },
     models: { modelInventory: "Inventaire des modèles", addEndpoint: "Ajouter un point de terminaison", inventoryDescription: "Tester et inspecter les points de terminaison configurés", endpointDescription: "Connexion, limites, coûts et identifiants" },
     datasets: { datasetInventory: "Inventaire des jeux de données", registerDataset: "Enregistrer un jeu de données" },
-    runs: { runInventory: "Inventaire des exécutions", launchEvaluation: "Lancer une évaluation", runDetails: "Détails de l’exécution" },
+    runs: { runInventory: "Inventaire des exécutions", quickStart: "Démarrage rapide", datasetEvaluation: "Évaluation du jeu de données", runDetails: "Détails de l’exécution" },
     analysis: { evidenceMatrix: "Matrice de preuves", compareRuns: "Comparer les exécutions" },
     settings: { health: "Santé", access: "Accès", preferences: "Préférences" },
   },
@@ -584,7 +712,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Erste Schritte", prepareData: "Daten vorbereiten", runAndAnalyze: "Ausführen und analysieren" },
     models: { modelInventory: "Modellübersicht", addEndpoint: "Endpunkt hinzufügen", inventoryDescription: "Konfigurierte Endpunkte testen und prüfen", endpointDescription: "Verbindung, Limits, Kosten und Zugangsdaten" },
     datasets: { datasetInventory: "Datensatzübersicht", registerDataset: "Datensatz registrieren" },
-    runs: { runInventory: "Ausführungsübersicht", launchEvaluation: "Evaluierung starten", runDetails: "Ausführungsdetails" },
+    runs: { runInventory: "Ausführungsübersicht", quickStart: "Schnellstart", datasetEvaluation: "Datensatz-Evaluierung", runDetails: "Ausführungsdetails" },
     analysis: { evidenceMatrix: "Evidenzmatrix", compareRuns: "Ausführungen vergleichen" },
     settings: { health: "Systemzustand", access: "Zugriff", preferences: "Einstellungen" },
   },
@@ -593,7 +721,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Начало работы", prepareData: "Подготовка данных", runAndAnalyze: "Запуск и анализ" },
     models: { modelInventory: "Инвентарь моделей", addEndpoint: "Добавить конечную точку", inventoryDescription: "Тестирование и проверка настроенных конечных точек", endpointDescription: "Подключение, ограничения, стоимость и учётные данные" },
     datasets: { datasetInventory: "Инвентарь наборов данных", registerDataset: "Зарегистрировать набор данных" },
-    runs: { runInventory: "Инвентарь запусков", launchEvaluation: "Запустить оценку", runDetails: "Сведения о запуске" },
+    runs: { runInventory: "Инвентарь запусков", quickStart: "Быстрый запуск", datasetEvaluation: "Оценка набора данных", runDetails: "Сведения о запуске" },
     analysis: { evidenceMatrix: "Матрица доказательств", compareRuns: "Сравнить запуски" },
     settings: { health: "Состояние", access: "Доступ", preferences: "Настройки" },
   },
@@ -602,7 +730,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "はじめに", prepareData: "データを準備", runAndAnalyze: "実行と分析" },
     models: { modelInventory: "モデル一覧", addEndpoint: "エンドポイントを追加", inventoryDescription: "設定済みエンドポイントのテストと確認", endpointDescription: "接続、制限、コスト、認証情報" },
     datasets: { datasetInventory: "データセット一覧", registerDataset: "データセットを登録" },
-    runs: { runInventory: "実行一覧", launchEvaluation: "評価を開始", runDetails: "実行の詳細" },
+    runs: { runInventory: "実行一覧", quickStart: "クイックスタート", datasetEvaluation: "データセット評価", runDetails: "実行の詳細" },
     analysis: { evidenceMatrix: "証拠マトリクス", compareRuns: "実行を比較" },
     settings: { health: "正常性", access: "アクセス", preferences: "設定" },
   },
@@ -611,7 +739,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "시작하기", prepareData: "데이터 준비", runAndAnalyze: "실행 및 분석" },
     models: { modelInventory: "모델 인벤토리", addEndpoint: "엔드포인트 추가", inventoryDescription: "구성된 엔드포인트 테스트 및 검사", endpointDescription: "연결, 제한, 비용 및 자격 증명" },
     datasets: { datasetInventory: "데이터 세트 인벤토리", registerDataset: "데이터 세트 등록" },
-    runs: { runInventory: "실행 인벤토리", launchEvaluation: "평가 시작", runDetails: "실행 세부 정보" },
+    runs: { runInventory: "실행 인벤토리", quickStart: "빠른 시작", datasetEvaluation: "데이터 세트 평가", runDetails: "실행 세부 정보" },
     analysis: { evidenceMatrix: "증거 매트릭스", compareRuns: "실행 비교" },
     settings: { health: "상태", access: "액세스", preferences: "기본 설정" },
   },
@@ -620,10 +748,123 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     guide: { gettingStarted: "Bermula", prepareData: "Sediakan data", runAndAnalyze: "Jalankan dan analisis" },
     models: { modelInventory: "Inventori model", addEndpoint: "Tambah titik akhir", inventoryDescription: "Uji dan periksa titik akhir yang dikonfigurasi", endpointDescription: "Sambungan, had, kos dan kelayakan" },
     datasets: { datasetInventory: "Inventori set data", registerDataset: "Daftar set data" },
-    runs: { runInventory: "Inventori larian", launchEvaluation: "Lancarkan penilaian", runDetails: "Butiran larian" },
+    runs: { runInventory: "Inventori larian", quickStart: "Mula pantas", datasetEvaluation: "Penilaian set data", runDetails: "Butiran larian" },
     analysis: { evidenceMatrix: "Matriks bukti", compareRuns: "Bandingkan larian" },
     settings: { health: "Kesihatan", access: "Akses", preferences: "Keutamaan" },
   },
+};
+
+const runDetailKeys = [
+  "sectionsLabel", "overview", "metrics", "evidence", "lifecycle", "reports", "reviews",
+  "runId", "benchmark", "endpoint", "created", "started", "completed", "effectiveMetric",
+  "performanceTitle", "completion", "accuracy", "successRate", "errorRate", "averageLatency", "p95Latency", "tokens", "cost", "loadingSummary",
+  "metricsTitle", "metricsDescription", "metric", "value", "samples", "availability", "notAvailable", "noNamedMetrics",
+  "capabilityEvidence", "noCapabilityEvidence", "strongest", "weakest", "runSignals", "noRunSignals",
+  "lifecycleTitle", "lifecycleHint", "noLogs", "task", "sample",
+] as const;
+
+export type RunDetailCopy = Record<typeof runDetailKeys[number], string>;
+
+function runDetail(values: readonly string[]): RunDetailCopy {
+  return Object.fromEntries(runDetailKeys.map((key, index) => [key, values[index]])) as RunDetailCopy;
+}
+
+export const runDetailCopy: Record<Locale, RunDetailCopy> = {
+  en: runDetail(["Run detail sections", "Overview", "Metrics", "Evidence", "Lifecycle", "Reports", "Reviews", "Run ID", "Benchmark", "Endpoint", "Created", "Started", "Completed", "Evaluation metric", "Performance summary", "Completion", "Accuracy", "Success rate", "Error rate", "Average latency", "P95 latency", "Tokens", "Cost", "Loading summary…", "Named evaluation metrics", "Task-aware metrics remain explicit when their evidence is unavailable.", "Metric", "Value", "Samples", "Availability", "N/A", "No named metrics were materialized for this run.", "Capability evidence", "No scored capability evidence yet.", "Strongest", "Weakest", "Run signals", "No significant anomalies or regressions detected.", "Durable run log", "Refreshes with live run events", "No task or sample lifecycle events have been recorded.", "task", "sample"]),
+  "zh-CN": runDetail(["运行详情分区", "概览", "指标", "证据", "生命周期", "报告", "审核", "运行 ID", "基准", "端点", "创建时间", "开始时间", "完成时间", "有效指标", "性能摘要", "完成度", "准确率", "成功率", "错误率", "平均延迟", "P95 延迟", "词元", "成本", "正在加载摘要…", "命名评测指标", "当证据不可用时，任务感知指标会明确说明原因。", "指标", "值", "样本", "可用性", "不适用", "此运行尚未生成命名指标。", "能力证据", "尚无已评分的能力证据。", "最强", "最弱", "运行信号", "未检测到显著异常或回归。", "持久运行日志", "随实时运行事件刷新", "尚未记录任务或样本生命周期事件。", "任务", "样本"]),
+  fr: runDetail(["Sections du détail de l’exécution", "Aperçu", "Métriques", "Preuves", "Cycle de vie", "Rapports", "Revues", "ID d’exécution", "Benchmark", "Point de terminaison", "Créée", "Démarrée", "Terminée", "Métrique effective", "Résumé des performances", "Progression", "Exactitude", "Taux de réussite", "Taux d’erreur", "Latence moyenne", "Latence P95", "Jetons", "Coût", "Chargement du résumé…", "Métriques d’évaluation nommées", "Les métriques propres à la tâche expliquent explicitement l’absence de preuves.", "Métrique", "Valeur", "Échantillons", "Disponibilité", "N/D", "Aucune métrique nommée n’a été produite pour cette exécution.", "Preuves par capacité", "Aucune preuve de capacité notée pour le moment.", "Meilleure", "Plus faible", "Signaux d’exécution", "Aucune anomalie ou régression significative détectée.", "Journal durable de l’exécution", "Actualisé avec les événements en direct", "Aucun événement de cycle de vie de tâche ou d’échantillon n’a été enregistré.", "tâche", "échantillon"]),
+  de: runDetail(["Abschnitte der Ausführungsdetails", "Übersicht", "Metriken", "Evidenz", "Lebenszyklus", "Berichte", "Prüfungen", "Ausführungs-ID", "Benchmark", "Endpunkt", "Erstellt", "Gestartet", "Abgeschlossen", "Wirksame Metrik", "Leistungsübersicht", "Fortschritt", "Genauigkeit", "Erfolgsrate", "Fehlerrate", "Durchschnittliche Latenz", "P95-Latenz", "Token", "Kosten", "Zusammenfassung wird geladen…", "Benannte Evaluierungsmetriken", "Aufgabenspezifische Metriken erklären fehlende Evidenz ausdrücklich.", "Metrik", "Wert", "Stichproben", "Verfügbarkeit", "k. A.", "Für diese Ausführung wurden keine benannten Metriken erstellt.", "Fähigkeitsevidenz", "Noch keine bewertete Fähigkeitsevidenz.", "Stärkste", "Schwächste", "Ausführungssignale", "Keine signifikanten Anomalien oder Regressionen erkannt.", "Dauerhaftes Ausführungsprotokoll", "Wird mit Live-Ereignissen aktualisiert", "Es wurden keine Aufgaben- oder Stichprobenereignisse aufgezeichnet.", "Aufgabe", "Stichprobe"]),
+  ru: runDetail(["Разделы сведений о запуске", "Обзор", "Метрики", "Данные", "Жизненный цикл", "Отчёты", "Проверки", "ID запуска", "Бенчмарк", "Конечная точка", "Создан", "Запущен", "Завершён", "Итоговая метрика", "Сводка производительности", "Выполнение", "Точность", "Доля успехов", "Доля ошибок", "Средняя задержка", "Задержка P95", "Токены", "Стоимость", "Загрузка сводки…", "Именованные метрики оценки", "Метрики задачи явно объясняют отсутствие необходимых данных.", "Метрика", "Значение", "Примеры", "Доступность", "Н/Д", "Для этого запуска нет рассчитанных именованных метрик.", "Данные по возможностям", "Оценённых данных по возможностям пока нет.", "Сильнейшая", "Слабейшая", "Сигналы запуска", "Значимых аномалий или регрессий не обнаружено.", "Постоянный журнал запуска", "Обновляется по событиям запуска", "События жизненного цикла задач или примеров не записаны.", "задача", "пример"]),
+  ja: runDetail(["実行詳細セクション", "概要", "指標", "証拠", "ライフサイクル", "レポート", "レビュー", "実行 ID", "ベンチマーク", "エンドポイント", "作成日時", "開始日時", "完了日時", "有効な指標", "パフォーマンス概要", "完了率", "正解率", "成功率", "エラー率", "平均レイテンシ", "P95 レイテンシ", "トークン", "コスト", "概要を読み込み中…", "名前付き評価指標", "タスク固有の証拠がない場合は理由を明示します。", "指標", "値", "サンプル", "利用可否", "該当なし", "この実行には名前付き指標がありません。", "能力の証拠", "スコア付き能力証拠はまだありません。", "最強", "最弱", "実行シグナル", "重大な異常や回帰は検出されませんでした。", "永続実行ログ", "実行イベントに応じて更新", "タスクまたはサンプルのライフサイクルイベントは記録されていません。", "タスク", "サンプル"]),
+  ko: runDetail(["실행 세부 섹션", "개요", "지표", "증거", "수명 주기", "보고서", "검토", "실행 ID", "벤치마크", "엔드포인트", "생성", "시작", "완료", "적용 지표", "성능 요약", "완료율", "정확도", "성공률", "오류율", "평균 지연 시간", "P95 지연 시간", "토큰", "비용", "요약을 불러오는 중…", "명명된 평가 지표", "작업별 증거가 없으면 그 이유를 명확히 표시합니다.", "지표", "값", "샘플", "가용성", "해당 없음", "이 실행에는 생성된 명명 지표가 없습니다.", "기능 증거", "점수가 있는 기능 증거가 아직 없습니다.", "최강", "최약", "실행 신호", "중요한 이상 또는 회귀가 감지되지 않았습니다.", "영구 실행 로그", "실시간 실행 이벤트로 새로 고침", "작업 또는 샘플 수명 주기 이벤트가 기록되지 않았습니다.", "작업", "샘플"]),
+  ms: runDetail(["Bahagian butiran larian", "Gambaran keseluruhan", "Metrik", "Bukti", "Kitar hayat", "Laporan", "Semakan", "ID larian", "Penanda aras", "Titik akhir", "Dicipta", "Dimulakan", "Selesai", "Metrik berkesan", "Ringkasan prestasi", "Penyelesaian", "Ketepatan", "Kadar kejayaan", "Kadar ralat", "Kependaman purata", "Kependaman P95", "Token", "Kos", "Memuatkan ringkasan…", "Metrik penilaian bernama", "Metrik mengikut tugas menerangkan bukti yang tidak tersedia dengan jelas.", "Metrik", "Nilai", "Sampel", "Ketersediaan", "T/B", "Tiada metrik bernama dijana untuk larian ini.", "Bukti keupayaan", "Belum ada bukti keupayaan berskor.", "Terkuat", "Terlemah", "Isyarat larian", "Tiada anomali atau regresi ketara dikesan.", "Log larian tahan lama", "Disegar semula dengan peristiwa larian langsung", "Tiada peristiwa kitar hayat tugas atau sampel direkodkan.", "tugas", "sampel"]),
+};
+
+export type AnalysisScatterCopy = {
+  controlsTitle: string; controlsDescription: string; horizontalAxis: string; verticalAxis: string; runs: string; allRuns: string; runsSelected: string; includeRun: string;
+  filters: string; fromDate: string; toDate: string; model: string; dataset: string; status: string; capability: string; language: string; evaluationType: string; all: string;
+  minScore: string; maxScore: string; minAccuracy: string; maxAccuracy: string; minLatency: string; maxLatency: string; minCost: string; maxCost: string;
+  applyFilters: string; applying: string; resetFilters: string; chooseRun: string; loadError: string; loading: string; retry: string;
+  chartTitle: string; chartDescription: string; of: string; eligibleRunsPlotted: string; noPoints: string; modelLegend: string; scatterChart: string; selectedPoint: string;
+  availabilityTitle: string; unavailableSummary: string; xAxis: string; yAxis: string; truncatedSummary: string;
+  resultsTitle: string; resultsDescription: string; rows: string; run: string; created: string;
+};
+
+const analysisScatterEnglish: AnalysisScatterCopy = {
+  controlsTitle: "Evidence controls", controlsDescription: "Choose independent axes, runs, and evidence filters before updating the bounded view.", horizontalAxis: "Horizontal axis", verticalAxis: "Vertical axis", runs: "Runs", allRuns: "All runs", runsSelected: "runs selected", includeRun: "Include",
+  filters: "Filters", fromDate: "From date", toDate: "To date", model: "Model", dataset: "Dataset", status: "Status", capability: "Capability", language: "Language", evaluationType: "Evaluation type", all: "All",
+  minScore: "Minimum score", maxScore: "Maximum score", minAccuracy: "Minimum accuracy", maxAccuracy: "Maximum accuracy", minLatency: "Minimum latency (ms)", maxLatency: "Maximum latency (ms)", minCost: "Minimum cost", maxCost: "Maximum cost",
+  applyFilters: "Apply filters", applying: "Applying…", resetFilters: "Reset filters", chooseRun: "Select at least one run.", loadError: "Scatter evidence could not be loaded.", loading: "Loading scatter evidence…", retry: "Retry",
+  chartTitle: "Evidence scatter", chartDescription: "Each point is one immutable run. Select a point to inspect the same values listed in the evidence table.", of: "of", eligibleRunsPlotted: "eligible runs plotted", noPoints: "No runs have both selected axis values for the current filters.", modelLegend: "Model legend", scatterChart: "Evaluation evidence scatter chart", selectedPoint: "Selected evidence point",
+  availabilityTitle: "Evidence availability", unavailableSummary: "runs omitted because an axis value is unavailable.", xAxis: "X axis", yAxis: "Y axis", truncatedSummary: "additional plottable runs were not rendered because the {{limit}}-point limit was reached.",
+  resultsTitle: "Plotted evidence", resultsDescription: "Accessible table equivalent of every rendered point.", rows: "rows", run: "Run", created: "Created",
+};
+
+export const analysisScatterCopy: Record<Locale, AnalysisScatterCopy> = {
+  en: analysisScatterEnglish,
+  "zh-CN": { ...analysisScatterEnglish, controlsTitle: "证据控制", controlsDescription: "选择独立坐标轴、运行和证据筛选条件，然后更新有界视图。", horizontalAxis: "横轴", verticalAxis: "纵轴", runs: "运行", allRuns: "所有运行", runsSelected: "个运行已选择", includeRun: "包含", filters: "筛选条件", fromDate: "开始日期", toDate: "结束日期", model: "模型", dataset: "数据集", status: "状态", capability: "能力", language: "语言", evaluationType: "评测类型", all: "全部", minScore: "最低分数", maxScore: "最高分数", minAccuracy: "最低准确率", maxAccuracy: "最高准确率", minLatency: "最低延迟（毫秒）", maxLatency: "最高延迟（毫秒）", minCost: "最低成本", maxCost: "最高成本", applyFilters: "应用筛选", applying: "正在应用…", resetFilters: "重置筛选", chooseRun: "请至少选择一个运行。", loadError: "无法加载散点证据。", loading: "正在加载散点证据…", retry: "重试", chartTitle: "证据散点图", chartDescription: "每个点代表一个不可变运行。选择点可检查证据表中的相同值。", of: "/", eligibleRunsPlotted: "个符合条件的运行已绘制", noPoints: "当前筛选下没有同时具备两个坐标轴值的运行。", modelLegend: "模型图例", scatterChart: "评测证据散点图", selectedPoint: "已选择的证据点", availabilityTitle: "证据可用性", unavailableSummary: "个运行因缺少坐标轴值而省略。", xAxis: "X 轴", yAxis: "Y 轴", truncatedSummary: "个额外可绘制运行因达到 {{limit}} 点上限而未渲染。", resultsTitle: "已绘制证据", resultsDescription: "与每个已渲染点等价的无障碍表格。", rows: "行", run: "运行", created: "创建时间" },
+  fr: { ...analysisScatterEnglish, controlsTitle: "Contrôles des preuves", controlsDescription: "Choisissez des axes indépendants, des exécutions et des filtres avant d’actualiser la vue limitée.", horizontalAxis: "Axe horizontal", verticalAxis: "Axe vertical", runs: "Exécutions", allRuns: "Toutes les exécutions", runsSelected: "exécutions sélectionnées", includeRun: "Inclure", filters: "Filtres", fromDate: "Date de début", toDate: "Date de fin", model: "Modèle", dataset: "Jeu de données", status: "État", capability: "Capacité", language: "Langue", evaluationType: "Type d’évaluation", all: "Tous", minScore: "Score minimal", maxScore: "Score maximal", minAccuracy: "Exactitude minimale", maxAccuracy: "Exactitude maximale", minLatency: "Latence minimale (ms)", maxLatency: "Latence maximale (ms)", minCost: "Coût minimal", maxCost: "Coût maximal", applyFilters: "Appliquer les filtres", applying: "Application…", resetFilters: "Réinitialiser", chooseRun: "Sélectionnez au moins une exécution.", loadError: "Les preuves du nuage de points n’ont pas pu être chargées.", loading: "Chargement des preuves…", retry: "Réessayer", chartTitle: "Nuage de preuves", chartDescription: "Chaque point représente une exécution immuable. Sélectionnez-le pour consulter les mêmes valeurs dans le tableau.", of: "sur", eligibleRunsPlotted: "exécutions admissibles tracées", noPoints: "Aucune exécution ne possède les deux valeurs d’axe avec ces filtres.", modelLegend: "Légende des modèles", scatterChart: "Nuage de points des preuves d’évaluation", selectedPoint: "Point de preuve sélectionné", availabilityTitle: "Disponibilité des preuves", unavailableSummary: "exécutions omises faute de valeur d’axe.", xAxis: "Axe X", yAxis: "Axe Y", truncatedSummary: "exécutions traçables supplémentaires non rendues car la limite de {{limit}} points est atteinte.", resultsTitle: "Preuves tracées", resultsDescription: "Tableau accessible équivalent à chaque point rendu.", rows: "lignes", run: "Exécution", created: "Créée" },
+  de: { ...analysisScatterEnglish, controlsTitle: "Evidenzsteuerung", controlsDescription: "Wählen Sie unabhängige Achsen, Ausführungen und Filter, bevor Sie die begrenzte Ansicht aktualisieren.", horizontalAxis: "Horizontale Achse", verticalAxis: "Vertikale Achse", runs: "Ausführungen", allRuns: "Alle Ausführungen", runsSelected: "Ausführungen ausgewählt", includeRun: "Einbeziehen", filters: "Filter", fromDate: "Von Datum", toDate: "Bis Datum", model: "Modell", dataset: "Datensatz", status: "Status", capability: "Fähigkeit", language: "Sprache", evaluationType: "Evaluierungstyp", all: "Alle", minScore: "Mindestwert", maxScore: "Höchstwert", minAccuracy: "Mindestgenauigkeit", maxAccuracy: "Höchstgenauigkeit", minLatency: "Minimale Latenz (ms)", maxLatency: "Maximale Latenz (ms)", minCost: "Minimale Kosten", maxCost: "Maximale Kosten", applyFilters: "Filter anwenden", applying: "Wird angewendet…", resetFilters: "Filter zurücksetzen", chooseRun: "Wählen Sie mindestens eine Ausführung.", loadError: "Die Streudiagramm-Evidenz konnte nicht geladen werden.", loading: "Streudiagramm-Evidenz wird geladen…", retry: "Erneut versuchen", chartTitle: "Evidenz-Streudiagramm", chartDescription: "Jeder Punkt ist eine unveränderliche Ausführung. Wählen Sie ihn aus, um dieselben Tabellenwerte zu prüfen.", of: "von", eligibleRunsPlotted: "geeigneten Ausführungen dargestellt", noPoints: "Keine Ausführung besitzt für diese Filter beide Achsenwerte.", modelLegend: "Modelllegende", scatterChart: "Streudiagramm der Evaluierungsevidenz", selectedPoint: "Ausgewählter Evidenzpunkt", availabilityTitle: "Evidenzverfügbarkeit", unavailableSummary: "Ausführungen wegen fehlendem Achsenwert ausgelassen.", xAxis: "X-Achse", yAxis: "Y-Achse", truncatedSummary: "weitere darstellbare Ausführungen wegen des Limits von {{limit}} Punkten nicht gerendert.", resultsTitle: "Dargestellte Evidenz", resultsDescription: "Barrierefreie Tabellenentsprechung jedes gerenderten Punkts.", rows: "Zeilen", run: "Ausführung", created: "Erstellt" },
+  ru: { ...analysisScatterEnglish, controlsTitle: "Управление данными", controlsDescription: "Выберите независимые оси, запуски и фильтры перед обновлением ограниченного представления.", horizontalAxis: "Горизонтальная ось", verticalAxis: "Вертикальная ось", runs: "Запуски", allRuns: "Все запуски", runsSelected: "запусков выбрано", includeRun: "Включить", filters: "Фильтры", fromDate: "Дата с", toDate: "Дата по", model: "Модель", dataset: "Набор данных", status: "Состояние", capability: "Возможность", language: "Язык", evaluationType: "Тип оценки", all: "Все", minScore: "Минимальный балл", maxScore: "Максимальный балл", minAccuracy: "Минимальная точность", maxAccuracy: "Максимальная точность", minLatency: "Минимальная задержка (мс)", maxLatency: "Максимальная задержка (мс)", minCost: "Минимальная стоимость", maxCost: "Максимальная стоимость", applyFilters: "Применить фильтры", applying: "Применение…", resetFilters: "Сбросить фильтры", chooseRun: "Выберите хотя бы один запуск.", loadError: "Не удалось загрузить данные диаграммы.", loading: "Загрузка данных диаграммы…", retry: "Повторить", chartTitle: "Диаграмма доказательств", chartDescription: "Каждая точка — неизменяемый запуск. Выберите точку, чтобы проверить те же значения в таблице.", of: "из", eligibleRunsPlotted: "подходящих запусков показано", noPoints: "Нет запусков с обоими значениями осей для текущих фильтров.", modelLegend: "Легенда моделей", scatterChart: "Диаграмма данных оценки", selectedPoint: "Выбранная точка", availabilityTitle: "Доступность данных", unavailableSummary: "запусков пропущено из-за отсутствующего значения оси.", xAxis: "Ось X", yAxis: "Ось Y", truncatedSummary: "дополнительных запусков не показано из-за ограничения в {{limit}} точек.", resultsTitle: "Показанные данные", resultsDescription: "Доступная таблица, эквивалентная всем показанным точкам.", rows: "строк", run: "Запуск", created: "Создан" },
+  ja: { ...analysisScatterEnglish, controlsTitle: "証拠コントロール", controlsDescription: "独立した軸、実行、証拠フィルターを選択して、制限付きビューを更新します。", horizontalAxis: "横軸", verticalAxis: "縦軸", runs: "実行", allRuns: "すべての実行", runsSelected: "件の実行を選択", includeRun: "含める", filters: "フィルター", fromDate: "開始日", toDate: "終了日", model: "モデル", dataset: "データセット", status: "状態", capability: "機能", language: "言語", evaluationType: "評価タイプ", all: "すべて", minScore: "最小スコア", maxScore: "最大スコア", minAccuracy: "最小精度", maxAccuracy: "最大精度", minLatency: "最小レイテンシ（ms）", maxLatency: "最大レイテンシ（ms）", minCost: "最小コスト", maxCost: "最大コスト", applyFilters: "フィルターを適用", applying: "適用中…", resetFilters: "フィルターをリセット", chooseRun: "実行を1件以上選択してください。", loadError: "散布図の証拠を読み込めませんでした。", loading: "散布図の証拠を読み込み中…", retry: "再試行", chartTitle: "証拠散布図", chartDescription: "各点は変更不可能な実行です。点を選択すると証拠表の同じ値を確認できます。", of: "/", eligibleRunsPlotted: "件の対象実行を描画", noPoints: "現在のフィルターでは両方の軸値を持つ実行がありません。", modelLegend: "モデル凡例", scatterChart: "評価証拠散布図", selectedPoint: "選択した証拠点", availabilityTitle: "証拠の可用性", unavailableSummary: "件の実行は軸値がないため省略されました。", xAxis: "X 軸", yAxis: "Y 軸", truncatedSummary: "件の追加実行は {{limit}} 点の上限に達したため描画されませんでした。", resultsTitle: "描画済み証拠", resultsDescription: "描画した全点と同等のアクセシブルな表です。", rows: "行", run: "実行", created: "作成日時" },
+  ko: { ...analysisScatterEnglish, controlsTitle: "증거 제어", controlsDescription: "독립 축, 실행 및 증거 필터를 선택한 뒤 제한된 보기를 업데이트합니다.", horizontalAxis: "가로축", verticalAxis: "세로축", runs: "실행", allRuns: "모든 실행", runsSelected: "개 실행 선택됨", includeRun: "포함", filters: "필터", fromDate: "시작 날짜", toDate: "종료 날짜", model: "모델", dataset: "데이터 세트", status: "상태", capability: "기능", language: "언어", evaluationType: "평가 유형", all: "전체", minScore: "최소 점수", maxScore: "최대 점수", minAccuracy: "최소 정확도", maxAccuracy: "최대 정확도", minLatency: "최소 지연 시간(ms)", maxLatency: "최대 지연 시간(ms)", minCost: "최소 비용", maxCost: "최대 비용", applyFilters: "필터 적용", applying: "적용 중…", resetFilters: "필터 재설정", chooseRun: "실행을 하나 이상 선택하세요.", loadError: "산점도 증거를 불러올 수 없습니다.", loading: "산점도 증거 불러오는 중…", retry: "다시 시도", chartTitle: "증거 산점도", chartDescription: "각 점은 변경 불가능한 실행입니다. 점을 선택하면 증거 표의 동일한 값을 확인할 수 있습니다.", of: "/", eligibleRunsPlotted: "개 적격 실행 표시", noPoints: "현재 필터에서 두 축 값을 모두 가진 실행이 없습니다.", modelLegend: "모델 범례", scatterChart: "평가 증거 산점도", selectedPoint: "선택한 증거 점", availabilityTitle: "증거 가용성", unavailableSummary: "개 실행이 축 값 없음으로 제외되었습니다.", xAxis: "X축", yAxis: "Y축", truncatedSummary: "개 추가 실행은 {{limit}}개 점 제한에 도달해 렌더링되지 않았습니다.", resultsTitle: "표시된 증거", resultsDescription: "렌더링된 모든 점과 동등한 접근성 표입니다.", rows: "행", run: "실행", created: "생성됨" },
+  ms: { ...analysisScatterEnglish, controlsTitle: "Kawalan bukti", controlsDescription: "Pilih paksi bebas, larian dan penapis bukti sebelum mengemas kini paparan terhad.", horizontalAxis: "Paksi mendatar", verticalAxis: "Paksi menegak", runs: "Larian", allRuns: "Semua larian", runsSelected: "larian dipilih", includeRun: "Sertakan", filters: "Penapis", fromDate: "Tarikh mula", toDate: "Tarikh tamat", model: "Model", dataset: "Set data", status: "Status", capability: "Keupayaan", language: "Bahasa", evaluationType: "Jenis penilaian", all: "Semua", minScore: "Skor minimum", maxScore: "Skor maksimum", minAccuracy: "Ketepatan minimum", maxAccuracy: "Ketepatan maksimum", minLatency: "Kependaman minimum (ms)", maxLatency: "Kependaman maksimum (ms)", minCost: "Kos minimum", maxCost: "Kos maksimum", applyFilters: "Gunakan penapis", applying: "Menggunakan…", resetFilters: "Tetapkan semula penapis", chooseRun: "Pilih sekurang-kurangnya satu larian.", loadError: "Bukti plot serak tidak dapat dimuatkan.", loading: "Memuatkan bukti plot serak…", retry: "Cuba lagi", chartTitle: "Plot serak bukti", chartDescription: "Setiap titik ialah satu larian tidak berubah. Pilih titik untuk memeriksa nilai yang sama dalam jadual.", of: "daripada", eligibleRunsPlotted: "larian layak diplot", noPoints: "Tiada larian mempunyai kedua-dua nilai paksi untuk penapis semasa.", modelLegend: "Petunjuk model", scatterChart: "Plot serak bukti penilaian", selectedPoint: "Titik bukti dipilih", availabilityTitle: "Ketersediaan bukti", unavailableSummary: "larian ditinggalkan kerana nilai paksi tidak tersedia.", xAxis: "Paksi X", yAxis: "Paksi Y", truncatedSummary: "larian tambahan yang boleh diplot tidak dipaparkan kerana had {{limit}} titik dicapai.", resultsTitle: "Bukti diplot", resultsDescription: "Jadual boleh dicapai yang setara dengan setiap titik dipaparkan.", rows: "baris", run: "Larian", created: "Dicipta" },
+};
+
+export type ComparisonCopy = {
+  sourcesTitle: string; sourcesDescription: string; runA: string; runB: string; selectCompleted: string; compare: string; comparing: string; sameRun: string; incompatible: string;
+  title: string; description: string; loading: string; empty: string; sharedSamples: string; notAvailable: string; tokens: string;
+  metricCharts: string; noMetricsDescription: string; noMetrics: string; unitScaleDescription: string; quality: string; performance: string; cost: string; usage: string; languageModeling: string; otherMetrics: string;
+  outcomeTitle: string; outcomeDescription: string; bothCorrect: string; aOnlyCorrect: string; bOnlyCorrect: string; bothIncorrect: string;
+  exactTitle: string; exactDescription: string; metrics: string; metric: string; samples: string; delta: string; unit: string;
+};
+
+const comparisonEnglish: ComparisonCopy = {
+  sourcesTitle: "Comparison sources", sourcesDescription: "Choose two distinct completed snapshots from the same benchmark version. Differences are Run A minus Run B.", runA: "Run A", runB: "Run B", selectCompleted: "Select completed run", compare: "Compare runs", comparing: "Comparing…", sameRun: "Choose two different runs.", incompatible: "Choose runs from the same benchmark version.",
+  title: "Comparison evidence", description: "Select two source runs to expose shared outcomes and complete metric deltas.", loading: "Comparing selected runs…", empty: "Choose two completed runs to begin an evidence-backed comparison.", sharedSamples: "shared samples", notAvailable: "N/A", tokens: "tokens",
+  metricCharts: "Metric comparison", noMetricsDescription: "No named metrics were materialized for this pair.", noMetrics: "Named metric evidence is unavailable for this comparison.", unitScaleDescription: "Bars share a scale only with metrics in this unit group; exact values remain in the table.", quality: "Quality", performance: "Performance", cost: "Cost", usage: "Usage", languageModeling: "Language modeling", otherMetrics: "Other metrics",
+  outcomeTitle: "Outcome distribution", outcomeDescription: "Shared samples grouped by whether both, one, or neither run was correct.", bothCorrect: "Both correct", aOnlyCorrect: "A only correct", bOnlyCorrect: "B only correct", bothIncorrect: "Both incorrect",
+  exactTitle: "Exact metric values", exactDescription: "Authoritative values, sample counts, units, deltas, and unavailable reasons for every named metric.", metrics: "metrics", metric: "Metric", samples: "Samples", delta: "A - B", unit: "Unit",
+};
+
+export const comparisonCopy: Record<Locale, ComparisonCopy> = {
+  en: comparisonEnglish,
+  "zh-CN": { ...comparisonEnglish, sourcesTitle: "比较来源", sourcesDescription: "选择同一基准版本的两个不同已完成快照。差值为运行 A 减运行 B。", runA: "运行 A", runB: "运行 B", selectCompleted: "选择已完成运行", compare: "比较运行", comparing: "正在比较…", sameRun: "请选择两个不同的运行。", incompatible: "请选择同一基准版本的运行。", title: "比较证据", description: "选择两个来源运行以查看共享结果和完整指标差值。", loading: "正在比较所选运行…", empty: "选择两个已完成运行以开始有证据支持的比较。", sharedSamples: "个共享样本", notAvailable: "不可用", tokens: "令牌", metricCharts: "指标比较", noMetricsDescription: "此运行对没有已物化的命名指标。", noMetrics: "此比较没有可用的命名指标证据。", unitScaleDescription: "条形仅与同一单位组内的指标共享比例；精确值保留在表中。", quality: "质量", performance: "性能", cost: "成本", usage: "用量", languageModeling: "语言建模", otherMetrics: "其他指标", outcomeTitle: "结果分布", outcomeDescription: "按两个、一个或均未答对来分组共享样本。", bothCorrect: "两者都正确", aOnlyCorrect: "仅 A 正确", bOnlyCorrect: "仅 B 正确", bothIncorrect: "两者都错误", exactTitle: "精确指标值", exactDescription: "每个命名指标的权威值、样本数、单位、差值和不可用原因。", metrics: "个指标", metric: "指标", samples: "样本", delta: "A - B", unit: "单位" },
+  fr: { ...comparisonEnglish, sourcesTitle: "Sources de comparaison", sourcesDescription: "Choisissez deux instantanés terminés distincts de la même version de benchmark. Les écarts sont A moins B.", runA: "Exécution A", runB: "Exécution B", selectCompleted: "Sélectionner une exécution terminée", compare: "Comparer", comparing: "Comparaison…", sameRun: "Choisissez deux exécutions différentes.", incompatible: "Choisissez des exécutions de la même version de benchmark.", title: "Preuves de comparaison", description: "Sélectionnez deux exécutions pour afficher les résultats partagés et tous les écarts de métriques.", loading: "Comparaison des exécutions…", empty: "Choisissez deux exécutions terminées pour commencer.", sharedSamples: "échantillons partagés", notAvailable: "N/D", tokens: "jetons", metricCharts: "Comparaison des métriques", noMetricsDescription: "Aucune métrique nommée n’a été matérialisée pour cette paire.", noMetrics: "Les preuves métriques ne sont pas disponibles.", unitScaleDescription: "Les barres partagent une échelle uniquement dans ce groupe d’unités ; les valeurs exactes restent dans le tableau.", quality: "Qualité", performance: "Performance", cost: "Coût", usage: "Utilisation", languageModeling: "Modélisation du langage", otherMetrics: "Autres métriques", outcomeTitle: "Répartition des résultats", outcomeDescription: "Échantillons partagés selon que les deux, une seule ou aucune exécution est correcte.", bothCorrect: "Les deux correctes", aOnlyCorrect: "A seule correcte", bOnlyCorrect: "B seule correcte", bothIncorrect: "Les deux incorrectes", exactTitle: "Valeurs métriques exactes", exactDescription: "Valeurs, nombres d’échantillons, unités, écarts et motifs d’indisponibilité de chaque métrique.", metrics: "métriques", metric: "Métrique", samples: "Échantillons", delta: "A - B", unit: "Unité" },
+  de: { ...comparisonEnglish, sourcesTitle: "Vergleichsquellen", sourcesDescription: "Wählen Sie zwei verschiedene abgeschlossene Snapshots derselben Benchmark-Version. Differenzen sind A minus B.", runA: "Ausführung A", runB: "Ausführung B", selectCompleted: "Abgeschlossene Ausführung wählen", compare: "Ausführungen vergleichen", comparing: "Vergleich läuft…", sameRun: "Wählen Sie zwei verschiedene Ausführungen.", incompatible: "Wählen Sie Ausführungen derselben Benchmark-Version.", title: "Vergleichsevidenz", description: "Wählen Sie zwei Ausführungen für gemeinsame Ergebnisse und vollständige Metrikdifferenzen.", loading: "Ausführungen werden verglichen…", empty: "Wählen Sie zwei abgeschlossene Ausführungen für den Vergleich.", sharedSamples: "gemeinsame Stichproben", notAvailable: "N/V", tokens: "Token", metricCharts: "Metrikvergleich", noMetricsDescription: "Für dieses Paar wurden keine benannten Metriken materialisiert.", noMetrics: "Benannte Metrikevidenz ist nicht verfügbar.", unitScaleDescription: "Balken teilen ihre Skala nur innerhalb dieser Einheitengruppe; exakte Werte stehen in der Tabelle.", quality: "Qualität", performance: "Leistung", cost: "Kosten", usage: "Nutzung", languageModeling: "Sprachmodellierung", otherMetrics: "Andere Metriken", outcomeTitle: "Ergebnisverteilung", outcomeDescription: "Gemeinsame Stichproben danach, ob beide, eine oder keine Ausführung korrekt war.", bothCorrect: "Beide korrekt", aOnlyCorrect: "Nur A korrekt", bOnlyCorrect: "Nur B korrekt", bothIncorrect: "Beide falsch", exactTitle: "Exakte Metrikwerte", exactDescription: "Maßgebliche Werte, Stichprobenzahlen, Einheiten, Differenzen und Nichtverfügbarkeitsgründe.", metrics: "Metriken", metric: "Metrik", samples: "Stichproben", delta: "A - B", unit: "Einheit" },
+  ru: { ...comparisonEnglish, sourcesTitle: "Источники сравнения", runA: "Запуск A", runB: "Запуск B", selectCompleted: "Выберите завершённый запуск", compare: "Сравнить запуски", comparing: "Сравнение…", sameRun: "Выберите два разных запуска.", incompatible: "Выберите запуски одной версии теста.", title: "Данные сравнения", loading: "Сравнение выбранных запусков…", empty: "Выберите два завершённых запуска для сравнения.", sharedSamples: "общих примеров", notAvailable: "Н/Д", tokens: "токенов", metricCharts: "Сравнение метрик", quality: "Качество", performance: "Производительность", cost: "Стоимость", usage: "Использование", languageModeling: "Языковое моделирование", otherMetrics: "Другие метрики", outcomeTitle: "Распределение результатов", bothCorrect: "Оба верны", aOnlyCorrect: "Только A верен", bOnlyCorrect: "Только B верен", bothIncorrect: "Оба неверны", exactTitle: "Точные значения метрик", metrics: "метрик", metric: "Метрика", samples: "Примеры", delta: "A - B", unit: "Единица" },
+  ja: { ...comparisonEnglish, sourcesTitle: "比較元", runA: "実行 A", runB: "実行 B", selectCompleted: "完了した実行を選択", compare: "実行を比較", comparing: "比較中…", sameRun: "異なる2件の実行を選択してください。", incompatible: "同じベンチマーク バージョンの実行を選択してください。", title: "比較証拠", loading: "選択した実行を比較中…", empty: "完了した実行を2件選択して比較を開始します。", sharedSamples: "件の共有サンプル", notAvailable: "利用不可", tokens: "トークン", metricCharts: "指標比較", quality: "品質", performance: "性能", cost: "コスト", usage: "使用量", languageModeling: "言語モデリング", otherMetrics: "その他の指標", outcomeTitle: "結果分布", bothCorrect: "両方正解", aOnlyCorrect: "A のみ正解", bOnlyCorrect: "B のみ正解", bothIncorrect: "両方不正解", exactTitle: "正確な指標値", metrics: "指標", metric: "指標", samples: "サンプル", delta: "A - B", unit: "単位" },
+  ko: { ...comparisonEnglish, sourcesTitle: "비교 원본", runA: "실행 A", runB: "실행 B", selectCompleted: "완료된 실행 선택", compare: "실행 비교", comparing: "비교 중…", sameRun: "서로 다른 두 실행을 선택하세요.", incompatible: "같은 벤치마크 버전의 실행을 선택하세요.", title: "비교 증거", loading: "선택한 실행 비교 중…", empty: "완료된 실행 두 개를 선택하여 비교를 시작하세요.", sharedSamples: "개 공유 샘플", notAvailable: "해당 없음", tokens: "토큰", metricCharts: "지표 비교", quality: "품질", performance: "성능", cost: "비용", usage: "사용량", languageModeling: "언어 모델링", otherMetrics: "기타 지표", outcomeTitle: "결과 분포", bothCorrect: "둘 다 정답", aOnlyCorrect: "A만 정답", bOnlyCorrect: "B만 정답", bothIncorrect: "둘 다 오답", exactTitle: "정확한 지표 값", metrics: "개 지표", metric: "지표", samples: "샘플", delta: "A - B", unit: "단위" },
+  ms: { ...comparisonEnglish, sourcesTitle: "Sumber perbandingan", runA: "Larian A", runB: "Larian B", selectCompleted: "Pilih larian selesai", compare: "Bandingkan larian", comparing: "Membandingkan…", sameRun: "Pilih dua larian berbeza.", incompatible: "Pilih larian daripada versi penanda aras yang sama.", title: "Bukti perbandingan", loading: "Membandingkan larian dipilih…", empty: "Pilih dua larian selesai untuk memulakan perbandingan.", sharedSamples: "sampel dikongsi", notAvailable: "T/T", tokens: "token", metricCharts: "Perbandingan metrik", quality: "Kualiti", performance: "Prestasi", cost: "Kos", usage: "Penggunaan", languageModeling: "Pemodelan bahasa", otherMetrics: "Metrik lain", outcomeTitle: "Taburan hasil", bothCorrect: "Kedua-dua betul", aOnlyCorrect: "A sahaja betul", bOnlyCorrect: "B sahaja betul", bothIncorrect: "Kedua-dua salah", exactTitle: "Nilai metrik tepat", metrics: "metrik", metric: "Metrik", samples: "Sampel", delta: "A - B", unit: "Unit" },
+};
+
+export type LeaderboardCopy = {
+  eyebrow: string; title: string; description: string; rankingExplanation: string;
+  filtersTitle: string; filtersDescription: string; dataset: string; model: string; status: string; fromDate: string; toDate: string; capability: string; language: string; evaluationType: string; availableMetric: string; all: string;
+  apply: string; applying: string; reset: string; activeFilters: string; removeFilter: string;
+  resultsTitle: string; resultsDescription: string; runs: string; loading: string; loadError: string; retry: string; empty: string;
+  name: string; averageLatency: string; p95Latency: string; score: string; cost: string; samples: string; created: string; inspect: string; notAvailable: string;
+  page: string; of: string; previous: string; next: string; sortBy: string; direction: string; ascending: string; descending: string; defaultOrder: string; restoreDefault: string;
+};
+
+const leaderboardEnglish: LeaderboardCopy = {
+  eyebrow: "Operations", title: "Leaderboard", description: "Rank and discover every non-archived evaluation run with server-backed filters, ordering, and bounded pages.", rankingExplanation: "Completed and scored runs rank first by primary score, then p95 latency, cost, and recency. Unscored and incomplete runs remain visible below them.",
+  filtersTitle: "Leaderboard filters", filtersDescription: "Combine dataset, model, lifecycle, date, capability, language, task type, and metric-availability filters.", dataset: "Dataset", model: "Model", status: "Status", fromDate: "From date", toDate: "To date", capability: "Capability", language: "Language", evaluationType: "Evaluation type", availableMetric: "Available metric", all: "All",
+  apply: "Apply filters", applying: "Applying…", reset: "Reset filters", activeFilters: "Active filters", removeFilter: "Remove",
+  resultsTitle: "Ranked runs", resultsDescription: "All ordering and pagination is evaluated by the service; unavailable values are never treated as zero.", runs: "runs", loading: "Loading leaderboard…", loadError: "The leaderboard could not be loaded.", retry: "Retry", empty: "No runs match the current filters.",
+  name: "Name", averageLatency: "Average latency", p95Latency: "p95 latency", score: "Score", cost: "Cost", samples: "Samples", created: "Created", inspect: "Inspect", notAvailable: "N/A",
+  page: "Page", of: "of", previous: "Previous page", next: "Next page", sortBy: "Sort by", direction: "Sort direction", ascending: "Ascending", descending: "Descending", defaultOrder: "Ranked order", restoreDefault: "Restore ranked order",
+};
+
+export const leaderboardCopy: Record<Locale, LeaderboardCopy> = {
+  en: leaderboardEnglish,
+  "zh-CN": { ...leaderboardEnglish, eyebrow: "运营", title: "排行榜", description: "使用服务端筛选、排序和分页，对所有未归档评测运行进行排名与查找。", rankingExplanation: "已完成且有评分的运行按主要分数、p95 延迟、成本和时间排序；未评分和未完成运行仍显示在其后。", filtersTitle: "排行榜筛选", apply: "应用筛选", applying: "正在应用…", reset: "重置筛选", resultsTitle: "运行排名", runs: "个运行", loading: "正在加载排行榜…", retry: "重试", empty: "没有运行符合当前筛选。", name: "名称", score: "分数", cost: "成本", samples: "样本", created: "创建时间", inspect: "查看", previous: "上一页", next: "下一页" },
+  fr: { ...leaderboardEnglish, eyebrow: "Opérations", title: "Classement", description: "Classez et retrouvez chaque exécution non archivée avec des filtres, un tri et des pages gérés par le service.", rankingExplanation: "Les exécutions terminées et notées sont classées par score principal, latence p95, coût et récence. Les autres restent visibles ensuite.", filtersTitle: "Filtres du classement", apply: "Appliquer les filtres", applying: "Application…", reset: "Réinitialiser", resultsTitle: "Exécutions classées", runs: "exécutions", loading: "Chargement du classement…", retry: "Réessayer", empty: "Aucune exécution ne correspond aux filtres.", name: "Nom", score: "Score", cost: "Coût", samples: "Échantillons", created: "Créée", inspect: "Inspecter", previous: "Page précédente", next: "Page suivante" },
+  de: { ...leaderboardEnglish, eyebrow: "Betrieb", title: "Rangliste", description: "Ordnen und finden Sie alle nicht archivierten Ausführungen mit serverseitigen Filtern, Sortierung und begrenzten Seiten.", rankingExplanation: "Abgeschlossene bewertete Ausführungen werden nach Primärwert, p95-Latenz, Kosten und Aktualität geordnet; alle anderen bleiben darunter sichtbar.", filtersTitle: "Ranglistenfilter", apply: "Filter anwenden", applying: "Wird angewendet…", reset: "Filter zurücksetzen", resultsTitle: "Geordnete Ausführungen", runs: "Ausführungen", loading: "Rangliste wird geladen…", retry: "Erneut versuchen", empty: "Keine Ausführung entspricht den Filtern.", name: "Name", score: "Wert", cost: "Kosten", samples: "Stichproben", created: "Erstellt", inspect: "Prüfen", previous: "Vorherige Seite", next: "Nächste Seite" },
+  ru: { ...leaderboardEnglish, eyebrow: "Операции", title: "Рейтинг", filtersTitle: "Фильтры рейтинга", apply: "Применить фильтры", applying: "Применение…", reset: "Сбросить фильтры", resultsTitle: "Рейтинг запусков", runs: "запусков", loading: "Загрузка рейтинга…", retry: "Повторить", empty: "Нет запусков, соответствующих фильтрам.", name: "Название", score: "Балл", cost: "Стоимость", samples: "Примеры", created: "Создан", inspect: "Открыть", previous: "Предыдущая страница", next: "Следующая страница" },
+  ja: { ...leaderboardEnglish, eyebrow: "運用", title: "ランキング", filtersTitle: "ランキング フィルター", apply: "フィルターを適用", applying: "適用中…", reset: "フィルターをリセット", resultsTitle: "実行ランキング", runs: "件の実行", loading: "ランキングを読み込み中…", retry: "再試行", empty: "現在のフィルターに一致する実行はありません。", name: "名前", score: "スコア", cost: "コスト", samples: "サンプル", created: "作成日時", inspect: "確認", previous: "前のページ", next: "次のページ" },
+  ko: { ...leaderboardEnglish, eyebrow: "운영", title: "순위표", filtersTitle: "순위표 필터", apply: "필터 적용", applying: "적용 중…", reset: "필터 재설정", resultsTitle: "실행 순위", runs: "개 실행", loading: "순위표 불러오는 중…", retry: "다시 시도", empty: "현재 필터와 일치하는 실행이 없습니다.", name: "이름", score: "점수", cost: "비용", samples: "샘플", created: "생성됨", inspect: "검사", previous: "이전 페이지", next: "다음 페이지" },
+  ms: { ...leaderboardEnglish, eyebrow: "Operasi", title: "Papan kedudukan", filtersTitle: "Penapis papan kedudukan", apply: "Gunakan penapis", applying: "Menggunakan…", reset: "Tetapkan semula penapis", resultsTitle: "Kedudukan larian", runs: "larian", loading: "Memuatkan papan kedudukan…", retry: "Cuba lagi", empty: "Tiada larian sepadan dengan penapis semasa.", name: "Nama", score: "Skor", cost: "Kos", samples: "Sampel", created: "Dicipta", inspect: "Periksa", previous: "Halaman sebelumnya", next: "Halaman seterusnya" },
 };
 
 export type ShellCopy = {

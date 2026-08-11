@@ -6,6 +6,7 @@ const iconPaths = {
   models: "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0",
   datasets: "M4 6c0-2 16-2 16 0s-16 2-16 0zm0 0v6c0 2 16 2 16 0V6m-16 6v6c0 2 16 2 16 0v-6",
   runs: "M8 5v14l11-7z",
+  leaderboard: "M5 20V10h4v10M10 20V4h4v16M15 20v-7h4v7M3 20h18",
   analysis: "M4 19V5m0 14h16M7 15l4-4 3 2 5-6",
   settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 12h2m12 0h2M12 4v2m0 12v2M6.3 6.3l1.4 1.4m8.6 8.6 1.4 1.4m0-11.4-1.4 1.4m-8.6 8.6-1.4 1.4",
 } satisfies Record<View, string>;
