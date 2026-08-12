@@ -7,12 +7,14 @@ from uuid import uuid4
 
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.services.judge_assessments import JudgeAssessmentError, _parse_judge_response
+from app.services.judge_assessments import JudgeAssessmentError
 from app.services.judge_scoring import (
     DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
     DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    JudgeScoringError,
     build_pairwise_judge_input,
     build_single_judge_input,
+    parse_judge_response,
 )
 from app.services.model_executor import ModelExecutor
 
@@ -78,7 +80,7 @@ def assess_mongo_sample_attempt(
         )
     else:
         try:
-            parsed = _parse_judge_response(result.prediction)
+            parsed = parse_judge_response(result.prediction)
             values.update(
                 {
                     "score": parsed["score"],
@@ -88,7 +90,7 @@ def assess_mongo_sample_attempt(
                     "error_message": None,
                 }
             )
-        except JudgeAssessmentError as error:
+        except JudgeScoringError as error:
             values.update({"status": "failed", "error_message": str(error)})
     updated = store.update_document("judge_assessments", str(assessment["id"]), values)
     assert updated is not None
@@ -172,7 +174,7 @@ def assess_mongo_pairwise_sample_attempt(
             values.update({"status": "failed", "error_message": result.error_message or "Judge execution failed."})
         else:
             try:
-                parsed = _parse_judge_response(result.prediction)
+                parsed = parse_judge_response(result.prediction)
                 values.update(
                     {
                         "score": parsed["score"],
@@ -183,7 +185,7 @@ def assess_mongo_pairwise_sample_attempt(
                         "error_message": None,
                     }
                 )
-            except JudgeAssessmentError as error:
+            except JudgeScoringError as error:
                 values.update({"status": "failed", "error_message": str(error)})
         updated = store.update_document("judge_assessments", str(assessment["id"]), values)
         assert updated is not None

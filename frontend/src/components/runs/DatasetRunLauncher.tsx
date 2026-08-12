@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { Dataset, Endpoint, PromptPackage } from "../../api";
 import { datasetMetricIds, type DatasetMetricId } from "../../evaluations/scoringMetrics";
@@ -95,12 +95,7 @@ export function DatasetRunLauncher({
     }));
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    onQueue();
-  }
-
-  return <form className="form workspace-run-launcher" onSubmit={submit}>
+  return <form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); onQueue(); }}>
     <label>{t("datasetRun.dataset")}<select required value={form.dataset_version_id} onChange={(event) => updateForm({ dataset_version_id: event.target.value, input_field: "", reference_field: "" })}><option value="">—</option>{datasets.filter((dataset) => dataset.status === "ready").map((dataset) => <option data-i18n-preserve key={dataset.id} value={dataset.id}>{dataset.dataset_id} v{dataset.version}</option>)}</select></label>
     {handoffDatasetId === form.dataset_version_id && <p className="workspace-launch-note">{t("runLauncher.datasetHandoff")}</p>}
     {datasets.some((dataset) => dataset.status !== "ready") && <p className="muted">{t("datasetRun.nonReadyHint")}</p>}

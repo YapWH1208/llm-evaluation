@@ -74,13 +74,13 @@ def assess_sample_attempt(
         return assessment
 
     try:
-        parsed = _parse_judge_response(result.prediction)
+        parsed = parse_judge_response(result.prediction)
         assessment.score = parsed["score"]
         assessment.label = parsed.get("label")
         assessment.rationale = parsed.get("rationale")
         assessment.status = "succeeded"
         assessment.error_message = None
-    except JudgeAssessmentError as error:
+    except JudgeScoringError as error:
         assessment.status = "failed"
         assessment.error_message = str(error)
     _save_assessment(session, assessment, persist=persist)
@@ -161,14 +161,14 @@ def assess_pairwise_sample_attempt(
             assessment.error_message = result.error_message or "Judge execution failed."
         else:
             try:
-                parsed = _parse_judge_response(result.prediction)
+                parsed = parse_judge_response(result.prediction)
                 assessment.score = parsed["score"]
                 assessment.label = parsed.get("label")
                 assessment.rationale = parsed.get("rationale")
                 assessment.selected_answer = parsed.get("winner")
                 assessment.status = "succeeded"
                 assessment.error_message = None
-            except JudgeAssessmentError as error:
+            except JudgeScoringError as error:
                 assessment.status = "failed"
                 assessment.error_message = str(error)
         session.commit()
@@ -223,10 +223,3 @@ def _normalized_pairwise_decision(assessment: JudgeAssessment | dict[str, Any]) 
     if not isinstance(order, list) or len(order) != 2 or any(item not in {"target", "comparison"} for item in order):
         return selected
     return str(order[0] if selected == "A" else order[1])
-
-
-def _parse_judge_response(prediction: str) -> dict[str, object]:
-    try:
-        return parse_judge_response(prediction)
-    except JudgeScoringError as error:
-        raise JudgeAssessmentError(str(error)) from error
