@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The Configure navigation now includes a `/prompts` page that lists existing
+  versioned prompt packages and creates new versions through the existing API.
 - Every newly created evaluation run receives an immutable, URL-safe display name in
   `<model_name>_<dataset_or_benchmark_name>_<UTC_datetime>` form. Existing runs derive
   the same deterministic label without a destructive backfill.

@@ -34,6 +34,7 @@ import { ModelsPage, type EndpointForm } from "./components/pages/EndpointPages"
 import { AnalysisPage } from "./components/pages/InsightsPages";
 import { LeaderboardPage } from "./components/pages/LeaderboardPage";
 import { RunsPage } from "./components/pages/OperationsPages";
+import { PromptPackagesPage, type PromptPackageCreatePayload } from "./components/pages/PromptPackagesPage";
 import { DatasetRunLauncher, datasetMetricLabelKeys, type DatasetRunForm } from "./components/runs/DatasetRunLauncher";
 import { RunDetailWorkspace } from "./components/runs/RunDetailWorkspace";
 import { SettingsPage } from "./components/pages/SystemPages";
@@ -570,6 +571,20 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
+  async function createPromptPackage(payload: PromptPackageCreatePayload) {
+    setBusy("prompt-package");
+    try {
+      await api.createPromptPackage({ ...payload });
+      showNotice("Versioned prompt package saved.");
+      await refresh();
+    } catch (error) {
+      showError(error);
+      throw error;
+    } finally {
+      setBusy(null);
+    }
+  }
+
 
 
   async function queueDatasetRun() {
@@ -797,6 +812,8 @@ export default function App() {
       />}
 
       {view === "datasets" && <DatasetsPage activeTab={route.tab as WorkspaceTabFor<"datasets">} busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onTabChange={(tab) => navigate("datasets", { tab })} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} registration={<DatasetRegistrationForm busy={busy === "dataset"} onChange={setDatasetForm} onSubmit={createDataset} values={datasetForm} />} />}
+
+      {view === "prompts" && <PromptPackagesPage busy={busy === "prompt-package"} onCreate={createPromptPackage} prompts={prompts} />}
 
 
       {view === "runs" && <RunsPage
