@@ -1,4 +1,4 @@
-export const METRIC_PROFILE_VERSION = "1.0.0";
+export const METRIC_PROFILE_VERSION = "1.1.0";
 
 export const METRIC_DEFINITIONS = {
   score: { label: "Primary score", unit: "ratio", profile: "all" },
@@ -11,6 +11,7 @@ export const METRIC_DEFINITIONS = {
   token_f1: { label: "Token F1", unit: "ratio", profile: "generation" },
   bleu: { label: "BLEU", unit: "ratio", profile: "generation" },
   rouge_l: { label: "ROUGE-L", unit: "ratio", profile: "generation" },
+  llm_judge: { label: "LLM-as-judge", unit: "ratio", profile: "all" },
   "pass@1": { label: "pass@1", unit: "ratio", profile: "code" },
   perplexity: { label: "Perplexity", unit: "perplexity", profile: "language_modeling" },
   completion_rate: { label: "Completion rate", unit: "ratio", profile: "operational" },

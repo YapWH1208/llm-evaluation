@@ -22,6 +22,7 @@ from app.services.model_executor import SampleExecutionResult
 from app.services.run_names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.services.metric_profiles import METRIC_PROFILE_VERSION
 
 
 def _configure_dataset_download(monkeypatch, content: bytes) -> None:
@@ -470,7 +471,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert completed.json()["status"] == "completed"
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
-        assert attempts.json()[0]["metric_evidence"] == {"profile_version": "1.0.0"}
+        assert attempts.json()[0]["metric_evidence"] == {"profile_version": METRIC_PROFILE_VERSION}
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
         assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
         metrics = api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics")

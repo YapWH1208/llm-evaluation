@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import secrets
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +8,12 @@ from uuid import uuid4
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
 from app.services.judge_assessments import JudgeAssessmentError, _parse_judge_response
+from app.services.judge_scoring import (
+    DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+    DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    build_pairwise_judge_input,
+    build_single_judge_input,
+)
 from app.services.model_executor import ModelExecutor
 
 
@@ -50,26 +55,13 @@ def assess_mongo_sample_attempt(
             "created_at": datetime.now(timezone.utc),
         },
     )
-    input_snapshot = {
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an evaluation judge. Return only JSON with score (0 to 1), label, and rationale.",
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "rubric": assessment["rubric"],
-                        "input": attempt["input_snapshot"],
-                        "reference": attempt["reference_snapshot"],
-                        "prediction": attempt.get("parsed_prediction"),
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ]
-    }
+    input_snapshot = build_single_judge_input(
+        system_message=DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+        rubric=assessment["rubric"],
+        input_snapshot=attempt["input_snapshot"],
+        reference_snapshot=attempt["reference_snapshot"],
+        prediction=attempt.get("parsed_prediction"),
+    )
     result = model_executor.execute(
         type("DocumentEndpoint", (), endpoint)(),
         cipher.decrypt(str(endpoint["encrypted_api_key"])),
@@ -162,26 +154,13 @@ def assess_mongo_pairwise_sample_attempt(
             "A": attempt.get("parsed_prediction") if order[0] == "target" else comparison.get("parsed_prediction"),
             "B": comparison.get("parsed_prediction") if order[1] == "comparison" else attempt.get("parsed_prediction"),
         }
-        input_snapshot = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an evaluation judge. Compare two anonymized candidate answers. Return only JSON with score (0 to 1), label, rationale, and winner (A, B, or tie). Do not infer model identity.",
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "rubric": rubric_snapshot,
-                            "input": attempt["input_snapshot"],
-                            "reference": attempt["reference_snapshot"],
-                            "answers": answers,
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ]
-        }
+        input_snapshot = build_pairwise_judge_input(
+            system_message=DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+            rubric=rubric_snapshot,
+            input_snapshot=attempt["input_snapshot"],
+            reference_snapshot=attempt["reference_snapshot"],
+            answers=answers,
+        )
         result = model_executor.execute(
             type("DocumentEndpoint", (), endpoint)(),
             cipher.decrypt(str(endpoint["encrypted_api_key"])),

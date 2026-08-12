@@ -32,13 +32,39 @@ def _by_name(results):
 
 
 def test_metric_registry_is_versioned_and_declares_evidence_and_units() -> None:
-    assert METRIC_PROFILE_VERSION == "1.0.0"
+    assert METRIC_PROFILE_VERSION == "1.1.0"
     assert metric_definition("accuracy").profile == "classification"
     assert metric_definition("f1_macro").required_evidence == (
         "predicted_label",
         "reference_label",
     )
     assert metric_definition("perplexity").unit == "perplexity"
+    assert metric_definition("llm_judge").required_evidence == ("llm_judge.score",)
+
+
+def test_llm_judge_metric_uses_only_successful_judge_evidence() -> None:
+    attempts = [
+        _attempt("first", "reference", metric_evidence={"llm_judge": {"status": "succeeded", "score": 0.75}}),
+        _attempt("second", "reference", metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}}),
+        _attempt("third", "reference", metric_evidence={"llm_judge": {"status": "succeeded", "score": 0.25}}),
+    ]
+
+    enabled = _by_name(compute_profile_metrics(attempts, evaluation_type="generation", include_llm_judge=True))
+    disabled = _by_name(compute_profile_metrics(attempts, evaluation_type="generation"))
+    unavailable = _by_name(
+        compute_profile_metrics(
+            [_attempt("only", "reference", metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}})],
+            evaluation_type="generation",
+            include_llm_judge=True,
+        )
+    )
+
+    assert enabled["llm_judge"].value == 0.5
+    assert enabled["llm_judge"].sample_count == 2
+    assert "llm_judge" not in disabled
+    assert unavailable["llm_judge"].value is None
+    assert unavailable["llm_judge"].sample_count == 0
+    assert "successful" in str(unavailable["llm_judge"].availability_reason).lower()
 
 
 def test_classification_metrics_match_hand_calculated_macro_values() -> None:
@@ -149,7 +175,7 @@ def test_execution_metric_evidence_is_bounded_and_rejects_invalid_log_probabilit
         existing={"trusted_test_result": {"passed": True, "source": "trusted:sandbox"}},
     )
     assert evidence == {
-        "profile_version": "1.0.0",
+        "profile_version": METRIC_PROFILE_VERSION,
         "token_logprobs": [-0.1, -0.2],
         "token_logprobs_complete": True,
         "trusted_test_result": {"passed": True, "source": "trusted:sandbox"},

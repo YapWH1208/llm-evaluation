@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import secrets
 from typing import Any
 from uuid import uuid4
@@ -10,6 +9,14 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher
 from app.db.models import EndpointStatus, EvaluationRun, JudgeAssessment, ModelEndpoint, SampleAttempt
 from app.services.model_executor import ModelExecutor
+from app.services.judge_scoring import (
+    DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+    DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    JudgeScoringError,
+    build_pairwise_judge_input,
+    build_single_judge_input,
+    parse_judge_response,
+)
 
 
 class JudgeAssessmentError(ValueError):
@@ -47,26 +54,13 @@ def assess_sample_attempt(
     session.commit()
     session.refresh(assessment)
 
-    input_snapshot = {
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an evaluation judge. Return only JSON with score (0 to 1), label, and rationale.",
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "rubric": assessment.rubric,
-                        "input": attempt.input_snapshot,
-                        "reference": attempt.reference_snapshot,
-                        "prediction": attempt.parsed_prediction,
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ]
-    }
+    input_snapshot = build_single_judge_input(
+        system_message=DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+        rubric=assessment.rubric,
+        input_snapshot=attempt.input_snapshot,
+        reference_snapshot=attempt.reference_snapshot,
+        prediction=attempt.parsed_prediction,
+    )
     result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
     assessment.raw_response = result.raw_response
     if not result.success or result.prediction is None:
@@ -144,26 +138,13 @@ def assess_pairwise_sample_attempt(
             "A": attempt.parsed_prediction if order[0] == "target" else comparison.parsed_prediction,
             "B": comparison.parsed_prediction if order[1] == "comparison" else attempt.parsed_prediction,
         }
-        input_snapshot = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an evaluation judge. Compare two anonymized candidate answers. Return only JSON with score (0 to 1), label, rationale, and winner (A, B, or tie). Do not infer model identity.",
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "rubric": rubric_snapshot,
-                            "input": attempt.input_snapshot,
-                            "reference": attempt.reference_snapshot,
-                            "answers": answers,
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ]
-        }
+        input_snapshot = build_pairwise_judge_input(
+            system_message=DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+            rubric=rubric_snapshot,
+            input_snapshot=attempt.input_snapshot,
+            reference_snapshot=attempt.reference_snapshot,
+            answers=answers,
+        )
         result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
         assessment.raw_response = result.raw_response
         if not result.success or result.prediction is None:
@@ -236,33 +217,7 @@ def _normalized_pairwise_decision(assessment: JudgeAssessment | dict[str, Any]) 
 
 
 def _parse_judge_response(prediction: str) -> dict[str, object]:
-    text = prediction.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]
-        if text.endswith("```"):
-            text = text[:-3].strip()
     try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise JudgeAssessmentError("Judge response was not valid JSON.") from error
-    if not isinstance(payload, dict):
-        raise JudgeAssessmentError("Judge response must be a JSON object.")
-    try:
-        score = float(payload["score"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise JudgeAssessmentError("Judge response must include a numeric score.") from error
-    if not 0 <= score <= 1:
-        raise JudgeAssessmentError("Judge score must be between 0 and 1.")
-    parsed: dict[str, object] = {"score": score}
-    for field in ("label", "rationale"):
-        value = payload.get(field)
-        if value is not None and not isinstance(value, str):
-            raise JudgeAssessmentError(f"Judge response field {field} must be a string.")
-        if isinstance(value, str):
-            parsed[field] = value
-    winner = payload.get("winner")
-    if winner is not None:
-        if not isinstance(winner, str) or winner not in {"A", "B", "tie"}:
-            raise JudgeAssessmentError("Judge response winner must be A, B, or tie.")
-        parsed["winner"] = winner
-    return parsed
+        return parse_judge_response(prediction)
+    except JudgeScoringError as error:
+        raise JudgeAssessmentError(str(error)) from error

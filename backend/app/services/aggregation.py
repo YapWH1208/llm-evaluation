@@ -15,6 +15,7 @@ from app.services.metric_profiles import (
     compute_profile_metrics,
     evaluation_type_from_snapshot,
 )
+from app.services.judge_scoring import is_llm_judge_rule
 from app.services.run_analysis import latest_attempts, summarize_attempts
 
 
@@ -41,6 +42,7 @@ def recompute_aggregate_metrics(
         attempts,
         total_samples=run.total_samples,
         evaluation_type=evaluation_type_from_snapshot(run.configuration_snapshot),
+        include_llm_judge=_run_uses_llm_judge(run.configuration_snapshot),
     )
     session.execute(
         delete(AggregateMetric).where(AggregateMetric.run_id == run.id)
@@ -102,6 +104,7 @@ def recompute_mongo_aggregate_metrics(
         list(latest.values()),
         total_samples=int(run.get("total_samples", len(latest))),
         evaluation_type=evaluation_type_from_snapshot(run.get("configuration_snapshot")),
+        include_llm_judge=_run_uses_llm_judge(run.get("configuration_snapshot")),
     )
     store.delete_documents(
         "aggregate_metrics",
@@ -142,6 +145,7 @@ def _metrics_for_attempts(
     *,
     total_samples: int,
     evaluation_type: str,
+    include_llm_judge: bool = False,
 ) -> list[MetricResult]:
     summary_attempts = [
         SimpleNamespace(**attempt) if isinstance(attempt, dict) else attempt
@@ -162,7 +166,11 @@ def _metrics_for_attempts(
     completed = len(terminal)
     failed = len(terminal) - len(successful)
 
-    profile_metrics = compute_profile_metrics(attempts, evaluation_type=evaluation_type)
+    profile_metrics = compute_profile_metrics(
+        attempts,
+        evaluation_type=evaluation_type,
+        include_llm_judge=include_llm_judge,
+    )
     profile_names = {metric.metric_name for metric in profile_metrics}
     score_interval = _mean_confidence_interval(scored)
     profile_metrics = [
@@ -202,6 +210,10 @@ def _metrics_for_attempts(
         MetricResult("output_tokens", _as_float(summary["tokens"]["output"]), len(output_tokens)),
         MetricResult("estimated_cost", _as_float(summary["cost"]["estimated"]), len(costs)),
     ]
+
+
+def _run_uses_llm_judge(snapshot: object) -> bool:
+    return isinstance(snapshot, dict) and is_llm_judge_rule(snapshot.get("scoring_rule"))
 
 
 def _value(attempt: Any, key: str) -> Any:

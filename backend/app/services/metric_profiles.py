@@ -5,10 +5,11 @@ import math
 from typing import Any, Iterable
 
 from app.db.models import SampleAttemptStatus
+from app.services.judge_scoring import is_valid_judge_score
 from app.services.scoring import score_prediction
 
 
-METRIC_PROFILE_VERSION = "1.0.0"
+METRIC_PROFILE_VERSION = "1.1.0"
 MAX_RETAINED_TOKEN_LOGPROBS = 100_000
 
 
@@ -43,6 +44,7 @@ _DEFINITIONS = {
         MetricDefinition("token_f1", "Token F1", "ratio", "generation", ("prediction", "reference_text")),
         MetricDefinition("bleu", "BLEU", "ratio", "generation", ("prediction", "reference_text")),
         MetricDefinition("rouge_l", "ROUGE-L", "ratio", "generation", ("prediction", "reference_text")),
+        MetricDefinition("llm_judge", "LLM-as-judge", "ratio", "all", ("llm_judge.score",)),
         MetricDefinition("pass@1", "pass@1", "ratio", "code", ("trusted_passed", "trusted_source")),
         MetricDefinition("perplexity", "Perplexity", "perplexity", "language_modeling", ("complete_token_logprobs",)),
         MetricDefinition("completion_rate", "Completion rate", "ratio", "operational", ("terminal_status",)),
@@ -123,6 +125,7 @@ def compute_profile_metrics(
     attempts: list[Any],
     *,
     evaluation_type: str,
+    include_llm_judge: bool = False,
 ) -> list[MetricResult]:
     successful = [
         attempt
@@ -143,19 +146,43 @@ def compute_profile_metrics(
         )
     ]
     if evaluation_type == "classification":
-        return results + _classification_metrics(successful)
-    if evaluation_type == "generation":
-        return results + _generation_metrics(successful)
-    if evaluation_type == "code":
-        return results + [_pass_at_one(successful)]
-    if evaluation_type == "language_modeling":
-        return results + [_perplexity(successful)]
-    reason = "Metric is unavailable because the dataset uses the custom evaluation profile."
-    return results + [
-        MetricResult(definition.metric_name, None, 0, reason)
-        for definition in _DEFINITIONS.values()
-        if definition.profile not in {"all", "operational"} and definition.metric_name != "accuracy"
-    ]
+        results += _classification_metrics(successful)
+    elif evaluation_type == "generation":
+        results += _generation_metrics(successful)
+    elif evaluation_type == "code":
+        results.append(_pass_at_one(successful))
+    elif evaluation_type == "language_modeling":
+        results.append(_perplexity(successful))
+    else:
+        reason = "Metric is unavailable because the dataset uses the custom evaluation profile."
+        results += [
+            MetricResult(definition.metric_name, None, 0, reason)
+            for definition in _DEFINITIONS.values()
+            if definition.profile not in {"all", "operational"} and definition.metric_name != "accuracy"
+        ]
+    if include_llm_judge:
+        results.append(_llm_judge_metric(successful))
+    return results
+
+
+def _llm_judge_metric(attempts: list[Any]) -> MetricResult:
+    scores: list[float] = []
+    for attempt in attempts:
+        evidence = _value(attempt, "metric_evidence")
+        judge = evidence.get("llm_judge") if isinstance(evidence, dict) else None
+        if not isinstance(judge, dict) or judge.get("status") != "succeeded":
+            continue
+        score = judge.get("score")
+        if is_valid_judge_score(score):
+            scores.append(float(score))
+    if not scores:
+        return MetricResult(
+            "llm_judge",
+            None,
+            0,
+            "No successful LLM-as-judge scores are available for this run.",
+        )
+    return MetricResult("llm_judge", _average(scores), len(scores))
 
 
 def _classification_metrics(attempts: list[Any]) -> list[MetricResult]:

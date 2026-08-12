@@ -95,7 +95,7 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert evidence.json()[0]["sample_metadata"] == {"capability": "reasoning", "language": "en", "difficulty": "basic"}
         assert evidence.json()[0]["human_review_status"] == "unreviewed"
         assert evidence.json()[0]["judge_disagreement"] is False
-        assert evidence.json()[0]["metric_evidence"] == {"profile_version": "1.0.0"}
+        assert evidence.json()[0]["metric_evidence"] == {"profile_version": "1.1.0"}
 
         metrics = client.get(f"/api/v1/analytics/runs/{run_a}/metrics")
         assert metrics.status_code == 200
@@ -109,7 +109,7 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert metrics_by_name["f1_macro"]["availability_reason"]
         assert metrics_by_name["f1_macro"]["metric_label"] == "Macro F1"
         assert metrics_by_name["score"]["aggregation_version"] == "2.0.0"
-        assert metrics_by_name["score"]["profile_version"] == "1.0.0"
+        assert metrics_by_name["score"]["profile_version"] == "1.1.0"
         recomputed = client.post(f"/api/v1/analytics/runs/{run_a}/metrics/recompute")
         assert recomputed.status_code == 200
         assert len(recomputed.json()) == len(metrics_by_name)
