@@ -3,18 +3,19 @@ import { describe, expect, it } from "vitest";
 import { workspacePath, workspacePaths, workspaceRoute } from "./routing";
 
 describe("workspace routing", () => {
-  it("maps exactly the eight retained views to unique canonical paths", () => {
+  it("maps every retained view to a unique canonical path", () => {
     expect(workspacePaths).toEqual({
       dashboard: "/dashboard",
       guide: "/guide",
       models: "/models",
       datasets: "/datasets",
+      prompts: "/prompts",
       runs: "/runs",
       leaderboard: "/leaderboard",
       analysis: "/analysis",
       settings: "/settings",
     });
-    expect(new Set(Object.values(workspacePaths)).size).toBe(8);
+    expect(new Set(Object.values(workspacePaths)).size).toBe(9);
     for (const [view, pathname] of Object.entries(workspacePaths)) {
       expect(workspacePath(view as keyof typeof workspacePaths)).toBe(pathname);
       expect(workspaceRoute(pathname)).toEqual({

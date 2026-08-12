@@ -5,6 +5,7 @@ const iconPaths = {
   guide: "M5 4h9a5 5 0 0 1 5 5v11H10a5 5 0 0 0-5-5z",
   models: "M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0",
   datasets: "M4 6c0-2 16-2 16 0s-16 2-16 0zm0 0v6c0 2 16 2 16 0V6m-16 6v6c0 2 16 2 16 0v-6",
+  prompts: "M6 4h9l3 3v13H6zM15 4v4h4M9 12h6M9 16h6",
   runs: "M8 5v14l11-7z",
   leaderboard: "M5 20V10h4v10M10 20V4h4v16M15 20v-7h4v7M3 20h18",
   analysis: "M4 19V5m0 14h16M7 15l4-4 3 2 5-6",

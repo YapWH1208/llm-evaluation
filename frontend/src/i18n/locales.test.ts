@@ -52,6 +52,7 @@ describe("workspace locale catalog", () => {
       guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
       models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
       datasets: ["datasetInventory", "registerDataset"],
+      prompts: ["promptInventory"],
       runs: ["runInventory", "quickStart", "datasetEvaluation", "runDetails"],
       analysis: ["evidenceMatrix", "compareRuns"],
       settings: ["health", "access", "preferences"],
