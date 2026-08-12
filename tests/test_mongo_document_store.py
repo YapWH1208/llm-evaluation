@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1110,6 +1111,89 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             json=invalid_rule,
         ).status_code == 422
         assert len(store.list_documents("evaluation_runs")) == run_count
+
+
+def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Path) -> None:
+    class JudgeExecutor:
+        def __init__(self) -> None:
+            self.judge_inputs: list[dict[str, Any]] = []
+
+        def execute(self, endpoint: Any, _api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            if endpoint.model_name == "judge-model":
+                self.judge_inputs.append(input_snapshot)
+                return SampleExecutionResult(
+                    True,
+                    {"model": endpoint.model_name},
+                    '{"choices":[{"message":{"content":"{\\"score\\": 0.8, \\"label\\": \\"pass\\"}"}}]}',
+                    '{"score": 0.8, "label": "pass"}',
+                )
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "BLUE")
+
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    executor = JudgeExecutor()
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=executor,
+        document_store=store,
+    )
+    with TestClient(app) as api:
+        target = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "target-model"},
+        ).json()
+        judge = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://judge.example.test/v1", "api_key": "judge-secret", "model_name": "judge-model"},
+        ).json()
+        assert api.post(f"/api/v1/model-endpoints/{target['id']}/connection-test").status_code == 200
+        assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
+        dataset = api.post("/api/v1/datasets", json={"dataset_id": "mongo-judge", "version": "1"}).json()
+        assert api.post(
+            f"/api/v1/datasets/{dataset['id']}/upload",
+            json={
+                "filename": "samples.jsonl",
+                "base64_data": base64.b64encode(b'{"question":"blue sky","answer":"BLUE"}\n').decode("ascii"),
+            },
+        ).status_code == 200
+        system_message = "Judge the target answer using the supplied reference."
+        run = api.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": target["id"],
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "answer",
+                "scoring_rule": {
+                    "type": "llm_judge",
+                    "judge_endpoint_id": judge["id"],
+                    "system_message": system_message,
+                },
+            },
+        )
+        assert run.status_code == 201
+        assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"
+        attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
+        assert len(attempts) == 1
+        assert attempts[0]["status"] == "succeeded"
+        assert attempts[0]["score"] is None
+        judge_evidence = attempts[0]["metric_evidence"]["llm_judge"]
+        assert isinstance(judge_evidence["assessment_id"], str)
+        assert judge_evidence["status"] == "succeeded"
+        assert judge_evidence["score"] == 0.8
+        assert judge_evidence["label"] == "pass"
+        assessments = store.list_documents("judge_assessments", query={"sample_attempt_id": attempts[0]["id"]})
+        assert len(assessments) == 1
+        assert assessments[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"}
+        assert executor.judge_inputs[0]["messages"][0]["content"] == system_message
+        judge_payload = json.loads(executor.judge_inputs[0]["messages"][1]["content"])
+        assert judge_payload["reference"]["answer"] == "BLUE"
 
 
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:

@@ -211,6 +211,30 @@ def is_valid_judge_score(value: object) -> bool:
     )
 
 
+def judge_assessment_evidence(assessment: object) -> dict[str, object]:
+    """Project a durable assessment into the safe, per-attempt metric evidence."""
+
+    status = str(_endpoint_value(assessment, "status", "failed"))
+    evidence: dict[str, object] = {"status": status}
+    assessment_id = _endpoint_value(assessment, "id")
+    if assessment_id is not None:
+        evidence["assessment_id"] = str(assessment_id)
+    score = _endpoint_value(assessment, "score")
+    if is_valid_judge_score(score):
+        evidence["score"] = float(score)
+    for field in ("label", "rationale", "error_message"):
+        value = _endpoint_value(assessment, field)
+        if isinstance(value, str) and value:
+            evidence[field] = value
+    return evidence
+
+
+def judge_failure_evidence(error_message: str) -> dict[str, str]:
+    """Record a judge setup failure without exposing provider request or response data."""
+
+    return {"status": "failed", "error_message": error_message}
+
+
 def _judge_input(*, system_message: str, payload: Mapping[str, object]) -> dict[str, object]:
     return {
         "messages": [

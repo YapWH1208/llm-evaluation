@@ -29,6 +29,8 @@ def assess_sample_attempt(
     sample_attempt_id: str,
     judge_endpoint_id: str,
     rubric: dict[str, Any] | None,
+    system_message: str = DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    persist: bool = True,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
 ) -> JudgeAssessment:
@@ -51,11 +53,13 @@ def assess_sample_attempt(
         status="running",
     )
     session.add(assessment)
-    session.commit()
-    session.refresh(assessment)
+    session.flush()
+    if persist:
+        session.commit()
+        session.refresh(assessment)
 
     input_snapshot = build_single_judge_input(
-        system_message=DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+        system_message=system_message,
         rubric=assessment.rubric,
         input_snapshot=attempt.input_snapshot,
         reference_snapshot=attempt.reference_snapshot,
@@ -66,8 +70,7 @@ def assess_sample_attempt(
     if not result.success or result.prediction is None:
         assessment.status = "failed"
         assessment.error_message = result.error_message or "Judge execution failed."
-        session.commit()
-        session.refresh(assessment)
+        _save_assessment(session, assessment, persist=persist)
         return assessment
 
     try:
@@ -80,9 +83,15 @@ def assess_sample_attempt(
     except JudgeAssessmentError as error:
         assessment.status = "failed"
         assessment.error_message = str(error)
-    session.commit()
-    session.refresh(assessment)
+    _save_assessment(session, assessment, persist=persist)
     return assessment
+
+
+def _save_assessment(session: Session, assessment: JudgeAssessment, *, persist: bool) -> None:
+    session.flush()
+    if persist:
+        session.commit()
+        session.refresh(assessment)
 
 
 def assess_pairwise_sample_attempt(

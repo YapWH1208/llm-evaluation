@@ -23,6 +23,7 @@ def assess_mongo_sample_attempt(
     sample_attempt_id: str,
     judge_endpoint_id: str,
     rubric: dict[str, Any] | None,
+    system_message: str = DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
 ) -> dict[str, Any]:
@@ -56,7 +57,7 @@ def assess_mongo_sample_attempt(
         },
     )
     input_snapshot = build_single_judge_input(
-        system_message=DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+        system_message=system_message,
         rubric=assessment["rubric"],
         input_snapshot=attempt["input_snapshot"],
         reference_snapshot=attempt["reference_snapshot"],

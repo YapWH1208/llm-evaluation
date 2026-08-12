@@ -22,6 +22,12 @@ from app.db import (
 )
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
+from app.services.judge_assessments import JudgeAssessmentError, assess_sample_attempt
+from app.services.judge_scoring import (
+    is_llm_judge_rule,
+    judge_assessment_evidence,
+    judge_failure_evidence,
+)
 from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
@@ -135,7 +141,16 @@ def execute_leased_text_task(
         _mark_attempt_running(session, task, lease_token, attempt)
         result = model_executor.execute(frozen_endpoint, api_key, attempt.input_snapshot)
         _require_current_lease(session, task, lease_token)
-        _record_result(attempt, result, frozen_endpoint)
+        _record_result(
+            session,
+            run,
+            attempt,
+            result,
+            frozen_endpoint,
+            cipher=cipher,
+            model_executor=model_executor,
+        )
+        _require_current_lease(session, task, lease_token)
         if not result.success and _is_retryable(result.error_type, policy):
             retry_sample_ids.append(attempt.sample_id)
             if result.retry_after_seconds is not None:
@@ -425,7 +440,16 @@ def _mark_attempt_running(
     attempt.completed_at = None
     session.commit()
 
-def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoint: Any) -> None:
+def _record_result(
+    session: Session,
+    run: EvaluationRun,
+    attempt: SampleAttempt,
+    result: SampleExecutionResult,
+    endpoint: Any,
+    *,
+    cipher: SecretCipher,
+    model_executor: ModelExecutor,
+) -> None:
     attempt.request_snapshot = result.request_snapshot
     attempt.raw_response = result.raw_response
     attempt.parsed_prediction = result.prediction
@@ -439,6 +463,22 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoi
     )
     attempt.completed_at = datetime.now(timezone.utc)
     if result.success and result.prediction is not None:
+        if is_llm_judge_rule(attempt.reference_snapshot.get("scoring")):
+            attempt.score = None
+            attempt.status = SampleAttemptStatus.SUCCEEDED.value
+            attempt.error_type = None
+            attempt.error_message = None
+            attempt.metric_evidence = {
+                **(attempt.metric_evidence or {}),
+                "llm_judge": _automatic_judge_evidence(
+                    session,
+                    run,
+                    attempt,
+                    cipher=cipher,
+                    model_executor=model_executor,
+                ),
+            }
+            return
         try:
             attempt.score = score_prediction(result.prediction, attempt.reference_snapshot)
             attempt.status = SampleAttemptStatus.SUCCEEDED.value
@@ -454,6 +494,44 @@ def _record_result(attempt: SampleAttempt, result: SampleExecutionResult, endpoi
     attempt.score = None
     attempt.error_type = result.error_type or "execution_error"
     attempt.error_message = result.error_message or "Sample execution failed."
+
+
+def _automatic_judge_evidence(
+    session: Session,
+    run: EvaluationRun,
+    attempt: SampleAttempt,
+    *,
+    cipher: SecretCipher,
+    model_executor: ModelExecutor,
+) -> dict[str, object]:
+    """Run the frozen judge configuration without changing target execution status."""
+
+    configuration = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
+    judge = configuration.get("judge") if isinstance(configuration.get("judge"), dict) else {}
+    endpoint = judge.get("endpoint") if isinstance(judge.get("endpoint"), dict) else {}
+    judge_endpoint_id = endpoint.get("id")
+    system_message = judge.get("system_message")
+    if not isinstance(judge_endpoint_id, str) or not judge_endpoint_id:
+        return judge_failure_evidence("Frozen judge endpoint configuration is missing.")
+    if not isinstance(system_message, str) or not system_message:
+        return judge_failure_evidence("Frozen judge system message is missing.")
+    try:
+        assessment = assess_sample_attempt(
+            session,
+            sample_attempt_id=attempt.id,
+            judge_endpoint_id=judge_endpoint_id,
+            rubric={
+                "source": "llm_judge_metric",
+                "reference_field": judge.get("reference_field"),
+            },
+            system_message=system_message,
+            persist=False,
+            cipher=cipher,
+            model_executor=model_executor,
+        )
+    except JudgeAssessmentError as error:
+        return judge_failure_evidence(str(error))
+    return judge_assessment_evidence(assessment)
 
 
 def _frozen_endpoint(run: EvaluationRun, endpoint: ModelEndpoint) -> SimpleNamespace:
