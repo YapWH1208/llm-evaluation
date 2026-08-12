@@ -20,6 +20,22 @@ def test_configured_bearer_token_protects_api(tmp_path:Path)->None:
         assert client.get("/api/v1/users").status_code==401
         assert client.get("/api/v1/users",headers={"Authorization":"Bearer protect-me"}).status_code==200
 
+def test_unauthorized_browser_response_includes_cors_headers(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            admin_token="protect-me",
+            secret_encryption_key=Fernet.generate_key().decode(),
+        )
+    )
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/users",
+            headers={"Origin": "http://127.0.0.1:5173"},
+        )
+    assert response.status_code == 401
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
 def test_missing_token_requires_explicit_local_opt_in(tmp_path: Path) -> None:
     app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}"))
     with pytest.raises(ValueError, match="LLE_ADMIN_TOKEN"):

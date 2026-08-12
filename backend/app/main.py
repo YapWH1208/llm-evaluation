@@ -98,13 +98,6 @@ def create_app(
         version=settings.application_version,
         lifespan=lifespan,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=list(settings.cors_origins),
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-Report-Password"],
-    )
     app.state.settings = settings
     app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
     app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor(max_response_bytes=settings.provider_response_max_bytes)
@@ -159,6 +152,14 @@ def create_app(
         if request.method in {"POST", "PATCH", "PUT", "DELETE"} and response.status_code < 400:
             _record_mutation_audit(database, document_store, request, response.status_code)
         return response
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Report-Password"],
+    )
     app.include_router(evaluation_runs_router)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
