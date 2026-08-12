@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./formatters";
+import { formatWorkspaceBytes, formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./formatters";
 
 describe("workspace locale formatters", () => {
   it("uses the selected locale for dates, numbers, percentages, and empty values", () => {
@@ -14,5 +14,12 @@ describe("workspace locale formatters", () => {
     expect(formatWorkspaceNumber("ja", null)).toBe("--");
     expect(formatWorkspacePercent("ja", null)).toBe("--");
     expect(formatWorkspaceMoney("ja", 1.25, "USD")).toContain("USD");
+  });
+
+  it("formats bytes as localized human-readable storage", () => {
+    expect(formatWorkspaceBytes("en", 1_572_864)).toBe("1.5 MB");
+    expect(formatWorkspaceBytes("fr", 1_572_864)).toMatch(/^1,5\sMB$/);
+    expect(formatWorkspaceBytes("en", 128)).toBe("128 B");
+    expect(formatWorkspaceBytes("en", null)).toBe("--");
   });
 });

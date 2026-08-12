@@ -140,6 +140,14 @@ describe("catalog workspace pages", () => {
     await waitFor(() => expect(usageRequest).toHaveBeenCalledTimes(2));
   });
 
+  it("labels dataset storage with human-readable byte units", async () => {
+    vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1_610_612_736, cache_bytes: 1_572_864, root: "/data", total_bytes: 2_000_000_000 });
+    renderCatalogPage(<DatasetsPage activeTab="dataset-inventory" busy={null} datasets={[]} onClear={vi.fn()} onDelete={vi.fn()} onPause={vi.fn()} onPrepare={vi.fn()} onTabChange={vi.fn()} onUpdate={vi.fn()} onUpload={vi.fn()} onValidate={vi.fn()} registration={<div>Dataset registration</div>} />);
+
+    expect(await screen.findByText(/1\.5 MB/)).toBeVisible();
+    expect(screen.getByText(/1\.5 GB free/)).toBeVisible();
+  });
+
 
   it("keeps the dataset inventory visible while selecting a versioned inspector", async () => {
     const user = userEvent.setup();

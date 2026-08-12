@@ -76,7 +76,7 @@ export async function loadDatasetPreview(dataset: Dataset) {
 }
 
 export function DatasetsPage({ activeTab, busy, datasets, onClear, onDelete, onPause, onPrepare, onStartEvaluation, onTabChange, onUpdate, onUpload, onValidate, registration }: DatasetsPageProps) {
-  const { formatNumber: display, locale } = useTranslation();
+  const { formatBytes, locale } = useTranslation();
   const copy = workspacePageTabCopy[locale].datasets;
   const [usage, setUsage] = useState<{ cache_bytes: number; available_bytes: number } | null>(null);
   const usageKey = datasets.map((dataset) => `${dataset.id}:${dataset.status}`).join("|");
@@ -107,7 +107,7 @@ export function DatasetsPage({ activeTab, busy, datasets, onClear, onDelete, onP
       <PageHeader
         description="Manage source versions, cached data, licenses, and field mapping while keeping the selected dataset’s evidence in view."
         eyebrow="Catalog"
-        status={<>{usage ? <><strong>{display(usage.cache_bytes)}</strong> cached · {display(usage.available_bytes)} free</> : "Loading disk usage…"}</>}
+        status={<>{usage ? <><strong>{formatBytes(usage.cache_bytes)}</strong> cached · {formatBytes(usage.available_bytes)} free</> : "Loading disk usage…"}</>}
         title="Datasets"
       />
       <WorkspaceTabs ariaLabel="Datasets sections" idPrefix="datasets" onChange={onTabChange} tabs={[{ id: "dataset-inventory", label: copy.datasetInventory }, { id: "register-dataset", label: copy.registerDataset }]} value={activeTab} />

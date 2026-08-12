@@ -1331,6 +1331,19 @@ export const firstEvaluationCopy: Record<Locale, FirstEvaluationCopy> = {
   ms: { title: "Sediakan penilaian pertama anda", description: "Gunakan Mula pantas terbina dalam untuk mendapatkan hasil pertama tanpa menyediakan set data.", checklist: "Laluan ke hasil pertama", endpointStep: "1. Sambungkan model", endpointMissing: "Tambah titik akhir model yang ingin dinilai.", endpointNeedsTest: "Uji titik akhir yang disimpan sebelum menjalankan penilaian.", endpointReady: "Model yang disahkan sudah sedia.", quickStartStep: "2. Jalankan Mula pantas", quickStartReady: "Penilaian terbina dalam sedia dilancarkan.", quickStartBlocked: "Mula pantas dibuka selepas sambungan model berjaya.", inspectStep: "3. Periksa hasil", inspectBlocked: "Inventori larian akan menunjukkan bukti selepas penilaian dilancarkan.", addEndpoint: "Tambah titik akhir model", testConnection: "Uji sambungan model", startQuickStart: "Mulakan Mula pantas", modelEmpty: "Tambah titik akhir untuk menyambungkan model pertama anda.", quickStartMissing: "Tambah titik akhir model untuk membuka Mula pantas.", quickStartNeedsTest: "Uji sambungan model untuk membuka Mula pantas." },
 };
 
+export type FormCopy = { requirements: string; required: string; optional: string; advanced: string };
+
+export const formCopy: Record<Locale, FormCopy> = {
+  en: { requirements: "Required fields are marked; everything else is optional.", required: "Required", optional: "Optional", advanced: "Advanced settings (optional)" },
+  "zh-CN": { requirements: "必填字段已标记；其他字段均为可选。", required: "必填", optional: "可选", advanced: "高级设置（可选）" },
+  fr: { requirements: "Les champs obligatoires sont indiqués ; tous les autres sont facultatifs.", required: "Obligatoire", optional: "Facultatif", advanced: "Paramètres avancés (facultatifs)" },
+  de: { requirements: "Pflichtfelder sind markiert; alle anderen Felder sind optional.", required: "Erforderlich", optional: "Optional", advanced: "Erweiterte Einstellungen (optional)" },
+  ru: { requirements: "Обязательные поля отмечены; остальные поля необязательны.", required: "Обязательно", optional: "Необязательно", advanced: "Расширенные настройки (необязательно)" },
+  ja: { requirements: "必須フィールドには印があります。その他は任意です。", required: "必須", optional: "任意", advanced: "詳細設定（任意）" },
+  ko: { requirements: "필수 필드는 표시되어 있으며 나머지는 선택 사항입니다.", required: "필수", optional: "선택", advanced: "고급 설정(선택 사항)" },
+  ms: { requirements: "Medan wajib ditandakan; semua yang lain adalah pilihan.", required: "Wajib", optional: "Pilihan", advanced: "Tetapan lanjutan (pilihan)" },
+};
+
 export type GuideCopy = {
   pageDescription: string; status: string; fastTitle: string; fastDescription: string; customTitle: string; customDescription: string;
   addDescription: string; testDescription: string; quickDescription: string; inspectDescription: string;
