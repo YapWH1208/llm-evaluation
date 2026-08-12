@@ -114,6 +114,16 @@ describe("AppShell", () => {
     expect(sidebar).not.toHaveClass("is-open");
   });
 
+  it("keeps focus on a desktop navigation link", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const link = screen.getByRole("link", { name: "Models" });
+
+    await user.click(link);
+
+    expect(link).toHaveFocus();
+  });
+
   it("makes the closed mobile drawer inert and contains focus while open", async () => {
     const mediaListeners = new Set<(event: MediaQueryListEvent) => void>();
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({

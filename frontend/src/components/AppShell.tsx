@@ -110,7 +110,7 @@ export function AppShell({
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     onViewChange(nextView);
-    closeNavigation();
+    closeNavigation(isMobileNavigation);
   }
 
   return (
