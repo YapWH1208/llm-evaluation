@@ -338,6 +338,23 @@ textarea {
   top: 5.45rem;
 }
 
+.access-required {
+  align-items: center;
+  background: color-mix(in srgb, var(--danger, #ef4444) 12%, var(--panel, #121a2d));
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 48%, transparent);
+  border-radius: 12px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.access-required h2,
+.access-required p { margin: 0; }
+.access-required h2 { font-size: 1rem; }
+.access-required p { color: var(--text-muted, #9ca9bf); margin-top: .25rem; }
+
 .notice span {
   color: var(--primary);
   font-size: .78rem;

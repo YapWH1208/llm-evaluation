@@ -11,6 +11,7 @@ import "../dashboard.css";
 type Theme = "dark" | "light";
 
 type AppShellProps = {
+  accessRequired?: boolean;
   children: ReactNode;
   completedRunCount: number;
   locale: Locale;
@@ -20,11 +21,13 @@ type AppShellProps = {
   view: View;
   onDismissNotice: () => void;
   onLocaleChange: (locale: Locale) => void;
+  onOpenAccess?: () => void;
   onThemeToggle: () => void;
   onViewChange: (view: View) => void;
 };
 
 export function AppShell({
+  accessRequired = false,
   children,
   completedRunCount,
   locale,
@@ -34,6 +37,7 @@ export function AppShell({
   view,
   onDismissNotice,
   onLocaleChange,
+  onOpenAccess = () => undefined,
   onThemeToggle,
   onViewChange,
 }: AppShellProps) {
@@ -139,6 +143,13 @@ export function AppShell({
         </header>
 
         <main className="workspace-main">
+          {accessRequired && <section aria-labelledby="access-required-title" className="access-required" role="alert">
+            <div>
+              <h2 id="access-required-title">{t("accessRequired.title")}</h2>
+              <p>{t("accessRequired.description")}</p>
+            </div>
+            <button onClick={onOpenAccess} type="button">{t("accessRequired.action")}</button>
+          </section>}
           {notice && <button aria-live="polite" className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
           <div className="workspace-page-content">{children}</div>
         </main>

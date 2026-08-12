@@ -215,6 +215,7 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [accessRequired, setAccessRequired] = useState(false);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
     const href = workspacePath(nextView, options.tab, { runId: options.runId });
@@ -248,6 +249,7 @@ export default function App() {
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
     setSystemHealth(nextSystemHealth);
+    setAccessRequired(false);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -322,7 +324,12 @@ export default function App() {
   }
 
   function showError(error: unknown) {
-    if (error instanceof ApiError || error instanceof Error) {
+    if (error instanceof ApiError && error.status === 401) {
+      setAccessRequired(true);
+      setNotice(null);
+      return;
+    }
+    if (error instanceof Error) {
       setNotice(error.message);
       return;
     }
@@ -820,6 +827,7 @@ export default function App() {
 
   return (
     <AppShell
+      accessRequired={accessRequired}
       completedRunCount={dashboard?.runs.completed ?? 0}
       locale={locale}
       notice={notice}
@@ -828,6 +836,7 @@ export default function App() {
       view={view}
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={setLocale}
+      onOpenAccess={() => navigate("settings", { tab: "access" })}
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       onViewChange={navigate}
     >
