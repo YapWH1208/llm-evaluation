@@ -65,6 +65,66 @@ def judge_endpoint_snapshot(endpoint: object) -> dict[str, object]:
     }
 
 
+def validate_judge_endpoint(
+    rule: Mapping[str, object],
+    *,
+    evaluated_endpoint_id: str,
+    judge_endpoint: object | None,
+) -> dict[str, str]:
+    """Validate the selected judge endpoint without coupling to a storage backend."""
+
+    normalized = normalize_judge_rule(rule)
+    if judge_endpoint is None:
+        raise JudgeScoringError("Judge model endpoint not found.")
+    if str(_endpoint_value(judge_endpoint, "id")) == evaluated_endpoint_id:
+        raise JudgeScoringError("A model endpoint cannot judge its own evaluation output.")
+    if _endpoint_value(judge_endpoint, "status") != "available":
+        raise JudgeScoringError("Judge model endpoint must pass a connection test before scheduling a run.")
+    return normalized
+
+
+def judge_configuration_snapshot(
+    rule: Mapping[str, object],
+    *,
+    judge_endpoint: object,
+    reference_field: str,
+) -> dict[str, object]:
+    """Return the immutable, credential-free configuration retained with a run."""
+
+    normalized = normalize_judge_rule(rule)
+    return {
+        "endpoint": judge_endpoint_snapshot(judge_endpoint),
+        "reference_field": reference_field,
+        "system_message": normalized["system_message"],
+    }
+
+
+def judge_preflight_estimate(
+    *,
+    sample_count: int,
+    target_input_tokens: int,
+    judge_endpoint: object,
+) -> dict[str, object]:
+    """Estimate one judge request per sample without changing target-run totals."""
+
+    estimated_input_tokens = target_input_tokens + sample_count * 128
+    estimated_output_tokens = sample_count * 64
+    input_cost = _optional_float(_endpoint_value(judge_endpoint, "input_cost_per_million"))
+    output_cost = _optional_float(_endpoint_value(judge_endpoint, "output_cost_per_million"))
+    estimated_cost = (
+        (estimated_input_tokens * input_cost + estimated_output_tokens * output_cost) / 1_000_000
+        if input_cost is not None and output_cost is not None
+        else None
+    )
+    return {
+        "estimated_requests": sample_count,
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost": estimated_cost,
+        "currency": str(_endpoint_value(judge_endpoint, "currency", "USD")),
+    }
+
+
 def build_single_judge_input(
     *,
     system_message: str,

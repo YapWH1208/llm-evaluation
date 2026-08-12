@@ -144,6 +144,7 @@ class EvaluationRunPreflightResponse(BaseModel):
     estimated_output_tokens: int
     estimated_cost: float | None
     currency: str | None
+    judge_estimate: dict[str, Any] | None = None
     compatibility: dict[str, list[str]]
     datasets: list[dict[str, Any]]
     request_body_evidence: dict[str, Any] | None

@@ -1049,6 +1049,56 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             assert attempts
             assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
 
+        judge = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://judge.example.test/v1",
+            "api_key": "judge-secret",
+            "model_name": "judge-model",
+            "custom_headers": {"X-Judge-Secret": "must-not-appear"},
+        }).json()
+        assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
+        judge_rule = {
+            "type": "llm_judge",
+            "judge_endpoint_id": judge["id"],
+            "system_message": "Judge each candidate against the reference.",
+        }
+        judge_payload = {**base_payload, "scoring_rule": judge_rule}
+        judge_preflight = api.post("/api/v1/evaluation-runs/dataset/preflight", json=judge_payload)
+        assert judge_preflight.status_code == 200
+        assert judge_preflight.json()["can_queue"] is True
+        assert judge_preflight.json()["judge_estimate"]["estimated_requests"] == 1
+        judge_run = api.post("/api/v1/evaluation-runs/dataset", json=judge_payload)
+        assert judge_run.status_code == 201
+        snapshot = judge_run.json()["configuration_snapshot"]
+        assert snapshot["judge"]["endpoint"]["id"] == judge["id"]
+        assert snapshot["judge"]["reference_field"] == "answer"
+        assert "judge-secret" not in str(snapshot)
+        assert "must-not-appear" not in str(snapshot)
+        attempts = store.list_documents("sample_attempts", query={"run_id": judge_run.json()["id"]})
+        assert all(attempt["reference_snapshot"]["judge"] == snapshot["judge"] for attempt in attempts)
+
+        unavailable_judge = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://offline-judge.example.test/v1",
+            "api_key": "offline-judge-secret",
+            "model_name": "offline-judge",
+        }).json()
+
+        for invalid_rule, message in (
+            ({**judge_rule, "judge_endpoint_id": endpoint["id"]}, "cannot judge its own"),
+            ({**judge_rule, "judge_endpoint_id": "missing-judge"}, "Judge model endpoint not found"),
+            ({**judge_rule, "judge_endpoint_id": unavailable_judge["id"]}, "must pass a connection test"),
+        ):
+            invalid_preflight = api.post(
+                "/api/v1/evaluation-runs/dataset/preflight",
+                json={**base_payload, "scoring_rule": invalid_rule},
+            )
+            assert invalid_preflight.status_code == 200
+            assert invalid_preflight.json()["can_queue"] is False
+            assert any(message in issue for issue in invalid_preflight.json()["issues"])
+            assert api.post(
+                "/api/v1/evaluation-runs/dataset",
+                json={**base_payload, "scoring_rule": invalid_rule},
+            ).status_code == 409
+
         run_count = len(store.list_documents("evaluation_runs"))
         invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
         assert api.post(

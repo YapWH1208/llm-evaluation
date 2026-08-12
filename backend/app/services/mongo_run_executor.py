@@ -39,6 +39,14 @@ from app.services.dataset_runs import (
     effective_dataset_scoring_rule,
 )
 from app.services.dataset_records import DatasetRecordError
+from app.services.judge_scoring import (
+    JudgeScoringError,
+    is_llm_judge_rule,
+    judge_configuration_snapshot,
+    judge_preflight_estimate,
+    normalize_judge_rule,
+    validate_judge_endpoint,
+)
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
@@ -55,6 +63,27 @@ from app.services.mongo_datasets import download_mongo_dataset
 
 class MongoRunExecutionError(ValueError):
     """Raised when a document-backed run cannot be created or executed safely."""
+
+
+def _mongo_judge_endpoint_for_rule(
+    store: MongoDocumentStore,
+    *,
+    scoring_rule: dict[str, object],
+    evaluated_endpoint_id: str,
+) -> dict[str, Any] | None:
+    if not is_llm_judge_rule(scoring_rule):
+        return None
+    normalized = normalize_judge_rule(scoring_rule)
+    endpoint = store.get_document("model_endpoints", normalized["judge_endpoint_id"])
+    try:
+        validate_judge_endpoint(
+            normalized,
+            evaluated_endpoint_id=evaluated_endpoint_id,
+            judge_endpoint=endpoint,
+        )
+    except JudgeScoringError as error:
+        raise MongoRunExecutionError(str(error)) from error
+    return endpoint
 
 
 def preflight_mongo_benchmark_run(
@@ -421,6 +450,20 @@ def create_mongo_dataset_run(
         )
     except DatasetRunError as error:
         raise MongoRunExecutionError(str(error)) from error
+    judge_endpoint = _mongo_judge_endpoint_for_rule(
+        store,
+        scoring_rule=effective_scoring_rule,
+        evaluated_endpoint_id=model_endpoint_id,
+    )
+    judge_configuration = (
+        judge_configuration_snapshot(
+            effective_scoring_rule,
+            judge_endpoint=judge_endpoint,
+            reference_field=normalized_reference_field,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     request_body_evidence = _mongo_request_body_evidence(
         endpoint=endpoint,
         benchmark_manifest=_dataset_run_manifest(),
@@ -465,6 +508,8 @@ def create_mongo_dataset_run(
         ),
         "request_body_evidence": request_body_evidence,
     }
+    if judge_configuration is not None:
+        snapshot["judge"] = judge_configuration
     run = store.insert_document(
         "evaluation_runs",
         {
@@ -567,7 +612,13 @@ def create_mongo_dataset_run(
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
                     "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                    "reference_snapshot": {"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule, "dataset_profile": _sample_dataset_profile(sample)},
+                    "reference_snapshot": {
+                        "type": str(effective_scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": effective_scoring_rule,
+                        "dataset_profile": _sample_dataset_profile(sample),
+                        **({"judge": judge_configuration} if judge_configuration is not None else {}),
+                    },
                     "request_snapshot": None,
                     "raw_response": None,
                     "parsed_prediction": None,
@@ -623,13 +674,24 @@ def preflight_mongo_dataset_run(
         resolved_input_field,
         _proxy(prompt_package) if prompt_package else None,
     )
+    effective_scoring_rule: dict[str, object] | None = None
     try:
-        effective_dataset_scoring_rule(
+        effective_scoring_rule = effective_dataset_scoring_rule(
             scoring_rule,
             _proxy(prompt_package) if prompt_package else None,
         )
     except DatasetRunError as error:
         issues.append(str(error))
+    judge_endpoint: dict[str, Any] | None = None
+    if effective_scoring_rule is not None:
+        try:
+            judge_endpoint = _mongo_judge_endpoint_for_rule(
+                store,
+                scoring_rule=effective_scoring_rule,
+                evaluated_endpoint_id=model_endpoint_id,
+            )
+        except MongoRunExecutionError as error:
+            issues.append(str(error))
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
@@ -678,6 +740,15 @@ def preflight_mongo_dataset_run(
         if endpoint is not None and endpoint.get("input_cost_per_million") is not None and endpoint.get("output_cost_per_million") is not None
         else None
     )
+    judge_estimate = (
+        judge_preflight_estimate(
+            sample_count=len(samples),
+            target_input_tokens=estimated_input_tokens,
+            judge_endpoint=judge_endpoint,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     return {
         "can_queue": not issues,
         "issues": issues,
@@ -687,6 +758,7 @@ def preflight_mongo_dataset_run(
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_cost": estimated_cost,
         "currency": endpoint.get("currency") if endpoint is not None else None,
+        "judge_estimate": judge_estimate,
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (

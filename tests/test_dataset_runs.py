@@ -180,6 +180,83 @@ def test_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_path: 
             assert attempts
             assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
 
+        judge = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://judge.example.test/v1",
+                "api_key": "judge-secret-key",
+                "model_name": "judge-model",
+                "custom_headers": {"X-Judge-Secret": "must-not-appear"},
+            },
+        )
+        assert judge.status_code == 201
+        judge_id = judge.json()["id"]
+        assert client.post(f"/api/v1/model-endpoints/{judge_id}/connection-test").status_code == 200
+        judge_rule = {
+            "type": "LLM_JUDGE",
+            "judge_endpoint_id": judge_id,
+            "system_message": " Judge each candidate against the reference. ",
+        }
+        judge_payload = {**base_payload, "scoring_rule": judge_rule}
+        judge_preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json=judge_payload)
+        assert judge_preflight.status_code == 200
+        assert judge_preflight.json()["can_queue"] is True
+        assert judge_preflight.json()["judge_estimate"] == {
+            "estimated_requests": 2,
+            "estimated_input_tokens": judge_preflight.json()["estimated_input_tokens"] + 256,
+            "estimated_output_tokens": 128,
+            "estimated_cost": None,
+            "currency": "USD",
+        }
+        judge_run = client.post("/api/v1/evaluation-runs/dataset", json=judge_payload)
+        assert judge_run.status_code == 201
+        judge_snapshot = judge_run.json()["configuration_snapshot"]
+        expected_judge_rule = {
+            "type": "llm_judge",
+            "judge_endpoint_id": judge_id,
+            "system_message": "Judge each candidate against the reference.",
+        }
+        assert judge_snapshot["scoring_rule"] == expected_judge_rule
+        assert judge_snapshot["judge"] == {
+            "endpoint": {
+                "id": judge_id,
+                "base_url": "https://judge.example.test/v1",
+                "model_name": "judge-model",
+                "protocol_profile": "openai_chat_completions",
+                "timeout_seconds": 60,
+                "input_cost_per_million": None,
+                "output_cost_per_million": None,
+                "currency": "USD",
+            },
+            "reference_field": "answer",
+            "system_message": "Judge each candidate against the reference.",
+        }
+        assert "judge-secret-key" not in str(judge_snapshot)
+        assert "must-not-appear" not in str(judge_snapshot)
+        judge_attempts = client.get(f"/api/v1/evaluation-runs/{judge_run.json()['id']}/attempts").json()
+        assert all(attempt["reference_snapshot"]["judge"] == judge_snapshot["judge"] for attempt in judge_attempts)
+
+        unavailable_judge = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://offline-judge.example.test/v1",
+                "api_key": "offline-judge-secret",
+                "model_name": "offline-judge",
+            },
+        ).json()
+
+        for invalid_rule, message in (
+            ({**expected_judge_rule, "judge_endpoint_id": endpoint_id}, "cannot judge its own"),
+            ({**expected_judge_rule, "judge_endpoint_id": "missing-judge"}, "Judge model endpoint not found"),
+            ({**expected_judge_rule, "judge_endpoint_id": unavailable_judge["id"]}, "must pass a connection test"),
+        ):
+            invalid_payload = {**base_payload, "scoring_rule": invalid_rule}
+            invalid_preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json=invalid_payload)
+            assert invalid_preflight.status_code == 200
+            assert invalid_preflight.json()["can_queue"] is False
+            assert any(message in issue for issue in invalid_preflight.json()["issues"])
+            assert client.post("/api/v1/evaluation-runs/dataset", json=invalid_payload).status_code == 409
+
         run_count = len(client.get("/api/v1/evaluation-runs").json())
         invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
         assert client.post(

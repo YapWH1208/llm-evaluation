@@ -62,6 +62,13 @@ export type RunPreflight = {
   estimated_output_tokens: number;
   estimated_cost: number | null;
   currency: string | null;
+  judge_estimate: {
+    estimated_requests: number;
+    estimated_input_tokens: number;
+    estimated_output_tokens: number;
+    estimated_cost: number | null;
+    currency: string | null;
+  } | null;
   compatibility: { required: string[]; unsupported: string[]; unverified: string[] };
   datasets: Array<Record<string, unknown>>;
   request_body_evidence: Record<string, unknown> | null;

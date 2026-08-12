@@ -31,6 +31,14 @@ from app.services.evaluation_runs import (
     _split_samples_for_endpoint_budget,
 )
 from app.services.prompt_templates import PromptTemplateError, render_template
+from app.services.judge_scoring import (
+    JudgeScoringError,
+    is_llm_judge_rule,
+    judge_configuration_snapshot,
+    judge_preflight_estimate,
+    normalize_judge_rule,
+    validate_judge_endpoint,
+)
 from app.services.scoring import ScoringError, validate_scoring_rule
 
 
@@ -127,9 +135,34 @@ def effective_dataset_scoring_rule(
     rule = dict(candidate) if isinstance(candidate, dict) and candidate else {"type": "exact_match"}
     try:
         validate_scoring_rule(rule)
+        if is_llm_judge_rule(rule):
+            return normalize_judge_rule(rule)
     except ScoringError as error:
         raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
+    except JudgeScoringError as error:
+        raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
     return rule
+
+
+def _judge_endpoint_for_rule(
+    session: Session,
+    *,
+    scoring_rule: dict[str, object],
+    evaluated_endpoint_id: str,
+) -> ModelEndpoint | None:
+    if not is_llm_judge_rule(scoring_rule):
+        return None
+    normalized = normalize_judge_rule(scoring_rule)
+    endpoint = session.get(ModelEndpoint, normalized["judge_endpoint_id"])
+    try:
+        validate_judge_endpoint(
+            normalized,
+            evaluated_endpoint_id=evaluated_endpoint_id,
+            judge_endpoint=endpoint,
+        )
+    except JudgeScoringError as error:
+        raise DatasetRunError(str(error)) from error
+    return endpoint
 
 
 _DATASET_RUN_MANIFEST: dict[str, object] = {
@@ -226,6 +259,20 @@ def create_dataset_run(
             "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
         )
     effective_scoring_rule = effective_dataset_scoring_rule(scoring_rule, prompt_package)
+    judge_endpoint = _judge_endpoint_for_rule(
+        session,
+        scoring_rule=effective_scoring_rule,
+        evaluated_endpoint_id=endpoint.id,
+    )
+    judge_configuration = (
+        judge_configuration_snapshot(
+            effective_scoring_rule,
+            judge_endpoint=judge_endpoint,
+            reference_field=normalized_reference_field,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     request_body_evidence = _request_body_evidence(
         endpoint=endpoint,
         benchmark_manifest=_DATASET_RUN_MANIFEST,
@@ -269,6 +316,8 @@ def create_dataset_run(
         ),
         "request_body_evidence": request_body_evidence,
     }
+    if judge_configuration is not None:
+        snapshot["judge"] = judge_configuration
     created_at = datetime.now(timezone.utc)
     run = EvaluationRun(
         model_endpoint_id=endpoint.id,
@@ -336,7 +385,13 @@ def create_dataset_run(
                         "metadata": dict(sample.metadata),
                         "request_body_evidence": request_body_evidence,
                     },
-                    reference_snapshot={"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule, "dataset_profile": _sample_dataset_profile(sample)},
+                    reference_snapshot={
+                        "type": str(effective_scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": effective_scoring_rule,
+                        "dataset_profile": _sample_dataset_profile(sample),
+                        **({"judge": judge_configuration} if judge_configuration is not None else {}),
+                    },
                 )
                 for sample in shard_samples
             ]
@@ -383,10 +438,21 @@ def preflight_dataset_run(
         resolved_input_field,
         prompt_package,
     )
+    effective_scoring_rule: dict[str, object] | None = None
     try:
-        effective_dataset_scoring_rule(scoring_rule, prompt_package)
+        effective_scoring_rule = effective_dataset_scoring_rule(scoring_rule, prompt_package)
     except DatasetRunError as error:
         issues.append(str(error))
+    judge_endpoint: ModelEndpoint | None = None
+    if effective_scoring_rule is not None:
+        try:
+            judge_endpoint = _judge_endpoint_for_rule(
+                session,
+                scoring_rule=effective_scoring_rule,
+                evaluated_endpoint_id=endpoint.id if endpoint is not None else model_endpoint_id,
+            )
+        except DatasetRunError as error:
+            issues.append(str(error))
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
@@ -432,6 +498,15 @@ def preflight_dataset_run(
         if endpoint is not None and endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
         else None
     )
+    judge_estimate = (
+        judge_preflight_estimate(
+            sample_count=len(samples),
+            target_input_tokens=estimated_input_tokens,
+            judge_endpoint=judge_endpoint,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     return {
         "can_queue": not issues,
         "issues": issues,
@@ -441,6 +516,7 @@ def preflight_dataset_run(
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_cost": estimated_cost,
         "currency": endpoint.currency if endpoint is not None else None,
+        "judge_estimate": judge_estimate,
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (
