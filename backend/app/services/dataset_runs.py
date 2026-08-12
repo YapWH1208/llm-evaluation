@@ -139,8 +139,6 @@ def effective_dataset_scoring_rule(
             return normalize_judge_rule(rule)
     except ScoringError as error:
         raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
-    except JudgeScoringError as error:
-        raise DatasetRunError(f"Scoring rule is invalid: {error}") from error
     return rule
 
 

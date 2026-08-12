@@ -1117,15 +1117,19 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
     class JudgeExecutor:
         def __init__(self) -> None:
             self.judge_inputs: list[dict[str, Any]] = []
+            self.judge_endpoint_calls: list[tuple[str, str, int]] = []
 
         def execute(self, endpoint: Any, _api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
             if endpoint.model_name == "judge-model":
+                self.judge_endpoint_calls.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds))
                 self.judge_inputs.append(input_snapshot)
                 return SampleExecutionResult(
                     True,
                     {"model": endpoint.model_name},
                     '{"choices":[{"message":{"content":"{\\"score\\": 0.8, \\"label\\": \\"pass\\"}"}}]}',
                     '{"score": 0.8, "label": "pass"}',
+                    input_tokens=12,
+                    output_tokens=8,
                 )
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "BLUE")
 
@@ -1150,7 +1154,7 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
         ).json()
         judge = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://judge.example.test/v1", "api_key": "judge-secret", "model_name": "judge-model"},
+            json={"base_url": "https://judge.example.test/v1", "api_key": "judge-secret", "model_name": "judge-model", "input_cost_per_million": 2, "output_cost_per_million": 3},
         ).json()
         assert api.post(f"/api/v1/model-endpoints/{target['id']}/connection-test").status_code == 200
         assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
@@ -1178,7 +1182,19 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
             },
         )
         assert run.status_code == 201
+        store.update_document(
+            "model_endpoints",
+            judge["id"],
+            {
+                "base_url": "https://judge-edited.example.test/v1",
+                "model_name": "judge-edited-model",
+                "timeout_seconds": 30,
+                "input_cost_per_million": 99,
+                "output_cost_per_million": 99,
+            },
+        )
         assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"
+        assert executor.judge_endpoint_calls == [("https://judge.example.test/v1", "judge-model", 60)]
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
         assert len(attempts) == 1
         assert attempts[0]["status"] == "succeeded"
@@ -1204,6 +1220,9 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
         assessments = store.list_documents("judge_assessments", query={"sample_attempt_id": attempts[0]["id"]})
         assert len(assessments) == 1
         assert assessments[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"}
+        assert assessments[0]["input_tokens"] == 12
+        assert assessments[0]["output_tokens"] == 8
+        assert assessments[0]["estimated_cost"] == round((12 * 2 + 8 * 3) / 1_000_000, 12)
         assert executor.judge_inputs[0]["messages"][0]["content"] == system_message
         judge_payload = json.loads(executor.judge_inputs[0]["messages"][1]["content"])
         assert judge_payload["reference"]["answer"] == "BLUE"

@@ -528,6 +528,7 @@ def _automatic_judge_evidence(
             persist=False,
             cipher=cipher,
             model_executor=model_executor,
+            endpoint_override=endpoint,
         )
     except JudgeAssessmentError as error:
         return judge_failure_evidence(str(error))

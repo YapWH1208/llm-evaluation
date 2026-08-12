@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -23,6 +25,30 @@ class JudgeAssessmentError(ValueError):
     pass
 
 
+def _execution_endpoint(endpoint: ModelEndpoint, override: Mapping[str, object] | None) -> Any:
+    """Merge a frozen endpoint description over the live row for reproducible judging."""
+    if override is None:
+        return endpoint
+    return SimpleNamespace(
+        base_url=str(override.get("base_url", endpoint.base_url)),
+        model_name=str(override.get("model_name", endpoint.model_name)),
+        protocol_profile=str(override.get("protocol_profile", endpoint.protocol_profile)),
+        default_request_body=override.get("default_request_body", endpoint.default_request_body),
+        timeout_seconds=int(override.get("timeout_seconds", endpoint.timeout_seconds)),
+        custom_headers=override.get("custom_headers", endpoint.custom_headers),
+        input_cost_per_million=override.get("input_cost_per_million", endpoint.input_cost_per_million),
+        output_cost_per_million=override.get("output_cost_per_million", endpoint.output_cost_per_million),
+    )
+
+
+def _estimated_cost(endpoint: Any, input_tokens: int | None, output_tokens: int | None) -> float | None:
+    if input_tokens is None and output_tokens is None:
+        return None
+    input_cost = (input_tokens or 0) * (endpoint.input_cost_per_million or 0) / 1_000_000
+    output_cost = (output_tokens or 0) * (endpoint.output_cost_per_million or 0) / 1_000_000
+    return round(input_cost + output_cost, 12)
+
+
 def assess_sample_attempt(
     session: Session,
     *,
@@ -33,6 +59,7 @@ def assess_sample_attempt(
     persist: bool = True,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    endpoint_override: Mapping[str, object] | None = None,
 ) -> JudgeAssessment:
     attempt = session.get(SampleAttempt, sample_attempt_id)
     if attempt is None:
@@ -65,8 +92,12 @@ def assess_sample_attempt(
         reference_snapshot=attempt.reference_snapshot,
         prediction=attempt.parsed_prediction,
     )
-    result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
+    execution_endpoint = _execution_endpoint(endpoint, endpoint_override)
+    result = model_executor.execute(execution_endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
     assessment.raw_response = result.raw_response
+    assessment.input_tokens = result.input_tokens
+    assessment.output_tokens = result.output_tokens
+    assessment.estimated_cost = _estimated_cost(execution_endpoint, result.input_tokens, result.output_tokens)
     if not result.success or result.prediction is None:
         assessment.status = "failed"
         assessment.error_message = result.error_message or "Judge execution failed."
@@ -156,6 +187,9 @@ def assess_pairwise_sample_attempt(
         )
         result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
         assessment.raw_response = result.raw_response
+        assessment.input_tokens = result.input_tokens
+        assessment.output_tokens = result.output_tokens
+        assessment.estimated_cost = _estimated_cost(endpoint, result.input_tokens, result.output_tokens)
         if not result.success or result.prediction is None:
             assessment.status = "failed"
             assessment.error_message = result.error_message or "Judge execution failed."

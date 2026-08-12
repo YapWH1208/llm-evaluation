@@ -46,6 +46,9 @@ class JudgeAssessmentResponse(BaseModel):
     label: str | None
     rationale: str | None
     raw_response: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost: float | None
     status: str
     error_message: str | None
     created_at: datetime

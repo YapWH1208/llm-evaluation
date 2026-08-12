@@ -639,7 +639,21 @@ export default function App() {
     try {
       const result = await api.validateDatasetRun(datasetRunPayload(datasetRunForm));
       setLaunchPreflight({ kind: "dataset", result });
-      showNotice(result.can_queue ? "Preflight ready: {{samples}} samples." : "Preflight blocked: {{issues}}", result.can_queue ? { samples: result.sample_count } : { issues: result.issues.join(" ") });
+      const judge = result.judge_estimate;
+      showNotice(!result.can_queue
+        ? "Preflight blocked: {{issues}}"
+        : judge
+          ? "Preflight ready: {{samples}} samples, {{judgeRequests}} judge requests, {{judgeTokens}} estimated judge tokens, {{cost}}."
+          : "Preflight ready: {{samples}} samples.", !result.can_queue
+          ? { issues: result.issues.join(" ") }
+          : judge
+            ? {
+                samples: result.sample_count,
+                judgeRequests: judge.estimated_requests,
+                judgeTokens: judge.estimated_input_tokens + judge.estimated_output_tokens,
+                cost: judge.estimated_cost === null ? translateStaticTemplate(locale, "cost not configured") : `${display(judge.estimated_cost, 6)} ${judge.currency ?? ""}`,
+              }
+            : { samples: result.sample_count });
     } catch (error) {
       showError(error);
     } finally {

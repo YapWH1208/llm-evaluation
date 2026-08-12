@@ -62,6 +62,24 @@ class _AutomaticJudgeExecutor(_DatasetAnswerExecutor):
         )
 
 
+class _FrozenJudgeExecutor(_DatasetAnswerExecutor):
+    def __init__(self) -> None:
+        self.judge_calls: list[tuple[str, str, int, str]] = []
+
+    def execute(self, endpoint, api_key: str, input_snapshot: dict[str, object]) -> SampleExecutionResult:
+        if endpoint.model_name != "judge-model":
+            return super().execute(endpoint, api_key, input_snapshot)
+        self.judge_calls.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, api_key))
+        return SampleExecutionResult(
+            success=True,
+            request_snapshot={"model": endpoint.model_name},
+            raw_response='{"choices":[{"message":{"content":"{\\"score\\": 0.75, \\"label\\": \\"pass\\", \\"rationale\\": \\"Matches the reference.\\"}"}}]}',
+            prediction='{"score": 0.75, "label": "pass", "rationale": "Matches the reference."}',
+            input_tokens=12,
+            output_tokens=8,
+        )
+
+
 def _create_available_endpoint(client: TestClient) -> str:
     created = client.post(
         "/api/v1/model-endpoints",
@@ -471,6 +489,100 @@ def test_dataset_run_automatically_records_llm_judge_evidence(
             assert [item["messages"][0]["content"] for item in executor.judge_inputs] == [system_message, system_message]
             judge_payloads = [json.loads(item["messages"][1]["content"]) for item in executor.judge_inputs]
             assert {payload["reference"]["answer"] for payload in judge_payloads} == {"4", "6"}
+
+
+def test_dataset_run_judges_with_the_frozen_endpoint_configuration_and_records_judge_usage(tmp_path: Path) -> None:
+    executor = _FrozenJudgeExecutor()
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
+        connection_tester=_SuccessfulTester(),
+        model_executor=executor,
+    )
+    with TestClient(app) as client:
+        dataset = _register_ready_dataset(client)
+        assert client.put(
+            f"/api/v1/datasets/{dataset['id']}",
+            json={
+                "dataset_id": "demo",
+                "version": "1",
+                "input_field": "question",
+                "reference_field": "answer",
+                "capabilities": ["classification"],
+                "languages": ["en"],
+                "evaluation_type": "classification",
+            },
+        ).status_code == 200
+        target_id = _create_available_endpoint(client)
+        judge = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://judge.example.test/v1",
+                "api_key": "judge-secret",
+                "model_name": "judge-model",
+                "input_cost_per_million": 2,
+                "output_cost_per_million": 3,
+            },
+        )
+        assert judge.status_code == 201
+        judge_id = judge.json()["id"]
+        assert client.post(f"/api/v1/model-endpoints/{judge_id}/connection-test").status_code == 200
+        system_message = "Score the candidate strictly against the dataset answer."
+        run = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": target_id,
+                "dataset_version_id": dataset["id"],
+                "prompt_package_id": _prompt_package(client),
+                "reference_field": "answer",
+                "sample_limit": 2,
+                "scoring_rule": {
+                    "type": "llm_judge",
+                    "judge_endpoint_id": judge_id,
+                    "system_message": system_message,
+                },
+            },
+        )
+        assert run.status_code == 201
+        edited = client.patch(
+            f"/api/v1/model-endpoints/{judge_id}",
+            json={
+                "base_url": "https://judge-edited.example.test/v1",
+                "model_name": "judge-edited-model",
+                "timeout_seconds": 30,
+                "input_cost_per_million": 99,
+                "output_cost_per_million": 99,
+            },
+        )
+        assert edited.status_code == 200
+        assert client.post(f"/api/v1/model-endpoints/{judge_id}/connection-test").status_code == 200
+        executed = client.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute")
+        assert executed.status_code == 200
+        assert executed.json()["status"] == "completed"
+        assert executor.judge_calls == [("https://judge.example.test/v1", "judge-model", 60, "judge-secret")] * 2
+        attempts = client.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
+        assessments = [
+            client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0]
+            for attempt in attempts
+        ]
+        assert len(assessments) == 2
+        assert {item["status"] for item in assessments} == {"succeeded"}
+        assert {item["input_tokens"] for item in assessments} == {12}
+        assert {item["output_tokens"] for item in assessments} == {8}
+        assert {item["estimated_cost"] for item in assessments} == {round((12 * 2 + 8 * 3) / 1_000_000, 12)}
+
+
+def test_effective_dataset_scoring_rule_rejects_overlong_judge_system_messages() -> None:
+    from app.services import dataset_runs
+
+    with pytest.raises(dataset_runs.DatasetRunError, match="Scoring rule is invalid:"):
+        dataset_runs.effective_dataset_scoring_rule(
+            {"type": "llm_judge", "judge_endpoint_id": "endpoint-x", "system_message": "a" * 12_000},
+            None,
+        )
 
 
 def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:

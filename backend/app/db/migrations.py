@@ -208,6 +208,12 @@ def _upgrade_v25_evaluation_experience_persistence(connection: Connection) -> No
     )
 
 
+def _upgrade_v26_judge_usage_and_cost(connection: Connection) -> None:
+    _add_column_if_missing(connection, "judge_assessments", "input_tokens", "input_tokens INTEGER")
+    _add_column_if_missing(connection, "judge_assessments", "output_tokens", "output_tokens INTEGER")
+    _add_column_if_missing(connection, "judge_assessments", "estimated_cost", "estimated_cost FLOAT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -352,6 +358,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260811_add_evaluation_experience_persistence",
         description="Add run names, dataset metadata, and named-metric evidence fields.",
         upgrade=_upgrade_v25_evaluation_experience_persistence,
+    ),
+    Migration(
+        version=26,
+        migration_id="20260812_add_judge_usage_and_cost",
+        description="Add provider token usage and estimated cost evidence to judge assessments.",
+        upgrade=_upgrade_v26_judge_usage_and_cost,
     ),
 )
 

@@ -1622,6 +1622,7 @@ def _automatic_mongo_judge_evidence(
             system_message=system_message,
             cipher=cipher,
             model_executor=model_executor,
+            endpoint_override=endpoint,
         )
     except JudgeAssessmentError as error:
         return judge_failure_evidence(str(error))
