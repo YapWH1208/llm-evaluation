@@ -206,8 +206,9 @@ describe("workspace tab routing", () => {
     render(<LocaleProvider><App /></LocaleProvider>);
 
     expect(screen.getByRole("heading", { name: "How to use this workspace" })).toBeVisible();
-    expect(screen.getByText(/1\. Add a model endpoint/i)).toBeVisible();
-    expect(screen.getByText(/4\. Queue a dataset run/i)).toBeVisible();
+    const timelines = screen.getAllByRole("list");
+    expect(timelines).toHaveLength(2);
+    for (const timeline of timelines) expect(within(timeline).getAllByRole("listitem")).toHaveLength(4);
   });
 
   it("direct-loads the Dashboard readiness tab", () => {
