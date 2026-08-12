@@ -39,6 +39,18 @@ from app.services.dataset_runs import (
     effective_dataset_scoring_rule,
 )
 from app.services.dataset_records import DatasetRecordError
+from app.services.judge_scoring import (
+    JudgeScoringError,
+    is_llm_judge_rule,
+    judge_assessment_evidence,
+    judge_configuration_snapshot,
+    judge_failure_evidence,
+    judge_preflight_estimate,
+    normalize_judge_rule,
+    validate_judge_endpoint,
+)
+from app.services.judge_assessments import JudgeAssessmentError
+from app.services.mongo_judge_assessments import assess_mongo_sample_attempt
 from app.services.model_executor import ModelExecutor, SampleExecutionResult
 from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
@@ -55,6 +67,27 @@ from app.services.mongo_datasets import download_mongo_dataset
 
 class MongoRunExecutionError(ValueError):
     """Raised when a document-backed run cannot be created or executed safely."""
+
+
+def _mongo_judge_endpoint_for_rule(
+    store: MongoDocumentStore,
+    *,
+    scoring_rule: dict[str, object],
+    evaluated_endpoint_id: str,
+) -> dict[str, Any] | None:
+    if not is_llm_judge_rule(scoring_rule):
+        return None
+    normalized = normalize_judge_rule(scoring_rule)
+    endpoint = store.get_document("model_endpoints", normalized["judge_endpoint_id"])
+    try:
+        validate_judge_endpoint(
+            normalized,
+            evaluated_endpoint_id=evaluated_endpoint_id,
+            judge_endpoint=endpoint,
+        )
+    except JudgeScoringError as error:
+        raise MongoRunExecutionError(str(error)) from error
+    return endpoint
 
 
 def preflight_mongo_benchmark_run(
@@ -421,6 +454,20 @@ def create_mongo_dataset_run(
         )
     except DatasetRunError as error:
         raise MongoRunExecutionError(str(error)) from error
+    judge_endpoint = _mongo_judge_endpoint_for_rule(
+        store,
+        scoring_rule=effective_scoring_rule,
+        evaluated_endpoint_id=model_endpoint_id,
+    )
+    judge_configuration = (
+        judge_configuration_snapshot(
+            effective_scoring_rule,
+            judge_endpoint=judge_endpoint,
+            reference_field=normalized_reference_field,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     request_body_evidence = _mongo_request_body_evidence(
         endpoint=endpoint,
         benchmark_manifest=_dataset_run_manifest(),
@@ -465,6 +512,8 @@ def create_mongo_dataset_run(
         ),
         "request_body_evidence": request_body_evidence,
     }
+    if judge_configuration is not None:
+        snapshot["judge"] = judge_configuration
     run = store.insert_document(
         "evaluation_runs",
         {
@@ -567,7 +616,13 @@ def create_mongo_dataset_run(
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
                     "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                    "reference_snapshot": {"type": str(effective_scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": effective_scoring_rule, "dataset_profile": _sample_dataset_profile(sample)},
+                    "reference_snapshot": {
+                        "type": str(effective_scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": effective_scoring_rule,
+                        "dataset_profile": _sample_dataset_profile(sample),
+                        **({"judge": judge_configuration} if judge_configuration is not None else {}),
+                    },
                     "request_snapshot": None,
                     "raw_response": None,
                     "parsed_prediction": None,
@@ -623,13 +678,24 @@ def preflight_mongo_dataset_run(
         resolved_input_field,
         _proxy(prompt_package) if prompt_package else None,
     )
+    effective_scoring_rule: dict[str, object] | None = None
     try:
-        effective_dataset_scoring_rule(
+        effective_scoring_rule = effective_dataset_scoring_rule(
             scoring_rule,
             _proxy(prompt_package) if prompt_package else None,
         )
     except DatasetRunError as error:
         issues.append(str(error))
+    judge_endpoint: dict[str, Any] | None = None
+    if effective_scoring_rule is not None:
+        try:
+            judge_endpoint = _mongo_judge_endpoint_for_rule(
+                store,
+                scoring_rule=effective_scoring_rule,
+                evaluated_endpoint_id=model_endpoint_id,
+            )
+        except MongoRunExecutionError as error:
+            issues.append(str(error))
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
@@ -678,6 +744,15 @@ def preflight_mongo_dataset_run(
         if endpoint is not None and endpoint.get("input_cost_per_million") is not None and endpoint.get("output_cost_per_million") is not None
         else None
     )
+    judge_estimate = (
+        judge_preflight_estimate(
+            sample_count=len(samples),
+            target_input_tokens=estimated_input_tokens,
+            judge_endpoint=judge_endpoint,
+        )
+        if judge_endpoint is not None
+        else None
+    )
     return {
         "can_queue": not issues,
         "issues": issues,
@@ -687,6 +762,7 @@ def preflight_mongo_dataset_run(
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_cost": estimated_cost,
         "currency": endpoint.get("currency") if endpoint is not None else None,
+        "judge_estimate": judge_estimate,
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (
@@ -1059,7 +1135,16 @@ def execute_mongo_leased_task(
             raise MongoRunExecutionError("Sample attempt is no longer available for this task lease.")
         result = model_executor.execute(_proxy(frozen_endpoint), api_key, attempt["input_snapshot"])
         _require_current_mongo_lease(store, task_id, lease_token)
-        stored = _record_result(store, attempt, result, frozen_endpoint, lease_token)
+        stored = _record_result(
+            store,
+            run,
+            attempt,
+            result,
+            frozen_endpoint,
+            lease_token,
+            cipher=cipher,
+            model_executor=model_executor,
+        )
         if not result.success and _is_retryable(result.error_type, policy):
             retry_sample_ids.append(str(stored["sample_id"]))
             if result.retry_after_seconds is not None:
@@ -1427,10 +1512,14 @@ def _latest_run_attempts(store: MongoDocumentStore, run_id: str) -> dict[str, di
 
 def _record_result(
     store: MongoDocumentStore,
+    run: dict[str, Any],
     attempt: dict[str, Any],
     result: SampleExecutionResult,
     endpoint: dict[str, Any],
     lease_token: str,
+    *,
+    cipher: SecretCipher,
+    model_executor: ModelExecutor,
 ) -> dict[str, Any]:
     values: dict[str, Any] = {
         "request_snapshot": result.request_snapshot,
@@ -1447,6 +1536,37 @@ def _record_result(
         "completed_at": _utc_now(),
     }
     if result.success and result.prediction is not None:
+        if is_llm_judge_rule(attempt.get("reference_snapshot", {}).get("scoring")):
+            values.update({"score": None, "error_type": None, "error_message": None})
+            stored = store.update_document_if(
+                "sample_attempts",
+                str(attempt["id"]),
+                {"status": "running", "worker_lease_token": lease_token},
+                values,
+            )
+            if stored is None:
+                raise MongoRunExecutionError("Task lease was lost before result persistence.")
+            evidence = _automatic_mongo_judge_evidence(
+                store,
+                run,
+                stored,
+                cipher=cipher,
+                model_executor=model_executor,
+            )
+            _require_current_mongo_lease(store, str(attempt["task_id"]), lease_token)
+            completed = store.update_document_if(
+                "sample_attempts",
+                str(attempt["id"]),
+                {"status": "running", "worker_lease_token": lease_token},
+                {
+                    "metric_evidence": {**values["metric_evidence"], "llm_judge": evidence},
+                    "status": "succeeded",
+                    "worker_lease_token": None,
+                },
+            )
+            if completed is None:
+                raise MongoRunExecutionError("Task lease was lost before judge evidence persistence.")
+            return completed
         try:
             values.update({"score": score_prediction(result.prediction, attempt["reference_snapshot"]), "status": "succeeded", "error_type": None, "error_message": None})
         except ScoringError as error:
@@ -1469,6 +1589,44 @@ def _record_result(
     if stored is None:
         raise MongoRunExecutionError("Task lease was lost before result persistence.")
     return stored
+
+
+def _automatic_mongo_judge_evidence(
+    store: MongoDocumentStore,
+    run: dict[str, Any],
+    attempt: dict[str, Any],
+    *,
+    cipher: SecretCipher,
+    model_executor: ModelExecutor,
+) -> dict[str, object]:
+    """Run the frozen judge configuration without changing target execution status."""
+
+    configuration = run.get("configuration_snapshot") if isinstance(run.get("configuration_snapshot"), dict) else {}
+    judge = configuration.get("judge") if isinstance(configuration.get("judge"), dict) else {}
+    endpoint = judge.get("endpoint") if isinstance(judge.get("endpoint"), dict) else {}
+    judge_endpoint_id = endpoint.get("id")
+    system_message = judge.get("system_message")
+    if not isinstance(judge_endpoint_id, str) or not judge_endpoint_id:
+        return judge_failure_evidence("Frozen judge endpoint configuration is missing.")
+    if not isinstance(system_message, str) or not system_message:
+        return judge_failure_evidence("Frozen judge system message is missing.")
+    try:
+        assessment = assess_mongo_sample_attempt(
+            store,
+            sample_attempt_id=str(attempt["id"]),
+            judge_endpoint_id=judge_endpoint_id,
+            rubric={
+                "source": "llm_judge_metric",
+                "reference_field": judge.get("reference_field"),
+            },
+            system_message=system_message,
+            cipher=cipher,
+            model_executor=model_executor,
+            endpoint_override=endpoint,
+        )
+    except JudgeAssessmentError as error:
+        return judge_failure_evidence(str(error))
+    return judge_assessment_evidence(assessment)
 
 
 def _update_run_progress(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:

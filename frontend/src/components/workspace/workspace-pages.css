@@ -447,6 +447,93 @@ button.dataset-value-chip {
   grid-template-columns: minmax(16rem, .52fr) minmax(0, 1fr);
 }
 
+.workspace-prompt-inspector,
+.workspace-prompt-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-prompt-instructions,
+.workspace-prompt-configuration-grid {
+  display: grid;
+  gap: .8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-prompt-instructions > div,
+.workspace-prompt-configuration {
+  min-width: 0;
+}
+
+.workspace-prompt-instructions h3,
+.workspace-prompt-configuration h3,
+.workspace-prompt-form-section h3 {
+  color: var(--text-muted);
+  font-size: .74rem;
+  letter-spacing: .04em;
+  margin: 0 0 .35rem;
+  text-transform: uppercase;
+}
+
+.workspace-prompt-instructions pre,
+.workspace-prompt-configuration pre {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .76rem;
+  margin: 0;
+  max-height: 15rem;
+  overflow: auto;
+  padding: .68rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.workspace-prompt-configuration {
+  display: grid;
+  gap: .35rem;
+}
+
+.workspace-prompt-configuration > p {
+  margin: 0;
+}
+
+.workspace-prompt-form-section {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: .7rem;
+  padding-bottom: 1rem;
+}
+
+.workspace-prompt-form-section:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.workspace-prompt-template-hint {
+  color: var(--text-muted);
+  font-size: .76rem;
+  line-height: 1.55;
+  margin: -.2rem 0 0;
+}
+
+.workspace-prompt-template-hint code {
+  background: var(--surface-subtle);
+  border-radius: .25rem;
+  color: var(--text);
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .72rem;
+  margin: .1rem .16rem .1rem 0;
+  padding: .08rem .26rem;
+}
+
+.workspace-prompt-actions {
+  border-top: 1px solid var(--border);
+  padding-top: .85rem;
+}
+
 .workspace-filter-control {
   color: var(--text-muted);
   display: grid;
@@ -617,6 +704,19 @@ button.dataset-value-chip {
 
 .workspace-run-launcher {
   align-content: start;
+}
+
+.workspace-run-judge-settings {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .5rem;
+  padding: .75rem;
+}
+
+.workspace-run-judge-settings > p {
+  margin: 0;
 }
 
 .workspace-launch-note {
@@ -1797,6 +1897,8 @@ button.dataset-value-chip {
   .workspace-model-inventory-layout,
   .workspace-split--capabilities,
   .workspace-split--catalog,
+  .workspace-prompt-instructions,
+  .workspace-prompt-configuration-grid,
   .workspace-split--runs,
   .workspace-run-launch-grid,
   .workspace-run-context-controls,

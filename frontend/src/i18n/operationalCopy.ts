@@ -2667,7 +2667,8 @@ P95 延迟
 人工审核已与自动结果分开保存。
 已保存盲测成对评审证据和交换测试结果。
 已保存独立 LLM 评审判断及理由证据。
-任务优先级已更新为 {{priority}}。`.split("\n"),
+任务优先级已更新为 {{priority}}。
+预检就绪：{{samples}} 个样本，{{judgeRequests}} 次评委请求，预计 {{judgeTokens}} 个评委 token，{{cost}}。`.split("\n"),
   fr: `Corps de requête par défaut (JSON)
 Paquet de prompts pour une nouvelle exécution
 Remplacement du corps de requête de l’exécution (JSON)
@@ -2826,7 +2827,8 @@ Choisissez deux exécutions différentes de la même version de benchmark.
 La révision humaine a été enregistrée séparément des résultats automatisés.
 Les preuves du juge pair-à-pair en aveugle et les résultats du test d’inversion ont été enregistrés.
 L’évaluation indépendante LLM en tant que juge a été enregistrée avec les preuves de justification.
-La priorité de la tâche a été mise à jour à {{priority}}.`.split("\n"),
+La priorité de la tâche a été mise à jour à {{priority}}.
+Pré-évaluation prête : {{samples}} échantillons, {{judgeRequests}} requêtes de juge, {{judgeTokens}} jetons de juge estimés, {{cost}}.`.split("\n"),
   de: `Standard-Anfragetext (JSON)
 Prompt-Paket für einen neuen Lauf
 Überschreibung des Anfragetexts für den Lauf (JSON)
@@ -2985,7 +2987,8 @@ Wählen Sie zwei verschiedene Läufe derselben Benchmark-Version aus.
 Menschliche Überprüfung wurde getrennt von automatisierten Ergebnissen gespeichert.
 Nachweise des verblindeten paarweisen Richters und Ergebnisse des Umkehrtests wurden gespeichert.
 Unabhängige LLM-als-Richter-Bewertung wurde mit Begründungsnachweisen gespeichert.
-Aufgabenpriorität auf {{priority}} aktualisiert.`.split("\n"),
+Aufgabenpriorität auf {{priority}} aktualisiert.
+Voreinschätzung bereit: {{samples}} Stichproben, {{judgeRequests}} Bewertungsanfragen, {{judgeTokens}} geschätzte Bewertungs-Tokens, {{cost}}.`.split("\n"),
   ru: `Тело запроса по умолчанию (JSON)
 Пакет промптов для нового запуска
 Переопределение тела запроса запуска (JSON)
@@ -3144,7 +3147,8 @@ LLM в роли судьи
 Проверка человеком сохранена отдельно от автоматизированных результатов.
 Доказательства слепого попарного судьи и результаты теста смены порядка сохранены.
 Независимая оценка LLM в роли судьи сохранена с доказательствами обоснования.
-Приоритет задачи обновлён до {{priority}}.`.split("\n"),
+Приоритет задачи обновлён до {{priority}}.
+Предварительная проверка готова: {{samples}} образцов, {{judgeRequests}} запросов к судье, {{judgeTokens}} расчётных токенов судьи, {{cost}}.`.split("\n"),
   ja: `既定のリクエスト本文（JSON）
 新しい実行用のプロンプト パッケージ
 実行リクエスト本文のオーバーライド（JSON）
@@ -3303,7 +3307,8 @@ P95 レイテンシ
 人によるレビューは自動結果とは別に保存されました。
 ブラインドのペアワイズ判定の証拠と入れ替えテストの結果を保存しました。
 根拠の証拠とともに独立した LLM-as-a-judge 評価を保存しました。
-タスク優先度を {{priority}} に更新しました。`.split("\n"),
+タスク優先度を {{priority}} に更新しました。
+プリフライト準備完了: サンプル {{samples}} 件、判定リクエスト {{judgeRequests}} 件、推定判定トークン {{judgeTokens}}、{{cost}}。`.split("\n"),
   ko: `기본 요청 본문(JSON)
 새 실행용 프롬프트 패키지
 실행 요청 본문 재정의(JSON)
@@ -3462,7 +3467,8 @@ P95 지연 시간
 사람 검토가 자동화된 결과와 별도로 저장되었습니다.
 블라인드 쌍대 판정 증거와 교환 테스트 결과가 저장되었습니다.
 독립 LLM 판정 평가가 근거 증거와 함께 저장되었습니다.
-작업 우선순위가 {{priority}}(으)로 업데이트되었습니다.`.split("\n"),
+작업 우선순위가 {{priority}}(으)로 업데이트되었습니다.
+사전 검사 준비 완료: 샘플 {{samples}}개, 심사 요청 {{judgeRequests}}건, 예상 심사 토큰 {{judgeTokens}}, {{cost}}。`.split("\n"),
   ms: `Badan permintaan lalai (JSON)
 Pakej gesaan untuk larian baharu
 Gantian badan permintaan larian (JSON)
@@ -3621,7 +3627,8 @@ Pilih dua larian berlainan daripada versi penanda aras yang sama.
 Semakan manusia disimpan berasingan daripada keputusan automatik.
 Bukti hakim berpasangan buta dan hasil ujian pertukaran disimpan.
 Penilaian LLM-sebagai-hakim bebas disimpan bersama bukti alasan.
-Keutamaan tugas dikemas kini kepada {{priority}}.`.split("\n"),
+Keutamaan tugas dikemas kini kepada {{priority}}.
+Prasemak sedia: {{samples}} sampel, {{judgeRequests}} permintaan hakim, {{judgeTokens}} token hakim dianggarkan, {{cost}}.`.split("\n"),
 };
 
 // Only literals authored by the client are eligible for word-level fallback.
@@ -3652,7 +3659,7 @@ export const staticSourceTexts = new Set([
   "Generate portable evaluation artifacts, then manage their controlled, read-only share policies.", "Report context", "Select the run whose immutable evidence snapshot should anchor this report.", "Report source run", "Select a report source", "Choose an evaluation run above to generate and manage its artifacts without returning to a separate page.", "Select a run to generate a portable report or inspect saved artifacts.", "Generate report", "Select the report shape, then generate the download format needed by the next review or handoff.", "Report artifacts", "Download a generated artifact or create a scoped share link with explicit evidence and download controls.", "Keep human scoring and judge assessments tied to the precise run snapshot and sample under review.", "Select an evidence sample", "Review context", "Choose the evaluation snapshot and sample before opening human or independent judge workflows.", "Review run", "Review sample", "Select a run to begin a human or judge review.", "Human review workflow", "Provision constrained API users and keep recent administrative activity alongside the current inventory.", "User inventory", "Create a token-bearing account with the least-privileged role and an optional concurrency ceiling.", "Roles, rate ceilings, and status remain visible before issuing additional credentials.", "The latest recorded administrative changes are retained as an audit trail, separate from user-authored values.", "Inspect deployment-owned configuration, local workspace preferences, and the bearer token used for protected service calls.", "Application and storage", "Access and preferences", "The token remains only in this browser session. Clear it when you no longer need protected access.", "Operating guidance", "Choose a storage deployment that matches the worker topology, then use the theme toggle for this workspace only.",
   "How to use this workspace", "7 steps", "Register a model endpoint and a dataset, then queue evaluation runs and inspect the evidence.", "1. Add a model endpoint", "Models · configure the provider, run a connection test, and confirm it is available.", "2. Register a dataset", "Datasets · declare the source and, optionally, the input and reference fields.", "3. Download and verify", "Download the dataset and wait until its status is ready.", "4. Create a prompt package", "Workspace · write the user template; record fields render through {{ placeholders }}.", "4. Queue a dataset run", "Runs · pick the dataset, evaluation metric, reference field, and endpoint, then queue the run.", "5. Inspect evidence", "Runs · open the run to review samples, scores, latency, cost, and errors.", "6. Analyze results", "Analysis · inspect evaluation dimensions or compare two completed runs.", "7. Judge, review, and report", "Run blind pairwise judging, save human reviews, and generate reports.",
   "Filter benchmarks", "Name, source, status…", "Find run", "Benchmark, status, or ID", "Run status", "No runs match the current filters.", "Pause download", "Validate cache", "Clear cache", "Retry download", "Upload local revision", "Benchmark composition", "Queue suite", "Uses each selected endpoint’s saved connection and capacity configuration.", "No available endpoints are ready to receive this suite.", "Loading disk usage…", "No events available.", "Comparing…", "registered versions", "total runs", "tasks visible",
-  "Endpoint saved. Test its connection before starting a run.", "Capability probe completed. Declared capability settings were not changed.", "User capability declaration saved alongside detection evidence.", "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}.", "Preflight blocked: {{issues}}", "{{benchmark}} queued with an immutable configuration snapshot.", "Run cloned with a new immutable configuration snapshot.", "Benchmark rerun queued with a link to its source run.", "Failed samples were queued as new attempts.", "Run archived. Its evidence remains available through the API until deleted.", "Run {{action}}.", "Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.", "{{benchmark}} is now {{status}}.", "{{dataset}} download paused.", "{{format}} {{reportType}} report generated.", "Read-only share link (expires {{expires}}): {{url}}",   "Versioned prompt package saved.", "Dataset version registered.", "Dataset version updated.", "Dataset version deleted.", "Preview unavailable.", "User created. Copy this API token now: {{token}}", "Versioned evaluation suite saved.", "{{count}} suite run(s) queued.", "Validated media asset uploaded and selected for the custom run.", "Select an available endpoint and upload or select a media asset first.", "Custom multimodal run queued with an immutable asset snapshot.", "License accepted. The dataset can now be downloaded.", "Dataset downloaded, verified, and cached.", "Dataset upload checksum verified and stored in the local dataset cache.", "Dataset cache checksum and size were verified.", "Dataset cache removed. You can download or upload it again.", "Choose two different runs from the same benchmark version.", "Human review saved separately from automated results.", "Blinded pairwise judge evidence and swap-test results saved.", "Independent LLM-as-judge assessment saved with rationale evidence.", "Task priority updated to {{priority}}.",
+  "Endpoint saved. Test its connection before starting a run.", "Capability probe completed. Declared capability settings were not changed.", "User capability declaration saved alongside detection evidence.", "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}.", "Preflight blocked: {{issues}}", "{{benchmark}} queued with an immutable configuration snapshot.", "Run cloned with a new immutable configuration snapshot.", "Benchmark rerun queued with a link to its source run.", "Failed samples were queued as new attempts.", "Run archived. Its evidence remains available through the API until deleted.", "Run {{action}}.", "Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.", "{{benchmark}} is now {{status}}.", "{{dataset}} download paused.", "{{format}} {{reportType}} report generated.", "Read-only share link (expires {{expires}}): {{url}}",   "Versioned prompt package saved.", "Dataset version registered.", "Dataset version updated.", "Dataset version deleted.", "Preview unavailable.", "User created. Copy this API token now: {{token}}", "Versioned evaluation suite saved.", "{{count}} suite run(s) queued.", "Validated media asset uploaded and selected for the custom run.", "Select an available endpoint and upload or select a media asset first.", "Custom multimodal run queued with an immutable asset snapshot.", "License accepted. The dataset can now be downloaded.", "Dataset downloaded, verified, and cached.", "Dataset upload checksum verified and stored in the local dataset cache.", "Dataset cache checksum and size were verified.", "Dataset cache removed. You can download or upload it again.", "Choose two different runs from the same benchmark version.", "Human review saved separately from automated results.", "Blinded pairwise judge evidence and swap-test results saved.", "Independent LLM-as-judge assessment saved with rationale evidence.", "Task priority updated to {{priority}}.", "Preflight ready: {{samples}} samples, {{judgeRequests}} judge requests, {{judgeTokens}} estimated judge tokens, {{cost}}.",
 ]);
 
 const handAuthoredStaticPhraseSources = [...staticSourceTexts].filter((source) =>

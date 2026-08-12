@@ -3,18 +3,19 @@ import { describe, expect, it } from "vitest";
 import { workspacePath, workspacePaths, workspaceRoute } from "./routing";
 
 describe("workspace routing", () => {
-  it("maps exactly the eight retained views to unique canonical paths", () => {
+  it("maps every retained view to a unique canonical path", () => {
     expect(workspacePaths).toEqual({
       dashboard: "/dashboard",
       guide: "/guide",
       models: "/models",
       datasets: "/datasets",
+      prompts: "/prompts",
       runs: "/runs",
       leaderboard: "/leaderboard",
       analysis: "/analysis",
       settings: "/settings",
     });
-    expect(new Set(Object.values(workspacePaths)).size).toBe(8);
+    expect(new Set(Object.values(workspacePaths)).size).toBe(9);
     for (const [view, pathname] of Object.entries(workspacePaths)) {
       expect(workspacePath(view as keyof typeof workspacePaths)).toBe(pathname);
       expect(workspaceRoute(pathname)).toEqual({
@@ -43,6 +44,14 @@ describe("workspace routing", () => {
     });
     expect(workspacePath("analysis", "compare-runs")).toBe("/analysis?tab=compare-runs");
     expect(workspacePath("analysis", "evidence-matrix")).toBe("/analysis");
+    expect(workspacePath("prompts", "new-prompt-package")).toBe("/prompts?tab=new-prompt-package");
+    expect(workspaceRoute("/prompts", "?tab=new-prompt-package")).toEqual({
+      view: "prompts",
+      tab: "new-prompt-package",
+      pathname: "/prompts",
+      search: "?tab=new-prompt-package",
+      replace: false,
+    });
   });
 
   it("canonicalizes the legacy combined run launcher to quick start", () => {

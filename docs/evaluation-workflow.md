@@ -181,11 +181,11 @@ evaluation retain independent preflight state in separate URL-backed tabs:
 - **Prompt package** (optional) — the package whose template is rendered per
   record; leave empty to use the selected input field directly.
 - **Evaluation metric** — Default, Exact match, Normalized exact match, Token
-  F1, BLEU, or ROUGE-L. An explicit selection is frozen into the run and sample
-  evidence. **Default** sends no override, so the selected prompt package's
-  scoring rule wins when present; otherwise the service falls back to exact
-  match. In precedence order: explicit selection → prompt-package rule → exact
-  match.
+  F1, BLEU, ROUGE-L, or **LLM-as-judge**. An explicit selection is frozen into
+  the run and sample evidence. **Default** sends no override, so the selected
+  prompt package's scoring rule wins when present; otherwise the service falls
+  back to exact match. In precedence order: explicit selection → prompt-package
+  rule → exact match.
 - **Sample limit** — how many records (1–10,000, default 100) to draw from the
   dataset.
 
@@ -196,6 +196,32 @@ are identical. The backend returns clear errors
 when a check fails — for example a dataset version that is not `ready`, a
 selected field that is absent, or an endpoint that is not available. Scripted
 checks can call `POST /api/v1/evaluation-runs/dataset/preflight` directly.
+
+### LLM-as-judge configuration
+
+When you select **LLM-as-judge**, configure all of the following before
+preflight or queueing:
+
+- **Judge endpoint** — a separately registered endpoint that has passed its
+  connection test. The target model is never available as its own judge.
+- **Judge system message** — the evaluation criteria that the judge must apply
+  when returning a JSON score from 0 to 1, label, and rationale.
+- **Reference field** — the existing selected dataset field; its value is the
+  per-record reference answer sent to the judge alongside the target response.
+
+The run freezes a credential-free judge endpoint description, system message,
+and reference-field selection. API keys, custom request headers, and default
+request bodies are not returned in those snapshots. Preflight reports separate
+judge request/token/cost estimates and leaves target-run totals unchanged.
+
+After a successful target response, the worker creates a durable judge
+assessment and stores safe score, label, rationale, and failure summary in the
+sample's metric evidence. `llm_judge` aggregates only successful judge scores;
+its sample count therefore makes partial coverage explicit. A judge provider or
+response-format failure does not turn a successful target response into a
+failed target sample: the judge metric is instead unavailable for that sample
+and the saved failure evidence explains why. The target endpoint's latency and
+cost remain target-only; judge work is surfaced separately by preflight.
 
 ## 7. Watch and inspect
 
@@ -210,6 +236,10 @@ Reviews without removing operational controls:
   terminal failure state) as the task queue schedules it against the endpoint.
 - **Named metrics** — task-aware aggregate metrics show exact values, sample counts,
   confidence intervals, and an explicit N/A reason when required evidence is absent.
+- **LLM-as-judge metrics** — LLM-judge runs add a named `llm_judge` ratio with
+  only successful judge assessments in its score and coverage. The frozen rule,
+  reference answer, judge result, label, rationale, or safe failure summary are
+  retained with the sample evidence.
 - **Sample attempts** — each record becomes a sample attempt with the fully
   rendered prompt, the request sent, the raw provider response, the parsed
   prediction, the reference answer, latency, token usage, and the frozen metric

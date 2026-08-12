@@ -11,6 +11,7 @@ from jsonschema.exceptions import SchemaError
 import regex as safe_regex
 
 from app.services.model_executor import normalize_exact_match
+from app.services.judge_scoring import LLM_JUDGE_RULE_TYPE, JudgeScoringError, normalize_judge_rule
 
 
 class ScoringError(ValueError):
@@ -46,6 +47,12 @@ def validate_scoring_rule(rule: dict[str, object], *, _depth: int = 0) -> None:
     if not isinstance(rule, dict):
         raise ScoringError("Scoring rule must be an object.")
     rule_type = str(rule.get("type", "exact_match")).strip().lower()
+    if rule_type == LLM_JUDGE_RULE_TYPE:
+        try:
+            normalize_judge_rule(rule)
+        except JudgeScoringError as error:
+            raise ScoringError(str(error)) from error
+        return
     if rule_type not in _SUPPORTED_RULE_TYPES:
         raise ScoringError(f"Unsupported deterministic scoring type: {rule_type}.")
     if _depth > _MAX_RULE_DEPTH:
@@ -134,6 +141,8 @@ def score_prediction(prediction: str, reference: dict[str, object]) -> float:
     rule = dict(config) if isinstance(config, dict) else {"type": reference.get("type", "exact_match")}
     validate_scoring_rule(rule)
     rule_type = str(rule.get("type", "exact_match")).strip().lower()
+    if rule_type == LLM_JUDGE_RULE_TYPE:
+        raise ScoringError("LLM-as-judge scoring must be executed by the judge evaluation workflow.")
     expected = reference.get("answer")
     if rule_type == "exact_match":
         return float(prediction.strip() == str(expected).strip())

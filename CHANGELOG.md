@@ -8,6 +8,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The Configure navigation now includes a `/prompts` page that lists existing
+  versioned prompt packages and creates new versions through the existing API.
+- Prompt packages now use a Dataset-style tabbed workspace with a selectable
+  inventory, full configuration inspector, in-place editing, duplication into a
+  new version, template-variable guidance, and deletion that is safely blocked
+  when a package is referenced by an evaluation run or suite.
 - Every newly created evaluation run receives an immutable, URL-safe display name in
   `<model_name>_<dataset_or_benchmark_name>_<UTC_datetime>` form. Existing runs derive
   the same deterministic label without a destructive backfill.
@@ -25,6 +31,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   package rule; Default defers to the package and then exact match. The run
   launcher now shows a hint when a chosen metric overrides the selected prompt
   package's scoring rule.
+- Dataset evaluation runs can now use LLM-as-judge scoring with a separately
+  tested judge endpoint, frozen judge system message, and per-record reference
+  field. Successful assessments materialize an `llm_judge` metric with coverage
+  and confidence intervals; safe assessment evidence remains available when a
+  judge fails without failing the target response.
 - The retained workspace pages have stable direct URLs: `/dashboard`, `/guide`,
   `/models`, `/datasets`, `/runs`, `/analysis`, and `/settings`.
 - Every retained page now exposes URL-backed task tabs so inventory, creation,
@@ -70,6 +81,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Transient application notices dismiss automatically after five seconds; replacing
   a notice resets the timer, while manual dismissal and accessibility announcements
   remain available.
+- LLM-judge assessment runs now execute against a frozen snapshot of the judge
+  endpoint configuration, so later edits to the endpoint (connection settings,
+  credentials, rate limits, or pricing) cannot alter in-flight or past
+  assessments. Judge system-message length is validated at preflight time.
+- Independent judge assessments now record input/output token counts and an
+  estimated cost alongside each assessment, surfaced in the judge evidence API
+  and type contract, with a forward-only schema migration for SQLite/PostgreSQL
+  and parallel Mongo storage.
+- Dataset run preflight now reports the LLM-judge work estimate (judge request
+  count, estimated tokens, and cost) when a judge endpoint is configured,
+  localized in all supported locales.
+- Removed a dead exception handler that could never catch its declared
+  `JudgeScoringError` in dataset run scoring-rule normalization.
 - New dataset registrations default their source revision to `main` without
   rewriting revision values already stored for existing datasets.
 - Browser navigation now supports direct loads and back/forward history, with

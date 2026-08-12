@@ -13,6 +13,7 @@ afterEach(() => {
 });
 
 const endpoint = { id: "ep-1", display_name: "Test model", status: "available" } as Endpoint;
+const judgeEndpoint = { id: "ep-judge", display_name: "Judge model", status: "available" } as Endpoint;
 const readyDataset = {
   id: "ds-1",
   dataset_id: "demo",
@@ -29,7 +30,10 @@ const promptPackage = {
   system_message: null,
   user_template: "Q: {{question}}\nA:",
   few_shot_examples: [],
+  output_format: null,
+  response_parser: null,
   scoring_rule: { type: "exact_match" },
+  change_log: null,
   created_at: "2026-08-09T00:00:00Z",
 } as PromptPackage;
 const quickStartBenchmark = {
@@ -271,6 +275,76 @@ describe("evaluation run launch workspace", () => {
     await user.selectOptions(metric, "token_f1");
     await user.click(screen.getByRole("button", { name: "Queue dataset run" }));
     expect(createDatasetRun).toHaveBeenCalledWith(expectedPayload);
+  }, 10_000);
+
+  it("requires a separate judge endpoint and system message for LLM-as-judge", async () => {
+    mockWorkspace({ endpoints: [endpoint, judgeEndpoint] });
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Reference field")).toHaveValue("answer"));
+    await user.selectOptions(screen.getByLabelText("Evaluation metric"), "llm_judge");
+
+    expect(screen.getByLabelText("Judge endpoint")).toHaveTextContent("Judge model");
+    expect(screen.getByLabelText("Judge endpoint")).not.toHaveTextContent("Test model");
+    expect(screen.getByLabelText("Judge system message")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Queue dataset run" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Judge endpoint"), judgeEndpoint.id);
+    await user.type(screen.getByLabelText("Judge system message"), "Score each answer against the reference.");
+    await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
+    expect(validateDatasetRun).toHaveBeenCalledWith(expect.objectContaining({
+      scoring_rule: {
+        type: "llm_judge",
+        judge_endpoint_id: judgeEndpoint.id,
+        system_message: "Score each answer against the reference.",
+      },
+    }));
+
+    await user.selectOptions(screen.getByLabelText("Evaluation metric"), "token_f1");
+    await user.selectOptions(screen.getByLabelText("Evaluation metric"), "llm_judge");
+    expect(screen.getByLabelText("Judge endpoint")).toHaveValue("");
+    expect(screen.getByLabelText("Judge system message")).toHaveValue("");
+  }, 10_000);
+
+  it("reports a separate judge estimate when an LLM judge is configured", async () => {
+    mockWorkspace({ endpoints: [endpoint, judgeEndpoint] });
+    vi.spyOn(api, "previewDataset").mockResolvedValue({
+      fields: ["question", "answer"],
+      rows: [{ question: "2 + 2?", answer: "4" }],
+    });
+    vi.spyOn(api, "validateDatasetRun").mockResolvedValue({
+      can_queue: true,
+      issues: [],
+      sample_count: 1,
+      judge_estimate: {
+        estimated_requests: 1,
+        estimated_input_tokens: 200,
+        estimated_output_tokens: 64,
+        estimated_cost: 0.00025,
+        currency: "USD",
+      },
+    } as never);
+    const user = await openRuns();
+
+    await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
+    await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
+    await waitFor(() => expect(screen.getByLabelText("Reference field")).toHaveValue("answer"));
+    await user.selectOptions(screen.getByLabelText("Evaluation metric"), "llm_judge");
+    await user.selectOptions(screen.getByLabelText("Judge endpoint"), judgeEndpoint.id);
+    await user.type(screen.getByLabelText("Judge system message"), "Score each answer against the reference.");
+    await user.click(screen.getByRole("button", { name: "Preflight dataset" }));
+
+    const notice = await screen.findByRole("button", { name: /judge requests/i });
+    expect(notice).toHaveTextContent("1 judge requests");
+    expect(notice).toHaveTextContent("264 estimated judge tokens");
+    expect(notice).toHaveTextContent("0.00025 USD");
   }, 10_000);
 
   it("shows the immutable scoring metric in selected run evidence", async () => {

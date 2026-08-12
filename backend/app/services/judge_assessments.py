@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 import secrets
+from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -10,10 +11,42 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher
 from app.db.models import EndpointStatus, EvaluationRun, JudgeAssessment, ModelEndpoint, SampleAttempt
 from app.services.model_executor import ModelExecutor
+from app.services.judge_scoring import (
+    DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+    DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    JudgeScoringError,
+    build_pairwise_judge_input,
+    build_single_judge_input,
+    parse_judge_response,
+)
 
 
 class JudgeAssessmentError(ValueError):
     pass
+
+
+def _execution_endpoint(endpoint: ModelEndpoint, override: Mapping[str, object] | None) -> Any:
+    """Merge a frozen endpoint description over the live row for reproducible judging."""
+    if override is None:
+        return endpoint
+    return SimpleNamespace(
+        base_url=str(override.get("base_url", endpoint.base_url)),
+        model_name=str(override.get("model_name", endpoint.model_name)),
+        protocol_profile=str(override.get("protocol_profile", endpoint.protocol_profile)),
+        default_request_body=override.get("default_request_body", endpoint.default_request_body),
+        timeout_seconds=int(override.get("timeout_seconds", endpoint.timeout_seconds)),
+        custom_headers=override.get("custom_headers", endpoint.custom_headers),
+        input_cost_per_million=override.get("input_cost_per_million", endpoint.input_cost_per_million),
+        output_cost_per_million=override.get("output_cost_per_million", endpoint.output_cost_per_million),
+    )
+
+
+def _estimated_cost(endpoint: Any, input_tokens: int | None, output_tokens: int | None) -> float | None:
+    if input_tokens is None and output_tokens is None:
+        return None
+    input_cost = (input_tokens or 0) * (endpoint.input_cost_per_million or 0) / 1_000_000
+    output_cost = (output_tokens or 0) * (endpoint.output_cost_per_million or 0) / 1_000_000
+    return round(input_cost + output_cost, 12)
 
 
 def assess_sample_attempt(
@@ -22,8 +55,11 @@ def assess_sample_attempt(
     sample_attempt_id: str,
     judge_endpoint_id: str,
     rubric: dict[str, Any] | None,
+    system_message: str = DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
+    persist: bool = True,
     cipher: SecretCipher,
     model_executor: ModelExecutor,
+    endpoint_override: Mapping[str, object] | None = None,
 ) -> JudgeAssessment:
     attempt = session.get(SampleAttempt, sample_attempt_id)
     if attempt is None:
@@ -44,51 +80,49 @@ def assess_sample_attempt(
         status="running",
     )
     session.add(assessment)
-    session.commit()
-    session.refresh(assessment)
+    session.flush()
+    if persist:
+        session.commit()
+        session.refresh(assessment)
 
-    input_snapshot = {
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an evaluation judge. Return only JSON with score (0 to 1), label, and rationale.",
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "rubric": assessment.rubric,
-                        "input": attempt.input_snapshot,
-                        "reference": attempt.reference_snapshot,
-                        "prediction": attempt.parsed_prediction,
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ]
-    }
-    result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
+    input_snapshot = build_single_judge_input(
+        system_message=system_message,
+        rubric=assessment.rubric,
+        input_snapshot=attempt.input_snapshot,
+        reference_snapshot=attempt.reference_snapshot,
+        prediction=attempt.parsed_prediction,
+    )
+    execution_endpoint = _execution_endpoint(endpoint, endpoint_override)
+    result = model_executor.execute(execution_endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
     assessment.raw_response = result.raw_response
+    assessment.input_tokens = result.input_tokens
+    assessment.output_tokens = result.output_tokens
+    assessment.estimated_cost = _estimated_cost(execution_endpoint, result.input_tokens, result.output_tokens)
     if not result.success or result.prediction is None:
         assessment.status = "failed"
         assessment.error_message = result.error_message or "Judge execution failed."
-        session.commit()
-        session.refresh(assessment)
+        _save_assessment(session, assessment, persist=persist)
         return assessment
 
     try:
-        parsed = _parse_judge_response(result.prediction)
+        parsed = parse_judge_response(result.prediction)
         assessment.score = parsed["score"]
         assessment.label = parsed.get("label")
         assessment.rationale = parsed.get("rationale")
         assessment.status = "succeeded"
         assessment.error_message = None
-    except JudgeAssessmentError as error:
+    except JudgeScoringError as error:
         assessment.status = "failed"
         assessment.error_message = str(error)
-    session.commit()
-    session.refresh(assessment)
+    _save_assessment(session, assessment, persist=persist)
     return assessment
+
+
+def _save_assessment(session: Session, assessment: JudgeAssessment, *, persist: bool) -> None:
+    session.flush()
+    if persist:
+        session.commit()
+        session.refresh(assessment)
 
 
 def assess_pairwise_sample_attempt(
@@ -144,41 +178,31 @@ def assess_pairwise_sample_attempt(
             "A": attempt.parsed_prediction if order[0] == "target" else comparison.parsed_prediction,
             "B": comparison.parsed_prediction if order[1] == "comparison" else attempt.parsed_prediction,
         }
-        input_snapshot = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an evaluation judge. Compare two anonymized candidate answers. Return only JSON with score (0 to 1), label, rationale, and winner (A, B, or tie). Do not infer model identity.",
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "rubric": rubric_snapshot,
-                            "input": attempt.input_snapshot,
-                            "reference": attempt.reference_snapshot,
-                            "answers": answers,
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ]
-        }
+        input_snapshot = build_pairwise_judge_input(
+            system_message=DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
+            rubric=rubric_snapshot,
+            input_snapshot=attempt.input_snapshot,
+            reference_snapshot=attempt.reference_snapshot,
+            answers=answers,
+        )
         result = model_executor.execute(endpoint, cipher.decrypt(endpoint.encrypted_api_key), input_snapshot)
         assessment.raw_response = result.raw_response
+        assessment.input_tokens = result.input_tokens
+        assessment.output_tokens = result.output_tokens
+        assessment.estimated_cost = _estimated_cost(endpoint, result.input_tokens, result.output_tokens)
         if not result.success or result.prediction is None:
             assessment.status = "failed"
             assessment.error_message = result.error_message or "Judge execution failed."
         else:
             try:
-                parsed = _parse_judge_response(result.prediction)
+                parsed = parse_judge_response(result.prediction)
                 assessment.score = parsed["score"]
                 assessment.label = parsed.get("label")
                 assessment.rationale = parsed.get("rationale")
                 assessment.selected_answer = parsed.get("winner")
                 assessment.status = "succeeded"
                 assessment.error_message = None
-            except JudgeAssessmentError as error:
+            except JudgeScoringError as error:
                 assessment.status = "failed"
                 assessment.error_message = str(error)
         session.commit()
@@ -233,36 +257,3 @@ def _normalized_pairwise_decision(assessment: JudgeAssessment | dict[str, Any]) 
     if not isinstance(order, list) or len(order) != 2 or any(item not in {"target", "comparison"} for item in order):
         return selected
     return str(order[0] if selected == "A" else order[1])
-
-
-def _parse_judge_response(prediction: str) -> dict[str, object]:
-    text = prediction.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]
-        if text.endswith("```"):
-            text = text[:-3].strip()
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise JudgeAssessmentError("Judge response was not valid JSON.") from error
-    if not isinstance(payload, dict):
-        raise JudgeAssessmentError("Judge response must be a JSON object.")
-    try:
-        score = float(payload["score"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise JudgeAssessmentError("Judge response must include a numeric score.") from error
-    if not 0 <= score <= 1:
-        raise JudgeAssessmentError("Judge score must be between 0 and 1.")
-    parsed: dict[str, object] = {"score": score}
-    for field in ("label", "rationale"):
-        value = payload.get(field)
-        if value is not None and not isinstance(value, str):
-            raise JudgeAssessmentError(f"Judge response field {field} must be a string.")
-        if isinstance(value, str):
-            parsed[field] = value
-    winner = payload.get("winner")
-    if winner is not None:
-        if not isinstance(winner, str) or winner not in {"A", "B", "tie"}:
-            raise JudgeAssessmentError("Judge response winner must be A, B, or tie.")
-        parsed["winner"] = winner
-    return parsed

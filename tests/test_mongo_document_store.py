@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +23,7 @@ from app.services.model_executor import SampleExecutionResult
 from app.services.run_names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.services.metric_profiles import METRIC_PROFILE_VERSION
 
 
 def _configure_dataset_download(monkeypatch, content: bytes) -> None:
@@ -470,7 +472,7 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         assert completed.json()["status"] == "completed"
         attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts")
         assert [(item["status"], item["score"]) for item in attempts.json()] == [("succeeded", 1.0)]
-        assert attempts.json()[0]["metric_evidence"] == {"profile_version": "1.0.0"}
+        assert attempts.json()[0]["metric_evidence"] == {"profile_version": METRIC_PROFILE_VERSION}
         assert attempts.json()[0]["request_snapshot"]["model"] == "model"
         assert api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/progress").json()["completion_rate"] == 1
         metrics = api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics")
@@ -1048,6 +1050,56 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             assert attempts
             assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
 
+        judge = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://judge.example.test/v1",
+            "api_key": "judge-secret",
+            "model_name": "judge-model",
+            "custom_headers": {"X-Judge-Secret": "must-not-appear"},
+        }).json()
+        assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
+        judge_rule = {
+            "type": "llm_judge",
+            "judge_endpoint_id": judge["id"],
+            "system_message": "Judge each candidate against the reference.",
+        }
+        judge_payload = {**base_payload, "scoring_rule": judge_rule}
+        judge_preflight = api.post("/api/v1/evaluation-runs/dataset/preflight", json=judge_payload)
+        assert judge_preflight.status_code == 200
+        assert judge_preflight.json()["can_queue"] is True
+        assert judge_preflight.json()["judge_estimate"]["estimated_requests"] == 1
+        judge_run = api.post("/api/v1/evaluation-runs/dataset", json=judge_payload)
+        assert judge_run.status_code == 201
+        snapshot = judge_run.json()["configuration_snapshot"]
+        assert snapshot["judge"]["endpoint"]["id"] == judge["id"]
+        assert snapshot["judge"]["reference_field"] == "answer"
+        assert "judge-secret" not in str(snapshot)
+        assert "must-not-appear" not in str(snapshot)
+        attempts = store.list_documents("sample_attempts", query={"run_id": judge_run.json()["id"]})
+        assert all(attempt["reference_snapshot"]["judge"] == snapshot["judge"] for attempt in attempts)
+
+        unavailable_judge = api.post("/api/v1/model-endpoints", json={
+            "base_url": "https://offline-judge.example.test/v1",
+            "api_key": "offline-judge-secret",
+            "model_name": "offline-judge",
+        }).json()
+
+        for invalid_rule, message in (
+            ({**judge_rule, "judge_endpoint_id": endpoint["id"]}, "cannot judge its own"),
+            ({**judge_rule, "judge_endpoint_id": "missing-judge"}, "Judge model endpoint not found"),
+            ({**judge_rule, "judge_endpoint_id": unavailable_judge["id"]}, "must pass a connection test"),
+        ):
+            invalid_preflight = api.post(
+                "/api/v1/evaluation-runs/dataset/preflight",
+                json={**base_payload, "scoring_rule": invalid_rule},
+            )
+            assert invalid_preflight.status_code == 200
+            assert invalid_preflight.json()["can_queue"] is False
+            assert any(message in issue for issue in invalid_preflight.json()["issues"])
+            assert api.post(
+                "/api/v1/evaluation-runs/dataset",
+                json={**base_payload, "scoring_rule": invalid_rule},
+            ).status_code == 409
+
         run_count = len(store.list_documents("evaluation_runs"))
         invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
         assert api.post(
@@ -1059,6 +1111,121 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             json=invalid_rule,
         ).status_code == 422
         assert len(store.list_documents("evaluation_runs")) == run_count
+
+
+def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Path) -> None:
+    class JudgeExecutor:
+        def __init__(self) -> None:
+            self.judge_inputs: list[dict[str, Any]] = []
+            self.judge_endpoint_calls: list[tuple[str, str, int]] = []
+
+        def execute(self, endpoint: Any, _api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
+            if endpoint.model_name == "judge-model":
+                self.judge_endpoint_calls.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds))
+                self.judge_inputs.append(input_snapshot)
+                return SampleExecutionResult(
+                    True,
+                    {"model": endpoint.model_name},
+                    '{"choices":[{"message":{"content":"{\\"score\\": 0.8, \\"label\\": \\"pass\\"}"}}]}',
+                    '{"score": 0.8, "label": "pass"}',
+                    input_tokens=12,
+                    output_tokens=8,
+                )
+            return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "BLUE")
+
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    executor = JudgeExecutor()
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=executor,
+        document_store=store,
+    )
+    with TestClient(app) as api:
+        target = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "target-model"},
+        ).json()
+        judge = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://judge.example.test/v1", "api_key": "judge-secret", "model_name": "judge-model", "input_cost_per_million": 2, "output_cost_per_million": 3},
+        ).json()
+        assert api.post(f"/api/v1/model-endpoints/{target['id']}/connection-test").status_code == 200
+        assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
+        dataset = api.post("/api/v1/datasets", json={"dataset_id": "mongo-judge", "version": "1"}).json()
+        assert api.post(
+            f"/api/v1/datasets/{dataset['id']}/upload",
+            json={
+                "filename": "samples.jsonl",
+                "base64_data": base64.b64encode(b'{"question":"blue sky","answer":"BLUE"}\n').decode("ascii"),
+            },
+        ).status_code == 200
+        system_message = "Judge the target answer using the supplied reference."
+        run = api.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": target["id"],
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "answer",
+                "scoring_rule": {
+                    "type": "llm_judge",
+                    "judge_endpoint_id": judge["id"],
+                    "system_message": system_message,
+                },
+            },
+        )
+        assert run.status_code == 201
+        store.update_document(
+            "model_endpoints",
+            judge["id"],
+            {
+                "base_url": "https://judge-edited.example.test/v1",
+                "model_name": "judge-edited-model",
+                "timeout_seconds": 30,
+                "input_cost_per_million": 99,
+                "output_cost_per_million": 99,
+            },
+        )
+        assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"
+        assert executor.judge_endpoint_calls == [("https://judge.example.test/v1", "judge-model", 60)]
+        attempts = api.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
+        assert len(attempts) == 1
+        assert attempts[0]["status"] == "succeeded"
+        assert attempts[0]["score"] is None
+        judge_evidence = attempts[0]["metric_evidence"]["llm_judge"]
+        assert isinstance(judge_evidence["assessment_id"], str)
+        assert judge_evidence["status"] == "succeeded"
+        assert judge_evidence["score"] == 0.8
+        assert judge_evidence["label"] == "pass"
+        metrics = {
+            item["metric_name"]: item
+            for item in api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics").json()
+        }
+        assert metrics["llm_judge"]["metric_value"] == 0.8
+        assert metrics["llm_judge"]["sample_count"] == 1
+        assert metrics["llm_judge"]["confidence_interval"] == {
+            "method": "normal_95",
+            "lower": 0.8,
+            "upper": 0.8,
+        }
+        leaderboard = api.get("/api/v1/leaderboard", params={"available_metric": "llm_judge"})
+        assert [item["run_id"] for item in leaderboard.json()["items"]] == [run.json()["id"]]
+        assessments = store.list_documents("judge_assessments", query={"sample_attempt_id": attempts[0]["id"]})
+        assert len(assessments) == 1
+        assert assessments[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"}
+        assert assessments[0]["input_tokens"] == 12
+        assert assessments[0]["output_tokens"] == 8
+        assert assessments[0]["estimated_cost"] == round((12 * 2 + 8 * 3) / 1_000_000, 12)
+        assert executor.judge_inputs[0]["messages"][0]["content"] == system_message
+        judge_payload = json.loads(executor.judge_inputs[0]["messages"][1]["content"])
+        assert judge_payload["reference"]["answer"] == "BLUE"
 
 
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:

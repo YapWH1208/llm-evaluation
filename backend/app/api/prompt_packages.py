@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.db.models import PromptPackage
+from app.db.models import EvaluationRun, EvaluationSuite, PromptPackage
 from app.db.mongo import MongoDocumentStore
 from app.services.prompt_templates import PromptTemplateError, validate_template
 from app.services.scoring import ScoringError, validate_scoring_rule
@@ -72,3 +72,108 @@ def list_prompt_packages(request: Request, session: SessionDependency) -> list[P
         return store.list_documents("prompt_packages", sort=[("created_at", -1)])
     assert session is not None
     return list(session.scalars(select(PromptPackage).order_by(PromptPackage.created_at.desc())))
+
+
+@router.put("/{prompt_package_id}", response_model=PromptPackageResponse)
+def update_prompt_package(
+    prompt_package_id: str,
+    payload: PromptPackageCreate,
+    request: Request,
+    session: SessionDependency,
+) -> PromptPackage | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        if store.get_document("prompt_packages", prompt_package_id) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Prompt package not found")
+        duplicates = store.list_documents(
+            "prompt_packages",
+            query={"name": payload.name, "version": payload.version},
+        )
+        if any(str(item["id"]) != prompt_package_id for item in duplicates):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package name and version already exist")
+        updated = store.update_document("prompt_packages", prompt_package_id, payload.model_dump())
+        assert updated is not None
+        return updated
+
+    assert session is not None
+    prompt_package = session.get(PromptPackage, prompt_package_id)
+    if prompt_package is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prompt package not found")
+    existing = session.scalar(
+        select(PromptPackage).where(
+            PromptPackage.name == payload.name,
+            PromptPackage.version == payload.version,
+        )
+    )
+    if existing is not None and existing.id != prompt_package_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package name and version already exist")
+    for field, value in payload.model_dump().items():
+        setattr(prompt_package, field, value)
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package name and version already exist") from error
+    session.refresh(prompt_package)
+    return prompt_package
+
+
+@router.delete("/{prompt_package_id}", response_model=PromptPackageResponse)
+def delete_prompt_package(
+    prompt_package_id: str,
+    request: Request,
+    session: SessionDependency,
+) -> PromptPackage | dict[str, Any]:
+    store = get_document_store(request)
+    if store is not None:
+        prompt_package = store.get_document("prompt_packages", prompt_package_id)
+        if prompt_package is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Prompt package not found")
+        _ensure_mongo_prompt_package_is_unreferenced(store, prompt_package_id)
+        store.delete_document("prompt_packages", prompt_package_id)
+        return prompt_package
+
+    assert session is not None
+    prompt_package = session.get(PromptPackage, prompt_package_id)
+    if prompt_package is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prompt package not found")
+    _ensure_prompt_package_is_unreferenced(session, prompt_package_id)
+    session.delete(prompt_package)
+    session.commit()
+    return prompt_package
+
+
+def _ensure_prompt_package_is_unreferenced(session: Session, prompt_package_id: str) -> None:
+    if session.scalar(
+        select(EvaluationRun.id)
+        .where(EvaluationRun.prompt_package_id == prompt_package_id)
+        .limit(1)
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation run")
+    if any(_suite_references_prompt_package(suite, prompt_package_id) for suite in session.scalars(select(EvaluationSuite))):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation suite")
+
+
+def _ensure_mongo_prompt_package_is_unreferenced(store: MongoDocumentStore, prompt_package_id: str) -> None:
+    if store.list_documents("evaluation_runs", query={"prompt_package_id": prompt_package_id}, limit=1):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation run")
+    if any(
+        _suite_references_prompt_package(suite, prompt_package_id)
+        for suite in store.list_documents("evaluation_suites")
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation suite")
+
+
+def _suite_references_prompt_package(suite: EvaluationSuite | dict[str, Any], prompt_package_id: str) -> bool:
+    default_overrides = (
+        suite.get("default_prompt_overrides")
+        if isinstance(suite, dict)
+        else suite.default_prompt_overrides
+    )
+    if isinstance(default_overrides, dict) and any(value == prompt_package_id for value in default_overrides.values()):
+        return True
+    benchmark_list = suite.get("benchmark_list") if isinstance(suite, dict) else suite.benchmark_list
+    return isinstance(benchmark_list, list) and any(
+        isinstance(selection, dict) and selection.get("prompt_package_id") == prompt_package_id
+        for selection in benchmark_list
+    )

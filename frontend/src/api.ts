@@ -62,6 +62,13 @@ export type RunPreflight = {
   estimated_output_tokens: number;
   estimated_cost: number | null;
   currency: string | null;
+  judge_estimate: {
+    estimated_requests: number;
+    estimated_input_tokens: number;
+    estimated_output_tokens: number;
+    estimated_cost: number | null;
+    currency: string | null;
+  } | null;
   compatibility: { required: string[]; unsupported: string[]; unverified: string[] };
   datasets: Array<Record<string, unknown>>;
   request_body_evidence: Record<string, unknown> | null;
@@ -265,6 +272,11 @@ export type PromptPackage = {
   prompt_type: string;
   system_message: string | null;
   user_template: string;
+  few_shot_examples: unknown[];
+  output_format: Record<string, unknown> | null;
+  response_parser: Record<string, unknown> | null;
+  scoring_rule: Record<string, unknown> | null;
+  change_log: string | null;
   created_at: string;
 };
 
@@ -321,7 +333,7 @@ export type Comparison = {
 
 export type Review = { id: string; sample_attempt_id: string; reviewer_id: string; rubric: Record<string, unknown> | null; score: number | null; labels: string[]; notes: string | null; review_stage: "primary" | "secondary" | "adjudication"; adjudicates_review_ids: string[]; created_at: string };
 export type ReviewAgreement = { sample_attempt_id: string; review_count: number; distinct_reviewer_count: number; review_stage_counts: { primary: number; secondary: number; adjudication: number }; numeric_score: { count: number; mean: number | null; standard_deviation: number | null; range: number | null }; label_agreement: number | null; status: string; adjudication_review_id: string | null };
-export type JudgeAssessment = { id: string; sample_attempt_id: string; judge_endpoint_id: string; comparison_sample_attempt_id: string | null; rubric: Record<string, unknown>; answer_order: string[]; swap_test_group_id: string | null; selected_answer: string | null; score: number | null; label: string | null; rationale: string | null; raw_response: string | null; status: string; error_message: string | null; created_at: string };
+export type JudgeAssessment = { id: string; sample_attempt_id: string; judge_endpoint_id: string; comparison_sample_attempt_id: string | null; rubric: Record<string, unknown>; answer_order: string[]; swap_test_group_id: string | null; selected_answer: string | null; score: number | null; label: string | null; rationale: string | null; raw_response: string | null; input_tokens: number | null; output_tokens: number | null; estimated_cost: number | null; status: string; error_message: string | null; created_at: string };
 export type JudgeAgreement = { status: string; assessment_count: number; successful_assessment_count: number; judge_endpoint_count: number; scores: { mean: number | null; range: number | null }; decisions: { distinct: string[]; count: number }; swap_test_group_count: number };
 export type Task = { id: string; run_id: string; parent_task_id: string | null; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsCell = { x_key: string; x_label: string; y_key: string; y_label: string; run_ids: string[]; score: number | null; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; baseline_score: number | null; delta: number | null };
@@ -443,6 +455,8 @@ export const api = {
   listBenchmarks: () => request<Benchmark[]>("/benchmarks"),
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
   createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
+  updatePromptPackage: (promptPackageId: string, body: Record<string, unknown>) => request<PromptPackage>(`/prompt-packages/${promptPackageId}`, { method: "PUT", body: JSON.stringify(body) }),
+  deletePromptPackage: (promptPackageId: string) => request<PromptPackage>(`/prompt-packages/${promptPackageId}`, { method: "DELETE" }),
   listDatasets: () => request<Dataset[]>("/datasets"),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   previewDataset: (datasetId: string, limit = 5) => request<{ fields: string[]; rows: Array<Record<string, string>> }>(`/datasets/${datasetId}/preview?limit=${limit}`),
