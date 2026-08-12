@@ -10,6 +10,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The Configure navigation now includes a `/prompts` page that lists existing
   versioned prompt packages and creates new versions through the existing API.
+- Prompt packages now use a Dataset-style tabbed workspace with a selectable
+  inventory, full configuration inspector, in-place editing, duplication into a
+  new version, template-variable guidance, and deletion that is safely blocked
+  when a package is referenced by an evaluation run or suite.
 - Every newly created evaluation run receives an immutable, URL-safe display name in
   `<model_name>_<dataset_or_benchmark_name>_<UTC_datetime>` form. Existing runs derive
   the same deterministic label without a destructive backfill.

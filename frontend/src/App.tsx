@@ -571,11 +571,41 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function createPromptPackage(payload: PromptPackageCreatePayload) {
-    setBusy("prompt-package");
+  async function createPromptPackage(payload: PromptPackageCreatePayload): Promise<PromptPackage> {
+    setBusy("prompt-package-create");
     try {
-      await api.createPromptPackage({ ...payload });
-      showNotice("Versioned prompt package saved.");
+      const created = await api.createPromptPackage({ ...payload });
+      showNotice(t("promptPackage.savedNotice"));
+      await refresh();
+      return created;
+    } catch (error) {
+      showError(error);
+      throw error;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updatePromptPackage(promptPackageId: string, payload: PromptPackageCreatePayload): Promise<PromptPackage> {
+    setBusy(`prompt-package-update-${promptPackageId}`);
+    try {
+      const updated = await api.updatePromptPackage(promptPackageId, { ...payload });
+      showNotice(t("promptPackage.updatedNotice"));
+      await refresh();
+      return updated;
+    } catch (error) {
+      showError(error);
+      throw error;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deletePromptPackage(promptPackageId: string): Promise<void> {
+    setBusy(`prompt-package-delete-${promptPackageId}`);
+    try {
+      await api.deletePromptPackage(promptPackageId);
+      showNotice(t("promptPackage.deletedNotice"));
       await refresh();
     } catch (error) {
       showError(error);
@@ -813,7 +843,15 @@ export default function App() {
 
       {view === "datasets" && <DatasetsPage activeTab={route.tab as WorkspaceTabFor<"datasets">} busy={busy} datasets={datasets} onClear={clearDatasetCache} onDelete={deleteDatasetRecord} onPause={pauseDataset} onPrepare={prepareDataset} onStartEvaluation={startDatasetEvaluation} onTabChange={(tab) => navigate("datasets", { tab })} onUpdate={updateDatasetRecord} onUpload={uploadDataset} onValidate={validateDataset} registration={<DatasetRegistrationForm busy={busy === "dataset"} onChange={setDatasetForm} onSubmit={createDataset} values={datasetForm} />} />}
 
-      {view === "prompts" && <PromptPackagesPage busy={busy === "prompt-package"} onCreate={createPromptPackage} prompts={prompts} />}
+      {view === "prompts" && <PromptPackagesPage
+        activeTab={route.tab as WorkspaceTabFor<"prompts">}
+        busy={busy}
+        onCreate={createPromptPackage}
+        onDelete={deletePromptPackage}
+        onTabChange={(tab) => navigate("prompts", { tab })}
+        onUpdate={updatePromptPackage}
+        prompts={prompts}
+      />}
 
 
       {view === "runs" && <RunsPage

@@ -17,7 +17,7 @@ export const workspaceTabIds = {
   guide: ["getting-started", "prepare-data", "run-and-analyze"],
   models: ["model-inventory", "add-endpoint"],
   datasets: ["dataset-inventory", "register-dataset"],
-  prompts: ["prompt-inventory"],
+  prompts: ["prompt-inventory", "new-prompt-package"],
   runs: ["run-inventory", "quick-start", "dataset-evaluation", "run-details"],
   leaderboard: ["rankings"],
   analysis: ["evidence-matrix", "compare-runs"],

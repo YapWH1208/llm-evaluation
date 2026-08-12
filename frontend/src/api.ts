@@ -272,6 +272,11 @@ export type PromptPackage = {
   prompt_type: string;
   system_message: string | null;
   user_template: string;
+  few_shot_examples: unknown[];
+  output_format: Record<string, unknown> | null;
+  response_parser: Record<string, unknown> | null;
+  scoring_rule: Record<string, unknown> | null;
+  change_log: string | null;
   created_at: string;
 };
 
@@ -450,6 +455,8 @@ export const api = {
   listBenchmarks: () => request<Benchmark[]>("/benchmarks"),
   listPromptPackages: () => request<PromptPackage[]>("/prompt-packages"),
   createPromptPackage: (body: Record<string, unknown>) => request<PromptPackage>("/prompt-packages", { method: "POST", body: JSON.stringify(body) }),
+  updatePromptPackage: (promptPackageId: string, body: Record<string, unknown>) => request<PromptPackage>(`/prompt-packages/${promptPackageId}`, { method: "PUT", body: JSON.stringify(body) }),
+  deletePromptPackage: (promptPackageId: string) => request<PromptPackage>(`/prompt-packages/${promptPackageId}`, { method: "DELETE" }),
   listDatasets: () => request<Dataset[]>("/datasets"),
   createDataset: (body: Record<string, unknown>) => request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   previewDataset: (datasetId: string, limit = 5) => request<{ fields: string[]; rows: Array<Record<string, string>> }>(`/datasets/${datasetId}/preview?limit=${limit}`),

@@ -30,7 +30,10 @@ const promptPackage = {
   system_message: null,
   user_template: "Q: {{question}}\nA:",
   few_shot_examples: [],
+  output_format: null,
+  response_parser: null,
   scoring_rule: { type: "exact_match" },
+  change_log: null,
   created_at: "2026-08-09T00:00:00Z",
 } as PromptPackage;
 const quickStartBenchmark = {

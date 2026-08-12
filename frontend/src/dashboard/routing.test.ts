@@ -44,6 +44,14 @@ describe("workspace routing", () => {
     });
     expect(workspacePath("analysis", "compare-runs")).toBe("/analysis?tab=compare-runs");
     expect(workspacePath("analysis", "evidence-matrix")).toBe("/analysis");
+    expect(workspacePath("prompts", "new-prompt-package")).toBe("/prompts?tab=new-prompt-package");
+    expect(workspaceRoute("/prompts", "?tab=new-prompt-package")).toEqual({
+      view: "prompts",
+      tab: "new-prompt-package",
+      pathname: "/prompts",
+      search: "?tab=new-prompt-package",
+      replace: false,
+    });
   });
 
   it("canonicalizes the legacy combined run launcher to quick start", () => {
