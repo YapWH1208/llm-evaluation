@@ -25,6 +25,9 @@ function runPageProps(overrides: Partial<React.ComponentProps<typeof RunsPage>> 
     onTabChange: vi.fn(),
     quickStartLauncher: <p>Quick start controls</p>,
     quickStartPreflight: <p>Quick start preflight controls</p>,
+    availableEndpointCount: 1,
+    configuredEndpointCount: 1,
+    onOpenModelSetup: vi.fn(),
     renderActions: () => <button type="button">Run action</button>,
     runs: [firstRun, secondRun],
     selectedRunId: firstRun.id,
@@ -65,6 +68,22 @@ describe("runs workspace page", () => {
     expect(screen.queryByText("Dataset launch controls")).not.toBeInTheDocument();
     expect(screen.queryByText("Dataset preflight controls")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Run inventory" })).not.toBeInTheDocument();
+  });
+
+  it("explains and repairs a missing Quick start endpoint", async () => {
+    const user = userEvent.setup();
+    const addProps = runPageProps({ activeTab: "quick-start", availableEndpointCount: 0, configuredEndpointCount: 0 });
+    const { rerender } = renderOperationsPage(<RunsPage {...addProps} />);
+
+    expect(screen.getByText("Add a model endpoint to unlock Quick start.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Add model endpoint" }));
+    expect(addProps.onOpenModelSetup).toHaveBeenCalledWith("add-endpoint");
+
+    const testProps = runPageProps({ activeTab: "quick-start", availableEndpointCount: 0, configuredEndpointCount: 1 });
+    rerender(<LocaleProvider><RunsPage {...testProps} /></LocaleProvider>);
+    expect(screen.getByText("Test a model connection to unlock Quick start.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Test model connection" }));
+    expect(testProps.onOpenModelSetup).toHaveBeenCalledWith("model-inventory");
   });
 
   it("isolates dataset context and controls on its URL-backed tab", () => {

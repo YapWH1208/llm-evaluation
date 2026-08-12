@@ -194,6 +194,7 @@ export default function App() {
   const [form, setForm] = useState(initialEndpoint);
   const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
   const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
+  const [preferredEndpointId, setPreferredEndpointId] = useState<string | null>(null);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
   const [datasetRunFields, setDatasetRunFields] = useState<string[]>([]);
@@ -406,11 +407,13 @@ export default function App() {
         });
         showNotice("Model configuration saved. Test its connection before starting a run.");
       } else {
-        await api.createEndpoint(endpointPayload);
+        const createdEndpoint = await api.createEndpoint(endpointPayload);
+        setPreferredEndpointId(createdEndpoint.id);
         showNotice("Endpoint saved. Test its connection before starting a run.");
       }
       cancelEndpointEdit();
       await refresh();
+      if (!editingEndpointId) navigate("models", { tab: "model-inventory" });
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -842,7 +845,7 @@ export default function App() {
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("datasets", { tab: "register-dataset" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
+      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("runs", { tab: "quick-start" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
       {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
@@ -861,6 +864,7 @@ export default function App() {
         onSubmit={createEndpoint}
         onTabChange={(tab) => navigate("models", { tab })}
         onTest={(endpointId) => void testEndpoint(endpointId)}
+        preferredEndpointId={preferredEndpointId}
         testRequests={testRequests}
       />}
 
@@ -879,6 +883,8 @@ export default function App() {
 
       {view === "runs" && <RunsPage
         activeTab={route.tab as WorkspaceTabFor<"runs">}
+        availableEndpointCount={availableEndpoints.length}
+        configuredEndpointCount={endpoints.length}
         inspector={selectedRunInfo && <RunDetailContainer actions={runActions(selectedRunInfo)} run={selectedRunInfo} summary={runSummary} metrics={runMetrics} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
         datasetLauncher={<DatasetRunLauncher
           busy={busy}
@@ -898,6 +904,7 @@ export default function App() {
         />}
         datasetPreflight={runPreflightControls("dataset")}
         onSelect={inspectRun}
+        onOpenModelSetup={(tab) => navigate("models", { tab })}
         onTabChange={(tab) => navigate("runs", { tab })}
         quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>
           <label>{t("runLauncher.quickStartBenchmark")}<select aria-label={t("runLauncher.quickStartBenchmark")} required value={selectedQuickStart ? `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}` : ""} onChange={(event) => { const benchmark = quickStartBenchmarks.find((item) => `${item.benchmark_id}@${item.version}` === event.target.value); setSelectedQuickStartBenchmark(event.target.value); setQuickStartSampleLimit(String(Number(benchmark?.manifest.sample_count) || 1)); setLaunchPreflight(null); }}><option value="">—</option>{quickStartBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name}</option>)}</select></label>

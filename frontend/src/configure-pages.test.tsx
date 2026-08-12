@@ -132,6 +132,16 @@ describe("configure workspace pages", () => {
     expect(within(screen.getByRole("region", { name: "Selected model endpoint" })).getByRole("heading", { name: "Production model" })).toBeVisible();
   });
 
+  it("offers endpoint creation directly from the empty model inventory", async () => {
+    const user = userEvent.setup();
+    const props = modelProps({ endpoints: [] });
+    render(<ModelsPage {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "Add model endpoint" }));
+
+    expect(props.onTabChange).toHaveBeenCalledWith("add-endpoint");
+  });
+
   it("shows only the endpoint form on the add-endpoint tab", async () => {
     const user = userEvent.setup();
     const props = modelProps({ activeTab: "add-endpoint" });

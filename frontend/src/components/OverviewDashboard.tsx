@@ -2,7 +2,8 @@ import type { AnalyticsMatrix, Dashboard, Endpoint, EvaluationRun, SystemHealth,
 import { buildDashboardAnalytics, buildRecentRunRows, type DashboardAnalyticsPoint, type RecentRunRow } from "../dashboard/analytics";
 import type { View } from "../dashboard/navigation";
 import type { WorkspaceTabFor } from "../dashboard/routing";
-import { overviewCopy, workspacePageTabCopy, type OverviewCopy } from "../i18n/catalog";
+import type { WorkspaceNavigate } from "../dashboard/routing";
+import { firstEvaluationCopy, overviewCopy, workspacePageTabCopy, type OverviewCopy } from "../i18n/catalog";
 import { useTranslation } from "../i18n/LocaleProvider";
 import { EfficiencySignals, EvaluationTrendChart, type DashboardVisualizationFormatters, type DashboardVisualizationLabels } from "./DashboardVisualizations";
 import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "./workspace/WorkspaceTabs";
@@ -18,7 +19,7 @@ type OverviewDashboardProps = {
   tasks: Task[];
   onInspectRun: (runId: string) => void;
   onOpenSetup: () => void;
-  onOpenView: (view: View) => void;
+  onOpenView: WorkspaceNavigate;
   onTabChange: (tab: WorkspaceTabFor<"dashboard">) => void;
 };
 
@@ -148,6 +149,7 @@ function ReadinessGrid({ copy, items, onOpenView }: { copy: OverviewCopy; items:
 export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, runs, systemHealth, tasks, onInspectRun, onOpenSetup, onOpenView, onTabChange }: OverviewDashboardProps) {
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = overviewCopy[locale];
+  const onboarding = firstEvaluationCopy[locale];
   const tabCopy = workspacePageTabCopy[locale].dashboard;
   const analyticsPoints = buildDashboardAnalytics(runs, analytics);
   const recentRows = buildRecentRunRows(runs, endpoints, analytics);
@@ -188,6 +190,40 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
               <button onClick={() => onOpenView("models")} type="button">{copy.configureModel}</button>
               <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.openRuns}</button>
             </div>
+          </section>
+        </div>
+      </section>
+    );
+  }
+
+  if (runs.length === 0) {
+    const hasEndpoint = endpoints.length > 0;
+    const hasVerifiedEndpoint = verifiedEndpoints.length > 0;
+    const primary = !hasEndpoint
+      ? { label: onboarding.addEndpoint, open: () => onOpenView("models", { tab: "add-endpoint" }) }
+      : !hasVerifiedEndpoint
+        ? { label: onboarding.testConnection, open: () => onOpenView("models", { tab: "model-inventory" }) }
+        : { label: onboarding.startQuickStart, open: () => onOpenView("runs", { tab: "quick-start" }) };
+    const steps = [
+      { title: onboarding.endpointStep, detail: hasVerifiedEndpoint ? onboarding.endpointReady : hasEndpoint ? onboarding.endpointNeedsTest : onboarding.endpointMissing, complete: hasVerifiedEndpoint },
+      { title: onboarding.quickStartStep, detail: hasVerifiedEndpoint ? onboarding.quickStartReady : onboarding.quickStartBlocked, complete: false },
+      { title: onboarding.inspectStep, detail: onboarding.inspectBlocked, complete: false },
+    ];
+    return (
+      <section className="overview-dashboard" aria-labelledby="dashboard-title">
+        <DashboardHeader copy={copy} onOpenSetup={primary.open} onOpenView={onOpenView} showActions={false} />
+        <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
+        <div aria-labelledby={workspaceTabId("dashboard", activeTab)} className="dashboard-tabpanel" id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
+          <section className="dashboard-panel first-evaluation" aria-labelledby="first-evaluation-title">
+            <div className="first-evaluation__heading">
+              <p className="eyebrow">{onboarding.checklist}</p>
+              <h2 id="first-evaluation-title">{onboarding.title}</h2>
+              <p>{onboarding.description}</p>
+            </div>
+            <ol className="first-evaluation__steps">
+              {steps.map((step) => <li className={step.complete ? "is-complete" : undefined} key={step.title}><span aria-hidden="true" className="status-dot" /><div><strong>{step.title}</strong><small>{step.detail}</small></div></li>)}
+            </ol>
+            <button onClick={primary.open} type="button">{primary.label}</button>
           </section>
         </div>
       </section>
@@ -255,7 +291,7 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
   );
 }
 
-function DashboardHeader({ copy, onOpenSetup, onOpenView }: { copy: OverviewCopy; onOpenSetup: () => void; onOpenView: (view: View) => void }) {
+function DashboardHeader({ copy, onOpenSetup, onOpenView, showActions = true }: { copy: OverviewCopy; onOpenSetup: () => void; onOpenView: (view: View) => void; showActions?: boolean }) {
   return (
     <header className="overview-dashboard__header">
       <div>
@@ -263,10 +299,7 @@ function DashboardHeader({ copy, onOpenSetup, onOpenView }: { copy: OverviewCopy
         <h1 id="dashboard-title">{copy.dashboardTitle}</h1>
         <p>{copy.dashboardDescription}</p>
       </div>
-      <div className="overview-dashboard__actions">
-        <button onClick={() => onOpenSetup()} type="button">{copy.setupEvaluation}</button>
-        <button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button>
-      </div>
+      {showActions && <div className="overview-dashboard__actions"><button onClick={() => onOpenSetup()} type="button">{copy.setupEvaluation}</button><button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button></div>}
     </header>
   );
 }

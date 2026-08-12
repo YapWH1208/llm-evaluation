@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { Capability, Endpoint } from "../../api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
-import { workspacePageTabCopy, type Locale } from "../../i18n/catalog";
+import { firstEvaluationCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
@@ -52,6 +52,7 @@ type ModelsPageProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTabChange: (tab: WorkspaceTabFor<"models">) => void;
   onTest: (endpointId: string) => void;
+  preferredEndpointId?: string | null;
   testRequests: Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>;
 };
 
@@ -79,20 +80,25 @@ export function EndpointFormPanel({ busy, editingEndpointId, form, onCancelEdit,
   );
 }
 
-type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "onDeclare" | "onEdit" | "onProbe" | "onTest" | "testRequests">;
+type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "locale" | "onDeclare" | "onEdit" | "onProbe" | "onTabChange" | "onTest" | "preferredEndpointId" | "testRequests">;
 
-export function ModelInventory({ busy, capabilities, endpoints, onDeclare, onEdit, onProbe, onTest, testRequests }: ModelInventoryProps) {
-  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(() => endpoints[0]?.id ?? null);
+export function ModelInventory({ busy, capabilities, endpoints, locale = "en", onDeclare, onEdit, onProbe, onTabChange, onTest, preferredEndpointId, testRequests }: ModelInventoryProps) {
+  const onboarding = firstEvaluationCopy[locale];
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(() => preferredEndpointId ?? endpoints[0]?.id ?? null);
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? endpoints[0] ?? null;
 
   useEffect(() => {
     if ((selectedEndpoint?.id ?? null) !== selectedEndpointId) setSelectedEndpointId(selectedEndpoint?.id ?? null);
   }, [selectedEndpoint?.id, selectedEndpointId]);
 
+  useEffect(() => {
+    if (preferredEndpointId && endpoints.some((endpoint) => endpoint.id === preferredEndpointId)) setSelectedEndpointId(preferredEndpointId);
+  }, [endpoints, preferredEndpointId]);
+
   return (
     <div className="workspace-model-inventory-layout">
       <WorkspacePanel toolbar={<span className="workspace-count">{endpoints.length} configured</span>} title="Endpoint inventory">
-        {endpoints.length === 0 ? <p className="empty">No model endpoints yet.</p> : (
+        {endpoints.length === 0 ? <div className="workspace-empty-action"><p className="empty">{onboarding.modelEmpty}</p><button onClick={() => onTabChange("add-endpoint")} type="button">{onboarding.addEndpoint}</button></div> : (
           <div className="workspace-model-selector-list">
             {endpoints.map((endpoint) => (
               <button
@@ -140,7 +146,7 @@ export function ModelInventory({ busy, capabilities, endpoints, onDeclare, onEdi
   );
 }
 
-export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTabChange, onTest, testRequests }: ModelsPageProps) {
+export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTabChange, onTest, preferredEndpointId, testRequests }: ModelsPageProps) {
   const copy = workspacePageTabCopy[locale].models;
   const tabs = [
     { id: "model-inventory", label: copy.modelInventory, description: copy.inventoryDescription },
@@ -158,7 +164,7 @@ export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, e
       <WorkspaceTabs ariaLabel="Models sections" idPrefix="models" onChange={onTabChange} tabs={tabs} value={activeTab} />
       <div aria-labelledby={workspaceTabId("models", activeTab)} id={workspaceTabPanelId("models", activeTab)} role="tabpanel" tabIndex={0}>
         {activeTab === "model-inventory" ? (
-          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} onDeclare={onDeclare} onEdit={onEdit} onProbe={onProbe} onTest={onTest} testRequests={testRequests} />
+          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} locale={locale} onDeclare={onDeclare} onEdit={onEdit} onProbe={onProbe} onTabChange={onTabChange} onTest={onTest} preferredEndpointId={preferredEndpointId} testRequests={testRequests} />
         ) : (
           <EndpointFormPanel busy={busy} editingEndpointId={editingEndpointId} form={form} onCancelEdit={onCancelEdit} onFormChange={onFormChange} onSubmit={onSubmit} />
         )}

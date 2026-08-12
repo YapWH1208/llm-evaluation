@@ -2,7 +2,7 @@ import { ReactNode, useMemo, useState } from "react";
 
 import { EvaluationRun } from "../../api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
-import { workspacePageTabCopy } from "../../i18n/catalog";
+import { firstEvaluationCopy, workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
@@ -10,10 +10,13 @@ import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace
 
 type RunsPageProps = {
   activeTab: WorkspaceTabFor<"runs">;
+  availableEndpointCount: number;
+  configuredEndpointCount: number;
   datasetLauncher: ReactNode;
   datasetPreflight: ReactNode;
   inspector: ReactNode;
   onSelect: (runId: string) => void;
+  onOpenModelSetup: (tab: WorkspaceTabFor<"models">) => void;
   onTabChange: (tab: WorkspaceTabFor<"runs">) => void;
   quickStartLauncher: ReactNode;
   quickStartPreflight: ReactNode;
@@ -44,19 +47,20 @@ export function RunInventory({ onSelect, renderActions, runs, selectedRunId }: P
   </WorkspacePanel>;
 }
 
-export function RunsPage({ activeTab, datasetLauncher, datasetPreflight, inspector, onSelect, onTabChange, quickStartLauncher, quickStartPreflight, renderActions, runs, selectedRunId }: RunsPageProps) {
+export function RunsPage({ activeTab, availableEndpointCount, configuredEndpointCount, datasetLauncher, datasetPreflight, inspector, onOpenModelSetup, onSelect, onTabChange, quickStartLauncher, quickStartPreflight, renderActions, runs, selectedRunId }: RunsPageProps) {
   const { locale, t } = useTranslation();
   const copy = workspacePageTabCopy[locale].runs;
+  const onboarding = firstEvaluationCopy[locale];
   const selectedVisible = runs.some((run) => run.id === selectedRunId);
   return <div className="workspace-page runs-page">
     <PageHeader description="Launch immutable evaluation snapshots, then inspect their operational and evidence trail." eyebrow="Operations" status={<>{runs.length} total runs</>} title="Runs" />
     <WorkspaceTabs ariaLabel="Runs sections" idPrefix="runs" onChange={onTabChange} tabs={[{ id: "run-inventory", label: copy.runInventory }, { id: "quick-start", label: copy.quickStart }, { id: "dataset-evaluation", label: copy.datasetEvaluation }, { id: "run-details", label: copy.runDetails }]} value={activeTab} />
     <div aria-labelledby={workspaceTabId("runs", activeTab)} id={workspaceTabPanelId("runs", activeTab)} role="tabpanel" tabIndex={0}>
       {activeTab === "run-inventory" && <RunInventory onSelect={onSelect} renderActions={renderActions} runs={runs} selectedRunId={selectedRunId} />}
-      {activeTab === "quick-start" && <div className="workspace-run-launch-grid">
+      {activeTab === "quick-start" && <>{availableEndpointCount === 0 && <section className="workspace-prerequisite" role="status"><div><strong>{configuredEndpointCount === 0 ? onboarding.quickStartMissing : onboarding.quickStartNeedsTest}</strong><small>{onboarding.quickStartBlocked}</small></div><button onClick={() => onOpenModelSetup(configuredEndpointCount === 0 ? "add-endpoint" : "model-inventory")} type="button">{configuredEndpointCount === 0 ? onboarding.addEndpoint : onboarding.testConnection}</button></section>}<div className="workspace-run-launch-grid">
         <WorkspacePanel className="workspace-run-context" description={t("runLauncher.contextDescription")} title={t("runLauncher.contextTitle")}>{quickStartPreflight}</WorkspacePanel>
         <WorkspacePanel description={t("runLauncher.quickStartDescription")} title={t("runLauncher.quickStartTitle")}>{quickStartLauncher}</WorkspacePanel>
-      </div>}
+      </div></>}
       {activeTab === "dataset-evaluation" && <div className="workspace-run-launch-grid">
         <WorkspacePanel className="workspace-run-context" description={t("runLauncher.contextDescription")} title={t("runLauncher.contextTitle")}>{datasetPreflight}</WorkspacePanel>
         <WorkspacePanel description={t("runLauncher.datasetDescription")} title={t("datasetRun.title")}>{datasetLauncher}</WorkspacePanel>

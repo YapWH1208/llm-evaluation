@@ -141,6 +141,22 @@
   margin: .8rem 0 0;
 }
 
+.first-evaluation {
+  display: grid;
+  gap: 1rem;
+  max-width: 52rem;
+}
+
+.first-evaluation__heading h2 { font-size: 1.15rem; margin: .25rem 0; }
+.first-evaluation__heading > p:last-child { color: var(--text-muted); margin: 0; }
+.first-evaluation__steps { display: grid; gap: .65rem; list-style: none; margin: 0; padding: 0; }
+.first-evaluation__steps li { align-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: .7rem; grid-template-columns: auto 1fr; padding: .75rem; }
+.first-evaluation__steps strong,
+.first-evaluation__steps small { display: block; }
+.first-evaluation__steps small { color: var(--text-muted); margin-top: .18rem; }
+.first-evaluation__steps .is-complete .status-dot { background: var(--success); }
+.first-evaluation > button { justify-self: start; }
+
 .overview-unavailable {
   align-items: center;
   display: flex;

@@ -443,6 +443,15 @@ button.dataset-value-chip {
 .workspace-timeline h2 { font-size: .9rem; margin: 0; }
 .workspace-timeline p { color: var(--text-muted); font-size: .82rem; margin: .2rem 0 0; }
 
+.workspace-empty-action,
+.workspace-prerequisite { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; }
+.workspace-empty-action { align-items: center; }
+.workspace-empty-action .empty { margin: 0; }
+.workspace-prerequisite { align-items: center; background: color-mix(in srgb, var(--warning) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warning) 42%, var(--border)); border-radius: var(--radius-md); margin-bottom: 1rem; padding: .85rem 1rem; }
+.workspace-prerequisite strong,
+.workspace-prerequisite small { display: block; }
+.workspace-prerequisite small { color: var(--text-muted); margin-top: .2rem; }
+
 .workspace-split--catalog {
   grid-template-columns: minmax(16rem, .52fr) minmax(0, 1fr);
 }

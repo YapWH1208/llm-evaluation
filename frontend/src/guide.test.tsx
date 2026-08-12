@@ -29,7 +29,7 @@ describe("usage guide", () => {
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Guide" }));
     expect(screen.getByRole("heading", { name: /How to use this workspace/i })).toBeTruthy();
-    expect(screen.getByText(/1\. Add a model endpoint/i)).toBeTruthy();
+    expect(screen.getByText(/1\. Add model endpoint/i)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Open Models" }));
     expect(window.location.search).toBe("?tab=add-endpoint");
     expect(screen.getByLabelText("Base URL")).toBeTruthy();
@@ -73,12 +73,16 @@ describe("usage guide", () => {
 
     expect(onOpenView.mock.calls).toEqual([
       ["models", { tab: "add-endpoint" }],
+      ["models", { tab: "model-inventory" }],
+      ["runs", { tab: "quick-start" }],
+      ["runs", { tab: "run-inventory" }],
       ["datasets", { tab: "register-dataset" }],
       ["datasets", { tab: "dataset-inventory" }],
       ["runs", { tab: "dataset-evaluation" }],
-      ["runs", { tab: "run-inventory" }],
       ["analysis", { tab: "evidence-matrix" }],
     ]);
+    expect(screen.getByRole("heading", { name: "Fastest path to a first result" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Evaluate your own data" })).toBeVisible();
     expect(screen.queryByText(/Workspace ·/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Human review/)).not.toBeInTheDocument();
   });

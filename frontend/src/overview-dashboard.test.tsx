@@ -253,6 +253,50 @@ describe("OverviewDashboard", () => {
     expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
   });
 
+  it("guides an empty workspace to add its first model endpoint", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview({
+      analytics: null,
+      endpoints: [],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] }, endpoints: { available: 0, unavailable: 0, total: 0 } },
+    });
+
+    expect(screen.getByRole("heading", { name: "Set up your first evaluation" })).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Evaluation trend" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add model endpoint" }));
+
+    expect(props.onOpenView).toHaveBeenCalledWith("models", { tab: "add-endpoint" });
+  });
+
+  it("guides an unverified model to connection testing", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview({
+      analytics: null,
+      endpoints: [{ ...endpoint, status: "unverified" }],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] }, endpoints: { available: 0, unavailable: 0, total: 1 } },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Test model connection" }));
+
+    expect(props.onOpenView).toHaveBeenCalledWith("models", { tab: "model-inventory" });
+  });
+
+  it("guides a ready model to the built-in Quick start", async () => {
+    const user = userEvent.setup();
+    const props = renderOverview({
+      analytics: null,
+      endpoints: [endpoint],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] } },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Start Quick start" }));
+
+    expect(props.onOpenView).toHaveBeenCalledWith("runs", { tab: "quick-start" });
+  });
+
   it("routes setup through dataset registration and comparison through analysis", async () => {
     const user = userEvent.setup();
     const props = renderOverview();
