@@ -619,6 +619,19 @@ button.dataset-value-chip {
   align-content: start;
 }
 
+.workspace-run-judge-settings {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: .5rem;
+  padding: .75rem;
+}
+
+.workspace-run-judge-settings > p {
+  margin: 0;
+}
+
 .workspace-launch-note {
   background: var(--surface-subtle);
   border: 1px solid var(--border);
