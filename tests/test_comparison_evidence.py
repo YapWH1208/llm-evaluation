@@ -49,3 +49,31 @@ def test_comparison_extension_preserves_legacy_names_and_missing_metric_reasons(
         {"outcome": "run_b_only_correct", "count": 0},
         {"outcome": "both_incorrect", "count": 0},
     ]
+
+
+def test_comparison_extension_exposes_llm_judge_as_a_named_ratio_metric() -> None:
+    run = {
+        "id": "judge-run-a",
+        "model_endpoint_id": "model-a",
+        "benchmark_id": "dataset-evaluation",
+        "status": "completed",
+        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        "configuration_snapshot": {"endpoint": {"model_name": "judge-target"}},
+    }
+    extension = build_comparison_extension(
+        run,
+        {**run, "id": "judge-run-b", "model_endpoint_id": "model-b"},
+        None,
+        None,
+        [{"metric_name": "llm_judge", "metric_value": 0.75, "sample_count": 2}],
+        [{"metric_name": "llm_judge", "metric_value": 0.5, "sample_count": 1}],
+        {},
+    )
+
+    judge_metric = extension["named_metrics"][0]
+    assert judge_metric["metric_name"] == "llm_judge"
+    assert judge_metric["label"] == "LLM-as-judge"
+    assert judge_metric["unit"] == "ratio"
+    assert judge_metric["run_a"] == {"value": 0.75, "availability_reason": None, "sample_count": 2}
+    assert judge_metric["run_b"] == {"value": 0.5, "availability_reason": None, "sample_count": 1}
+    assert judge_metric["delta"] == 0.25

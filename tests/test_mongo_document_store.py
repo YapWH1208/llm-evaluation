@@ -1188,6 +1188,19 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
         assert judge_evidence["status"] == "succeeded"
         assert judge_evidence["score"] == 0.8
         assert judge_evidence["label"] == "pass"
+        metrics = {
+            item["metric_name"]: item
+            for item in api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics").json()
+        }
+        assert metrics["llm_judge"]["metric_value"] == 0.8
+        assert metrics["llm_judge"]["sample_count"] == 1
+        assert metrics["llm_judge"]["confidence_interval"] == {
+            "method": "normal_95",
+            "lower": 0.8,
+            "upper": 0.8,
+        }
+        leaderboard = api.get("/api/v1/leaderboard", params={"available_metric": "llm_judge"})
+        assert [item["run_id"] for item in leaderboard.json()["items"]] == [run.json()["id"]]
         assessments = store.list_documents("judge_assessments", query={"sample_attempt_id": attempts[0]["id"]})
         assert len(assessments) == 1
         assert assessments[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"}

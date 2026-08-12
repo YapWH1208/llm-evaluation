@@ -441,6 +441,24 @@ def test_dataset_run_automatically_records_llm_judge_evidence(
         else:
             assert {item["error_message"] for item in judge_evidence} == {"Judge rejected the assessment request."}
 
+        metrics = {
+            item["metric_name"]: item
+            for item in client.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics").json()
+        }
+        judge_metric = metrics["llm_judge"]
+        assert judge_metric["metric_value"] == (0.75 if judge_succeeds else None)
+        assert judge_metric["sample_count"] == (2 if judge_succeeds else 0)
+        assert judge_metric["confidence_interval"] == (
+            {"method": "normal_95", "lower": 0.75, "upper": 0.75}
+            if judge_succeeds
+            else None
+        )
+        if not judge_succeeds:
+            assert "No successful" in judge_metric["availability_reason"]
+        leaderboard = client.get("/api/v1/leaderboard", params={"available_metric": "llm_judge"})
+        assert leaderboard.status_code == 200
+        assert leaderboard.json()["total"] == (1 if judge_succeeds else 0)
+
         assessments = [
             client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()
             for attempt in attempts
