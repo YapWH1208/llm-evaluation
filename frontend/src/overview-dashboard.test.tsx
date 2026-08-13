@@ -297,6 +297,55 @@ describe("OverviewDashboard", () => {
     expect(props.onOpenView).toHaveBeenCalledWith("runs", { tab: "quick-start" });
   });
 
+  it("keeps the first-evaluation checklist on the summary tab for an empty workspace", () => {
+    renderOverview({
+      analytics: null,
+      endpoints: [],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] }, endpoints: { available: 0, unavailable: 0, total: 0 } },
+    });
+
+    expect(screen.getByRole("heading", { name: "Set up your first evaluation" })).toBeVisible();
+    expect(screen.getByText("1. Connect a model")).toBeVisible();
+    expect(screen.getByText("2. Run Quick start")).toBeVisible();
+    expect(screen.getByText("3. Inspect the result")).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 2, name: "Recent evaluations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "System readiness" })).not.toBeInTheDocument();
+  });
+
+  it("shows an empty recent-evaluations state on the evaluations tab for an empty workspace", () => {
+    renderOverview({
+      activeTab: "evaluations",
+      analytics: null,
+      endpoints: [endpoint],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] } },
+    });
+
+    expect(screen.getByRole("tab", { name: "Evaluations" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "Recent evaluations" })).toBeVisible();
+    expect(screen.getByText("Evaluation history is not available yet.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Set up your first evaluation" })).not.toBeInTheDocument();
+  });
+
+  it("keeps operational readiness reachable on the readiness tab for an empty workspace", () => {
+    renderOverview({
+      activeTab: "readiness",
+      analytics: null,
+      endpoints: [endpoint],
+      runs: [],
+      dashboard: { ...dashboard, runs: { active: 0, completed: 0, recent_completed: [] } },
+    });
+
+    expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { level: 2, name: "System readiness" })).toBeVisible();
+    const grid = document.querySelector(".readiness-grid");
+    expect(grid).not.toBeNull();
+    const systemItem = within(grid as HTMLElement).getByText("Operational").closest("article");
+    expect(systemItem).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Set up your first evaluation" })).not.toBeInTheDocument();
+  });
+
   it("routes setup through dataset registration and comparison through analysis", async () => {
     const user = userEvent.setup();
     const props = renderOverview();

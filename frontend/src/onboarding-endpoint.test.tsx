@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,5 +65,47 @@ describe("endpoint onboarding handoff", () => {
     expect(screen.getByRole("button", { name: "Test connection" })).toBeVisible();
     expect(window.location.pathname).toBe("/models");
     expect(window.location.search).toBe("");
+  });
+
+  it("keeps the user's endpoint selection when a later refresh repopulates the inventory", async () => {
+    const user = userEvent.setup();
+    const secondEndpoint: Endpoint = { ...createdEndpoint, display_name: "Second model", id: "endpoint-second" };
+    vi.spyOn(api, "listEndpoints").mockResolvedValueOnce([]).mockImplementation(async () => [createdEndpoint, secondEndpoint]);
+    vi.spyOn(api, "listRuns").mockResolvedValue([]);
+    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
+    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
+    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
+    vi.spyOn(api, "listTasks").mockResolvedValue([]);
+    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
+    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(api, "createEndpoint").mockResolvedValue(createdEndpoint);
+    vi.spyOn(api, "testEndpoint").mockResolvedValue({
+      provider_status_code: 200,
+      request: { body: {}, method: "POST", url: secondEndpoint.base_url },
+      status: "available",
+      success: true,
+      tested_at: "2026-08-01T09:00:00Z",
+      message: "Connection test completed.",
+    });
+    window.history.replaceState(null, "", "/models?tab=add-endpoint");
+
+    render(<LocaleProvider><App /></LocaleProvider>);
+    await user.type(screen.getByLabelText("Display name"), "First model");
+    await user.type(screen.getByLabelText("Base URL"), createdEndpoint.base_url);
+    await user.type(screen.getByLabelText("Model name"), createdEndpoint.model_name);
+    await user.type(screen.getByLabelText("API key"), "secret-test-key");
+    await user.click(screen.getByRole("button", { name: "Save encrypted endpoint" }));
+
+    await screen.findByRole("tab", { name: "Model inventory" });
+    await user.click(screen.getByRole("button", { name: "Select Second model" }));
+    expect(screen.getByRole("button", { name: "Select Second model" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled());
+
+    expect(screen.getByRole("button", { name: "Select Second model" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Select First model" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(screen.getByRole("region", { name: "Selected model endpoint" })).getByRole("heading", { name: "Second model" })).toBeVisible();
   });
 });

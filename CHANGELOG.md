@@ -84,6 +84,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Selecting a different model endpoint no longer snaps the selection back to a
+  newly created endpoint every time the inventory refreshes; the post-creation
+  handoff is now consumed once.
+- The Dashboard Evaluations and Readiness tabs now render their own panels even
+  before the first evaluation completes, keeping recent-evaluation and system
+  readiness signals reachable in a fresh workspace.
+- Guide and first-evaluation checklist step numbers are presentation-only and no
+  longer derived from translated step titles.
 - Protected workspaces now show persistent access recovery that opens the
   session-token control directly and clears only after a successful refresh.
 - Newly created endpoints open selected in Model inventory with connection testing

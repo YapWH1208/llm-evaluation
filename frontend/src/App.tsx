@@ -195,6 +195,7 @@ export default function App() {
   const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
   const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
   const [preferredEndpointId, setPreferredEndpointId] = useState<string | null>(null);
+  const consumePreferredEndpoint = useCallback(() => setPreferredEndpointId(null), []);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
   const [datasetRunFields, setDatasetRunFields] = useState<string[]>([]);
@@ -860,6 +861,7 @@ export default function App() {
         onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)}
         onEdit={(endpoint) => { editEndpoint(endpoint); navigate("models", { tab: "add-endpoint" }); }}
         onFormChange={setForm}
+        onPreferredEndpointConsumed={consumePreferredEndpoint}
         onProbe={(endpointId) => void probeCapabilities(endpointId)}
         onSubmit={createEndpoint}
         onTabChange={(tab) => navigate("models", { tab })}

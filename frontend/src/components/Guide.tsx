@@ -16,7 +16,7 @@ export function Guide({ onOpenView }: GuideProps) {
     { title: `1. ${onboarding.addEndpoint}`, description: copy.addDescription, action: copy.openModels, open: (navigate: WorkspaceNavigate) => navigate("models", { tab: "add-endpoint" }) },
     { title: `2. ${onboarding.testConnection}`, description: copy.testDescription, action: copy.reviewModels, open: (navigate: WorkspaceNavigate) => navigate("models", { tab: "model-inventory" }) },
     { title: `3. ${onboarding.startQuickStart}`, description: copy.quickDescription, action: copy.openQuickStart, open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "quick-start" }) },
-    { title: `4. ${onboarding.inspectStep.replace(/^3\.\s*/, "")}`, description: copy.inspectDescription, action: copy.inspectRuns, open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "run-inventory" }) },
+    { title: `4. ${onboarding.inspectStep}`, description: copy.inspectDescription, action: copy.inspectRuns, open: (navigate: WorkspaceNavigate) => navigate("runs", { tab: "run-inventory" }) },
   ];
   const datasetSteps = [
     { title: `1. ${copy.datasetTitle}`, description: copy.datasetDescription, action: copy.openDatasets, open: (navigate: WorkspaceNavigate) => navigate("datasets", { tab: "register-dataset" }) },

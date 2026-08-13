@@ -52,6 +52,7 @@ type ModelsPageProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTabChange: (tab: WorkspaceTabFor<"models">) => void;
   onTest: (endpointId: string) => void;
+  onPreferredEndpointConsumed?: () => void;
   preferredEndpointId?: string | null;
   testRequests: Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>;
 };
@@ -88,9 +89,9 @@ export function EndpointFormPanel({ busy, editingEndpointId, form, locale = "en"
   );
 }
 
-type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "locale" | "onDeclare" | "onEdit" | "onProbe" | "onTabChange" | "onTest" | "preferredEndpointId" | "testRequests">;
+type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "locale" | "onDeclare" | "onEdit" | "onPreferredEndpointConsumed" | "onProbe" | "onTabChange" | "onTest" | "preferredEndpointId" | "testRequests">;
 
-export function ModelInventory({ busy, capabilities, endpoints, locale = "en", onDeclare, onEdit, onProbe, onTabChange, onTest, preferredEndpointId, testRequests }: ModelInventoryProps) {
+export function ModelInventory({ busy, capabilities, endpoints, locale = "en", onDeclare, onEdit, onPreferredEndpointConsumed, onProbe, onTabChange, onTest, preferredEndpointId, testRequests }: ModelInventoryProps) {
   const onboarding = firstEvaluationCopy[locale];
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(() => preferredEndpointId ?? endpoints[0]?.id ?? null);
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? endpoints[0] ?? null;
@@ -100,8 +101,11 @@ export function ModelInventory({ busy, capabilities, endpoints, locale = "en", o
   }, [selectedEndpoint?.id, selectedEndpointId]);
 
   useEffect(() => {
-    if (preferredEndpointId && endpoints.some((endpoint) => endpoint.id === preferredEndpointId)) setSelectedEndpointId(preferredEndpointId);
-  }, [endpoints, preferredEndpointId]);
+    if (preferredEndpointId && endpoints.some((endpoint) => endpoint.id === preferredEndpointId)) {
+      setSelectedEndpointId(preferredEndpointId);
+      onPreferredEndpointConsumed?.();
+    }
+  }, [endpoints, onPreferredEndpointConsumed, preferredEndpointId]);
 
   return (
     <div className="workspace-model-inventory-layout">
@@ -154,7 +158,7 @@ export function ModelInventory({ busy, capabilities, endpoints, locale = "en", o
   );
 }
 
-export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onProbe, onSubmit, onTabChange, onTest, preferredEndpointId, testRequests }: ModelsPageProps) {
+export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onPreferredEndpointConsumed, onProbe, onSubmit, onTabChange, onTest, preferredEndpointId, testRequests }: ModelsPageProps) {
   const copy = workspacePageTabCopy[locale].models;
   const tabs = [
     { id: "model-inventory", label: copy.modelInventory, description: copy.inventoryDescription },
@@ -172,7 +176,7 @@ export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, e
       <WorkspaceTabs ariaLabel="Models sections" idPrefix="models" onChange={onTabChange} tabs={tabs} value={activeTab} />
       <div aria-labelledby={workspaceTabId("models", activeTab)} id={workspaceTabPanelId("models", activeTab)} role="tabpanel" tabIndex={0}>
         {activeTab === "model-inventory" ? (
-          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} locale={locale} onDeclare={onDeclare} onEdit={onEdit} onProbe={onProbe} onTabChange={onTabChange} onTest={onTest} preferredEndpointId={preferredEndpointId} testRequests={testRequests} />
+          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} locale={locale} onDeclare={onDeclare} onEdit={onEdit} onPreferredEndpointConsumed={onPreferredEndpointConsumed} onProbe={onProbe} onTabChange={onTabChange} onTest={onTest} preferredEndpointId={preferredEndpointId} testRequests={testRequests} />
         ) : (
           <EndpointFormPanel busy={busy} editingEndpointId={editingEndpointId} form={form} locale={locale} onCancelEdit={onCancelEdit} onFormChange={onFormChange} onSubmit={onSubmit} />
         )}

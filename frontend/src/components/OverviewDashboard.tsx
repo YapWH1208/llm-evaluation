@@ -196,6 +196,15 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
     );
   }
 
+  const systemHealthState = systemHealth === null ? "unknown" : systemHealth.status === "ok" && systemHealth.database_connected ? "ready" : "attention";
+  const readinessItems: ReadinessItem[] = [
+    { id: "system", label: copy.systemReadiness, detail: systemHealthState === "ready" ? copy.operational : systemHealthState === "unknown" ? copy.unknownValue : copy.attentionNeeded, attention: systemHealthState === "attention", view: "settings" },
+    { id: "endpoints", label: copy.modelEndpoints, detail: dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel, attention: dashboard.endpoints.available === 0, view: "models" },
+    { id: "datasets", label: copy.evaluationData, detail: dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset, attention: dashboard.datasets.ready === 0, view: "datasets" },
+    { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "runs" },
+    { id: "workers", label: copy.workers, detail: formatNumber(dashboard.workers.active), attention: dashboard.workers.active === 0 && activeTasks.length > 0, view: "runs" },
+  ];
+
   if (runs.length === 0) {
     const hasEndpoint = endpoints.length > 0;
     const hasVerifiedEndpoint = verifiedEndpoints.length > 0;
@@ -214,17 +223,25 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
         <DashboardHeader copy={copy} onOpenSetup={primary.open} onOpenView={onOpenView} showActions={false} />
         <WorkspaceTabs ariaLabel="Dashboard sections" idPrefix="dashboard" onChange={onTabChange} tabs={[{ id: "summary", label: tabCopy.summary }, { id: "evaluations", label: tabCopy.evaluations }, { id: "readiness", label: tabCopy.readiness }]} value={activeTab} />
         <div aria-labelledby={workspaceTabId("dashboard", activeTab)} className="dashboard-tabpanel" id={workspaceTabPanelId("dashboard", activeTab)} role="tabpanel" tabIndex={0}>
-          <section className="dashboard-panel first-evaluation" aria-labelledby="first-evaluation-title">
+          {activeTab === "summary" && <section className="dashboard-panel first-evaluation" aria-labelledby="first-evaluation-title">
             <div className="first-evaluation__heading">
               <p className="eyebrow">{onboarding.checklist}</p>
               <h2 id="first-evaluation-title">{onboarding.title}</h2>
               <p>{onboarding.description}</p>
             </div>
             <ol className="first-evaluation__steps">
-              {steps.map((step) => <li className={step.complete ? "is-complete" : undefined} key={step.title}><span aria-hidden="true" className="status-dot" /><div><strong>{step.title}</strong><small>{step.detail}</small></div></li>)}
+              {steps.map((step, index) => <li className={step.complete ? "is-complete" : undefined} key={step.title}><span aria-hidden="true" className="status-dot" /><div><strong>{index + 1}. {step.title}</strong><small>{step.detail}</small></div></li>)}
             </ol>
             <button onClick={primary.open} type="button">{primary.label}</button>
-          </section>
+          </section>}
+          {activeTab === "evaluations" && <section className="dashboard-panel" aria-labelledby="recent-evaluations-title">
+            <div className="dashboard-panel__heading"><h2 id="recent-evaluations-title">{copy.recentEvaluations}</h2><button className="secondary" onClick={() => onOpenView("runs")} type="button">{copy.viewAllRuns}</button></div>
+            <RecentEvaluationsTable copy={copy} formatDate={(value) => value ? formatDate(value) : "--"} formatters={formatters} onInspectRun={onInspectRun} rows={recentRows} />
+          </section>}
+          {activeTab === "readiness" && <section className="dashboard-panel" aria-labelledby="system-readiness-title">
+            <div className="dashboard-panel__heading"><h2 id="system-readiness-title">{copy.systemReadiness}</h2><span>{interpolate(copy.verified, { count: verifiedEndpoints.length })}</span></div>
+            <ReadinessGrid copy={copy} items={readinessItems} onOpenView={onOpenView} />
+          </section>}
         </div>
       </section>
     );
@@ -243,14 +260,6 @@ export function OverviewDashboard({ activeTab, analytics, dashboard, endpoints, 
     { id: "latency", label: copy.p95Latency, value: formatters.latency(dashboard.quality.latency_ms.p95), detail: interpolate(copy.measured, { count: dashboard.quality.latency_ms.measured_samples }) },
     ...costMetrics,
     { id: "errors", label: copy.apiErrors, value: formatters.percent(dashboard.api.request_error_rate), detail: interpolate(copy.requests, { count: dashboard.quality.errors.api_errors }) },
-  ];
-  const systemHealthState = systemHealth === null ? "unknown" : systemHealth.status === "ok" && systemHealth.database_connected ? "ready" : "attention";
-  const readinessItems: ReadinessItem[] = [
-    { id: "system", label: copy.systemReadiness, detail: systemHealthState === "ready" ? copy.operational : systemHealthState === "unknown" ? copy.unknownValue : copy.attentionNeeded, attention: systemHealthState === "attention", view: "settings" },
-    { id: "endpoints", label: copy.modelEndpoints, detail: dashboard.endpoints.available > 0 ? interpolate(copy.availableForEvaluation, { count: dashboard.endpoints.available }) : copy.verifyModel, attention: dashboard.endpoints.available === 0, view: "models" },
-    { id: "datasets", label: copy.evaluationData, detail: dashboard.datasets.ready > 0 ? interpolate(dashboard.datasets.ready === 1 ? copy.readyDataset : copy.readyDatasets, { count: dashboard.datasets.ready }) : copy.registerDataset, attention: dashboard.datasets.ready === 0, view: "datasets" },
-    { id: "queue", label: copy.queuePressure, detail: dashboard.queue.pending === 0 ? copy.noWorkWaiting : interpolate(dashboard.queue.pending === 1 ? copy.taskNeedsCapacity : copy.tasksNeedCapacity, { count: dashboard.queue.pending }), attention: dashboard.queue.pending > 0, view: "runs" },
-    { id: "workers", label: copy.workers, detail: formatNumber(dashboard.workers.active), attention: dashboard.workers.active === 0 && activeTasks.length > 0, view: "runs" },
   ];
 
   return (
