@@ -84,6 +84,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Saving an edited model endpoint keeps you on the form instead of navigating to
+  Model inventory; the one-shot handoff to the inventory now runs only after
+  creating a new endpoint.
+- The Guide page is now fully localized; step titles, descriptions, and action
+  labels previously fell back to English in seven locales.
 - Selecting a different model endpoint no longer snaps the selection back to a
   newly created endpoint every time the inventory refreshes; the post-creation
   handoff is now consumed once.

@@ -108,4 +108,34 @@ describe("endpoint onboarding handoff", () => {
     expect(screen.getByRole("button", { name: "Select First model" })).toHaveAttribute("aria-pressed", "false");
     expect(within(screen.getByRole("region", { name: "Selected model endpoint" })).getByRole("heading", { name: "Second model" })).toBeVisible();
   });
+
+  it("keeps the user on the form after saving an edit instead of navigating to inventory", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "listEndpoints").mockResolvedValue([createdEndpoint]);
+    vi.spyOn(api, "listRuns").mockResolvedValue([]);
+    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
+    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
+    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
+    vi.spyOn(api, "listTasks").mockResolvedValue([]);
+    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
+    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(api, "updateEndpoint").mockResolvedValue(createdEndpoint);
+    window.history.replaceState(null, "", "/models");
+
+    render(<LocaleProvider><App /></LocaleProvider>);
+    await user.click(await screen.findByRole("button", { name: "Select First model" }));
+    await user.click(screen.getByRole("button", { name: "Edit configuration" }));
+
+    const displayName = screen.getByLabelText("Display name");
+    expect(displayName).toHaveValue("First model");
+    await user.clear(displayName);
+    await user.type(displayName, "Renamed model");
+    await user.click(screen.getByRole("button", { name: "Save model configuration" }));
+
+    expect(await screen.findByRole("tab", { name: "Add endpoint" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Model inventory" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("heading", { name: "Add model endpoint" })).toBeVisible();
+    expect(window.location.search).toBe("?tab=add-endpoint");
+  });
 });

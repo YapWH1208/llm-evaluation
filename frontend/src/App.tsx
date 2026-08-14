@@ -412,9 +412,10 @@ export default function App() {
         setPreferredEndpointId(createdEndpoint.id);
         showNotice("Endpoint saved. Test its connection before starting a run.");
       }
+      const wasCreating = !editingEndpointId;
       cancelEndpointEdit();
       await refresh();
-      if (!editingEndpointId) navigate("models", { tab: "model-inventory" });
+      if (wasCreating) navigate("models", { tab: "model-inventory" });
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
