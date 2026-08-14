@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,7 @@ import { LocaleProvider } from "./i18n/LocaleProvider";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -111,6 +112,52 @@ describe("AppShell", () => {
     expect(props.onViewChange).toHaveBeenCalledWith("models");
     expect(sidebar).toHaveClass("is-closed");
     expect(sidebar).not.toHaveClass("is-open");
+  });
+
+  it("keeps focus on a desktop navigation link", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const link = screen.getByRole("link", { name: "Models" });
+
+    await user.click(link);
+
+    expect(link).toHaveFocus();
+  });
+
+  it("makes the closed mobile drawer inert and contains focus while open", async () => {
+    const mediaListeners = new Set<(event: MediaQueryListEvent) => void>();
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
+      matches: true,
+      media: "(max-width: 960px)",
+      onchange: null,
+      addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.add(listener),
+      removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.delete(listener),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const user = userEvent.setup();
+    renderShell();
+    const sidebar = screen.getByTestId("workspace-sidebar");
+    const opener = screen.getByRole("button", { name: "Open navigation" });
+
+    await waitFor(() => expect(sidebar).toHaveAttribute("inert"));
+    expect(sidebar).toHaveAttribute("aria-hidden", "true");
+
+    await user.click(opener);
+    const close = within(sidebar).getByRole("button", { name: "Close navigation" });
+    expect(sidebar).not.toHaveAttribute("inert");
+    expect(sidebar).not.toHaveAttribute("aria-hidden");
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(sidebar, { key: "Tab", shiftKey: true });
+    expect(within(sidebar).getByRole("link", { name: "Settings" })).toHaveFocus();
+    fireEvent.keyDown(sidebar, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(sidebar, { key: "Escape" });
+    expect(sidebar).toHaveAttribute("inert");
+    expect(opener).toHaveFocus();
   });
 
   it("leaves modified navigation clicks to the browser", () => {

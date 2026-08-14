@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { catalogs, Locale, resolveLocale, TranslationKey } from "./catalog";
-import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./formatters";
+import { formatWorkspaceBytes, formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceNumber, formatWorkspacePercent } from "./formatters";
 
 type TranslationValues = Record<string, number | string | null | undefined>;
 
@@ -13,6 +13,7 @@ type LocaleContextValue = {
   formatNumber: (value: number | null | undefined, digits?: number) => string;
   formatPercent: (value: number | null | undefined) => string;
   formatCurrency: (value: number | null | undefined, currency: string | null | undefined, digits?: number) => string;
+  formatBytes: (value: number | null | undefined) => string;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -36,8 +37,9 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const formatPercent = useCallback((value: number | null | undefined) => formatWorkspacePercent(locale, value), [locale]);
   const formatDate = useCallback((value: string | null | undefined) => formatWorkspaceDate(locale, value), [locale]);
   const formatCurrency = useCallback((value: number | null | undefined, currency: string | null | undefined, digits = 6) => formatWorkspaceMoney(locale, value, currency, digits), [locale]);
+  const formatBytes = useCallback((value: number | null | undefined) => formatWorkspaceBytes(locale, value), [locale]);
 
-  const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale, t, formatDate, formatNumber, formatPercent, formatCurrency }), [formatCurrency, formatDate, formatNumber, formatPercent, locale, setLocale, t]);
+  const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale, t, formatBytes, formatDate, formatNumber, formatPercent, formatCurrency }), [formatBytes, formatCurrency, formatDate, formatNumber, formatPercent, locale, setLocale, t]);
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
 

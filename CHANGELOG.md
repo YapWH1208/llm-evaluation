@@ -44,6 +44,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Fresh workspaces now lead with a state-aware first-evaluation checklist:
+  connect or test a model, run the built-in Quick start, then inspect results.
+  The Guide presents this shortest path before the optional custom-dataset flow.
+- Endpoint and dataset registration forms now keep essential fields visible and
+  place optional operational metadata under an advanced-settings disclosure,
+  with explicit required and optional guidance.
 - Analysis now uses an independent-axis evidence scatter plot with all eligible runs
   selected by default, broad contextual and numeric filters, linked exact-value
   evidence, bounded loading states, and accessible point inspection.
@@ -78,6 +84,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Saving an edited model endpoint keeps you on the form instead of navigating to
+  Model inventory; the one-shot handoff to the inventory now runs only after
+  creating a new endpoint.
+- The Guide page is now fully localized; step titles, descriptions, and action
+  labels previously fell back to English in seven locales.
+- Selecting a different model endpoint no longer snaps the selection back to a
+  newly created endpoint every time the inventory refreshes; the post-creation
+  handoff is now consumed once.
+- The Dashboard Evaluations and Readiness tabs now render their own panels even
+  before the first evaluation completes, keeping recent-evaluation and system
+  readiness signals reachable in a fresh workspace.
+- Guide and first-evaluation checklist step numbers are presentation-only and no
+  longer derived from translated step titles.
+- Protected workspaces now show persistent access recovery that opens the
+  session-token control directly and clears only after a successful refresh.
+- Newly created endpoints open selected in Model inventory with connection testing
+  exposed as the next action; empty model and blocked Quick start states now link
+  directly to their missing prerequisite.
+- Closed mobile navigation is inert to keyboard and assistive technology, contains
+  focus while open, closes on Escape, and restores focus to its opener.
+- Dataset cache and free-space totals now use localized human-readable byte units.
 - Transient application notices dismiss automatically after five seconds; replacing
   a notice resets the timer, while manual dismissal and accessibility announcements
   remain available.
@@ -100,8 +127,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   root and unknown workspace paths canonicalized to `/dashboard`.
 - Queuing a quick-start run now refreshes the run inventory before navigating
   to run details, so the newly queued run no longer flashes away on arrival.
-- The Dashboard "Set up an evaluation" action opens dataset registration
-  directly instead of landing on the dataset inventory.
+- The Dashboard setup action now resolves the next prerequisite—add a model, test
+  its connection, or open Quick start—instead of assuming dataset registration.
 - Workspace tabs only link `aria-controls` from the active tab to its rendered
   panel, avoiding references to panels that are not in the document.
 

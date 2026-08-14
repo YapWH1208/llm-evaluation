@@ -143,6 +143,27 @@ describe("workspace locale catalog", () => {
     }
   });
 
+  it("provides complete onboarding terminology in every shipped locale", () => {
+    for (const copy of [catalogModule.guideCopy, catalogModule.firstEvaluationCopy, catalogModule.formCopy, catalogModule.shellCopy]) {
+      const englishKeys = Object.keys(copy.en).sort();
+      for (const locale of localeIds) {
+        expect(Object.keys(copy[locale]).sort()).toEqual(englishKeys);
+        expect(Object.values(copy[locale]).every((value) => value.trim().length > 0)).toBe(true);
+      }
+    }
+  });
+
+  it("localizes every guide and first-evaluation phrase instead of falling back to English", () => {
+    const copies = [catalogModule.guideCopy, catalogModule.firstEvaluationCopy] as Record<string, Record<string, string>>[];
+    for (const copy of copies) {
+      for (const locale of localeIds.filter((locale) => locale !== "en")) {
+        for (const [key, value] of Object.entries(copy[locale])) {
+          expect(value, `${locale}.${key}`).not.toBe(copy.en[key]);
+        }
+      }
+    }
+  });
+
   it("provides every dataset scoring metric label in each shipped locale", () => {
     for (const locale of localeIds) {
       for (const key of datasetMetricKeys) {

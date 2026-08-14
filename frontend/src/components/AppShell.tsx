@@ -1,4 +1,4 @@
-import { type MouseEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { localeIds, localeNames, navigationCopy, shellCopy, type Locale } from "../i18n/catalog";
 import { navigationGroupFor, navigationGroups, navigationItem, View } from "../dashboard/navigation";
@@ -11,6 +11,7 @@ import "../dashboard.css";
 type Theme = "dark" | "light";
 
 type AppShellProps = {
+  accessRequired?: boolean;
   children: ReactNode;
   completedRunCount: number;
   locale: Locale;
@@ -20,11 +21,13 @@ type AppShellProps = {
   view: View;
   onDismissNotice: () => void;
   onLocaleChange: (locale: Locale) => void;
+  onOpenAccess?: () => void;
   onThemeToggle: () => void;
   onViewChange: (view: View) => void;
 };
 
 export function AppShell({
+  accessRequired = false,
   children,
   completedRunCount,
   locale,
@@ -34,11 +37,16 @@ export function AppShell({
   view,
   onDismissNotice,
   onLocaleChange,
+  onOpenAccess = () => undefined,
   onThemeToggle,
   onViewChange,
 }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+  const [isMobileNavigation, setIsMobileNavigation] = useState(false);
   const dismissNoticeRef = useRef(onDismissNotice);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const closeNavigationRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation();
   const currentItem = navigationItem(view);
   const currentGroup = navigationGroupFor(view);
@@ -56,11 +64,53 @@ export function AppShell({
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 960px)");
+    if (!query) return;
+    const update = () => {
+      setIsMobileNavigation(query.matches);
+      if (!query.matches) setIsNavigationOpen(false);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileNavigation && isNavigationOpen) closeNavigationRef.current?.focus();
+  }, [isMobileNavigation, isNavigationOpen]);
+
+  const closeNavigation = useCallback((restoreFocus = true) => {
+    setIsNavigationOpen(false);
+    if (restoreFocus) menuButtonRef.current?.focus();
+  }, []);
+
+  function handleNavigationKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!isMobileNavigation || !isNavigationOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeNavigation();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") ?? []).filter((element) => !element.hidden);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function navigate(event: MouseEvent<HTMLAnchorElement>, nextView: View) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     onViewChange(nextView);
-    setIsNavigationOpen(false);
+    closeNavigation(isMobileNavigation);
   }
 
   return (
@@ -68,11 +118,12 @@ export function AppShell({
       <button
         aria-label={copy.closeNavigation}
         className={isNavigationOpen ? "navigation-scrim is-visible" : "navigation-scrim"}
-        onClick={() => setIsNavigationOpen(false)}
-        tabIndex={isNavigationOpen ? 0 : -1}
+        onClick={() => closeNavigation()}
+        tabIndex={-1}
         type="button"
       />
-      <aside className={isNavigationOpen ? "sidebar is-open" : "sidebar is-closed"} data-testid="workspace-sidebar" id="workspace-navigation">
+      <aside aria-hidden={isMobileNavigation && !isNavigationOpen ? true : undefined} className={isNavigationOpen ? "sidebar is-open" : "sidebar is-closed"} data-testid="workspace-sidebar" id="workspace-navigation" inert={isMobileNavigation && !isNavigationOpen} onKeyDown={handleNavigationKeyDown} ref={sidebarRef}>
+        <button aria-label={copy.closeNavigation} className="sidebar-close secondary" hidden={!isMobileNavigation} onClick={() => closeNavigation()} ref={closeNavigationRef} type="button">×</button>
         <div className="sidebar-brand">
           <span aria-hidden="true" className="brand-mark">E</span>
           <div>
@@ -115,6 +166,7 @@ export function AppShell({
               aria-label={copy.openNavigation}
               className="menu-toggle secondary"
               onClick={() => setIsNavigationOpen(true)}
+              ref={menuButtonRef}
               type="button"
             >
               <MenuIcon />
@@ -139,6 +191,13 @@ export function AppShell({
         </header>
 
         <main className="workspace-main">
+          {accessRequired && <section aria-labelledby="access-required-title" className="access-required" role="alert">
+            <div>
+              <h2 id="access-required-title">{t("accessRequired.title")}</h2>
+              <p>{t("accessRequired.description")}</p>
+            </div>
+            <button onClick={onOpenAccess} type="button">{t("accessRequired.action")}</button>
+          </section>}
           {notice && <button aria-live="polite" className="notice" onClick={onDismissNotice} type="button">{notice}<span>{t("common.dismiss")}</span></button>}
           <div className="workspace-page-content">{children}</div>
         </main>

@@ -31,6 +31,7 @@ describe("dataset registration", () => {
     await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     expect(screen.getByLabelText("Revision")).toHaveValue("main");
     await user.type(screen.getByLabelText("Dataset ID"), "private-corpus");
+    await user.click(screen.getByText("Advanced settings (optional)"));
     await user.type(screen.getByLabelText("Source HTTPS URL"), "https://datasets.example.test/corpus.jsonl");
     await user.type(screen.getByLabelText("Credential binding ID"), "private-dataset");
     await user.click(screen.getByRole("button", { name: "Register dataset" }));
@@ -68,6 +69,7 @@ describe("dataset registration", () => {
     await user.click(screen.getByRole("link", { name: "Datasets" }));
     await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     await user.type(screen.getByLabelText("Dataset ID"), "metadata-demo");
+    await user.click(screen.getByText("Advanced settings (optional)"));
     await user.type(screen.getByLabelText("Capabilities"), "reasoning{Enter}coding{Enter}");
     await user.type(screen.getByLabelText("Languages"), "en{Enter}ms{Enter}");
     await user.type(screen.getByLabelText("Languages"), "{Backspace}");
@@ -103,6 +105,7 @@ describe("dataset registration", () => {
     await user.click(screen.getByRole("link", { name: "Datasets" }));
     await user.click(screen.getByRole("tab", { name: "Register dataset" }));
     await user.type(screen.getByLabelText("Dataset ID"), "fields-demo");
+    await user.click(screen.getByText("Advanced settings (optional)"));
     await user.type(screen.getByLabelText("Input field"), "question");
     await user.type(screen.getByLabelText("Reference (output) field"), "answer");
     await user.click(screen.getByRole("button", { name: "Register dataset" }));

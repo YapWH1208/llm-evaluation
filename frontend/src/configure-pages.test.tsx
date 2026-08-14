@@ -132,6 +132,16 @@ describe("configure workspace pages", () => {
     expect(within(screen.getByRole("region", { name: "Selected model endpoint" })).getByRole("heading", { name: "Production model" })).toBeVisible();
   });
 
+  it("offers endpoint creation directly from the empty model inventory", async () => {
+    const user = userEvent.setup();
+    const props = modelProps({ endpoints: [] });
+    render(<ModelsPage {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "Add model endpoint" }));
+
+    expect(props.onTabChange).toHaveBeenCalledWith("add-endpoint");
+  });
+
   it("shows only the endpoint form on the add-endpoint tab", async () => {
     const user = userEvent.setup();
     const props = modelProps({ activeTab: "add-endpoint" });
@@ -140,8 +150,12 @@ describe("configure workspace pages", () => {
     expect(screen.getByRole("tab", { name: "Add endpoint" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Add model endpoint" })).toBeVisible();
     expect(screen.getByLabelText("Base URL")).toBeVisible();
-    expect(screen.getByLabelText("Default request body (JSON)")).toBeVisible();
+    expect(screen.getByText("Required fields are marked; everything else is optional.")).toBeVisible();
+    expect(screen.getByLabelText("Default request body (JSON)")).not.toBeVisible();
     expect(screen.queryByRole("heading", { name: "Endpoint inventory" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    expect(screen.getByLabelText("Default request body (JSON)")).toBeVisible();
 
     await user.type(screen.getByLabelText("Display name"), "Staging");
     expect(props.onFormChange).toHaveBeenCalled();
@@ -156,6 +170,18 @@ describe("configure workspace pages", () => {
     await user.type(screen.getByLabelText("Display name"), "Staging");
 
     expect(screen.getByLabelText("Display name")).toHaveValue("Staging");
+  });
+
+  it("preserves advanced endpoint values while disclosure is toggled", async () => {
+    const user = userEvent.setup();
+    render(<StatefulModelsPage />);
+
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    await user.type(screen.getByLabelText("Notes"), "Keep this value");
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    await user.click(screen.getByText("Advanced settings (optional)"));
+
+    expect(screen.getByLabelText("Notes")).toHaveValue("Keep this value");
   });
 
 

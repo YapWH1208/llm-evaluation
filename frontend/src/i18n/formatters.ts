@@ -23,3 +23,13 @@ export function formatWorkspaceMoney(locale: Locale, value: number | null | unde
     ? catalogs[locale]["common.notConfigured"]
     : `${formatWorkspaceNumber(locale, value, digits)} ${currency ?? ""}`.trim();
 }
+
+export function formatWorkspaceBytes(locale: Locale, value: number | null | undefined) {
+  if (value === null || value === undefined) return "--";
+  const units = ["B", "KB", "MB", "GB", "TB"] as const;
+  const safeValue = Math.max(0, value);
+  const exponent = safeValue < 1024 ? 0 : Math.min(Math.floor(Math.log(safeValue) / Math.log(1024)), units.length - 1);
+  const scaled = safeValue / 1024 ** exponent;
+  const digits = exponent === 0 || scaled >= 10 ? 0 : 1;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(scaled)} ${units[exponent]}`;
+}

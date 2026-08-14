@@ -20,6 +20,9 @@ const en = {
   "common.notRecorded": "Not recorded",
   "common.unavailable": "Unavailable",
   "common.unknown": "Unknown",
+  "accessRequired.title": "Workspace access required",
+  "accessRequired.description": "Enter a valid bearer token to load this protected workspace.",
+  "accessRequired.action": "Enter access token",
   "locale.label": "Workspace language",
   "locale.unsupported": "Unsupported locale",
   "provider.missing": "Translation provider is unavailable.",
@@ -146,6 +149,9 @@ const zhCN: TranslationCatalog = {
   "common.notRecorded": "未记录",
   "common.unavailable": "不可用",
   "common.unknown": "未知",
+  "accessRequired.title": "需要工作区访问权限",
+  "accessRequired.description": "请输入有效的持有者令牌以加载此受保护的工作区。",
+  "accessRequired.action": "输入访问令牌",
   "locale.label": "工作区语言",
   "locale.unsupported": "不支持的语言区域",
   "provider.missing": "翻译提供程序不可用。",
@@ -269,6 +275,9 @@ const fr: TranslationCatalog = {
   "common.notRecorded": "Non enregistré",
   "common.unavailable": "Indisponible",
   "common.unknown": "Inconnu",
+  "accessRequired.title": "Accès à l’espace de travail requis",
+  "accessRequired.description": "Saisissez un jeton valide pour charger cet espace de travail protégé.",
+  "accessRequired.action": "Saisir le jeton d’accès",
   "locale.label": "Langue de l’espace de travail",
   "locale.unsupported": "Langue non prise en charge",
   "provider.missing": "Le fournisseur de traductions est indisponible.",
@@ -392,6 +401,9 @@ const de: TranslationCatalog = {
   "common.notRecorded": "Nicht erfasst",
   "common.unavailable": "Nicht verfügbar",
   "common.unknown": "Unbekannt",
+  "accessRequired.title": "Arbeitsbereichszugriff erforderlich",
+  "accessRequired.description": "Geben Sie ein gültiges Bearer-Token ein, um diesen geschützten Arbeitsbereich zu laden.",
+  "accessRequired.action": "Zugriffstoken eingeben",
   "locale.label": "Arbeitsbereichssprache",
   "locale.unsupported": "Nicht unterstützte Sprache",
   "provider.missing": "Der Übersetzungsanbieter ist nicht verfügbar.",
@@ -515,6 +527,9 @@ const ru: TranslationCatalog = {
   "common.notRecorded": "Не записано",
   "common.unavailable": "Недоступно",
   "common.unknown": "Неизвестно",
+  "accessRequired.title": "Требуется доступ к рабочему пространству",
+  "accessRequired.description": "Введите действительный токен, чтобы загрузить защищённое рабочее пространство.",
+  "accessRequired.action": "Ввести токен доступа",
   "locale.label": "Язык рабочего пространства",
   "locale.unsupported": "Неподдерживаемая локаль",
   "provider.missing": "Поставщик переводов недоступен.",
@@ -638,6 +653,9 @@ const ja: TranslationCatalog = {
   "common.notRecorded": "記録なし",
   "common.unavailable": "利用不可",
   "common.unknown": "不明",
+  "accessRequired.title": "ワークスペースへのアクセスが必要です",
+  "accessRequired.description": "この保護されたワークスペースを読み込むには、有効なトークンを入力してください。",
+  "accessRequired.action": "アクセストークンを入力",
   "locale.label": "ワークスペースの言語",
   "locale.unsupported": "サポートされていないロケール",
   "provider.missing": "翻訳プロバイダーを利用できません。",
@@ -761,6 +779,9 @@ const ko: TranslationCatalog = {
   "common.notRecorded": "기록되지 않음",
   "common.unavailable": "사용할 수 없음",
   "common.unknown": "알 수 없음",
+  "accessRequired.title": "작업 공간 액세스 필요",
+  "accessRequired.description": "보호된 작업 공간을 불러오려면 유효한 토큰을 입력하세요.",
+  "accessRequired.action": "액세스 토큰 입력",
   "locale.label": "작업 공간 언어",
   "locale.unsupported": "지원하지 않는 로캘",
   "provider.missing": "번역 공급자를 사용할 수 없습니다.",
@@ -884,6 +905,9 @@ const ms: TranslationCatalog = {
   "common.notRecorded": "Tidak direkodkan",
   "common.unavailable": "Tidak tersedia",
   "common.unknown": "Tidak diketahui",
+  "accessRequired.title": "Akses ruang kerja diperlukan",
+  "accessRequired.description": "Masukkan token pembawa yang sah untuk memuatkan ruang kerja terlindung ini.",
+  "accessRequired.action": "Masukkan token akses",
   "locale.label": "Bahasa ruang kerja",
   "locale.unsupported": "Bahasa tidak disokong",
   "provider.missing": "Penyedia terjemahan tidak tersedia.",
@@ -1285,6 +1309,59 @@ export const shellCopy: Record<Locale, ShellCopy> = {
   ja: { brand: "評価ワークスペース", navigation: "ワークスペース ナビゲーション", closeNavigation: "ナビゲーションを閉じる", openNavigation: "ナビゲーションを開く", systemHealthy: "システムは正常です", systemStatus: "システム {{status}}", systemUnavailable: "システム状態を利用できません", completed: "完了", switchToLight: "ライトモードに切り替える", switchToDark: "ダークモードに切り替える", lightMode: "ライトモード", darkMode: "ダークモード", controlCenter: "評価コントロール センター" },
   ko: { brand: "평가 작업 공간", navigation: "작업 공간 탐색", closeNavigation: "탐색 닫기", openNavigation: "탐색 열기", systemHealthy: "시스템 정상", systemStatus: "시스템 {{status}}", systemUnavailable: "시스템 상태를 사용할 수 없음", completed: "완료", switchToLight: "라이트 모드로 전환", switchToDark: "다크 모드로 전환", lightMode: "라이트 모드", darkMode: "다크 모드", controlCenter: "평가 제어 센터" },
   ms: { brand: "Ruang kerja penilaian", navigation: "Navigasi ruang kerja", closeNavigation: "Tutup navigasi", openNavigation: "Buka navigasi", systemHealthy: "Sistem sihat", systemStatus: "Sistem {{status}}", systemUnavailable: "Status sistem tidak tersedia", completed: "selesai", switchToLight: "Tukar kepada mod cerah", switchToDark: "Tukar kepada mod gelap", lightMode: "Mod cerah", darkMode: "Mod gelap", controlCenter: "Pusat kawalan penilaian" },
+};
+
+export type FirstEvaluationCopy = {
+  title: string; description: string; checklist: string;
+  endpointStep: string; endpointMissing: string; endpointNeedsTest: string; endpointReady: string;
+  quickStartStep: string; quickStartReady: string; quickStartBlocked: string;
+  inspectStep: string; inspectBlocked: string;
+  addEndpoint: string; testConnection: string; startQuickStart: string;
+  modelEmpty: string; quickStartMissing: string; quickStartNeedsTest: string;
+};
+
+export const firstEvaluationCopy: Record<Locale, FirstEvaluationCopy> = {
+  en: { title: "Set up your first evaluation", description: "Use the built-in Quick start to reach a first result without preparing a dataset.", checklist: "Your path to a first result", endpointStep: "Connect a model", endpointMissing: "Add the model endpoint you want to evaluate.", endpointNeedsTest: "Test the saved endpoint before running an evaluation.", endpointReady: "A verified model is ready.", quickStartStep: "Run Quick start", quickStartReady: "The built-in evaluation is ready to launch.", quickStartBlocked: "Quick start unlocks after a model connection succeeds.", inspectStep: "Inspect the result", inspectBlocked: "The run inventory will show evidence after you launch the evaluation.", addEndpoint: "Add model endpoint", testConnection: "Test model connection", startQuickStart: "Start Quick start", modelEmpty: "Add an endpoint to connect your first model.", quickStartMissing: "Add a model endpoint to unlock Quick start.", quickStartNeedsTest: "Test a model connection to unlock Quick start." },
+  "zh-CN": { title: "设置首次评测", description: "使用内置快速开始，无需准备数据集即可获得首个结果。", checklist: "获得首个结果的路径", endpointStep: "连接模型", endpointMissing: "添加要评测的模型端点。", endpointNeedsTest: "运行评测前测试已保存的端点。", endpointReady: "已验证的模型已就绪。", quickStartStep: "运行快速开始", quickStartReady: "内置评测已可启动。", quickStartBlocked: "模型连接成功后即可使用快速开始。", inspectStep: "查看结果", inspectBlocked: "启动评测后，运行清单将显示证据。", addEndpoint: "添加模型端点", testConnection: "测试模型连接", startQuickStart: "启动快速开始", modelEmpty: "添加端点以连接您的第一个模型。", quickStartMissing: "添加模型端点以启用快速开始。", quickStartNeedsTest: "测试模型连接以启用快速开始。" },
+  fr: { title: "Configurez votre première évaluation", description: "Utilisez le démarrage rapide intégré pour obtenir un premier résultat sans préparer de jeu de données.", checklist: "Votre parcours vers un premier résultat", endpointStep: "Connecter un modèle", endpointMissing: "Ajoutez le point de terminaison du modèle à évaluer.", endpointNeedsTest: "Testez le point de terminaison enregistré avant l’évaluation.", endpointReady: "Un modèle vérifié est prêt.", quickStartStep: "Lancer le démarrage rapide", quickStartReady: "L’évaluation intégrée est prête.", quickStartBlocked: "Le démarrage rapide sera disponible après la connexion du modèle.", inspectStep: "Examiner le résultat", inspectBlocked: "L’inventaire affichera les preuves après le lancement.", addEndpoint: "Ajouter un point de terminaison", testConnection: "Tester la connexion du modèle", startQuickStart: "Lancer le démarrage rapide", modelEmpty: "Ajoutez un point de terminaison pour connecter votre premier modèle.", quickStartMissing: "Ajoutez un modèle pour déverrouiller le démarrage rapide.", quickStartNeedsTest: "Testez une connexion de modèle pour déverrouiller le démarrage rapide." },
+  de: { title: "Erste Evaluierung einrichten", description: "Nutzen Sie den integrierten Schnellstart für ein erstes Ergebnis ohne vorbereiteten Datensatz.", checklist: "Ihr Weg zum ersten Ergebnis", endpointStep: "Modell verbinden", endpointMissing: "Fügen Sie den zu evaluierenden Modellendpunkt hinzu.", endpointNeedsTest: "Testen Sie den gespeicherten Endpunkt vor der Evaluierung.", endpointReady: "Ein verifiziertes Modell ist bereit.", quickStartStep: "Schnellstart ausführen", quickStartReady: "Die integrierte Evaluierung ist startbereit.", quickStartBlocked: "Der Schnellstart wird nach erfolgreicher Modellverbindung freigeschaltet.", inspectStep: "Ergebnis prüfen", inspectBlocked: "Nach dem Start zeigt das Ausführungsinventar die Nachweise.", addEndpoint: "Modellendpunkt hinzufügen", testConnection: "Modellverbindung testen", startQuickStart: "Schnellstart starten", modelEmpty: "Fügen Sie einen Endpunkt für Ihr erstes Modell hinzu.", quickStartMissing: "Fügen Sie einen Modellendpunkt hinzu, um den Schnellstart freizuschalten.", quickStartNeedsTest: "Testen Sie eine Modellverbindung, um den Schnellstart freizuschalten." },
+  ru: { title: "Настройте первую оценку", description: "Используйте встроенный быстрый старт, чтобы получить первый результат без подготовки набора данных.", checklist: "Путь к первому результату", endpointStep: "Подключите модель", endpointMissing: "Добавьте конечную точку модели для оценки.", endpointNeedsTest: "Проверьте сохранённую конечную точку перед оценкой.", endpointReady: "Проверенная модель готова.", quickStartStep: "Запустите быстрый старт", quickStartReady: "Встроенная оценка готова к запуску.", quickStartBlocked: "Быстрый старт станет доступен после успешного подключения модели.", inspectStep: "Изучите результат", inspectBlocked: "После запуска доказательства появятся в списке запусков.", addEndpoint: "Добавить конечную точку", testConnection: "Проверить подключение модели", startQuickStart: "Запустить быстрый старт", modelEmpty: "Добавьте конечную точку для первой модели.", quickStartMissing: "Добавьте модель, чтобы открыть быстрый старт.", quickStartNeedsTest: "Проверьте подключение модели, чтобы открыть быстрый старт." },
+  ja: { title: "最初の評価を設定", description: "データセットを準備せず、組み込みのクイックスタートで最初の結果を得られます。", checklist: "最初の結果までの手順", endpointStep: "モデルを接続", endpointMissing: "評価するモデル エンドポイントを追加します。", endpointNeedsTest: "評価前に保存済みエンドポイントをテストします。", endpointReady: "検証済みモデルの準備ができました。", quickStartStep: "クイックスタートを実行", quickStartReady: "組み込み評価を開始できます。", quickStartBlocked: "モデル接続に成功するとクイックスタートを利用できます。", inspectStep: "結果を確認", inspectBlocked: "評価開始後、実行一覧に証拠が表示されます。", addEndpoint: "モデル エンドポイントを追加", testConnection: "モデル接続をテスト", startQuickStart: "クイックスタートを開始", modelEmpty: "最初のモデルを接続するエンドポイントを追加します。", quickStartMissing: "クイックスタートを利用するにはモデルを追加してください。", quickStartNeedsTest: "クイックスタートを利用するにはモデル接続をテストしてください。" },
+  ko: { title: "첫 평가 설정", description: "데이터 세트를 준비하지 않고 내장 빠른 시작으로 첫 결과를 얻으세요.", checklist: "첫 결과까지의 경로", endpointStep: "모델 연결", endpointMissing: "평가할 모델 엔드포인트를 추가하세요.", endpointNeedsTest: "평가 전에 저장된 엔드포인트를 테스트하세요.", endpointReady: "검증된 모델이 준비되었습니다.", quickStartStep: "빠른 시작 실행", quickStartReady: "내장 평가를 시작할 수 있습니다.", quickStartBlocked: "모델 연결이 성공하면 빠른 시작을 사용할 수 있습니다.", inspectStep: "결과 검사", inspectBlocked: "평가를 시작하면 실행 목록에 증거가 표시됩니다.", addEndpoint: "모델 엔드포인트 추가", testConnection: "모델 연결 테스트", startQuickStart: "빠른 시작 실행", modelEmpty: "첫 모델을 연결할 엔드포인트를 추가하세요.", quickStartMissing: "빠른 시작을 사용하려면 모델을 추가하세요.", quickStartNeedsTest: "빠른 시작을 사용하려면 모델 연결을 테스트하세요." },
+  ms: { title: "Sediakan penilaian pertama anda", description: "Gunakan Mula pantas terbina dalam untuk mendapatkan hasil pertama tanpa menyediakan set data.", checklist: "Laluan ke hasil pertama", endpointStep: "Sambungkan model", endpointMissing: "Tambah titik akhir model yang ingin dinilai.", endpointNeedsTest: "Uji titik akhir yang disimpan sebelum menjalankan penilaian.", endpointReady: "Model yang disahkan sudah sedia.", quickStartStep: "Jalankan Mula pantas", quickStartReady: "Penilaian terbina dalam sedia dilancarkan.", quickStartBlocked: "Mula pantas dibuka selepas sambungan model berjaya.", inspectStep: "Periksa hasil", inspectBlocked: "Inventori larian akan menunjukkan bukti selepas penilaian dilancarkan.", addEndpoint: "Tambah titik akhir model", testConnection: "Uji sambungan model", startQuickStart: "Mulakan Mula pantas", modelEmpty: "Tambah titik akhir untuk menyambungkan model pertama anda.", quickStartMissing: "Tambah titik akhir model untuk membuka Mula pantas.", quickStartNeedsTest: "Uji sambungan model untuk membuka Mula pantas." },
+};
+
+export type FormCopy = { requirements: string; required: string; optional: string; advanced: string };
+
+export const formCopy: Record<Locale, FormCopy> = {
+  en: { requirements: "Required fields are marked; everything else is optional.", required: "Required", optional: "Optional", advanced: "Advanced settings (optional)" },
+  "zh-CN": { requirements: "必填字段已标记；其他字段均为可选。", required: "必填", optional: "可选", advanced: "高级设置（可选）" },
+  fr: { requirements: "Les champs obligatoires sont indiqués ; tous les autres sont facultatifs.", required: "Obligatoire", optional: "Facultatif", advanced: "Paramètres avancés (facultatifs)" },
+  de: { requirements: "Pflichtfelder sind markiert; alle anderen Felder sind optional.", required: "Erforderlich", optional: "Optional", advanced: "Erweiterte Einstellungen (optional)" },
+  ru: { requirements: "Обязательные поля отмечены; остальные поля необязательны.", required: "Обязательно", optional: "Необязательно", advanced: "Расширенные настройки (необязательно)" },
+  ja: { requirements: "必須フィールドには印があります。その他は任意です。", required: "必須", optional: "任意", advanced: "詳細設定（任意）" },
+  ko: { requirements: "필수 필드는 표시되어 있으며 나머지는 선택 사항입니다.", required: "필수", optional: "선택", advanced: "고급 설정(선택 사항)" },
+  ms: { requirements: "Medan wajib ditandakan; semua yang lain adalah pilihan.", required: "Wajib", optional: "Pilihan", advanced: "Tetapan lanjutan (pilihan)" },
+};
+
+export type GuideCopy = {
+  pageDescription: string; status: string; fastTitle: string; fastDescription: string; customTitle: string; customDescription: string;
+  addDescription: string; testDescription: string; quickDescription: string; inspectDescription: string;
+  datasetTitle: string; datasetDescription: string; prepareTitle: string; prepareDescription: string; datasetRunTitle: string; datasetRunDescription: string; analyzeTitle: string; analyzeDescription: string;
+  openModels: string; reviewModels: string; openQuickStart: string; inspectRuns: string; openDatasets: string; reviewDatasets: string; openDatasetRun: string; openAnalysis: string;
+};
+
+const guideEnglish: GuideCopy = { pageDescription: "Connect and verify a model, run the built-in Quick start, then inspect the evidence. Use your own dataset when you need a custom evaluation.", status: "Quick start + custom data", fastTitle: "Fastest path to a first result", fastDescription: "Three setup actions take you from an empty workspace to inspectable evidence.", customTitle: "Evaluate your own data", customDescription: "After Quick start, register and prepare a dataset for a tailored evaluation.", addDescription: "Configure the provider, model, and encrypted credential.", testDescription: "Open Model inventory and confirm the endpoint becomes available.", quickDescription: "Run a small built-in evaluation without preparing a dataset.", inspectDescription: "Review samples, scores, latency, cost, and errors in Run inventory.", datasetTitle: "Register a dataset", datasetDescription: "Declare the source and optional input and reference fields.", prepareTitle: "Download and verify", prepareDescription: "Prepare the dataset and wait until its status is ready.", datasetRunTitle: "Queue a dataset evaluation", datasetRunDescription: "Choose the prepared data, metric, reference field, and verified endpoint.", analyzeTitle: "Analyze results", analyzeDescription: "Explore evaluation dimensions or compare completed runs.", openModels: "Open Models", reviewModels: "Review model", openQuickStart: "Open Quick start", inspectRuns: "Inspect runs", openDatasets: "Open Datasets", reviewDatasets: "Review Datasets", openDatasetRun: "Open dataset evaluation", openAnalysis: "Open Analysis" };
+
+export const guideCopy: Record<Locale, GuideCopy> = {
+  en: guideEnglish,
+  "zh-CN": { ...guideEnglish, pageDescription: "连接并验证模型，运行内置快速开始，然后查看证据；需要自定义评测时再使用自己的数据集。", status: "快速开始 + 自定义数据", fastTitle: "最快获得首个结果", fastDescription: "三个设置操作即可从空工作区获得可检查的证据。", customTitle: "评测您自己的数据", customDescription: "完成快速开始后，注册并准备数据集以进行定制评测。", addDescription: "配置提供商、模型和加密凭据。", testDescription: "打开模型清单，确认端点变为可用。", quickDescription: "无需准备数据集即可运行小型内置评测。", inspectDescription: "在运行清单中查看样本、分数、延迟、成本和错误。", datasetTitle: "注册数据集", datasetDescription: "声明来源以及可选的输入字段和参考字段。", prepareTitle: "下载并验证", prepareDescription: "准备数据集，等待其状态变为就绪。", datasetRunTitle: "排队数据集评测", datasetRunDescription: "选择已准备的数据、指标、参考字段和已验证的端点。", analyzeTitle: "分析结果", analyzeDescription: "探索评测维度或比较已完成的运行。", openModels: "打开模型", reviewModels: "查看模型", openQuickStart: "打开快速开始", inspectRuns: "查看运行", openDatasets: "打开数据集", reviewDatasets: "查看数据集", openDatasetRun: "打开数据集评测", openAnalysis: "打开分析" },
+  fr: { ...guideEnglish, pageDescription: "Connectez et vérifiez un modèle, lancez le démarrage rapide, puis examinez les preuves. Utilisez vos données pour une évaluation personnalisée.", status: "Démarrage rapide + données", fastTitle: "Le chemin le plus rapide vers un premier résultat", fastDescription: "Trois actions transforment un espace vide en preuves consultables.", customTitle: "Évaluer vos propres données", customDescription: "Après le démarrage rapide, préparez un jeu de données pour une évaluation adaptée.", addDescription: "Configurez le fournisseur, le modèle et les identifiants chiffrés.", testDescription: "Ouvrez l’inventaire des modèles et confirmez que le point de terminaison devient disponible.", quickDescription: "Lancez une petite évaluation intégrée sans préparer de jeu de données.", inspectDescription: "Examinez les échantillons, les scores, la latence, les coûts et les erreurs dans l’inventaire des exécutions.", datasetTitle: "Enregistrer un jeu de données", datasetDescription: "Déclarez la source ainsi que les champs d’entrée et de référence facultatifs.", prepareTitle: "Télécharger et vérifier", prepareDescription: "Préparez le jeu de données et attendez que son statut soit prêt.", datasetRunTitle: "Planifier une évaluation de jeu de données", datasetRunDescription: "Choisissez les données préparées, la métrique, le champ de référence et le point de terminaison vérifié.", analyzeTitle: "Analyser les résultats", analyzeDescription: "Explorez les dimensions d’évaluation ou comparez les exécutions terminées.", openModels: "Ouvrir les modèles", reviewModels: "Examiner le modèle", openQuickStart: "Ouvrir le démarrage rapide", inspectRuns: "Examiner les exécutions", openDatasets: "Ouvrir les jeux de données", reviewDatasets: "Examiner les jeux de données", openDatasetRun: "Ouvrir l’évaluation du jeu de données", openAnalysis: "Ouvrir l’analyse" },
+  de: { ...guideEnglish, pageDescription: "Verbinden und verifizieren Sie ein Modell, starten Sie den Schnellstart und prüfen Sie die Nachweise. Eigene Daten sind der nächste Schritt.", status: "Schnellstart + eigene Daten", fastTitle: "Schnellster Weg zum ersten Ergebnis", fastDescription: "Drei Aktionen führen vom leeren Arbeitsbereich zu prüfbaren Nachweisen.", customTitle: "Eigene Daten evaluieren", customDescription: "Registrieren Sie nach dem Schnellstart einen Datensatz für eine angepasste Evaluierung.", addDescription: "Konfigurieren Sie den Anbieter, das Modell und die verschlüsselten Anmeldedaten.", testDescription: "Öffnen Sie die Modellübersicht und bestätigen Sie, dass der Endpunkt verfügbar wird.", quickDescription: "Führen Sie eine kleine integrierte Evaluierung ohne vorbereiteten Datensatz aus.", inspectDescription: "Prüfen Sie Stichproben, Ergebnisse, Latenz, Kosten und Fehler im Ausführungsinventar.", datasetTitle: "Datensatz registrieren", datasetDescription: "Geben Sie die Quelle sowie optionale Eingabe- und Referenzfelder an.", prepareTitle: "Herunterladen und verifizieren", prepareDescription: "Bereiten Sie den Datensatz vor und warten Sie, bis sein Status bereit ist.", datasetRunTitle: "Datensatz-Evaluierung einreihen", datasetRunDescription: "Wählen Sie die vorbereiteten Daten, die Metrik, das Referenzfeld und den verifizierten Endpunkt.", analyzeTitle: "Ergebnisse analysieren", analyzeDescription: "Erkunden Sie Evaluierungsdimensionen oder vergleichen Sie abgeschlossene Ausführungen.", openModels: "Modelle öffnen", reviewModels: "Modell prüfen", openQuickStart: "Schnellstart öffnen", inspectRuns: "Ausführungen prüfen", openDatasets: "Datensätze öffnen", reviewDatasets: "Datensätze prüfen", openDatasetRun: "Datensatz-Evaluierung öffnen", openAnalysis: "Analyse öffnen" },
+  ru: { ...guideEnglish, pageDescription: "Подключите и проверьте модель, выполните быстрый старт и изучите доказательства. Для своей оценки используйте собственный набор данных.", status: "Быстрый старт + свои данные", fastTitle: "Самый быстрый путь к первому результату", fastDescription: "Три действия превращают пустую рабочую область в доступные доказательства.", customTitle: "Оцените свои данные", customDescription: "После быстрого старта подготовьте набор данных для собственной оценки.", addDescription: "Настройте провайдера, модель и зашифрованные учётные данные.", testDescription: "Откройте список моделей и убедитесь, что конечная точка стала доступной.", quickDescription: "Запустите небольшую встроенную оценку без подготовки набора данных.", inspectDescription: "Просматривайте образцы, оценки, задержку, стоимость и ошибки в списке запусков.", datasetTitle: "Зарегистрировать набор данных", datasetDescription: "Укажите источник и необязательные поля ввода и референсное поле.", prepareTitle: "Скачать и проверить", prepareDescription: "Подготовьте набор данных и дождитесь статуса «готов».", datasetRunTitle: "Поставить оценку набора данных в очередь", datasetRunDescription: "Выберите подготовленные данные, метрику, референсное поле и проверенную конечную точку.", analyzeTitle: "Проанализировать результаты", analyzeDescription: "Изучайте показатели оценки или сравнивайте завершённые запуски.", openModels: "Открыть модели", reviewModels: "Проверить модель", openQuickStart: "Открыть быстрый старт", inspectRuns: "Просмотреть запуски", openDatasets: "Открыть наборы данных", reviewDatasets: "Проверить наборы данных", openDatasetRun: "Открыть оценку набора данных", openAnalysis: "Открыть анализ" },
+  ja: { ...guideEnglish, pageDescription: "モデルを接続して検証し、クイックスタートを実行して証拠を確認します。カスタム評価では独自データを使用します。", status: "クイックスタート + 独自データ", fastTitle: "最初の結果までの最短手順", fastDescription: "3 つの操作で空のワークスペースから確認可能な証拠まで進めます。", customTitle: "独自データを評価", customDescription: "クイックスタート後にデータセットを準備し、目的に合った評価を行います。", addDescription: "プロバイダー、モデル、暗号化された資格情報を設定します。", testDescription: "モデル一覧を開き、エンドポイントが利用可能になることを確認します。", quickDescription: "データセットを準備せずに、小さな組み込み評価を実行します。", inspectDescription: "実行一覧でサンプル、スコア、レイテンシー、コスト、エラーを確認します。", datasetTitle: "データセットを登録", datasetDescription: "ソースと、任意の入力フィールドおよび参照フィールドを指定します。", prepareTitle: "ダウンロードして検証", prepareDescription: "データセットを準備し、ステータスが準備完了になるまで待ちます。", datasetRunTitle: "データセット評価をキューに入れる", datasetRunDescription: "準備済みデータ、メトリック、参照フィールド、検証済みエンドポイントを選択します。", analyzeTitle: "結果を分析", analyzeDescription: "評価の次元を確認するか、完了した実行を比較します。", openModels: "モデルを開く", reviewModels: "モデルを確認", openQuickStart: "クイックスタートを開く", inspectRuns: "実行を確認", openDatasets: "データセットを開く", reviewDatasets: "データセットを確認", openDatasetRun: "データセット評価を開く", openAnalysis: "分析を開く" },
+  ko: { ...guideEnglish, pageDescription: "모델을 연결하고 검증한 뒤 빠른 시작을 실행하여 증거를 확인하세요. 사용자 지정 평가에는 자체 데이터를 사용하세요.", status: "빠른 시작 + 자체 데이터", fastTitle: "첫 결과까지 가장 빠른 경로", fastDescription: "세 가지 설정 작업으로 빈 작업 공간에서 검사 가능한 증거까지 진행합니다.", customTitle: "자체 데이터 평가", customDescription: "빠른 시작 후 맞춤 평가를 위해 데이터 세트를 준비하세요.", addDescription: "공급자, 모델 및 암호화된 자격 증명을 구성하세요.", testDescription: "모델 인벤토리를 열고 엔드포인트가 사용 가능해지는지 확인하세요.", quickDescription: "데이터 세트를 준비하지 않고 작은 내장 평가를 실행하세요.", inspectDescription: "실행 인벤토리에서 샘플, 점수, 대기 시간, 비용 및 오류를 검토하세요.", datasetTitle: "데이터 세트 등록", datasetDescription: "소스와 선택적 입력 필드 및 참조 필드를 지정하세요.", prepareTitle: "다운로드 및 확인", prepareDescription: "데이터 세트를 준비하고 상태가 준비됨이 될 때까지 기다리세요.", datasetRunTitle: "데이터 세트 평가 대기열에 추가", datasetRunDescription: "준비된 데이터, 메트릭, 참조 필드 및 검증된 엔드포인트를 선택하세요.", analyzeTitle: "결과 분석", analyzeDescription: "평가 차원을 살펴보거나 완료된 실행을 비교하세요.", openModels: "모델 열기", reviewModels: "모델 검토", openQuickStart: "빠른 시작 열기", inspectRuns: "실행 검사", openDatasets: "데이터 세트 열기", reviewDatasets: "데이터 세트 검토", openDatasetRun: "데이터 세트 평가 열기", openAnalysis: "분석 열기" },
+  ms: { ...guideEnglish, pageDescription: "Sambungkan dan sahkan model, jalankan Mula pantas, kemudian periksa bukti. Gunakan set data sendiri untuk penilaian tersuai.", status: "Mula pantas + data tersuai", fastTitle: "Laluan terpantas ke hasil pertama", fastDescription: "Tiga tindakan membawa ruang kerja kosong kepada bukti yang boleh diperiksa.", customTitle: "Nilai data anda sendiri", customDescription: "Selepas Mula pantas, sediakan set data untuk penilaian tersuai.", addDescription: "Konfigurasikan pembekal, model dan kelayakan tersulit.", testDescription: "Buka inventori model dan sahkan titik akhir menjadi tersedia.", quickDescription: "Jalankan penilaian terbina dalam kecil tanpa menyediakan set data.", inspectDescription: "Semak sampel, skor, kependaman, kos dan ralat dalam inventori larian.", datasetTitle: "Daftar set data", datasetDescription: "Isytiharkan sumber serta medan input dan medan rujukan pilihan.", prepareTitle: "Muat turun dan sahkan", prepareDescription: "Sediakan set data dan tunggu sehingga statusnya sedia.", datasetRunTitle: "Jejakkan penilaian set data", datasetRunDescription: "Pilih data sedia, metrik, medan rujukan dan titik akhir yang disahkan.", analyzeTitle: "Analisis hasil", analyzeDescription: "Terokai dimensi penilaian atau bandingkan larian siap.", openModels: "Buka Model", reviewModels: "Semak model", openQuickStart: "Buka Mula pantas", inspectRuns: "Periksa larian", openDatasets: "Buka Set Data", reviewDatasets: "Semak Set Data", openDatasetRun: "Buka penilaian set data", openAnalysis: "Buka Analisis" },
 };
 
 export type OverviewCopy = {

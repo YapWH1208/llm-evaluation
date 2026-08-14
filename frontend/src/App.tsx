@@ -194,6 +194,8 @@ export default function App() {
   const [form, setForm] = useState(initialEndpoint);
   const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
   const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
+  const [preferredEndpointId, setPreferredEndpointId] = useState<string | null>(null);
+  const consumePreferredEndpoint = useCallback(() => setPreferredEndpointId(null), []);
   const [datasetForm, setDatasetForm] = useState(initialDataset);
   const [datasetRunForm, setDatasetRunForm] = useState(initialDatasetRun);
   const [datasetRunFields, setDatasetRunFields] = useState<string[]>([]);
@@ -215,6 +217,7 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [accessRequired, setAccessRequired] = useState(false);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
     const href = workspacePath(nextView, options.tab, { runId: options.runId });
@@ -248,6 +251,7 @@ export default function App() {
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
     setSystemHealth(nextSystemHealth);
+    setAccessRequired(false);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -322,7 +326,12 @@ export default function App() {
   }
 
   function showError(error: unknown) {
-    if (error instanceof ApiError || error instanceof Error) {
+    if (error instanceof ApiError && error.status === 401) {
+      setAccessRequired(true);
+      setNotice(null);
+      return;
+    }
+    if (error instanceof Error) {
       setNotice(error.message);
       return;
     }
@@ -399,11 +408,14 @@ export default function App() {
         });
         showNotice("Model configuration saved. Test its connection before starting a run.");
       } else {
-        await api.createEndpoint(endpointPayload);
+        const createdEndpoint = await api.createEndpoint(endpointPayload);
+        setPreferredEndpointId(createdEndpoint.id);
         showNotice("Endpoint saved. Test its connection before starting a run.");
       }
+      const wasCreating = !editingEndpointId;
       cancelEndpointEdit();
       await refresh();
+      if (wasCreating) navigate("models", { tab: "model-inventory" });
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
@@ -820,6 +832,7 @@ export default function App() {
 
   return (
     <AppShell
+      accessRequired={accessRequired}
       completedRunCount={dashboard?.runs.completed ?? 0}
       locale={locale}
       notice={notice}
@@ -828,12 +841,13 @@ export default function App() {
       view={view}
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={setLocale}
+      onOpenAccess={() => navigate("settings", { tab: "access" })}
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       onViewChange={navigate}
     >
       <StaticCopy>
 
-      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("datasets", { tab: "register-dataset" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
+      {view === "dashboard" && <OverviewDashboard activeTab={route.tab as WorkspaceTabFor<"dashboard">} analytics={analytics} dashboard={dashboard} endpoints={endpoints} runs={runs} systemHealth={systemHealth} tasks={tasks} onInspectRun={inspectRun} onOpenSetup={() => navigate("runs", { tab: "quick-start" })} onOpenView={navigate} onTabChange={(tab) => navigate("dashboard", { tab })} />}
       {view === "guide" && <Guide onOpenView={navigate} />}
 
       {view === "models" && <ModelsPage
@@ -848,10 +862,12 @@ export default function App() {
         onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)}
         onEdit={(endpoint) => { editEndpoint(endpoint); navigate("models", { tab: "add-endpoint" }); }}
         onFormChange={setForm}
+        onPreferredEndpointConsumed={consumePreferredEndpoint}
         onProbe={(endpointId) => void probeCapabilities(endpointId)}
         onSubmit={createEndpoint}
         onTabChange={(tab) => navigate("models", { tab })}
         onTest={(endpointId) => void testEndpoint(endpointId)}
+        preferredEndpointId={preferredEndpointId}
         testRequests={testRequests}
       />}
 
@@ -870,6 +886,8 @@ export default function App() {
 
       {view === "runs" && <RunsPage
         activeTab={route.tab as WorkspaceTabFor<"runs">}
+        availableEndpointCount={availableEndpoints.length}
+        configuredEndpointCount={endpoints.length}
         inspector={selectedRunInfo && <RunDetailContainer actions={runActions(selectedRunInfo)} run={selectedRunInfo} summary={runSummary} metrics={runMetrics} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
         datasetLauncher={<DatasetRunLauncher
           busy={busy}
@@ -889,6 +907,7 @@ export default function App() {
         />}
         datasetPreflight={runPreflightControls("dataset")}
         onSelect={inspectRun}
+        onOpenModelSetup={(tab) => navigate("models", { tab })}
         onTabChange={(tab) => navigate("runs", { tab })}
         quickStartLauncher={<form className="form workspace-run-launcher" onSubmit={(event) => { event.preventDefault(); if (selectedQuickStart) void createRun(datasetRunForm.model_endpoint_id, Number(quickStartSampleLimit) || 1, selectedQuickStartBenchmark); }}>
           <label>{t("runLauncher.quickStartBenchmark")}<select aria-label={t("runLauncher.quickStartBenchmark")} required value={selectedQuickStart ? `${selectedQuickStart.benchmark_id}@${selectedQuickStart.version}` : ""} onChange={(event) => { const benchmark = quickStartBenchmarks.find((item) => `${item.benchmark_id}@${item.version}` === event.target.value); setSelectedQuickStartBenchmark(event.target.value); setQuickStartSampleLimit(String(Number(benchmark?.manifest.sample_count) || 1)); setLaunchPreflight(null); }}><option value="">—</option>{quickStartBenchmarks.map((benchmark) => <option data-i18n-preserve key={benchmark.id} value={`${benchmark.benchmark_id}@${benchmark.version}`}>{benchmark.display_name}</option>)}</select></label>
