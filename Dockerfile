@@ -9,4 +9,8 @@ ENV PYTHONPATH=/app/backend
 ENV LLE_DATA_ROOT=/data
 EXPOSE 8000
 
+COPY backend/docker-entrypoint.sh /usr/local/bin/lle-entrypoint.sh
+RUN chmod +x /usr/local/bin/lle-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/lle-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
