@@ -8,6 +8,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Pushing a `v*` git tag now runs the `Docker release` workflow, which
+  validates the full test suite and publishes the API and web images to GitHub
+  Container Registry (`ghcr.io/yapwh1208/llm-evaluation-api` and
+  `...-web`), tagged with the release version and `latest`.
 - Generated reports now embed the run's named aggregate metrics (metric name,
   label, value, sample count, availability reason, and confidence interval) in
   every format, with dedicated Metrics tables in HTML and Markdown exports.
