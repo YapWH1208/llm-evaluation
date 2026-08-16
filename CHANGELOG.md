@@ -8,6 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Generated reports now embed the run's named aggregate metrics (metric name,
+  label, value, sample count, availability reason, and confidence interval) in
+  every format, with dedicated Metrics tables in HTML and Markdown exports.
+- Run-details reports can be deleted from the Reports tab; the API endpoint
+  removes both the artifact file and its share links.
+- The web frontend is now containerized: a multi-stage Node/nginx image serves
+  the built SPA (including SPA deep-link rewrites) from a "web" service in
+  Docker Compose alongside the API and PostgreSQL.
 - The Configure navigation now includes a `/prompts` page that lists existing
   versioned prompt packages and creates new versions through the existing API.
 - Prompt packages now use a Dataset-style tabbed workspace with a selectable
@@ -44,6 +52,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Run-details evidence now renders as a compact, aligned list with expandable
+  per-sample details instead of wrapped summary chips.
+- The run lifecycle log is grouped by task id (with run-level entries under
+  their own group) instead of one flat list.
+- PDF and Parquet are no longer available report formats; report generation is
+  limited to JSON, CSV, HTML, and Markdown. Existing Parquet/PDF artifacts
+  remain downloadable. The unused pyarrow dependency was removed.
+- The Reports tab no longer shows the read-only sharing policy form or per-report
+  Share buttons; public sharing remains available through the API and the
+  shared-report page.
 - Fresh workspaces now lead with a state-aware first-evaluation checklist:
   connect or test a model, run the built-in Quick start, then inspect results.
   The Guide presents this shortest path before the optional custom-dataset flow.
