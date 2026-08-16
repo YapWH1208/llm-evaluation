@@ -8,6 +8,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `docker compose up` now requires no environment variables: the API
+  container auto-provisions a Fernet key at `./data/.lle-secret-key` (mode
+  0600) on first start and reuses it afterwards, so endpoint credentials stay
+  encrypted at rest without any setup. Setting `LLE_SECRET_ENCRYPTION_KEY`
+  explicitly still overrides the auto-provisioned key.
 - Pushing a `v*` git tag now runs the `Docker release` workflow, which
   validates the full test suite and publishes the API and web images to GitHub
   Container Registry (`ghcr.io/yapwh1208/llm-evaluation-api` and

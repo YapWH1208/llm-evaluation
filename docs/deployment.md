@@ -57,9 +57,8 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 ## Docker Compose
 
-1. Generate a Fernet key and choose a strong administrator token.
-2. Set `LLE_SECRET_ENCRYPTION_KEY` in the deployment environment before use; Compose intentionally fails when it is missing and publishes the API only on loopback by default.
-3. Run `docker compose up --build` to bring up the stack: `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
+1. Run `docker compose up --build` — no environment variables are required. The stack is `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
+2. On first start the API container auto-provisions a Fernet key at `./data/.lle-secret-key` (mode 0600) and reuses it on later starts, so endpoint API keys stay encrypted at rest and remain decryptable across restarts. To use your own key instead, set `LLE_SECRET_ENCRYPTION_KEY` in the environment (or pass it to the container); the entrypoint honors it and skips provisioning. Never delete or change the key file after endpoints have been saved, or their stored credentials can no longer be decrypted.
 4. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 5. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
