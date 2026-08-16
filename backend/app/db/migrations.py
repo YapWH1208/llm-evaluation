@@ -164,8 +164,6 @@ def _upgrade_v22_remediation_persistence_contracts(connection: Connection) -> No
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_model_endpoint_id", ("model_endpoint_id",))
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_prompt_package_id", ("prompt_package_id",))
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_suite_id", ("suite_id",))
-    if connection.dialect.name == "postgresql":
-        connection.execute(text("ALTER TABLE report_shares ALTER COLUMN password_hash TYPE VARCHAR(512)"))
 
 
 def _upgrade_v23_report_share_password_limits(_connection: Connection) -> None:

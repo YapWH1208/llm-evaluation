@@ -92,8 +92,6 @@ class Settings:
     def database_kind(self) -> str:
         if self.is_sqlite:
             return "sqlite"
-        if self.database_url.startswith(("postgresql", "postgres")):
-            return "postgresql"
         if self.database_url.startswith(("mongodb", "mongo")):
             return "mongodb"
         return "unknown"

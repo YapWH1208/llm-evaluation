@@ -66,8 +66,8 @@ class Database:
             raise DatabaseConfigurationError(
                 "MongoDB requires the optional document-store adapter, which is not configured in this relational deployment."
             )
-        if settings.database_kind not in {"sqlite", "postgresql"}:
-            raise DatabaseConfigurationError("Database URL must use a SQLite or PostgreSQL dialect.")
+        if settings.database_kind != "sqlite":
+            raise DatabaseConfigurationError("Database URL must use the SQLite dialect.")
         self._ensure_sqlite_parent_directory()
         self.engine = self._build_engine()
         self.session_factory = sessionmaker(

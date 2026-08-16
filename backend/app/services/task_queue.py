@@ -21,9 +21,6 @@ from app.db.models import (
 )
 
 
-_ADMISSION_LOCK_KEY = 0x4C4C45
-
-
 def reclaim_expired_leases(session: Session, *, commit: bool = True) -> int:
     """Make crashed-worker tasks claimable again without discarding sample evidence."""
 
@@ -227,19 +224,15 @@ def clear_lease(task: TaskUnit) -> None:
 def _begin_admission_transaction(session: Session) -> None:
     """Serialize capacity and rate reservations across all relational workers.
 
-    PostgreSQL uses a transaction-scoped advisory lock. SQLite has no row locks,
-    so an immediate write transaction is the equivalent safe single-writer gate.
-    ``claim_task`` already commits independently, therefore closing a caller's
-    read-only transaction before acquiring this gate preserves its contract.
+    SQLite has no row locks, so an immediate write transaction is the
+    equivalent safe single-writer gate. ``claim_task`` already commits
+    independently, therefore closing a caller's read-only transaction before
+    acquiring this gate preserves its contract.
     """
 
     if session.in_transaction():
         session.commit()
-    dialect = session.get_bind().dialect.name
-    if dialect == "postgresql":
-        session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": _ADMISSION_LOCK_KEY})
-    elif dialect == "sqlite":
-        session.execute(text("BEGIN IMMEDIATE"))
+    session.execute(text("BEGIN IMMEDIATE"))
 
 
 def _has_execution_capacity(
