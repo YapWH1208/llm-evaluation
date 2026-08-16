@@ -1,0 +1,13 @@
+.git
+data
+docs
+tests
+frontend
+.github
+.pytest_cache
+.code-review-graph
+.superdesign
+.agents
+quick-launch.*
+package-lock.json
+skills-lock.json

@@ -28,5 +28,14 @@ services:
     volumes:
       - ./data:/data
 
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
 volumes:
   postgres-data:
