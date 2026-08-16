@@ -57,8 +57,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
-          flavor: |
-            lowercase=auto
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -89,8 +87,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
-          flavor: |
-            lowercase=auto
       - uses: docker/build-push-action@v6
         with:
           context: ./frontend
