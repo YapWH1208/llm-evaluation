@@ -247,20 +247,35 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert downloaded.status_code == 200
         assert "# Evaluation report: text-quick-check" in downloaded.text
         assert "Estimated cost" in downloaded.text
+        # Generated reports embed the run's named aggregate metrics.
+        assert "## Metrics" in downloaded.text
+        assert "| Accuracy |" in downloaded.text
 
-        pdf = client.post("/api/v1/reports", json={"run_id": run_a, "format": "pdf"})
-        assert pdf.status_code == 200
-        pdf_download = client.get(f"/api/v1/reports/{pdf.json()['id']}/download")
-        assert pdf_download.headers["content-type"].startswith("application/pdf")
-        assert pdf_download.content.startswith(b"%PDF-1.4")
+        # PDF and Parquet formats are no longer supported.
+        assert client.post("/api/v1/reports", json={"run_id": run_a, "format": "pdf"}).status_code == 409
+        assert client.post("/api/v1/reports", json={"run_id": run_a, "format": "parquet"}).status_code == 409
 
-        parquet = client.post("/api/v1/reports", json={"run_id": run_a, "format": "parquet"})
-        assert parquet.status_code == 200
-        parquet_download = client.get(f"/api/v1/reports/{parquet.json()['id']}/download")
-        assert parquet_download.headers["content-type"].startswith("application/vnd.apache.parquet")
-        assert parquet_download.content[:4] == b"PAR1"
-        assert parquet_download.content[-4:] == b"PAR1"
-        assert client.post(f"/api/v1/reports/{parquet.json()['id']}/shares", json={}).status_code == 409
+        json_report = client.post("/api/v1/reports", json={"run_id": run_a, "format": "json"})
+        assert json_report.status_code == 200
+        json_payload = client.get(f"/api/v1/reports/{json_report.json()['id']}/download").json()
+        json_metrics = {metric["metric_name"]: metric for metric in json_payload["metrics"]}
+        assert json_metrics["score"]["metric_value"] == 1.0
+        assert json_metrics["score"]["sample_count"] == 2
+        assert json_metrics["accuracy"]["metric_label"] == "Accuracy"
+        assert json_metrics["f1_macro"]["metric_value"] is None
+        assert json_metrics["f1_macro"]["availability_reason"]
+
+        # Raw-evidence JSON/CSV reports still require explicit share controls.
+        csv_report = client.post("/api/v1/reports", json={"run_id": run_a, "format": "csv"})
+        assert csv_report.status_code == 200
+        assert client.post(f"/api/v1/reports/{csv_report.json()['id']}/shares", json={}).status_code == 409
+
+        # Deleting a report removes its artifact, list entry, and download.
+        deleted_id = json_report.json()["id"]
+        assert client.delete(f"/api/v1/reports/{deleted_id}").status_code == 204
+        assert client.get(f"/api/v1/reports/{deleted_id}/download").status_code == 404
+        assert client.delete(f"/api/v1/reports/{deleted_id}").status_code == 404
+        assert deleted_id not in [item["id"] for item in client.get(f"/api/v1/reports/run/{run_a}").json()]
 
         share = client.post(
             f"/api/v1/reports/{report.json()['id']}/shares",
