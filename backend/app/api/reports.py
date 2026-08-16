@@ -185,6 +185,9 @@ def delete_report(report_id: str, request: Request, session: SessionDependency) 
             raise HTTPException(404, "Report not found")
         if isinstance(report.get("artifact_path"), str):
             delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
+        share_ids = [str(share["id"]) for share in store.list_documents("report_shares", query={"report_id": report_id})]
+        if share_ids:
+            store.delete_documents("report_share_password_attempts", {"share_id": {"$in": share_ids}})
         store.delete_documents("report_shares", {"report_id": report_id})
         store.delete_documents("reports", {"id": report_id})
         return Response(status_code=status.HTTP_204_NO_CONTENT)
