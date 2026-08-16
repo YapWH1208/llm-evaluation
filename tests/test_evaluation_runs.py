@@ -703,7 +703,8 @@ def test_expired_worker_lease_requeues_only_inflight_sample_attempts(tmp_path: P
         assert attempts[0]["status"] == "pending"
 
 
-def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path) -> None:
+def test_worker_claim_honors_endpoint_concurrency_and_rpm_budgets(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.setattr("app.services.task_queue.datetime", _FixedNow)
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
