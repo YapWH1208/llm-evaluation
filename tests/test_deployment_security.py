@@ -31,7 +31,7 @@ def test_compose_requires_runtime_secrets_and_binds_api_to_loopback() -> None:
 
     assert "${LLE_ADMIN_TOKEN:?" in compose
     assert "${LLE_SECRET_ENCRYPTION_KEY:?" in compose
-    assert "${LLE_POSTGRES_PASSWORD:?" in compose
+    assert "sqlite:////data/llm_evaluation.db" in compose
     assert '"127.0.0.1:8000:8000"' in compose
 
 
