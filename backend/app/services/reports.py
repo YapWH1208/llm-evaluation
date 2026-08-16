@@ -19,7 +19,7 @@ class ReportError(ValueError):
     pass
 
 
-_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "parquet": "parquet", "html": "html", "markdown": "md", "pdf": "pdf"}
+_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md"}
 REPORT_TYPES = frozenset({"single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "cost", "human_review"})
 _COMPARISON_REPORT_TYPES = frozenset({"multi_model_comparison", "regression", "prompt_comparison"})
 
@@ -40,7 +40,7 @@ def generate_report(
         raise ReportError("Reports can only be generated after a run completes.")
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
-        raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
+        raise ReportError("Supported report formats are json, csv, html, and markdown.")
     if report_type not in REPORT_TYPES:
         raise ReportError("Unsupported report type.")
 
@@ -212,14 +212,8 @@ def _write_report(path: Path, format: str, payload: dict[str, Any]) -> None:
     if format == "csv":
         _write_csv(path, payload)
         return
-    if format == "parquet":
-        _write_parquet(path, payload)
-        return
     if format == "markdown":
         path.write_text(_markdown_report(payload), encoding="utf-8")
-        return
-    if format == "pdf":
-        path.write_bytes(_pdf_report(payload))
         return
     path.write_text(_html_report(payload), encoding="utf-8")
 
@@ -250,24 +244,6 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
         writer.writeheader()
         for attempt in payload["attempts"]:
             writer.writerow(_tabular_attempt(attempt, fields))
-
-
-def _write_parquet(path: Path, payload: dict[str, Any]) -> None:
-    """Write the same evidence columns as CSV in a typed columnar artifact."""
-
-    try:
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-    except ImportError as error:  # pragma: no cover - packaging guard
-        raise ReportError("Parquet export requires the pyarrow runtime.") from error
-    fields = [
-        "sample_id", "attempt", "is_latest", "status", "prediction", "score",
-        "latency_ms", "input_tokens", "output_tokens", "estimated_cost",
-        "error_type", "error_message", "input", "reference", "request",
-        "raw_response", "human_reviews", "judge_assessments",
-    ]
-    rows = [_tabular_attempt(attempt, fields) for attempt in payload["attempts"]]
-    pq.write_table(pa.Table.from_pylist(rows), path, compression="zstd")
 
 
 def _tabular_attempt(attempt: dict[str, Any], fields: list[str]) -> dict[str, Any]:
@@ -374,61 +350,6 @@ def _html_report(payload: dict[str, Any]) -> str:
 </body></html>"""
 
 
-def _pdf_report(payload: dict[str, Any]) -> bytes:
-    summary = payload["summary"]
-    samples = summary["samples"]
-    latency = summary["latency_ms"]
-    cost = summary["cost"]
-    lines = [
-        f"{_report_title(payload)}: {payload['benchmark']['id']}",
-        f"Run: {payload['run_id']}",
-        f"Status: {payload['status']}",
-        "",
-        "Executive summary",
-        f"Completion: {samples['completed']}/{samples['total']} ({_display_percent(samples['completion_rate'])})",
-        f"Accuracy: {_display_percent(samples['accuracy'])}",
-        f"Success rate: {_display_percent(samples['success_rate'])}",
-        f"Average latency: {_display(latency['average'])} ms; P95: {_display(latency['p95'])} ms",
-        f"Tokens (input/output): {summary['tokens']['input']}/{summary['tokens']['output']}",
-        f"Estimated cost: {_display(cost['estimated'])} {cost['currency'] or ''}",
-        "",
-        "Sample outcomes",
-    ]
-    lines.extend(
-        f"{attempt['sample_id']} | attempt {attempt['attempt']} | {attempt['status']} | score {_display(attempt['score'])} | {_display(attempt['latency_ms'])} ms"
-        for attempt in payload["attempts"][:25]
-    )
-    if len(payload["attempts"]) > 25:
-        lines.append(f"PDF summary omits {len(payload['attempts']) - 25} additional sample outcomes; use HTML, JSON, CSV, or Parquet for complete evidence.")
-    content_lines = ["BT", "/F1 12 Tf", "50 760 Td", "15 TL"]
-    for index, line in enumerate(lines):
-        if index:
-            content_lines.append("T*")
-        content_lines.append(f"({_pdf_escape(line)}) Tj")
-    content_lines.append("ET")
-    content = "\n".join(content_lines).encode("latin-1", errors="replace")
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-        b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0]
-    for index, object_data in enumerate(objects, start=1):
-        offsets.append(len(output))
-        output.extend(f"{index} 0 obj\n".encode())
-        output.extend(object_data)
-        output.extend(b"\nendobj\n")
-    xref_offset = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
-    for offset in offsets[1:]:
-        output.extend(f"{offset:010d} 00000 n \n".encode())
-    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
-    return bytes(output)
-
-
 def _report_title(payload: dict[str, Any]) -> str:
     report_type = str(payload.get("report_type", "single_model"))
     if report_type == "single_model":
@@ -445,10 +366,6 @@ def _related_runs_html(payload: dict[str, Any]) -> str:
         for item in related
     )
     return f"<h2>Related completed runs</h2><table><thead><tr><th>Run</th><th>Benchmark</th><th>Accuracy</th><th>Success</th></tr></thead><tbody>{rows}</tbody></table>"
-
-
-def _pdf_escape(value: object) -> str:
-    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _display(value: object) -> str:

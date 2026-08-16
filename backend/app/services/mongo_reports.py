@@ -16,7 +16,7 @@ def generate_mongo_report(store: MongoDocumentStore, run_id: str, format: str, d
     if run is None: raise ReportError("Evaluation run not found.")
     if run["status"] not in {"completed","completed_with_errors","generating_report"}: raise ReportError("Reports can only be generated after a run completes.")
     extension=_FORMAT_EXTENSIONS.get(format)
-    if extension is None: raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
+    if extension is None: raise ReportError("Supported report formats are json, csv, html, and markdown.")
     if report_type not in REPORT_TYPES: raise ReportError("Unsupported report type.")
     attempts=store.list_documents("sample_attempts",query={"run_id":run_id},sort=[("sample_id",1),("attempt_number",1)])
     latest={}
