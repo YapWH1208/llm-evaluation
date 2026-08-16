@@ -15,7 +15,7 @@ import {
   JudgeAgreement,
   PromptPackage,
   Report,
-  ReportShare,
+  ReportFormat,
   Review,
   ReviewAgreement,
   RunPreflight,
@@ -76,7 +76,6 @@ const initialDataset: DatasetRegistrationFormValues = { dataset_id: "", version:
 const initialDatasetRun: DatasetRunForm = { dataset_version_id: "", prompt_package_id: "", input_field: "", reference_field: "", sample_limit: "100", model_endpoint_id: "", metric: "default", judge_endpoint_id: "", judge_system_message: "" };
 const initialReview = { reviewer_id: "local-reviewer", rubric: "{}", score: "", labels: "", notes: "", review_stage: "primary" as "primary" | "secondary" | "adjudication" };
 const initialJudge = { endpoint_id: "", rubric: "{}", comparison_attempt_id: "", swap_test: true };
-const initialShare = { days: "7", password: "", allow_download: false, include_evidence: false };
 
 function datasetRunPayload(form: DatasetRunForm) {
   const scoringRule = datasetScoringRuleFor(form.metric, {
@@ -168,7 +167,6 @@ export default function App() {
   const [route, setRoute] = useState(() => workspaceRoute(window.location.pathname, window.location.search));
   const view: View = route.view;
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
-  const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [runs, setRuns] = useState<EvaluationRun[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -217,7 +215,6 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [accessRequired, setAccessRequired] = useState(false);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
     const href = workspacePath(nextView, options.tab, { runId: options.runId });
@@ -251,7 +248,6 @@ export default function App() {
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
     setSystemHealth(nextSystemHealth);
-    setAccessRequired(false);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -326,11 +322,6 @@ export default function App() {
   }
 
   function showError(error: unknown) {
-    if (error instanceof ApiError && error.status === 401) {
-      setAccessRequired(true);
-      setNotice(null);
-      return;
-    }
     if (error instanceof Error) {
       setNotice(error.message);
       return;
@@ -557,7 +548,7 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-  async function generateReport(runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") {
+  async function generateReport(runId: string, format: ReportFormat) {
     setBusy(`report-${runId}-${format}`);
     try {
       const report = await api.createReport(runId, format, "single_model", []);
@@ -570,7 +561,19 @@ export default function App() {
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
-
+  async function deleteReport(report: Report) {
+    const copy = reportCopy[locale];
+    if (!window.confirm(copy.deleteConfirm)) return;
+    setBusy(`report-delete-${report.id}`);
+    try {
+      await api.deleteReport(report.id);
+      showNotice(copy.deletedNotice);
+      if (selectedRun === report.run_id) await selectRun(selectedRun);
+      await refresh();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : copy.deleteFailed);
+    } finally { setBusy(null); }
+  }
 
   async function createDataset(event: FormEvent) {
     event.preventDefault();
@@ -832,7 +835,6 @@ export default function App() {
 
   return (
     <AppShell
-      accessRequired={accessRequired}
       completedRunCount={dashboard?.runs.completed ?? 0}
       locale={locale}
       notice={notice}
@@ -841,7 +843,6 @@ export default function App() {
       view={view}
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={setLocale}
-      onOpenAccess={() => navigate("settings", { tab: "access" })}
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       onViewChange={navigate}
     >
@@ -888,7 +889,7 @@ export default function App() {
         activeTab={route.tab as WorkspaceTabFor<"runs">}
         availableEndpointCount={availableEndpoints.length}
         configuredEndpointCount={endpoints.length}
-        inspector={selectedRunInfo && <RunDetailContainer actions={runActions(selectedRunInfo)} run={selectedRunInfo} summary={runSummary} metrics={runMetrics} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} />}
+        inspector={selectedRunInfo && <RunDetailContainer actions={runActions(selectedRunInfo)} run={selectedRunInfo} summary={runSummary} metrics={runMetrics} logs={runLogs} attempts={attempts} reports={reports} selectedAttempt={selectedAttempt} reviews={reviews} reviewAgreement={reviewAgreement} judgeAssessments={judgeAssessments} judgeAgreement={judgeAgreement} judgeForm={judgeForm} endpoints={endpoints} reviewForm={reviewForm} busy={busy} onJudgeForm={setJudgeForm} onReviewForm={setReviewForm} onReview={openReview} onLoadMoreAttempts={loadMoreAttempts} onCreateJudgeAssessment={createJudgeAssessment} onCreateReview={createReview} onGenerateReport={generateReport} onDeleteReport={deleteReport} />}
         datasetLauncher={<DatasetRunLauncher
           busy={busy}
           datasets={datasets}
@@ -925,7 +926,7 @@ export default function App() {
 
       {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={api.analyticsScatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
       {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={api.leaderboard} onInspectRun={inspectRun} />}
-      {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
+      {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} locale={locale} onLocaleChange={setLocale} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
   );
@@ -954,10 +955,11 @@ type RunDetailContainerProps = {
   onLoadMoreAttempts: () => Promise<void>;
   onCreateJudgeAssessment: (event: FormEvent) => void;
   onCreateReview: (event: FormEvent) => void;
-  onGenerateReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf") => void;
+  onGenerateReport: (runId: string, format: ReportFormat) => void;
+  onDeleteReport: (report: Report) => void;
 };
 
-function RunDetailContainer({ actions, run, summary, metrics, logs, attempts, reports, selectedAttempt, reviews, reviewAgreement, judgeAssessments, judgeAgreement, judgeForm, endpoints, reviewForm, busy, onJudgeForm, onReviewForm, onReview, onLoadMoreAttempts, onCreateJudgeAssessment, onCreateReview, onGenerateReport }: RunDetailContainerProps) {
+function RunDetailContainer({ actions, run, summary, metrics, logs, attempts, reports, selectedAttempt, reviews, reviewAgreement, judgeAssessments, judgeAgreement, judgeForm, endpoints, reviewForm, busy, onJudgeForm, onReviewForm, onReview, onLoadMoreAttempts, onCreateJudgeAssessment, onCreateReview, onGenerateReport, onDeleteReport }: RunDetailContainerProps) {
   const { formatDate, formatNumber: display, formatPercent: percent, t } = useTranslation();
   const runRule = run.configuration_snapshot?.scoring_rule;
   const attemptRule = selectedAttempt?.reference_snapshot.scoring;
@@ -980,7 +982,7 @@ function RunDetailContainer({ actions, run, summary, metrics, logs, attempts, re
     <section className="grid two"><article className="panel"><h2>Human review: {selectedAttempt.sample_id}</h2><form className="form" onSubmit={onCreateReview}><label>Reviewer ID<input required value={reviewForm.reviewer_id} onChange={(event) => onReviewForm({ ...reviewForm, reviewer_id: event.target.value })} /></label><label>Review stage<select value={reviewForm.review_stage} onChange={(event) => onReviewForm({ ...reviewForm, review_stage: event.target.value as typeof reviewForm.review_stage })}><option value="primary">Primary review</option><option value="secondary">Secondary review</option><option value="adjudication">Adjudication</option></select></label><label>Rubric (JSON)<textarea value={reviewForm.rubric} onChange={(event) => onReviewForm({ ...reviewForm, rubric: event.target.value })} spellCheck={false} placeholder='{"quality":"high"}' /></label><label>Score<input type="number" min="0" max="1" step="0.01" value={reviewForm.score} onChange={(event) => onReviewForm({ ...reviewForm, score: event.target.value })} /></label><label>Labels (comma-separated)<input value={reviewForm.labels} onChange={(event) => onReviewForm({ ...reviewForm, labels: event.target.value })} /></label><label>Notes<textarea value={reviewForm.notes} onChange={(event) => onReviewForm({ ...reviewForm, notes: event.target.value })} /></label>{reviewForm.review_stage === "adjudication" && <p className="muted">This records a final decision over all saved primary and secondary reviews.</p>}<button disabled={busy === "review-submit"}>Save review</button></form></article><article className="panel"><h2>Review agreement</h2>{reviewAgreement ? <><p><strong>{reviewAgreement.status.replaceAll("_", " ")}</strong> · {reviewAgreement.distinct_reviewer_count} reviewer(s)</p><p className="muted">Score mean {display(reviewAgreement.numeric_score.mean)} · spread {display(reviewAgreement.numeric_score.range)} · label agreement {percent(reviewAgreement.label_agreement)}</p><p className="muted">Primary {reviewAgreement.review_stage_counts.primary} · secondary {reviewAgreement.review_stage_counts.secondary} · adjudication {reviewAgreement.review_stage_counts.adjudication}</p></> : <p className="empty">Open a sample to load review agreement.</p>}<h3>Saved reviews</h3>{reviews.length === 0 ? <p className="empty">No human review has been saved for this attempt.</p> : <div className="review-list">{reviews.map((review) => <article className="review" key={review.id}><strong>{review.review_stage} · {review.reviewer_id} · {review.score ?? "no score"}</strong><p>{review.notes || "No notes"}</p><small>{review.labels.join(", ") || "No labels"} · {formatDate(review.created_at)}</small></article>)}</div>}</article></section>
   </> : <section className="panel run-detail-review-empty"><h2>Human and judge review</h2><p className="empty">Open a sample from Evidence to load review, agreement, and independent judge controls.</p></section>;
 
-  const reportWorkspace = <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "pdf")}>PDF</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button><button className="secondary" onClick={() => onGenerateReport(run.id, "parquet")}>Parquet</button></div></div><ReportsTable reports={reports} /></section>;
+  const reportWorkspace = <section className="panel"><div className="section-title"><h2>Report artifacts</h2><div className="actions"><button onClick={() => onGenerateReport(run.id, "html")}>HTML</button><button className="secondary" onClick={() => onGenerateReport(run.id, "markdown")}>Markdown</button><button className="secondary" onClick={() => onGenerateReport(run.id, "json")}>JSON</button><button className="secondary" onClick={() => onGenerateReport(run.id, "csv")}>CSV</button></div></div><ReportsTable onDelete={onDeleteReport} reports={reports} /></section>;
 
   return <RunDetailWorkspace actions={actions} effectiveMetric={effectiveMetric} evidence={evidence} logs={logs} metrics={metrics} reports={reportWorkspace} reviewSelectionKey={selectedAttempt?.id ?? null} reviews={reviewWorkspace} run={run} summary={summary} />;
 }
@@ -1011,7 +1013,7 @@ function SampleEvidenceBrowser({ attempts, onReview }: { attempts: SampleAttempt
   }), [anomaly, attempts, averages.cost, averages.latency, averages.tokens, capability, correctness, difficulty, errorKind, judgeState, language, modality, query, reviewState, status]);
   const visible = filtered.slice(0, visibleCount);
   const update = () => setVisibleCount(100);
-  return <section className="panel"><div className="section-title"><h2>Sample evidence</h2><span>{filtered.length}/{attempts.length} attempts</span></div>{attempts.length === 0 ? <p className="empty">This run has no saved attempts yet.</p> : <><div className="comparison-form" style={{ marginBottom: "1.5rem" }}><label>Search samples<input value={query} onChange={(event) => { setQuery(event.target.value); update(); }} placeholder="sample, prediction, error" /></label><label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); update(); }}><option value="all">All states</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option><option value="pending">Pending</option><option value="running">Running</option></select></label><label>Correctness<select value={correctness} onChange={(event) => { setCorrectness(event.target.value); update(); }}><option value="all">All</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label><label>Capability<select value={capability} onChange={(event) => { setCapability(event.target.value); update(); }}><option value="all">All</option>{options("capability").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Modality<select value={modality} onChange={(event) => { setModality(event.target.value); update(); }}><option value="all">All</option>{modalities.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Language<select value={language} onChange={(event) => { setLanguage(event.target.value); update(); }}><option value="all">All</option>{options("language").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={(event) => { setDifficulty(event.target.value); update(); }}><option value="all">All</option>{options("difficulty").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Error type<select value={errorKind} onChange={(event) => { setErrorKind(event.target.value); update(); }}><option value="all">All</option><option value="any">Any error</option><option value="api">API error</option><option value="parser">Parser error</option></select></label><label>Judge<select value={judgeState} onChange={(event) => { setJudgeState(event.target.value); update(); }}><option value="all">All</option><option value="disagreement">Disagreement</option><option value="agreement">No disagreement</option></select></label><label>Human review<select value={reviewState} onChange={(event) => { setReviewState(event.target.value); update(); }}><option value="all">All</option><option value="unreviewed">Unreviewed</option><option value="reviewed">Reviewed</option><option value="adjudicated">Adjudicated</option></select></label><label>Anomaly<select value={anomaly} onChange={(event) => { setAnomaly(event.target.value); update(); }}><option value="all">None</option><option value="latency">Latency &gt; 2× mean</option><option value="tokens">Tokens &gt; 2× mean</option><option value="cost">Cost &gt; 2× mean</option></select></label></div>{visible.length === 0 ? <p className="empty">No samples match these filters.</p> : visible.map((attempt) => <details className="attempt" key={attempt.id}><summary><span>{attempt.sample_id} · attempt {attempt.attempt_number}</span><span className={`badge ${attempt.status}`}>{attempt.status}</span><span>{attempt.sample_metadata.capability ?? "unclassified"} · {attempt.sample_metadata.language ?? "unknown"}</span><span>score {attempt.score ?? "--"}</span><span>{display(attempt.latency_ms)} ms · {display(attempt.input_tokens)}/{display(attempt.output_tokens)} tokens · {display(attempt.estimated_cost, 6)}</span></summary><div className="evidence"><pre>{JSON.stringify({ input: attempt.input_snapshot, request: attempt.request_snapshot, reference: attempt.reference_snapshot, prediction: attempt.parsed_prediction, metadata: attempt.sample_metadata, judge_disagreement: attempt.judge_disagreement, human_review_status: attempt.human_review_status }, null, 2)}</pre><pre>{attempt.raw_response ?? attempt.error_message ?? "No response captured."}</pre></div><div className="actions"><button className="secondary" onClick={() => void onReview(attempt)}>Human review</button></div></details>)}{visible.length < filtered.length && <div className="actions"><button className="secondary" onClick={() => setVisibleCount((value) => value + 100)}>Load next 100 samples</button></div>}</>}</section>;
+  return <section className="panel"><div className="section-title"><h2>Sample evidence</h2><span>{filtered.length}/{attempts.length} attempts</span></div>{attempts.length === 0 ? <p className="empty">This run has no saved attempts yet.</p> : <><div className="comparison-form" style={{ marginBottom: "1.5rem" }}><label>Search samples<input value={query} onChange={(event) => { setQuery(event.target.value); update(); }} placeholder="sample, prediction, error" /></label><label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); update(); }}><option value="all">All states</option><option value="succeeded">Succeeded</option><option value="failed">Failed</option><option value="pending">Pending</option><option value="running">Running</option></select></label><label>Correctness<select value={correctness} onChange={(event) => { setCorrectness(event.target.value); update(); }}><option value="all">All</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label><label>Capability<select value={capability} onChange={(event) => { setCapability(event.target.value); update(); }}><option value="all">All</option>{options("capability").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Modality<select value={modality} onChange={(event) => { setModality(event.target.value); update(); }}><option value="all">All</option>{modalities.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Language<select value={language} onChange={(event) => { setLanguage(event.target.value); update(); }}><option value="all">All</option>{options("language").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={(event) => { setDifficulty(event.target.value); update(); }}><option value="all">All</option>{options("difficulty").map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Error type<select value={errorKind} onChange={(event) => { setErrorKind(event.target.value); update(); }}><option value="all">All</option><option value="any">Any error</option><option value="api">API error</option><option value="parser">Parser error</option></select></label><label>Judge<select value={judgeState} onChange={(event) => { setJudgeState(event.target.value); update(); }}><option value="all">All</option><option value="disagreement">Disagreement</option><option value="agreement">No disagreement</option></select></label><label>Human review<select value={reviewState} onChange={(event) => { setReviewState(event.target.value); update(); }}><option value="all">All</option><option value="unreviewed">Unreviewed</option><option value="reviewed">Reviewed</option><option value="adjudicated">Adjudicated</option></select></label><label>Anomaly<select value={anomaly} onChange={(event) => { setAnomaly(event.target.value); update(); }}><option value="all">None</option><option value="latency">Latency &gt; 2× mean</option><option value="tokens">Tokens &gt; 2× mean</option><option value="cost">Cost &gt; 2× mean</option></select></label></div>{visible.length === 0 ? <p className="empty">No samples match these filters.</p> : <div className="evidence-list">{visible.map((attempt) => <details className="attempt evidence-row" key={attempt.id}><summary><span className="evidence-sample"><strong>{attempt.sample_id} · attempt {attempt.attempt_number}</strong></span><span className="evidence-status"><span className={`badge ${attempt.status}`}>{attempt.status}</span></span><span className="evidence-context">{attempt.sample_metadata.capability ?? "unclassified"} · {attempt.sample_metadata.language ?? "unknown"}</span><span className="evidence-score">score {attempt.score ?? "--"}</span><span className="evidence-performance">{display(attempt.latency_ms)} ms · {display(attempt.input_tokens)}/{display(attempt.output_tokens)} tokens</span><span className="evidence-cost">{display(attempt.estimated_cost, 6)}</span><span className="evidence-error">{attempt.error_type ?? ""}</span></summary><div className="evidence"><pre>{JSON.stringify({ input: attempt.input_snapshot, request: attempt.request_snapshot, reference: attempt.reference_snapshot, prediction: attempt.parsed_prediction, metadata: attempt.sample_metadata, judge_disagreement: attempt.judge_disagreement, human_review_status: attempt.human_review_status }, null, 2)}</pre><pre>{attempt.raw_response ?? attempt.error_message ?? "No response captured."}</pre></div><div className="actions"><button className="secondary" onClick={() => void onReview(attempt)}>Human review</button></div></details>)}</div>}{visible.length < filtered.length && <div className="actions"><button className="secondary" onClick={() => setVisibleCount((value) => value + 100)}>Load next 100 samples</button></div>}</>}</section>;
 }
 
 function JudgeWorkflow({ selectedAttempt, attempts, endpoints, form, assessments, agreement, busy, onForm, onSubmit }: { selectedAttempt: SampleAttempt; attempts: SampleAttempt[]; endpoints: Endpoint[]; form: typeof initialJudge; assessments: JudgeAssessment[]; agreement: JudgeAgreement | null; busy: string | null; onForm: (value: typeof initialJudge) => void; onSubmit: (event: FormEvent) => void }) {
@@ -1020,33 +1022,10 @@ function JudgeWorkflow({ selectedAttempt, attempts, endpoints, form, assessments
   return <section className="grid two"><article className="panel"><div className="section-title"><h2>Blinded pairwise judge</h2><span>Model identities are never sent to the judge.</span></div><form className="form" onSubmit={onSubmit}><label>Independent judge endpoint<select required value={form.endpoint_id} onChange={(event) => onForm({ ...form, endpoint_id: event.target.value })}><option value="">Select available endpoint</option>{endpoints.filter((endpoint) => endpoint.status === "available").map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.display_name} · {endpoint.model_name}</option>)}</select></label><label>Compare with matching sample attempt<select value={form.comparison_attempt_id} onChange={(event) => onForm({ ...form, comparison_attempt_id: event.target.value })}><option value="">Single-answer judge assessment</option>{pairedAttempts.map((attempt) => <option key={attempt.id} value={attempt.id}>{attempt.sample_id} · attempt {attempt.attempt_number} · {attempt.status}</option>)}</select></label><label>Or paste a sample attempt ID<input value={form.comparison_attempt_id} onChange={(event) => onForm({ ...form, comparison_attempt_id: event.target.value })} placeholder="Cross-run matching sample attempt ID" /></label>{form.comparison_attempt_id && <label><input type="checkbox" checked={form.swap_test} onChange={(event) => onForm({ ...form, swap_test: event.target.checked })} /> Run reverse-order swap test</label>}<label>Rubric (JSON)<textarea value={form.rubric} onChange={(event) => onForm({ ...form, rubric: event.target.value })} spellCheck={false} placeholder='{"criterion":"answer quality"}' /></label><button disabled={busy === "judge-submit"}>{form.comparison_attempt_id ? "Run blinded comparison" : "Request judge assessment"}</button></form></article><article className="panel"><h2>Judge agreement</h2>{agreement ? <><p><strong>{agreement.status.replaceAll("_", " ")}</strong> · {agreement.successful_assessment_count}/{agreement.assessment_count} succeeded</p><p className="muted">Score mean {display(agreement.scores.mean)} · spread {display(agreement.scores.range)} · {agreement.judge_endpoint_count} judge endpoint(s)</p><p className="muted">Decisions: {agreement.decisions.distinct.join(", ") || "none"} · swap groups {agreement.swap_test_group_count}</p></> : <p className="empty">Open a sample to load judge agreement.</p>}<h3>Judge evidence</h3>{assessments.length === 0 ? <p className="empty">No independent judge assessment has been recorded.</p> : <div className="review-list">{assessments.map((assessment) => <article className="review" key={assessment.id}><strong>{assessment.label || assessment.status} · {assessment.score ?? "--"}</strong><p>{assessment.rationale || assessment.error_message || "No rationale returned."}</p><small>{assessment.selected_answer ? `winner ${assessment.selected_answer} · ` : ""}{assessment.answer_order.join(" / ") || "single answer"} · {formatDate(assessment.created_at)}</small></article>)}</div>}</article></section>;
 }
 
-export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?: (report: Report, form: typeof initialShare) => Promise<ReportShare> }) {
+export function ReportsTable({ reports, onDelete }: { reports: Report[]; onDelete: (report: Report) => void }) {
   const { formatDate, locale } = useTranslation();
   const copy = reportCopy[locale];
-  const [shareForm, setShareForm] = useState(initialShare);
-  const [shareLink, setShareLink] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-
-  async function createShare(report: Report) {
-    setDownloadError(null);
-    try {
-      const form = shareForm;
-      const days = Math.min(365, Math.max(1, Number(form.days) || 7));
-      const share = onShare
-        ? await onShare(report, form)
-        : await api.createReportShare(report.id, {
-          expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
-          password: form.password || undefined,
-          allow_download: form.allow_download,
-          include_evidence: form.include_evidence,
-        });
-      setShareLink(share.share_url);
-      // The one-time value is no longer needed after the server receives it.
-      setShareForm({ ...form, password: "" });
-    } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : copy.shareCreateFailed);
-    }
-  }
 
   async function downloadReport(report: Report) {
     setDownloadError(null);
@@ -1062,7 +1041,7 @@ export function ReportsTable({ reports, onShare }: { reports: Report[]; onShare?
     }
   }
 
-  return reports.length === 0 ? <p className="empty">{copy.noArtifacts}</p> : <><section className="share-policy"><h3>{copy.readOnlyPolicy}</h3><div className="field-row"><label>{copy.expiresInDays}<input type="number" min="1" max="365" value={shareForm.days} onChange={(event) => setShareForm({ ...shareForm, days: event.target.value })} /></label><label>{copy.optionalPassword}<input type="password" value={shareForm.password} onChange={(event) => setShareForm({ ...shareForm, password: event.target.value })} placeholder={copy.passwordPlaceholder} /></label></div><div className="actions"><label><input type="checkbox" checked={shareForm.allow_download} onChange={(event) => setShareForm({ ...shareForm, allow_download: event.target.checked })} /> {copy.allowDownload}</label><label><input type="checkbox" checked={shareForm.include_evidence} onChange={(event) => setShareForm({ ...shareForm, include_evidence: event.target.checked })} /> {copy.shareRawEvidence}</label></div><p className="muted">{copy.policyDescription}</p>{shareLink && <a href={shareLink} target="_blank" rel="noreferrer">{copy.openShare}</a>}</section>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>{copy.format}</th><th>{copy.generated}</th><th>{copy.version}</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>{copy.download}</button><button className="secondary" onClick={() => void createShare(report)}>{copy.share}</button></div></td></tr>)}</tbody></table></div></>;
+  return reports.length === 0 ? <p className="empty">{copy.noArtifacts}</p> : <>{downloadError && <p className="error" role="alert">{downloadError}</p>}<div className="table-wrap"><table><thead><tr><th>{copy.format}</th><th>{copy.generated}</th><th>{copy.version}</th><th /></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{report.format}</td><td>{formatDate(report.generated_at)}</td><td>{report.generator_version}</td><td><div className="actions"><button className="secondary" onClick={() => void downloadReport(report)}>{copy.download}</button><button className="danger" onClick={() => onDelete(report)}>{copy.delete}</button></div></td></tr>)}</tbody></table></div></>;
 }
 
 function fileAsDataUrl(file: File): Promise<string> {

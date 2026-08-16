@@ -6,23 +6,21 @@ Use the default `sqlite:///./data/llm_evaluation.db` URL for a single-host works
 
 Set `LLE_SECRET_ENCRYPTION_KEY` before adding an endpoint. Use a stable Fernet key in the platform secret store; changing it prevents decryption of existing endpoint credentials.
 
-Set `LLE_ADMIN_TOKEN` before serving shared or remote traffic. The API refuses to start without it unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development. The local launcher sets that opt-in only when no administrator token is supplied and binds both services to `127.0.0.1`.
+The platform has no built-in authentication layer: the API is open to any caller that can reach it, and the web app binds both services to `127.0.0.1` locally. Only expose the API on a trusted network or loopback; anyone who can reach the port can read and mutate everything, including redirecting stored provider credentials.
 
-## PostgreSQL team mode
+## Team mode
 
-Install the PostgreSQL dependency extra, set `LLE_DATABASE_URL` to a `postgresql+psycopg://` URL, and run the database CLI before serving traffic:
+Run the database CLI before serving traffic:
 
 ```powershell
-python -m pip install -e ".[postgresql]"
-$env:LLE_DATABASE_URL = "postgresql+psycopg://lle:password@db.example/lle"
 python -m app.cli database preview
 python -m app.cli database initialize
 python -m app.cli database validate
 ```
 
-The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
+The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with MongoDB; SQLite is intentionally optimized for local/lightweight single-process use.
 
-Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; administrators can set a user ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
+Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
 
 Endpoint configuration also supports RPS plus distinct input-token and output-token TPM ceilings. They use durable fixed-window accounting in both relational and MongoDB document stores, so a restart or an additional worker cannot reset an already consumed provider budget.
 
@@ -59,11 +57,30 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 ## Docker Compose
 
-1. Generate a Fernet key and choose a strong administrator token.
-2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
-3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin. Configure the static host to rewrite `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
+1. Run `docker compose up --build` — no environment variables are required. The stack is `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
+2. On first start the API container auto-provisions a Fernet key at `./data/.lle-secret-key` (mode 0600) and reuses it on later starts, so endpoint API keys stay encrypted at rest and remain decryptable across restarts. To use your own key instead, set `LLE_SECRET_ENCRYPTION_KEY` in the environment (or pass it to the container); the entrypoint honors it and skips provisioning. Never delete or change the key file after endpoints have been saved, or their stored credentials can no longer be decrypted.
+3. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
+4. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
-This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
+This delivery validates the Compose configuration with `docker compose config`, builds both images (`docker build ./frontend` and `docker build .`), and smoke-tests the full stack (API with SQLite + nginx web) from the built images, including SPA deep-link rewrites.
+
+## Container image releases
+
+Tagging the repository with a `v*` tag (for example `v0.3.0`) triggers the
+`Docker release` workflow (`.github/workflows/docker-release.yml`): it first
+runs the backend and frontend test suites and, only when they pass, builds and
+publishes two images to GitHub Container Registry:
+
+- `ghcr.io/yapwh1208/llm-evaluation-api` — the FastAPI backend.
+- `ghcr.io/yapwh1208/llm-evaluation-web` — the nginx-served SPA, built with
+  `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` baked in; rebuild with the
+  `VITE_API_BASE_URL` build arg for a remote API origin.
+
+Each image is tagged with the release version (for example `0.3.0`) and
+`latest`. To consume a release in Compose, replace a service's `build:`
+block with its published image, for example
+`image: ghcr.io/yapwh1208/llm-evaluation-api:0.3.0`. Packages inherit the
+repository visibility; on a private repository, pull with a GitHub token.
 
 ## Migration and backup policy
 
@@ -86,7 +103,7 @@ Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include th
 
 ## Worker rollout and verification
 
-Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use PostgreSQL or MongoDB; keep SQLite to a single controlled API/worker process.
+Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use MongoDB; keep SQLite to a single controlled API/worker process.
 
 Run the following non-Docker checks before publishing a deployment artifact:
 

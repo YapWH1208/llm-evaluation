@@ -9,16 +9,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, ReportShare, ReportSharePasswordAttempt
 from app.db.mongo import MongoDocumentStore
-from app.services.reports import ReportError, generate_report
+from app.services.reports import ReportError, delete_report_artifact, generate_report
 from app.services.mongo_reports import generate_mongo_report
 
 
@@ -104,7 +104,7 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
     if store is not None:
         report = store.get_document("reports", report_id)
         if report is None: raise HTTPException(404, "Report not found")
-        if report["format"] in {"json", "csv", "parquet"} and not (payload.include_evidence and payload.allow_download): raise HTTPException(409, "Raw-evidence JSON/CSV/Parquet reports require explicit evidence sharing and download permission.")
+        if report["format"] in {"json", "csv"} and not (payload.include_evidence and payload.allow_download): raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
         now = datetime.now(timezone.utc); expires_at = payload.expires_at or now + timedelta(days=7)
         if _as_utc(expires_at) <= now: raise HTTPException(422, "Share expiration must be in the future.")
         token = secrets.token_urlsafe(32); password = payload.password.get_secret_value() if payload.password is not None else None
@@ -112,8 +112,8 @@ def create_share(report_id: str, payload: ReportShareCreate, request: Request, s
         return _share_document_response(share, request, token)
     assert session is not None
     report = _get_report(report_id, session)
-    if report.format in {"json", "csv", "parquet"} and not (payload.include_evidence and payload.allow_download):
-        raise HTTPException(409, "Raw-evidence JSON/CSV/Parquet reports require explicit evidence sharing and download permission.")
+    if report.format in {"json", "csv"} and not (payload.include_evidence and payload.allow_download):
+        raise HTTPException(409, "Raw-evidence JSON/CSV reports require explicit evidence sharing and download permission.")
     now = datetime.now(timezone.utc)
     expires_at = payload.expires_at or now + timedelta(days=7)
     if _as_utc(expires_at) <= now:
@@ -174,6 +174,31 @@ def download(report_id: str, request: Request, session: SessionDependency) -> Fi
     return _report_file_response(report, download=True)
 
 
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(report_id: str, request: Request, session: SessionDependency) -> Response:
+    """Permanently delete a report artifact and its share links."""
+
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        report = store.get_document("reports", report_id)
+        if report is None:
+            raise HTTPException(404, "Report not found")
+        if isinstance(report.get("artifact_path"), str):
+            delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
+        share_ids = [str(share["id"]) for share in store.list_documents("report_shares", query={"report_id": report_id})]
+        if share_ids:
+            store.delete_documents("report_share_password_attempts", {"share_id": {"$in": share_ids}})
+        store.delete_documents("report_shares", {"report_id": report_id})
+        store.delete_documents("reports", {"id": report_id})
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    assert session is not None
+    report = _get_report(report_id, session)
+    delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
+    session.execute(delete(ReportShare).where(ReportShare.report_id == report.id))
+    session.delete(report)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 @public_router.get("/{token}")
 def open_shared_report(token: str, request: Request, session: SessionDependency) -> FileResponse:
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
@@ -226,7 +251,7 @@ def _report_file_response(report: Report, *, download: bool) -> FileResponse:
     path = Path(report.artifact_path)
     if not path.is_file():
         raise HTTPException(404, "Report artifact is no longer available")
-    media_type = {"json": "application/json", "csv": "text/csv", "parquet": "application/vnd.apache.parquet", "html": "text/html", "markdown": "text/markdown", "pdf": "application/pdf"}.get(report.format, "application/octet-stream")
+    media_type = {"json": "application/json", "csv": "text/csv", "html": "text/html", "markdown": "text/markdown"}.get(report.format, "application/octet-stream")
     return FileResponse(path, filename=path.name if download else None, media_type=media_type)
 
 

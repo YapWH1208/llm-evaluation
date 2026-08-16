@@ -12,6 +12,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
+
 describe("public report sharing", () => {
   it("honors the saved light-theme preference without requiring the authenticated application shell", () => {
     window.localStorage.setItem("lle-theme", "light");
@@ -53,36 +55,21 @@ describe("public report sharing", () => {
 
   it("downloads a report from an authenticated object URL", async () => {
     const user = userEvent.setup();
-    const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
     vi.spyOn(api, "downloadReport").mockResolvedValue("blob:protected-report");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    render(<LocaleProvider><ReportsTable reports={[report]} /></LocaleProvider>);
+    render(<LocaleProvider><ReportsTable onDelete={vi.fn()} reports={[report]} /></LocaleProvider>);
 
     await user.click(screen.getByRole("button", { name: "Download" }));
     expect(api.downloadReport).toHaveBeenCalledWith("report-id");
     expect(click).toHaveBeenCalledOnce();
   });
 
-  it("passes the visible Reports share policy to the controlled share handler", async () => {
+  it("deletes a report through the table action", async () => {
     const user = userEvent.setup();
-    const report: Report = { id: "report-id", run_id: "run-id", report_type: "single_model", format: "html", artifact_path: "ignored", generator_version: "test", generated_at: "2026-07-29T00:00:00Z" };
-    const onShare = vi.fn().mockResolvedValue({ id: "share-id", report_id: report.id, expires_at: "2026-08-01T00:00:00Z", allow_download: true, revoked_at: null, created_at: "2026-07-29T00:00:00Z", share_url: "https://evaluation.example.test/shared-reports/token" });
-    render(<LocaleProvider><ReportsTable reports={[report]} onShare={onShare} /></LocaleProvider>);
+    const onDelete = vi.fn();
+    render(<LocaleProvider><ReportsTable onDelete={onDelete} reports={[report]} /></LocaleProvider>);
 
-    await user.clear(screen.getByLabelText("Expires in days"));
-    await user.type(screen.getByLabelText("Expires in days"), "21");
-    await user.type(screen.getByLabelText("Optional password"), "view-only-password");
-    await user.click(screen.getByLabelText("Allow download"));
-    await user.click(screen.getByLabelText("Share raw evidence"));
-    await user.click(screen.getByRole("button", { name: "Share" }));
-
-    expect(onShare).toHaveBeenCalledWith(report, {
-      days: "21",
-      password: "view-only-password",
-      allow_download: true,
-      include_evidence: true,
-    });
-    expect(screen.getByLabelText("Optional password")).toHaveValue("");
-    expect(await screen.findByRole("link", { name: "Open the newly created share link" })).toHaveAttribute("href", "https://evaluation.example.test/shared-reports/token");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith(report);
   });
 });

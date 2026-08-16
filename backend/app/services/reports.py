@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, HumanReview, JudgeAssessment, Report, SampleAttempt
+from app.services.aggregation import list_aggregate_metrics
+from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
 from app.services.run_analysis import all_attempts, build_run_summary, latest_attempts
 
 
@@ -19,7 +21,7 @@ class ReportError(ValueError):
     pass
 
 
-_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "parquet": "parquet", "html": "html", "markdown": "md", "pdf": "pdf"}
+_FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md"}
 REPORT_TYPES = frozenset({"single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "cost", "human_review"})
 _COMPARISON_REPORT_TYPES = frozenset({"multi_model_comparison", "regression", "prompt_comparison"})
 
@@ -40,7 +42,7 @@ def generate_report(
         raise ReportError("Reports can only be generated after a run completes.")
     extension = _FORMAT_EXTENSIONS.get(format)
     if extension is None:
-        raise ReportError("Supported report formats are json, csv, parquet, html, markdown, and pdf.")
+        raise ReportError("Supported report formats are json, csv, html, and markdown.")
     if report_type not in REPORT_TYPES:
         raise ReportError("Unsupported report type.")
 
@@ -55,7 +57,7 @@ def generate_report(
         report_type=report_type,
         format=format,
         artifact_path="",
-        generator_version="1.3.0",
+        generator_version="1.4.0",
     )
     session.add(report)
     session.flush()
@@ -171,6 +173,7 @@ def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any
         "configuration_snapshot": run.configuration_snapshot,
         "summary": build_run_summary(session, run),
         "attempts": attempts,
+        "metrics": [_serialize_metric(metric) for metric in list_aggregate_metrics(session, run.id)],
     }
 
 
@@ -205,6 +208,43 @@ def _serialize_attempt(
     }
 
 
+def _serialize_metric(row: Any) -> dict[str, Any]:
+    """Serialize an AggregateMetric row (ORM or Mongo document) with its profile enrichment."""
+
+    get = (lambda key: row[key]) if isinstance(row, dict) else (lambda key: getattr(row, key))
+    try:
+        definition = metric_definition(get("metric_name"))
+    except ValueError:
+        metric_label = get("metric_name").replace("_", " ").title()
+        unit = "value"
+        profile = "custom"
+        required_evidence: list[str] = []
+    else:
+        metric_label = definition.label
+        unit = definition.unit
+        profile = definition.profile
+        required_evidence = list(definition.required_evidence)
+    created_at = get("created_at")
+    return {
+        "id": get("id"),
+        "run_id": get("run_id"),
+        "benchmark_id": get("benchmark_id"),
+        "model_endpoint_id": get("model_endpoint_id"),
+        "metric_name": get("metric_name"),
+        "metric_value": get("metric_value"),
+        "availability_reason": get("availability_reason"),
+        "sample_count": get("sample_count"),
+        "confidence_interval": get("confidence_interval"),
+        "aggregation_version": get("aggregation_version"),
+        "profile_version": METRIC_PROFILE_VERSION,
+        "created_at": created_at.isoformat() if created_at else None,
+        "metric_label": metric_label,
+        "unit": unit,
+        "profile": profile,
+        "required_evidence": required_evidence,
+    }
+
+
 def _write_report(path: Path, format: str, payload: dict[str, Any]) -> None:
     if format == "json":
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -212,14 +252,8 @@ def _write_report(path: Path, format: str, payload: dict[str, Any]) -> None:
     if format == "csv":
         _write_csv(path, payload)
         return
-    if format == "parquet":
-        _write_parquet(path, payload)
-        return
     if format == "markdown":
         path.write_text(_markdown_report(payload), encoding="utf-8")
-        return
-    if format == "pdf":
-        path.write_bytes(_pdf_report(payload))
         return
     path.write_text(_html_report(payload), encoding="utf-8")
 
@@ -250,24 +284,6 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
         writer.writeheader()
         for attempt in payload["attempts"]:
             writer.writerow(_tabular_attempt(attempt, fields))
-
-
-def _write_parquet(path: Path, payload: dict[str, Any]) -> None:
-    """Write the same evidence columns as CSV in a typed columnar artifact."""
-
-    try:
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-    except ImportError as error:  # pragma: no cover - packaging guard
-        raise ReportError("Parquet export requires the pyarrow runtime.") from error
-    fields = [
-        "sample_id", "attempt", "is_latest", "status", "prediction", "score",
-        "latency_ms", "input_tokens", "output_tokens", "estimated_cost",
-        "error_type", "error_message", "input", "reference", "request",
-        "raw_response", "human_reviews", "judge_assessments",
-    ]
-    rows = [_tabular_attempt(attempt, fields) for attempt in payload["attempts"]]
-    pq.write_table(pa.Table.from_pylist(rows), path, compression="zstd")
 
 
 def _tabular_attempt(attempt: dict[str, Any], fields: list[str]) -> dict[str, Any]:
@@ -306,11 +322,35 @@ def _markdown_report(payload: dict[str, Any]) -> str:
         f"| Input / output tokens | {tokens['input']} / {tokens['output']} |",
         f"| Estimated cost | {_display(cost['estimated'])} {currency} |",
         "",
-        "## Sample evidence",
-        "",
-        "| Sample | Attempt | Current | Status | Score | Latency (ms) | Tokens in/out | Estimated cost | Error |",
-        "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | --- |",
     ]
+    if payload.get("metrics"):
+        rows.extend(
+            [
+                "",
+                "## Metrics",
+                "",
+                "| Metric | Value | Samples | Availability |",
+                "| --- | --- | ---: | --- |",
+            ]
+            + [
+                "| {label} | {value} | {samples} | {availability} |".format(
+                    label=_markdown_cell(metric["metric_label"]),
+                    value=_markdown_cell(_display(metric["metric_value"])),
+                    samples=metric["sample_count"],
+                    availability=_markdown_cell(metric["availability_reason"] if metric["metric_value"] is None else "—"),
+                )
+                for metric in payload["metrics"]
+            ]
+        )
+    rows.extend(
+        [
+            "",
+            "## Sample evidence",
+            "",
+            "| Sample | Attempt | Current | Status | Score | Latency (ms) | Tokens in/out | Estimated cost | Error |",
+            "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | --- |",
+        ]
+    )
     for attempt in payload["attempts"]:
         rows.append(
             "| {sample_id} | {attempt} | {latest} | {status} | {score} | {latency} | {input_tokens}/{output_tokens} | {cost} | {error} |".format(
@@ -368,65 +408,32 @@ def _html_report(payload: dict[str, Any]) -> str:
 <div class=\"metric\"><strong>Tokens in / out</strong><br>{tokens['input']} / {tokens['output']}</div>
 <div class=\"metric\"><strong>Estimated cost</strong><br>{_display(cost['estimated'])} {html.escape(cost['currency'] or '')}</div>
 </div>
+{_metrics_html(payload)}
 <h2>Sample evidence</h2>
 <table><thead><tr><th>Sample</th><th>Attempt</th><th>Current</th><th>Status</th><th>Score</th><th>Latency (ms)</th><th>Tokens</th><th>Estimated cost</th><th>Error</th></tr></thead><tbody>{table_rows}</tbody></table>
 {_related_runs_html(payload)}
 </body></html>"""
 
 
-def _pdf_report(payload: dict[str, Any]) -> bytes:
-    summary = payload["summary"]
-    samples = summary["samples"]
-    latency = summary["latency_ms"]
-    cost = summary["cost"]
-    lines = [
-        f"{_report_title(payload)}: {payload['benchmark']['id']}",
-        f"Run: {payload['run_id']}",
-        f"Status: {payload['status']}",
-        "",
-        "Executive summary",
-        f"Completion: {samples['completed']}/{samples['total']} ({_display_percent(samples['completion_rate'])})",
-        f"Accuracy: {_display_percent(samples['accuracy'])}",
-        f"Success rate: {_display_percent(samples['success_rate'])}",
-        f"Average latency: {_display(latency['average'])} ms; P95: {_display(latency['p95'])} ms",
-        f"Tokens (input/output): {summary['tokens']['input']}/{summary['tokens']['output']}",
-        f"Estimated cost: {_display(cost['estimated'])} {cost['currency'] or ''}",
-        "",
-        "Sample outcomes",
-    ]
-    lines.extend(
-        f"{attempt['sample_id']} | attempt {attempt['attempt']} | {attempt['status']} | score {_display(attempt['score'])} | {_display(attempt['latency_ms'])} ms"
-        for attempt in payload["attempts"][:25]
+
+def _metrics_html(payload: dict[str, Any]) -> str:
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, list) or not metrics:
+        return ""
+    rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(metric['metric_label']))}</td>"
+        f"<td>{html.escape(_display(metric['metric_value']))}</td>"
+        f"<td>{metric['sample_count']}</td>"
+        f"<td>{html.escape(str(metric['availability_reason'] if metric['metric_value'] is None else ''))}</td>"
+        "</tr>"
+        for metric in metrics
     )
-    if len(payload["attempts"]) > 25:
-        lines.append(f"PDF summary omits {len(payload['attempts']) - 25} additional sample outcomes; use HTML, JSON, CSV, or Parquet for complete evidence.")
-    content_lines = ["BT", "/F1 12 Tf", "50 760 Td", "15 TL"]
-    for index, line in enumerate(lines):
-        if index:
-            content_lines.append("T*")
-        content_lines.append(f"({_pdf_escape(line)}) Tj")
-    content_lines.append("ET")
-    content = "\n".join(content_lines).encode("latin-1", errors="replace")
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-        b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0]
-    for index, object_data in enumerate(objects, start=1):
-        offsets.append(len(output))
-        output.extend(f"{index} 0 obj\n".encode())
-        output.extend(object_data)
-        output.extend(b"\nendobj\n")
-    xref_offset = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
-    for offset in offsets[1:]:
-        output.extend(f"{offset:010d} 00000 n \n".encode())
-    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
-    return bytes(output)
+    return (
+        "<h2>Metrics</h2>"
+        "<table><thead><tr><th>Metric</th><th>Value</th><th>Samples</th><th>Availability</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
 
 
 def _report_title(payload: dict[str, Any]) -> str:
@@ -445,10 +452,6 @@ def _related_runs_html(payload: dict[str, Any]) -> str:
         for item in related
     )
     return f"<h2>Related completed runs</h2><table><thead><tr><th>Run</th><th>Benchmark</th><th>Accuracy</th><th>Success</th></tr></thead><tbody>{rows}</tbody></table>"
-
-
-def _pdf_escape(value: object) -> str:
-    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _display(value: object) -> str:

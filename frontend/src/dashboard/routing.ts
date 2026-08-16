@@ -21,7 +21,7 @@ export const workspaceTabIds = {
   runs: ["run-inventory", "quick-start", "dataset-evaluation", "run-details"],
   leaderboard: ["rankings"],
   analysis: ["evidence-matrix", "compare-runs"],
-  settings: ["health", "access", "preferences"],
+  settings: ["health", "preferences"],
 } as const satisfies Record<WorkspaceView, readonly string[]>;
 
 export type WorkspaceTabFor<V extends WorkspaceView> = (typeof workspaceTabIds)[V][number];

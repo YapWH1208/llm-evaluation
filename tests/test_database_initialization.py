@@ -33,9 +33,10 @@ def test_database_preview_validation_and_sqlite_backup(tmp_path: Path) -> None:
         database.dispose()
 
 
-def test_database_kind_recognizes_postgresql_and_mongodb_urls() -> None:
-    assert Settings.local_development(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "postgresql"
+def test_database_kind_recognizes_sqlite_and_mongodb_urls() -> None:
+    assert Settings.local_development(database_url="sqlite:///./data/llm_evaluation.db").database_kind == "sqlite"
     assert Settings.local_development(database_url="mongodb://host/db").database_kind == "mongodb"
+    assert Settings.local_development(database_url="postgresql+psycopg://user:pass@host/db").database_kind == "unknown"
 
 
 def test_schema_validation_detects_missing_column_index_and_migration(tmp_path: Path) -> None:

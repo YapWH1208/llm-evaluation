@@ -75,7 +75,7 @@ def test_dataset_rejects_local_sources_and_uses_administrator_credential_binding
         local = client.post("/api/v1/datasets", json={"dataset_id":"local","version":"1","source_url":"file:///private/source.jsonl"})
         assert local.status_code == 422
         assert "upload endpoint" in local.json()["detail"]
-        legacy = client.post("/api/v1/datasets", json={"dataset_id":"legacy","version":"1","credential_env_var":"LLE_ADMIN_TOKEN"})
+        legacy = client.post("/api/v1/datasets", json={"dataset_id":"legacy","version":"1","credential_env_var":"LLE_DATASET_CREDENTIAL_TOKEN"})
         assert legacy.status_code == 422
         assert "credential_binding_id" in str(legacy.json()["detail"])
 
@@ -184,7 +184,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
     with pytest.raises(DatasetError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)
     with pytest.raises(DatasetError, match="not configured"):
-        resolve_dataset_source("https://datasets.example.test/dataset.jsonl", "main", "LLE_ADMIN_TOKEN", settings)
+        resolve_dataset_source("https://datasets.example.test/dataset.jsonl", "main", "LLE_DATASET_CREDENTIAL_TOKEN", settings)
 
 
 def test_dataset_download_enforces_streamed_byte_limit(tmp_path: Path, monkeypatch) -> None:

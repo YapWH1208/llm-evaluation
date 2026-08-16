@@ -252,6 +252,7 @@ export type RunLogEntry = {
 };
 
 export type Report = { id: string; run_id: string; report_type: string; format: string; artifact_path: string; generator_version: string; generated_at: string };
+export type ReportFormat = "html" | "json" | "csv" | "markdown";
 export type ReportType = "single_model" | "multi_model_comparison" | "regression" | "prompt_comparison" | "benchmark" | "reliability" | "cost" | "human_review";
 export type Benchmark = { id: string; benchmark_id: string; version: string; display_name: string; manifest: Record<string, unknown>; status: string; source: string; created_at: string };
 export type Dashboard = {
@@ -338,12 +339,10 @@ export type JudgeAgreement = { status: string; assessment_count: number; success
 export type Task = { id: string; run_id: string; parent_task_id: string | null; task_type: string; payload: Record<string, unknown>; status: string; priority: number; attempt_count: number; leased_by: string | null; lease_expires_at: string | null; next_retry_at: string | null; heartbeat_at: string | null; created_at: string; updated_at: string };
 export type AnalyticsCell = { x_key: string; x_label: string; y_key: string; y_label: string; run_ids: string[]; score: number | null; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; baseline_score: number | null; delta: number | null };
 export type AnalyticsMatrix = { baseline_run_id: string | null; heatmap: Array<{ run_id: string; model_endpoint_id: string; model_name: string; benchmark_id: string; benchmark_version: string; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; currency: string | null; required_capabilities: string[]; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null }>; capability_matrix: Array<{ model_endpoint_id: string; capability: string; run_count: number; accuracy: number | null; success_rate: number | null; error_rate: number | null; average_latency_ms: number | null; estimated_cost: number | null; sample_count: number; confidence_interval: { method: string; lower: number; upper: number } | null; baseline_score: number | null; delta: number | null }>; heatmaps: Record<"model_benchmark" | "model_capability" | "model_language" | "model_difficulty" | "prompt_benchmark" | "model_modality", AnalyticsCell[]> };
-export type ReportShare = { id: string; report_id: string; expires_at: string; allow_download: boolean; revoked_at: string | null; created_at: string; share_url: string | null };
 export type SystemHealth = { status: string; database: string; schema_version: number; database_connected: boolean; disk: { available_bytes: number; total_bytes: number }; queue: { pending: number; active: number } };
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const publicApiBase = import.meta.env.VITE_PUBLIC_API_BASE_URL ?? apiBase.replace(/\/api\/v1$/, "");
-let bearerToken = window.sessionStorage.getItem("lle-api-token") ?? "";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -353,7 +352,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: { "Content-Type": "application/json", ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}), ...init?.headers },
+    headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });
   if (!response.ok) {
@@ -366,17 +365,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestObjectUrl(path: string): Promise<string> {
-  const response = await fetch(`${apiBase}${path}`, {
-    headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : undefined,
-  });
+  const response = await fetch(`${apiBase}${path}`);
   if (!response.ok) throw new ApiError("Media preview is unavailable.", response.status);
   return URL.createObjectURL(await response.blob());
 }
 
 async function downloadObjectUrl(path: string): Promise<string> {
-  const response = await fetch(apiBase + path, {
-    headers: bearerToken ? { Authorization: "Bearer " + bearerToken } : undefined,
-  });
+  const response = await fetch(apiBase + path);
   if (!response.ok) throw new ApiError("Download is unavailable.", response.status);
   return URL.createObjectURL(await response.blob());
 }
@@ -392,7 +387,7 @@ async function openSharedReportObjectUrl(token: string, password: string): Promi
 function subscribeToEvents(path: string, eventName: string, onEvent: () => void): () => void {
   const controller = new AbortController();
   void fetch(apiBase + path, {
-    headers: { Accept: "text/event-stream", ...(bearerToken ? { Authorization: "Bearer " + bearerToken } : {}) },
+    headers: { Accept: "text/event-stream" },
     signal: controller.signal,
   }).then(async (response) => {
     if (!response.ok || !response.body) throw new ApiError("Event stream is unavailable.", response.status);
@@ -420,7 +415,6 @@ async function systemRequest<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  setBearerToken: (token: string) => { bearerToken = token.trim(); if (bearerToken) window.sessionStorage.setItem("lle-api-token", bearerToken); else window.sessionStorage.removeItem("lle-api-token"); },
   listEndpoints: () => request<Endpoint[]>("/model-endpoints"),
   createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
   updateEndpoint: (endpointId: string, body: Record<string, unknown>) => request<Endpoint>(`/model-endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -445,9 +439,9 @@ export const api = {
   listRunMetrics: (runId: string) => request<AggregateMetric[]>(`/analytics/runs/${encodeURIComponent(runId)}/metrics`),
   listRunLogs: (runId: string, offset = 0, limit = 200) => request<RunLogEntry[]>(`/evaluation-runs/${runId}/logs?offset=${offset}&limit=${limit}`),
   subscribeToRunEvents: (runId: string, onEvent: () => void) => subscribeToEvents("/evaluation-runs/" + runId + "/events", "run", onEvent),
-  createReport: (runId: string, format: "html" | "json" | "csv" | "parquet" | "markdown" | "pdf", reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
+  createReport: (runId: string, format: ReportFormat, reportType: ReportType = "single_model", relatedRunIds: string[] = []) => request<Report>("/reports", { method: "POST", body: JSON.stringify({ run_id: runId, format, report_type: reportType, related_run_ids: relatedRunIds }) }),
+  deleteReport: (reportId: string) => request<void>(`/reports/${reportId}`, { method: "DELETE" }),
   listReports: (runId: string) => request<Report[]>(`/reports/run/${runId}`),
-  createReportShare: (reportId: string, body: Record<string, unknown> = {}) => request<ReportShare>(`/reports/${reportId}/shares`, { method: "POST", body: JSON.stringify(body) }),
   downloadReport: (reportId: string) => downloadObjectUrl("/reports/" + reportId + "/download"),
   openSharedReport: (token: string, password = "") => openSharedReportObjectUrl(token, password),
   dashboard: () => request<Dashboard>("/dashboard"),

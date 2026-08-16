@@ -188,7 +188,8 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert client.admin.commands == ["ping"]
     assert len(client["platform"]["schema_migrations"].documents) == len(MIGRATIONS)
     assert len(client["platform"]["task_units"].indexes) == 1
-    assert len(client["platform"]["users"].indexes) == 2
+    assert "users" not in client["platform"].list_collection_names()
+    assert "audit_events" not in client["platform"].list_collection_names()
 
 
 def test_mongo_store_backfills_missing_legacy_migration_ledger_before_upgrading() -> None:
@@ -614,6 +615,34 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
 
 
+def test_mongodb_report_delete_removes_shares_password_attempts_and_artifact(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(settings, document_store=store)
+    now = datetime.now(timezone.utc)
+
+    with TestClient(app) as api:
+        artifact = tmp_path / "reports" / "run-id" / "report.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("{}", encoding="utf-8")
+        store.insert_document("reports", {"id": "report-id", "run_id": "run-id", "report_type": "single_model", "format": "json", "artifact_path": str(artifact), "generator_version": "1.4.0", "generated_at": now})
+        store.insert_document("report_shares", {"id": "share-id", "report_id": "report-id", "token_hash": "hash", "expires_at": now + timedelta(days=1), "allow_download": False, "revoked_at": None, "created_at": now})
+        store.insert_document("report_share_password_attempts", {"id": "attempt-id", "share_id": "share-id", "client_key": "client-hash", "failure_count": 3, "expires_at": now + timedelta(minutes=5), "updated_at": now})
+
+        assert api.delete("/api/v1/reports/report-id").status_code == 204
+        assert api.delete("/api/v1/reports/report-id").status_code == 404
+
+    assert store.get_document("reports", "report-id") is None
+    assert store.list_documents("report_shares", query={"report_id": "report-id"}) == []
+    assert store.list_documents("report_share_password_attempts", query={"share_id": "share-id"}) == []
+    assert not artifact.exists()
+
+
 def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> None:
     client = FakeClient()
     settings = Settings.local_development(
@@ -745,10 +774,6 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         document_store=MongoDocumentStore(settings, client=client),
     )
     with TestClient(app) as api:
-        user = api.post("/api/v1/users", json={"email": "reviewer@example.test", "display_name": "Reviewer"})
-        assert user.status_code == 201
-        assert api.get("/api/v1/users").json()[0]["email"] == "reviewer@example.test"
-
         endpoint_ids: list[str] = []
         for model_name in ("target", "target-b", "judge"):
             endpoint = api.post(
@@ -799,7 +824,6 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         assert secondary_review.status_code == 201
         agreement = api.get(f"/api/v1/reviews/sample/{attempt['id']}/agreement")
         assert agreement.json()["status"] == "needs_adjudication"
-        assert api.get("/api/v1/audit-events").status_code == 200
 
 
 def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:

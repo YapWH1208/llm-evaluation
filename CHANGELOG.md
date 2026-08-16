@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `docker compose up` now requires no environment variables: the API
+  container auto-provisions a Fernet key at `./data/.lle-secret-key` (mode
+  0600) on first start and reuses it afterwards, so endpoint credentials stay
+  encrypted at rest without any setup. Setting `LLE_SECRET_ENCRYPTION_KEY`
+  explicitly still overrides the auto-provisioned key.
+- Pushing a `v*` git tag now runs the `Docker release` workflow, which
+  validates the full test suite and publishes the API and web images to GitHub
+  Container Registry (`ghcr.io/yapwh1208/llm-evaluation-api` and
+  `...-web`), tagged with the release version and `latest`.
+- Generated reports now embed the run's named aggregate metrics (metric name,
+  label, value, sample count, availability reason, and confidence interval) in
+  every format, with dedicated Metrics tables in HTML and Markdown exports.
+- Run-details reports can be deleted from the Reports tab; the API endpoint
+  removes both the artifact file and its share links.
+- The web frontend is now containerized: a multi-stage Node/nginx image serves
+  the built SPA (including SPA deep-link rewrites) from a "web" service in
+  Docker Compose alongside the API (SQLite).
 - The Configure navigation now includes a `/prompts` page that lists existing
   versioned prompt packages and creates new versions through the existing API.
 - Prompt packages now use a Dataset-style tabbed workspace with a selectable
@@ -44,6 +61,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The user and authentication system has been removed (`BREAKING`). The API
+  no longer requires or accepts a bearer token: the token middleware, user
+  roles and inventory, mutation audit events, and the Settings "Access" tab are
+  gone, and `LLE_ADMIN_TOKEN` / `LLE_ALLOW_INSECURE_LOCAL_AUTH` no longer exist.
+  The API is open to any caller that can reach it — keep it on loopback or a
+  trusted network, because anyone with access can read and mutate everything,
+  including redirecting stored provider credentials. Existing user and
+  audit-event tables are dropped by a forward-only migration.
+- PostgreSQL support has been removed (`BREAKING`). The platform is now
+  SQLite-only on the relational side with the optional MongoDB document store;
+  the Docker Compose stack runs the API on SQLite (under the mounted `./data`
+  volume) with no Postgres service, the `postgresql` dependency extra and
+  psycopg driver are gone, and `postgresql+psycopg://` database URLs are no
+  longer recognized. `docker compose up --build` no longer requires
+  `LLE_POSTGRES_PASSWORD`.
+- Run-details evidence now renders as a compact, aligned list with expandable
+  per-sample details instead of wrapped summary chips.
+- The run lifecycle log is grouped by task id (with run-level entries under
+  their own group) instead of one flat list.
+- PDF and Parquet are no longer available report formats; report generation is
+  limited to JSON, CSV, HTML, and Markdown. Existing Parquet/PDF artifacts
+  remain downloadable. The unused pyarrow dependency was removed.
+- The Reports tab no longer shows the read-only sharing policy form or per-report
+  Share buttons; public sharing remains available through the API and the
+  shared-report page.
 - Fresh workspaces now lead with a state-aware first-evaluation checklist:
   connect or test a model, run the built-in Quick start, then inspect results.
   The Guide presents this shortest path before the optional custom-dataset flow.

@@ -1028,6 +1028,25 @@ button.dataset-value-chip {
   white-space: normal;
 }
 
+.run-detail-log-group + .run-detail-log-group {
+  margin-top: .4rem;
+}
+
+.run-detail-log-group h4 {
+  border-top: 1px solid var(--border);
+  color: var(--text-subtle);
+  font-size: .7rem;
+  letter-spacing: .06em;
+  margin: 0;
+  padding: .8rem 0 .35rem;
+  text-transform: uppercase;
+}
+
+.run-detail-log-group:first-child h4 {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .run-detail-log {
   display: grid;
   list-style: none;

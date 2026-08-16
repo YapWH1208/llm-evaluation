@@ -19,7 +19,7 @@ class ExactExecutor:
         return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4")
 
 
-def test_completed_run_emits_sse_snapshot_and_mutations_are_audited(tmp_path: Path) -> None:
+def test_completed_run_emits_sse_snapshot(tmp_path: Path) -> None:
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
@@ -38,8 +38,3 @@ def test_completed_run_emits_sse_snapshot_and_mutations_are_audited(tmp_path: Pa
         assert events.status_code == 200
         assert "event: run" in events.text
         assert '"status":"completed"' in events.text
-
-        audit_events = client.get("/api/v1/audit-events").json()
-        endpoint_audit = next(item for item in audit_events if item["entity_type"] == "model-endpoints")
-        assert endpoint_audit["action"] == "api.post"
-        assert "audit-secret-key" not in str(endpoint_audit["details"])

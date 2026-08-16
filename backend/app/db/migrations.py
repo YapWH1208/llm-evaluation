@@ -164,8 +164,6 @@ def _upgrade_v22_remediation_persistence_contracts(connection: Connection) -> No
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_model_endpoint_id", ("model_endpoint_id",))
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_prompt_package_id", ("prompt_package_id",))
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_suite_id", ("suite_id",))
-    if connection.dialect.name == "postgresql":
-        connection.execute(text("ALTER TABLE report_shares ALTER COLUMN password_hash TYPE VARCHAR(512)"))
 
 
 def _upgrade_v23_report_share_password_limits(_connection: Connection) -> None:
@@ -212,6 +210,14 @@ def _upgrade_v26_judge_usage_and_cost(connection: Connection) -> None:
     _add_column_if_missing(connection, "judge_assessments", "input_tokens", "input_tokens INTEGER")
     _add_column_if_missing(connection, "judge_assessments", "output_tokens", "output_tokens INTEGER")
     _add_column_if_missing(connection, "judge_assessments", "estimated_cost", "estimated_cost FLOAT")
+
+
+def _upgrade_v27_remove_user_authentication_tables(connection: Connection) -> None:
+    """Drop the user-authentication tables removed with the user system."""
+
+    for table_name in ("audit_events", "users"):
+        if table_name in set(inspect(connection).get_table_names()):
+            connection.execute(text(f"DROP TABLE {table_name}"))
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -364,6 +370,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260812_add_judge_usage_and_cost",
         description="Add provider token usage and estimated cost evidence to judge assessments.",
         upgrade=_upgrade_v26_judge_usage_and_cost,
+    ),
+    Migration(
+        version=27,
+        migration_id="20260816_remove_user_authentication_tables",
+        description="Drop the users and audit_events tables removed with the user system.",
+        upgrade=_upgrade_v27_remove_user_authentication_tables,
     ),
 )
 

@@ -1,32 +1,18 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: lle
-      POSTGRES_USER: lle
-      POSTGRES_PASSWORD: "${LLE_POSTGRES_PASSWORD:?Set LLE_POSTGRES_PASSWORD before starting Compose}"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lle -d lle"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-
   api:
     build: .
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      LLE_DATABASE_URL: "postgresql+psycopg://lle:${LLE_POSTGRES_PASSWORD:?Set LLE_POSTGRES_PASSWORD before starting Compose}@postgres:5432/lle"
-      LLE_SECRET_ENCRYPTION_KEY: "${LLE_SECRET_ENCRYPTION_KEY:?Set LLE_SECRET_ENCRYPTION_KEY before starting Compose}"
-      LLE_ADMIN_TOKEN: "${LLE_ADMIN_TOKEN:?Set LLE_ADMIN_TOKEN before starting Compose}"
-      LLE_CORS_ORIGINS: http://127.0.0.1:5173
+      LLE_DATABASE_URL: "sqlite:////data/llm_evaluation.db"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/data
 
-volumes:
-  postgres-data:
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped

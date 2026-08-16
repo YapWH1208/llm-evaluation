@@ -2,28 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./api";
 
-describe("authenticated browser transport", () => {
+describe("browser transport", () => {
   beforeEach(() => {
-    api.setBearerToken("browser-token");
     vi.stubGlobal("fetch", vi.fn());
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:report"), revokeObjectURL: vi.fn() });
   });
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("sends the bearer token when downloading a protected report", async () => {
+  it("downloads a report artifact", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("report", { status: 200 }));
 
     await expect(api.downloadReport("report-id")).resolves.toBe("blob:report");
-    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/reports/report-id/download", {
-      headers: { Authorization: "Bearer browser-token" },
-    });
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/reports/report-id/download");
   });
 
-  it("opens the run event stream with the bearer token", async () => {
+  it("opens the run event stream", async () => {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new TextEncoder().encode("event: run\\ndata: {}\\n\\n"));
+        controller.enqueue(new TextEncoder().encode("event: run\ndata: {}\n\n"));
         controller.close();
       },
     });
@@ -32,13 +29,12 @@ describe("authenticated browser transport", () => {
 
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/evaluation-runs/run-id/events", expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: "Bearer browser-token", Accept: "text/event-stream" }),
+      headers: expect.objectContaining({ Accept: "text/event-stream" }),
     }));
     close();
   });
 
   it("submits a public share password in a header rather than a URL", async () => {
-    api.setBearerToken("");
     vi.mocked(fetch).mockResolvedValue(new Response("report", { status: 200 }));
 
     await api.openSharedReport("share-token", "share-password");
@@ -48,7 +44,6 @@ describe("authenticated browser transport", () => {
   });
 
   it("creates a dataset evaluation run", async () => {
-    api.setBearerToken("");
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: "run-1", benchmark_id: "dataset-evaluation", total_samples: 2, status: "queued" }), { status: 201, headers: { "Content-Type": "application/json" } }));
     const body = { model_endpoint_id: "ep-1", dataset_version_id: "ds-1", reference_field: "answer", sample_limit: 100 };
     const run = await api.createDatasetRun(body);

@@ -38,7 +38,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == list(range(2, 27))
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 28))
     database.initialize()
     database.initialize()
 
@@ -70,7 +70,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
     assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 26
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 27
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -151,7 +151,7 @@ def test_initialize_backfills_a_missing_legacy_migration_ledger_before_upgrading
     validation = database.initialize()
     assert validation.is_valid
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 26
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 27
         applied_versions = list(session.scalars(select(SchemaMigration.version).order_by(SchemaMigration.version)))
     assert applied_versions == [migration.version for migration in MIGRATIONS]
     assert database.initialize("validate").is_valid

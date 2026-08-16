@@ -12,7 +12,7 @@ For a one-command local launch, run the platform-specific script from the reposi
 - macOS: run `chmod +x quick-launch.command && ./quick-launch.command`.
 - Linux: run `chmod +x quick-launch.sh && ./quick-launch.sh`.
 
-The launchers install missing development dependencies, start the API and web app, and create `data/.lle-secret-key` on first run. That key is ignored by Git and keeps encrypted endpoint credentials available across restarts. They explicitly enable unauthenticated local-only API access when no `LLE_ADMIN_TOKEN` is supplied; set an administrator token for any shared or remote deployment. Set `LLE_SECRET_ENCRYPTION_KEY` yourself to use a different stable key.
+The launchers install missing development dependencies, start the API and web app, and create `data/.lle-secret-key` on first run. That key is ignored by Git and keeps encrypted endpoint credentials available across restarts. Set `LLE_SECRET_ENCRYPTION_KEY` yourself to use a different stable key. The platform has no built-in authentication; keep the API on loopback or a trusted network.
 
 To start the services manually instead:
 
@@ -41,7 +41,7 @@ continue to use `/shared-reports/<token>`. The API is available at
 
 ## Database operations
 
-SQLite and PostgreSQL share the SQLAlchemy schema, forward-only migrations, queue semantics, and database initialization controls.
+SQLite owns the relational schema, forward-only migrations, queue semantics, and database initialization controls; MongoDB is the optional document store for the same contracts.
 
 ```powershell
 # Show pending migrations without changing a database
@@ -62,17 +62,14 @@ A step-by-step guide from dataset registration through scored evaluation runs
 (including Hugging Face `hf://` sources) lives in
 [docs/evaluation-workflow.md](docs/evaluation-workflow.md).
 
-## PostgreSQL team deployment
+## Docker Compose deployment
 
 ```powershell
-python -m pip install -e ".[dev,postgresql]"
-$env:LLE_DATABASE_URL = "postgresql+psycopg://lle:change-me@127.0.0.1:5432/lle"
-$env:LLE_SECRET_ENCRYPTION_KEY = "your-Fernet-key"
-uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+docker compose up --build
 ```
 
 See [deployment.md](docs/deployment.md) for Docker Compose, environment variables, backups, and production checks.
 
 ## Security notes
 
-Endpoint API keys are encrypted at rest and only a masked suffix is returned. `LLE_ADMIN_TOKEN` is required unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development; create scoped user tokens for role-based access. The platform audits successful mutating API calls without recording request bodies, keys, prompts, or model responses in the audit entry.
+Endpoint API keys are encrypted at rest and only a masked suffix is returned. The platform has no built-in authentication or audit layer; keep the API on loopback or a trusted network.
