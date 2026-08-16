@@ -56,6 +56,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The user and authentication system has been removed (`BREAKING`). The API
+  no longer requires or accepts a bearer token: the token middleware, user
+  roles and inventory, mutation audit events, and the Settings "Access" tab are
+  gone, and `LLE_ADMIN_TOKEN` / `LLE_ALLOW_INSECURE_LOCAL_AUTH` no longer exist.
+  The API is open to any caller that can reach it — keep it on loopback or a
+  trusted network, because anyone with access can read and mutate everything,
+  including redirecting stored provider credentials. Existing user and
+  audit-event tables are dropped by a forward-only migration.
 - PostgreSQL support has been removed (`BREAKING`). The platform is now
   SQLite-only on the relational side with the optional MongoDB document store;
   the Docker Compose stack runs the API on SQLite (under the mounted `./data`

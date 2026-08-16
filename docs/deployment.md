@@ -6,7 +6,7 @@ Use the default `sqlite:///./data/llm_evaluation.db` URL for a single-host works
 
 Set `LLE_SECRET_ENCRYPTION_KEY` before adding an endpoint. Use a stable Fernet key in the platform secret store; changing it prevents decryption of existing endpoint credentials.
 
-Set `LLE_ADMIN_TOKEN` before serving shared or remote traffic. The API refuses to start without it unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development. The local launcher sets that opt-in only when no administrator token is supplied and binds both services to `127.0.0.1`.
+The platform has no built-in authentication layer: the API is open to any caller that can reach it, and the web app binds both services to `127.0.0.1` locally. Only expose the API on a trusted network or loopback; anyone who can reach the port can read and mutate everything, including redirecting stored provider credentials.
 
 ## Team mode
 
@@ -58,7 +58,7 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 ## Docker Compose
 
 1. Generate a Fernet key and choose a strong administrator token.
-2. Set `LLE_SECRET_ENCRYPTION_KEY` and `LLE_ADMIN_TOKEN` in the deployment environment before use; Compose intentionally fails when either is missing and publishes the API only on loopback by default.
+2. Set `LLE_SECRET_ENCRYPTION_KEY` in the deployment environment before use; Compose intentionally fails when it is missing and publishes the API only on loopback by default.
 3. Run `docker compose up --build` to bring up the stack: `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
 4. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 5. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.

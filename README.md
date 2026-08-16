@@ -12,7 +12,7 @@ For a one-command local launch, run the platform-specific script from the reposi
 - macOS: run `chmod +x quick-launch.command && ./quick-launch.command`.
 - Linux: run `chmod +x quick-launch.sh && ./quick-launch.sh`.
 
-The launchers install missing development dependencies, start the API and web app, and create `data/.lle-secret-key` on first run. That key is ignored by Git and keeps encrypted endpoint credentials available across restarts. They explicitly enable unauthenticated local-only API access when no `LLE_ADMIN_TOKEN` is supplied; set an administrator token for any shared or remote deployment. Set `LLE_SECRET_ENCRYPTION_KEY` yourself to use a different stable key.
+The launchers install missing development dependencies, start the API and web app, and create `data/.lle-secret-key` on first run. That key is ignored by Git and keeps encrypted endpoint credentials available across restarts. Set `LLE_SECRET_ENCRYPTION_KEY` yourself to use a different stable key. The platform has no built-in authentication; keep the API on loopback or a trusted network.
 
 To start the services manually instead:
 
@@ -72,4 +72,4 @@ See [deployment.md](docs/deployment.md) for Docker Compose, environment variable
 
 ## Security notes
 
-Endpoint API keys are encrypted at rest and only a masked suffix is returned. `LLE_ADMIN_TOKEN` is required unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development; create scoped user tokens for role-based access. The platform audits successful mutating API calls without recording request bodies, keys, prompts, or model responses in the audit entry.
+Endpoint API keys are encrypted at rest and only a masked suffix is returned. The platform has no built-in authentication or audit layer; keep the API on loopback or a trusted network.

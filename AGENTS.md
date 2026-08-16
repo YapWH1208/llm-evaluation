@@ -37,7 +37,7 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 - Backend tests: `python -m pytest -q` (config sets `pythonpath=["backend"]`, `testpaths=["tests"]`). Single file: `python -m pytest tests/test_x.py -q`.
 - Run API: `uvicorn app.main:app --app-dir backend --reload` (docs at `/docs` on port 8000).
 - DB CLI: `python -m app.cli database preview|initialize|validate` (migrations also run automatically at startup).
-- Docker deploy: `docker compose up --build` (API with SQLite + web container) needs `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`; see docs/deployment.md.
+- Docker deploy: `docker compose up --build` (API with SQLite + web container) needs `LLE_SECRET_ENCRYPTION_KEY`; see docs/deployment.md. The API has no built-in authentication — keep it on loopback or a trusted network.
 - Frontend deps/dev server: `npm ci` / `npm run dev` **inside `frontend/`** (vite, port 5173). Root `package-lock.json` is a stub — never `npm install` at repo root. Node 22 is what CI uses.
 - Frontend tests: `npm test -- --run` in `frontend/` — bare `npm test` is vitest **watch mode** (config lives in `vite.config.ts`: jsdom, `src/test-setup.ts`).
 - Frontend typecheck + build: `npm run build` (runs `tsc -b && vite build`). No lint script exists for either end.
@@ -45,7 +45,6 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 ## Environment (LLE_*)
 
-- `LLE_ADMIN_TOKEN` is required at startup unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` (enforced in `backend/app/core/config.py`).
 - `LLE_SECRET_ENCRYPTION_KEY` — Fernet key for encrypted endpoint credentials; if unset the launchers persist one at `data/.lle-secret-key` (gitignored).
 - `LLE_DATABASE_URL` — defaults to `sqlite:///./data/llm_evaluation.db`; `mongodb://` switches to the document store.
 - `LLE_DATABASE_INIT_MODE` — `auto_migrate` (default) | `preview` | `validate`.
