@@ -174,7 +174,6 @@ def download(report_id: str, request: Request, session: SessionDependency) -> Fi
     return _report_file_response(report, download=True)
 
 
-
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(report_id: str, request: Request, session: SessionDependency) -> Response:
     """Permanently delete a report artifact and its share links."""

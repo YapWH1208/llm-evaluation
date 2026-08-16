@@ -25,7 +25,6 @@ function SummaryMetric({ detail, label, value }: { detail?: string; label: strin
   return <article className="run-detail-kpi"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</article>;
 }
 
-
 type LogGroup = { taskId: string | null; entries: RunLogEntry[] };
 
 function groupLogsByTask(entries: RunLogEntry[]): LogGroup[] {
@@ -46,7 +45,6 @@ function groupLogsByTask(entries: RunLogEntry[]): LogGroup[] {
 }
 
 export function RunDetailWorkspace({ actions, effectiveMetric, evidence, logs, metrics, reports, reviewSelectionKey, reviews, run, summary }: RunDetailWorkspaceProps) {
-
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = runDetailCopy[locale];
   const [section, setSection] = useState<RunDetailSection>("overview");

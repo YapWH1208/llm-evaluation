@@ -65,7 +65,7 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 4. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 5. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
-This delivery validates the Compose configuration with `docker compose config` and builds both images (`docker build -t lle-web:test ./frontend` and `docker build -t lle-api:test .`); it does not run `docker compose up`.
+This delivery validates the Compose configuration with `docker compose config`, builds both images (`docker build ./frontend` and `docker build .`), and smoke-tests the full stack (PostgreSQL + API + nginx web) from the built images, including SPA deep-link rewrites.
 
 ## Migration and backup policy
 
