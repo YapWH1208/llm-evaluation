@@ -4,7 +4,6 @@ services:
     environment:
       LLE_DATABASE_URL: "sqlite:////data/llm_evaluation.db"
       LLE_SECRET_ENCRYPTION_KEY: "${LLE_SECRET_ENCRYPTION_KEY:?Set LLE_SECRET_ENCRYPTION_KEY before starting Compose}"
-      LLE_ADMIN_TOKEN: "${LLE_ADMIN_TOKEN:?Set LLE_ADMIN_TOKEN before starting Compose}"
       LLE_CORS_ORIGINS: http://127.0.0.1:5173
     ports:
       - "127.0.0.1:8000:8000"
