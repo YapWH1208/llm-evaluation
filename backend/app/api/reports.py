@@ -9,16 +9,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import Report, ReportShare, ReportSharePasswordAttempt
 from app.db.mongo import MongoDocumentStore
-from app.services.reports import ReportError, generate_report
+from app.services.reports import ReportError, delete_report_artifact, generate_report
 from app.services.mongo_reports import generate_mongo_report
 
 
@@ -173,6 +173,29 @@ def download(report_id: str, request: Request, session: SessionDependency) -> Fi
     report = _get_report(report_id, session)
     return _report_file_response(report, download=True)
 
+
+
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(report_id: str, request: Request, session: SessionDependency) -> Response:
+    """Permanently delete a report artifact and its share links."""
+
+    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
+    if store is not None:
+        report = store.get_document("reports", report_id)
+        if report is None:
+            raise HTTPException(404, "Report not found")
+        if isinstance(report.get("artifact_path"), str):
+            delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
+        store.delete_documents("report_shares", {"report_id": report_id})
+        store.delete_documents("reports", {"id": report_id})
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    assert session is not None
+    report = _get_report(report_id, session)
+    delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
+    session.execute(delete(ReportShare).where(ReportShare.report_id == report.id))
+    session.delete(report)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @public_router.get("/{token}")
 def open_shared_report(token: str, request: Request, session: SessionDependency) -> FileResponse:
