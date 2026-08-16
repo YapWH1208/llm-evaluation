@@ -61,9 +61,11 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 1. Generate a Fernet key and choose a strong administrator token.
 2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
-3. Build/serve the Vite frontend separately with `frontend/npm.cmd run build`, configuring `VITE_API_BASE_URL` when the API is remote. For password-protected public shares, configure `LLE_PUBLIC_WEB_URL` to the SPA origin and `VITE_PUBLIC_API_BASE_URL` to the API origin. Configure the static host to rewrite `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
+3. Run `docker compose up --build` to bring up the full stack: `postgres` (PostgreSQL 16), `api` (FastAPI backend), and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
+4. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
+5. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
-This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
+This delivery validates the Compose configuration with `docker compose config` and builds both images (`docker build -t lle-web:test ./frontend` and `docker build -t lle-api:test .`); it does not run `docker compose up`.
 
 ## Migration and backup policy
 
