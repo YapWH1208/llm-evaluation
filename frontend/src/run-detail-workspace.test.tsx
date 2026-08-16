@@ -104,4 +104,34 @@ describe("run detail workspace", () => {
     await user.click(screen.getByRole("tab", { name: "Metrics" }));
     expect(screen.getByRole("cell", { name: "5,482 tokens" })).toBeVisible();
   });
+
+  it("groups the lifecycle log by task id without dropping entries", async () => {
+    const user = userEvent.setup();
+    render(<LocaleProvider><RunDetailWorkspace
+      actions={null}
+      effectiveMetric={null}
+      evidence={<p>Evidence slot</p>}
+      logs={[
+        { timestamp: run.created_at, level: "info", event: "run.created", message: "Run created", task_id: null, sample_attempt_id: null, details: {} },
+        { timestamp: run.created_at, level: "info", event: "task.claimed", message: "Task claimed", task_id: "task-alpha-1234", sample_attempt_id: null, details: {} },
+        { timestamp: run.created_at, level: "info", event: "attempt.succeeded", message: "Attempt succeeded", task_id: "task-alpha-1234", sample_attempt_id: "attempt-1", details: { sample_id: "sample-1" } },
+        { timestamp: run.created_at, level: "info", event: "task.claimed", message: "Second task claimed", task_id: "task-beta-5678", sample_attempt_id: null, details: {} },
+      ]}
+      metrics={[]}
+      reports={<p>Reports slot</p>}
+      reviewSelectionKey={null}
+      reviews={<p>Reviews slot</p>}
+      run={run}
+      summary={summary}
+    /></LocaleProvider>);
+
+    await user.click(screen.getByRole("tab", { name: "Lifecycle" }));
+    expect(screen.getByText("Run-level events")).toBeVisible();
+    expect(screen.getByText("Task task-alp")).toBeVisible();
+    expect(screen.getByText("Task task-bet")).toBeVisible();
+    expect(screen.getByText("Run created")).toBeVisible();
+    expect(screen.getByText("Task claimed")).toBeVisible();
+    expect(screen.getByText("Attempt succeeded")).toBeVisible();
+    expect(screen.getByText("Second task claimed")).toBeVisible();
+  });
 });

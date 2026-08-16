@@ -25,7 +25,28 @@ function SummaryMetric({ detail, label, value }: { detail?: string; label: strin
   return <article className="run-detail-kpi"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</article>;
 }
 
+
+type LogGroup = { taskId: string | null; entries: RunLogEntry[] };
+
+function groupLogsByTask(entries: RunLogEntry[]): LogGroup[] {
+  const groups: LogGroup[] = [];
+  const byTask = new Map<string | null, LogGroup>();
+  for (const entry of entries) {
+    const taskId = entry.task_id ?? null;
+    const group = byTask.get(taskId);
+    if (group) {
+      group.entries.push(entry);
+    } else {
+      const next = { taskId, entries: [entry] };
+      byTask.set(taskId, next);
+      groups.push(next);
+    }
+  }
+  return groups;
+}
+
 export function RunDetailWorkspace({ actions, effectiveMetric, evidence, logs, metrics, reports, reviewSelectionKey, reviews, run, summary }: RunDetailWorkspaceProps) {
+
   const { formatCurrency, formatDate, formatNumber, formatPercent, locale } = useTranslation();
   const copy = runDetailCopy[locale];
   const [section, setSection] = useState<RunDetailSection>("overview");
@@ -104,7 +125,7 @@ export function RunDetailWorkspace({ actions, effectiveMetric, evidence, logs, m
       </div>}
 
       {section === "evidence" && <div className="run-detail-slot">{evidence}</div>}
-      {section === "lifecycle" && <section aria-labelledby="run-detail-lifecycle" className="run-detail-section"><div className="run-detail-section-heading"><div><p className="eyebrow">{copy.lifecycle}</p><h3 id="run-detail-lifecycle">{copy.lifecycleTitle}</h3></div><span>{copy.lifecycleHint}</span></div>{logs.length === 0 ? <p className="empty">{copy.noLogs}</p> : <ol className="run-detail-log">{logs.slice(-50).reverse().map((entry, index) => <li key={`${entry.event}-${entry.timestamp}-${index}`}><div><strong data-i18n-preserve>{entry.level.toUpperCase()} · {entry.event}</strong><time>{formatDate(entry.timestamp)}</time></div><p data-i18n-preserve>{entry.message}</p><small>{copy.task} <span data-i18n-preserve>{entry.task_id?.slice(0, 8) ?? copy.notAvailable}</span> · {copy.sample} <span data-i18n-preserve>{entry.details.sample_id ? String(entry.details.sample_id) : copy.notAvailable}</span></small></li>)}</ol>}</section>}
+      {section === "lifecycle" && <section aria-labelledby="run-detail-lifecycle" className="run-detail-section"><div className="run-detail-section-heading"><div><p className="eyebrow">{copy.lifecycle}</p><h3 id="run-detail-lifecycle">{copy.lifecycleTitle}</h3></div><span>{copy.lifecycleHint}</span></div>{logs.length === 0 ? <p className="empty">{copy.noLogs}</p> : groupLogsByTask(logs.slice(-50).reverse()).map((group) => <section className="run-detail-log-group" key={group.taskId ?? "run"}><h4>{group.taskId ? `${copy.taskGroup} ${group.taskId.slice(0, 8)}` : copy.runGroup}</h4><ol className="run-detail-log">{group.entries.map((entry, index) => <li key={`${entry.event}-${entry.timestamp}-${index}`}><div><strong data-i18n-preserve>{entry.level.toUpperCase()} · {entry.event}</strong><time>{formatDate(entry.timestamp)}</time></div><p data-i18n-preserve>{entry.message}</p><small>{copy.task} <span data-i18n-preserve>{entry.task_id?.slice(0, 8) ?? copy.notAvailable}</span> · {copy.sample} <span data-i18n-preserve>{entry.details.sample_id ? String(entry.details.sample_id) : copy.notAvailable}</span></small></li>)}</ol></section>)}</section>}
       {section === "reports" && <div className="run-detail-slot">{reports}</div>}
       {section === "reviews" && <div className="run-detail-slot">{reviews}</div>}
     </div>
