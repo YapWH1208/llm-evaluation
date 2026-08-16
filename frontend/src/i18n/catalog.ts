@@ -20,9 +20,6 @@ const en = {
   "common.notRecorded": "Not recorded",
   "common.unavailable": "Unavailable",
   "common.unknown": "Unknown",
-  "accessRequired.title": "Workspace access required",
-  "accessRequired.description": "Enter a valid bearer token to load this protected workspace.",
-  "accessRequired.action": "Enter access token",
   "locale.label": "Workspace language",
   "locale.unsupported": "Unsupported locale",
   "provider.missing": "Translation provider is unavailable.",
@@ -149,9 +146,6 @@ const zhCN: TranslationCatalog = {
   "common.notRecorded": "未记录",
   "common.unavailable": "不可用",
   "common.unknown": "未知",
-  "accessRequired.title": "需要工作区访问权限",
-  "accessRequired.description": "请输入有效的持有者令牌以加载此受保护的工作区。",
-  "accessRequired.action": "输入访问令牌",
   "locale.label": "工作区语言",
   "locale.unsupported": "不支持的语言区域",
   "provider.missing": "翻译提供程序不可用。",
@@ -275,9 +269,6 @@ const fr: TranslationCatalog = {
   "common.notRecorded": "Non enregistré",
   "common.unavailable": "Indisponible",
   "common.unknown": "Inconnu",
-  "accessRequired.title": "Accès à l’espace de travail requis",
-  "accessRequired.description": "Saisissez un jeton valide pour charger cet espace de travail protégé.",
-  "accessRequired.action": "Saisir le jeton d’accès",
   "locale.label": "Langue de l’espace de travail",
   "locale.unsupported": "Langue non prise en charge",
   "provider.missing": "Le fournisseur de traductions est indisponible.",
@@ -401,9 +392,6 @@ const de: TranslationCatalog = {
   "common.notRecorded": "Nicht erfasst",
   "common.unavailable": "Nicht verfügbar",
   "common.unknown": "Unbekannt",
-  "accessRequired.title": "Arbeitsbereichszugriff erforderlich",
-  "accessRequired.description": "Geben Sie ein gültiges Bearer-Token ein, um diesen geschützten Arbeitsbereich zu laden.",
-  "accessRequired.action": "Zugriffstoken eingeben",
   "locale.label": "Arbeitsbereichssprache",
   "locale.unsupported": "Nicht unterstützte Sprache",
   "provider.missing": "Der Übersetzungsanbieter ist nicht verfügbar.",
@@ -527,9 +515,6 @@ const ru: TranslationCatalog = {
   "common.notRecorded": "Не записано",
   "common.unavailable": "Недоступно",
   "common.unknown": "Неизвестно",
-  "accessRequired.title": "Требуется доступ к рабочему пространству",
-  "accessRequired.description": "Введите действительный токен, чтобы загрузить защищённое рабочее пространство.",
-  "accessRequired.action": "Ввести токен доступа",
   "locale.label": "Язык рабочего пространства",
   "locale.unsupported": "Неподдерживаемая локаль",
   "provider.missing": "Поставщик переводов недоступен.",
@@ -653,9 +638,6 @@ const ja: TranslationCatalog = {
   "common.notRecorded": "記録なし",
   "common.unavailable": "利用不可",
   "common.unknown": "不明",
-  "accessRequired.title": "ワークスペースへのアクセスが必要です",
-  "accessRequired.description": "この保護されたワークスペースを読み込むには、有効なトークンを入力してください。",
-  "accessRequired.action": "アクセストークンを入力",
   "locale.label": "ワークスペースの言語",
   "locale.unsupported": "サポートされていないロケール",
   "provider.missing": "翻訳プロバイダーを利用できません。",
@@ -779,9 +761,6 @@ const ko: TranslationCatalog = {
   "common.notRecorded": "기록되지 않음",
   "common.unavailable": "사용할 수 없음",
   "common.unknown": "알 수 없음",
-  "accessRequired.title": "작업 공간 액세스 필요",
-  "accessRequired.description": "보호된 작업 공간을 불러오려면 유효한 토큰을 입력하세요.",
-  "accessRequired.action": "액세스 토큰 입력",
   "locale.label": "작업 공간 언어",
   "locale.unsupported": "지원하지 않는 로캘",
   "provider.missing": "번역 공급자를 사용할 수 없습니다.",
@@ -905,9 +884,6 @@ const ms: TranslationCatalog = {
   "common.notRecorded": "Tidak direkodkan",
   "common.unavailable": "Tidak tersedia",
   "common.unknown": "Tidak diketahui",
-  "accessRequired.title": "Akses ruang kerja diperlukan",
-  "accessRequired.description": "Masukkan token pembawa yang sah untuk memuatkan ruang kerja terlindung ini.",
-  "accessRequired.action": "Masukkan token akses",
   "locale.label": "Bahasa ruang kerja",
   "locale.unsupported": "Bahasa tidak disokong",
   "provider.missing": "Penyedia terjemahan tidak tersedia.",
@@ -1085,7 +1061,7 @@ export type WorkspacePageTabCopy = {
   prompts: { promptInventory: string };
   runs: { runInventory: string; quickStart: string; datasetEvaluation: string; runDetails: string };
   analysis: { evidenceMatrix: string; compareRuns: string };
-  settings: { health: string; access: string; preferences: string };
+  settings: { health: string; preferences: string };
 };
 
 export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
@@ -1097,7 +1073,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "Prompt packages" },
     runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
     analysis: { evidenceMatrix: "Evidence matrix", compareRuns: "Compare runs" },
-    settings: { health: "Health", access: "Access", preferences: "Preferences" },
+    settings: { health: "Health", preferences: "Preferences" },
   },
   "zh-CN": {
     dashboard: { summary: "摘要", evaluations: "评测", readiness: "就绪情况" },
@@ -1107,7 +1083,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "提示词包" },
     runs: { runInventory: "运行清单", quickStart: "快速开始", datasetEvaluation: "数据集评测", runDetails: "运行详情" },
     analysis: { evidenceMatrix: "证据矩阵", compareRuns: "比较运行" },
-    settings: { health: "健康状态", access: "访问", preferences: "偏好设置" },
+    settings: { health: "健康状态", preferences: "偏好设置" },
   },
   fr: {
     dashboard: { summary: "Résumé", evaluations: "Évaluations", readiness: "Préparation" },
@@ -1117,7 +1093,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "Packages de prompts" },
     runs: { runInventory: "Inventaire des exécutions", quickStart: "Démarrage rapide", datasetEvaluation: "Évaluation du jeu de données", runDetails: "Détails de l’exécution" },
     analysis: { evidenceMatrix: "Matrice de preuves", compareRuns: "Comparer les exécutions" },
-    settings: { health: "Santé", access: "Accès", preferences: "Préférences" },
+    settings: { health: "Santé", preferences: "Préférences" },
   },
   de: {
     dashboard: { summary: "Zusammenfassung", evaluations: "Evaluierungen", readiness: "Bereitschaft" },
@@ -1127,7 +1103,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "Prompt-Pakete" },
     runs: { runInventory: "Ausführungsübersicht", quickStart: "Schnellstart", datasetEvaluation: "Datensatz-Evaluierung", runDetails: "Ausführungsdetails" },
     analysis: { evidenceMatrix: "Evidenzmatrix", compareRuns: "Ausführungen vergleichen" },
-    settings: { health: "Systemzustand", access: "Zugriff", preferences: "Einstellungen" },
+    settings: { health: "Systemzustand", preferences: "Einstellungen" },
   },
   ru: {
     dashboard: { summary: "Сводка", evaluations: "Оценки", readiness: "Готовность" },
@@ -1137,7 +1113,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "Пакеты промптов" },
     runs: { runInventory: "Инвентарь запусков", quickStart: "Быстрый запуск", datasetEvaluation: "Оценка набора данных", runDetails: "Сведения о запуске" },
     analysis: { evidenceMatrix: "Матрица доказательств", compareRuns: "Сравнить запуски" },
-    settings: { health: "Состояние", access: "Доступ", preferences: "Настройки" },
+    settings: { health: "Состояние", preferences: "Настройки" },
   },
   ja: {
     dashboard: { summary: "概要", evaluations: "評価", readiness: "準備状況" },
@@ -1147,7 +1123,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "プロンプトパッケージ" },
     runs: { runInventory: "実行一覧", quickStart: "クイックスタート", datasetEvaluation: "データセット評価", runDetails: "実行の詳細" },
     analysis: { evidenceMatrix: "証拠マトリクス", compareRuns: "実行を比較" },
-    settings: { health: "正常性", access: "アクセス", preferences: "設定" },
+    settings: { health: "正常性", preferences: "設定" },
   },
   ko: {
     dashboard: { summary: "요약", evaluations: "평가", readiness: "준비 상태" },
@@ -1157,7 +1133,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "프롬프트 패키지" },
     runs: { runInventory: "실행 인벤토리", quickStart: "빠른 시작", datasetEvaluation: "데이터 세트 평가", runDetails: "실행 세부 정보" },
     analysis: { evidenceMatrix: "증거 매트릭스", compareRuns: "실행 비교" },
-    settings: { health: "상태", access: "액세스", preferences: "기본 설정" },
+    settings: { health: "상태", preferences: "기본 설정" },
   },
   ms: {
     dashboard: { summary: "Ringkasan", evaluations: "Penilaian", readiness: "Kesediaan" },
@@ -1167,7 +1143,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
     prompts: { promptInventory: "Pakej gesaan" },
     runs: { runInventory: "Inventori larian", quickStart: "Mula pantas", datasetEvaluation: "Penilaian set data", runDetails: "Butiran larian" },
     analysis: { evidenceMatrix: "Matriks bukti", compareRuns: "Bandingkan larian" },
-    settings: { health: "Kesihatan", access: "Akses", preferences: "Keutamaan" },
+    settings: { health: "Kesihatan", preferences: "Keutamaan" },
   },
 };
 

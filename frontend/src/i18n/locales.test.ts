@@ -55,7 +55,7 @@ describe("workspace locale catalog", () => {
       prompts: ["promptInventory"],
       runs: ["runInventory", "quickStart", "datasetEvaluation", "runDetails"],
       analysis: ["evidenceMatrix", "compareRuns"],
-      settings: ["health", "access", "preferences"],
+      settings: ["health", "preferences"],
     };
 
     expect(tabCopy?.en).toEqual(expect.objectContaining({

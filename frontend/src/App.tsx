@@ -167,7 +167,6 @@ export default function App() {
   const [route, setRoute] = useState(() => workspaceRoute(window.location.pathname, window.location.search));
   const view: View = route.view;
   const [theme, setTheme] = useState<Theme>(() => window.localStorage.getItem("lle-theme") === "light" ? "light" : "dark");
-  const [apiToken, setApiToken] = useState(() => window.sessionStorage.getItem("lle-api-token") ?? "");
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [runs, setRuns] = useState<EvaluationRun[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -216,7 +215,6 @@ export default function App() {
   const [runConcurrencyEdits, setRunConcurrencyEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [accessRequired, setAccessRequired] = useState(false);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
     const href = workspacePath(nextView, options.tab, { runId: options.runId });
@@ -250,7 +248,6 @@ export default function App() {
     setTasks(nextTasks);
     setAnalytics(nextAnalytics);
     setSystemHealth(nextSystemHealth);
-    setAccessRequired(false);
   }, []);
 
   useEffect(() => { void refresh().catch(showError); }, [refresh]);
@@ -325,11 +322,6 @@ export default function App() {
   }
 
   function showError(error: unknown) {
-    if (error instanceof ApiError && error.status === 401) {
-      setAccessRequired(true);
-      setNotice(null);
-      return;
-    }
     if (error instanceof Error) {
       setNotice(error.message);
       return;
@@ -843,7 +835,6 @@ export default function App() {
 
   return (
     <AppShell
-      accessRequired={accessRequired}
       completedRunCount={dashboard?.runs.completed ?? 0}
       locale={locale}
       notice={notice}
@@ -852,7 +843,6 @@ export default function App() {
       view={view}
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={setLocale}
-      onOpenAccess={() => navigate("settings", { tab: "access" })}
       onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       onViewChange={navigate}
     >
@@ -936,7 +926,7 @@ export default function App() {
 
       {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={api.analyticsScatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
       {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={api.leaderboard} onInspectRun={inspectRun} />}
-      {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} apiToken={apiToken} locale={locale} onApiTokenChange={setApiToken} onClearToken={() => { setApiToken(""); api.setBearerToken(""); void refresh().catch(showError); }} onLocaleChange={setLocale} onSaveToken={() => { api.setBearerToken(apiToken); void refresh().catch(showError); }} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
+      {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} locale={locale} onLocaleChange={setLocale} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
   );

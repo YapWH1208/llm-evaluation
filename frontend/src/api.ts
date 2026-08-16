@@ -343,7 +343,6 @@ export type SystemHealth = { status: string; database: string; schema_version: n
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const publicApiBase = import.meta.env.VITE_PUBLIC_API_BASE_URL ?? apiBase.replace(/\/api\/v1$/, "");
-let bearerToken = window.sessionStorage.getItem("lle-api-token") ?? "";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -353,7 +352,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: { "Content-Type": "application/json", ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}), ...init?.headers },
+    headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });
   if (!response.ok) {
@@ -366,17 +365,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestObjectUrl(path: string): Promise<string> {
-  const response = await fetch(`${apiBase}${path}`, {
-    headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : undefined,
-  });
+  const response = await fetch(`${apiBase}${path}`);
   if (!response.ok) throw new ApiError("Media preview is unavailable.", response.status);
   return URL.createObjectURL(await response.blob());
 }
 
 async function downloadObjectUrl(path: string): Promise<string> {
-  const response = await fetch(apiBase + path, {
-    headers: bearerToken ? { Authorization: "Bearer " + bearerToken } : undefined,
-  });
+  const response = await fetch(apiBase + path);
   if (!response.ok) throw new ApiError("Download is unavailable.", response.status);
   return URL.createObjectURL(await response.blob());
 }
@@ -392,7 +387,7 @@ async function openSharedReportObjectUrl(token: string, password: string): Promi
 function subscribeToEvents(path: string, eventName: string, onEvent: () => void): () => void {
   const controller = new AbortController();
   void fetch(apiBase + path, {
-    headers: { Accept: "text/event-stream", ...(bearerToken ? { Authorization: "Bearer " + bearerToken } : {}) },
+    headers: { Accept: "text/event-stream" },
     signal: controller.signal,
   }).then(async (response) => {
     if (!response.ok || !response.body) throw new ApiError("Event stream is unavailable.", response.status);
@@ -420,7 +415,6 @@ async function systemRequest<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  setBearerToken: (token: string) => { bearerToken = token.trim(); if (bearerToken) window.sessionStorage.setItem("lle-api-token", bearerToken); else window.sessionStorage.removeItem("lle-api-token"); },
   listEndpoints: () => request<Endpoint[]>("/model-endpoints"),
   createEndpoint: (body: Record<string, unknown>) => request<Endpoint>("/model-endpoints", { method: "POST", body: JSON.stringify(body) }),
   updateEndpoint: (endpointId: string, body: Record<string, unknown>) => request<Endpoint>(`/model-endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(body) }),
