@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, HumanReview, JudgeAssessment, Report, SampleAttempt
+from app.services.aggregation import list_aggregate_metrics
+from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
 from app.services.run_analysis import all_attempts, build_run_summary, latest_attempts
 
 
@@ -55,7 +57,7 @@ def generate_report(
         report_type=report_type,
         format=format,
         artifact_path="",
-        generator_version="1.3.0",
+        generator_version="1.4.0",
     )
     session.add(report)
     session.flush()
@@ -171,6 +173,7 @@ def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any
         "configuration_snapshot": run.configuration_snapshot,
         "summary": build_run_summary(session, run),
         "attempts": attempts,
+        "metrics": [_serialize_metric(metric) for metric in list_aggregate_metrics(session, run.id)],
     }
 
 
@@ -202,6 +205,43 @@ def _serialize_attempt(
         "judge_assessments": judge_assessments,
         "created_at": attempt.created_at.isoformat() if attempt.created_at else None,
         "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
+    }
+
+
+def _serialize_metric(row: Any) -> dict[str, Any]:
+    """Serialize an AggregateMetric row (ORM or Mongo document) with its profile enrichment."""
+
+    get = (lambda key: row[key]) if isinstance(row, dict) else (lambda key: getattr(row, key))
+    try:
+        definition = metric_definition(get("metric_name"))
+    except ValueError:
+        metric_label = get("metric_name").replace("_", " ").title()
+        unit = "value"
+        profile = "custom"
+        required_evidence: list[str] = []
+    else:
+        metric_label = definition.label
+        unit = definition.unit
+        profile = definition.profile
+        required_evidence = list(definition.required_evidence)
+    created_at = get("created_at")
+    return {
+        "id": get("id"),
+        "run_id": get("run_id"),
+        "benchmark_id": get("benchmark_id"),
+        "model_endpoint_id": get("model_endpoint_id"),
+        "metric_name": get("metric_name"),
+        "metric_value": get("metric_value"),
+        "availability_reason": get("availability_reason"),
+        "sample_count": get("sample_count"),
+        "confidence_interval": get("confidence_interval"),
+        "aggregation_version": get("aggregation_version"),
+        "profile_version": METRIC_PROFILE_VERSION,
+        "created_at": created_at.isoformat() if created_at else None,
+        "metric_label": metric_label,
+        "unit": unit,
+        "profile": profile,
+        "required_evidence": required_evidence,
     }
 
 
@@ -282,11 +322,35 @@ def _markdown_report(payload: dict[str, Any]) -> str:
         f"| Input / output tokens | {tokens['input']} / {tokens['output']} |",
         f"| Estimated cost | {_display(cost['estimated'])} {currency} |",
         "",
-        "## Sample evidence",
-        "",
-        "| Sample | Attempt | Current | Status | Score | Latency (ms) | Tokens in/out | Estimated cost | Error |",
-        "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | --- |",
     ]
+    if payload.get("metrics"):
+        rows.extend(
+            [
+                "",
+                "## Metrics",
+                "",
+                "| Metric | Value | Samples | Availability |",
+                "| --- | --- | ---: | --- |",
+            ]
+            + [
+                "| {label} | {value} | {samples} | {availability} |".format(
+                    label=_markdown_cell(metric["metric_label"]),
+                    value=_markdown_cell(_display(metric["metric_value"])),
+                    samples=metric["sample_count"],
+                    availability=_markdown_cell(metric["availability_reason"] if metric["metric_value"] is None else "—"),
+                )
+                for metric in payload["metrics"]
+            ]
+        )
+    rows.extend(
+        [
+            "",
+            "## Sample evidence",
+            "",
+            "| Sample | Attempt | Current | Status | Score | Latency (ms) | Tokens in/out | Estimated cost | Error |",
+            "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | --- |",
+        ]
+    )
     for attempt in payload["attempts"]:
         rows.append(
             "| {sample_id} | {attempt} | {latest} | {status} | {score} | {latency} | {input_tokens}/{output_tokens} | {cost} | {error} |".format(
@@ -344,10 +408,32 @@ def _html_report(payload: dict[str, Any]) -> str:
 <div class=\"metric\"><strong>Tokens in / out</strong><br>{tokens['input']} / {tokens['output']}</div>
 <div class=\"metric\"><strong>Estimated cost</strong><br>{_display(cost['estimated'])} {html.escape(cost['currency'] or '')}</div>
 </div>
+{_metrics_html(payload)}
 <h2>Sample evidence</h2>
 <table><thead><tr><th>Sample</th><th>Attempt</th><th>Current</th><th>Status</th><th>Score</th><th>Latency (ms)</th><th>Tokens</th><th>Estimated cost</th><th>Error</th></tr></thead><tbody>{table_rows}</tbody></table>
 {_related_runs_html(payload)}
 </body></html>"""
+
+
+
+def _metrics_html(payload: dict[str, Any]) -> str:
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, list) or not metrics:
+        return ""
+    rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(metric['metric_label']))}</td>"
+        f"<td>{html.escape(_display(metric['metric_value']))}</td>"
+        f"<td>{metric['sample_count']}</td>"
+        f"<td>{html.escape(str(metric['availability_reason'] if metric['metric_value'] is None else ''))}</td>"
+        "</tr>"
+        for metric in metrics
+    )
+    return (
+        "<h2>Metrics</h2>"
+        "<table><thead><tr><th>Metric</th><th>Value</th><th>Samples</th><th>Availability</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
 
 
 def _report_title(payload: dict[str, Any]) -> str:
