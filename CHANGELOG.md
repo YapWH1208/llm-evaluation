@@ -8,6 +8,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Pushing a `v*` git tag now runs the `Docker release` workflow, which
+  validates the full test suite and publishes the API and web images to GitHub
+  Container Registry (`ghcr.io/yapwh1208/llm-evaluation-api` and
+  `...-web`), tagged with the release version and `latest`.
 - The Configure navigation now includes a `/prompts` page that lists existing
   versioned prompt packages and creates new versions through the existing API.
 - Prompt packages now use a Dataset-style tabbed workspace with a selectable

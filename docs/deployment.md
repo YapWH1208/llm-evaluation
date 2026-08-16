@@ -65,6 +65,24 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 This delivery validates the Compose configuration statically and does not run Docker or Docker Compose.
 
+## Container image releases
+
+Tagging the repository with a `v*` tag (for example `v0.3.0`) triggers the
+`Docker release` workflow (`.github/workflows/docker-release.yml`): it first
+runs the backend and frontend test suites and, only when they pass, builds and
+publishes two images to GitHub Container Registry:
+
+- `ghcr.io/yapwh1208/llm-evaluation-api` — the FastAPI backend.
+- `ghcr.io/yapwh1208/llm-evaluation-web` — the nginx-served SPA, built with
+  `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` baked in; rebuild with the
+  `VITE_API_BASE_URL` build arg for a remote API origin.
+
+Each image is tagged with the release version (for example `0.3.0`) and
+`latest`. To consume a release in Compose, replace a service's `build:`
+block with its published image, for example
+`image: ghcr.io/yapwh1208/llm-evaluation-api:0.3.0`. Packages inherit the
+repository visibility; on a private repository, pull with a GitHub token.
+
 ## Migration and backup policy
 
 `auto_migrate` is the default startup mode. Production services can set `LLE_DATABASE_INIT_MODE=validate` and perform migrations through CI or the CLI. SQLite backups can be enabled with `LLE_DATABASE_BACKUP_BEFORE_MIGRATE=true`; the backup uses SQLite's online backup API and writes to `<data-root>/backups`.
