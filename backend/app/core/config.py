@@ -31,8 +31,6 @@ class Settings:
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     data_root: str = "./data"
     public_web_url: str | None = None
-    admin_token: str | None = None
-    allow_insecure_local_auth: bool = False
     database_init_mode: str = "auto_migrate"
     database_backup_before_migrate: bool = False
     mongodb_database: str | None = None
@@ -54,8 +52,6 @@ class Settings:
             cors_origins=tuple(configured_origins.split(",")) if configured_origins else DEFAULT_CORS_ORIGINS,
             data_root=getenv("LLE_DATA_ROOT", "./data"),
             public_web_url=_optional_public_web_url(getenv("LLE_PUBLIC_WEB_URL")),
-            admin_token=getenv("LLE_ADMIN_TOKEN"),
-            allow_insecure_local_auth=_environment_bool("LLE_ALLOW_INSECURE_LOCAL_AUTH"),
             database_init_mode=getenv("LLE_DATABASE_INIT_MODE", "auto_migrate"),
             database_backup_before_migrate=getenv("LLE_DATABASE_BACKUP_BEFORE_MIGRATE", "false").lower() in {"1", "true", "yes"},
             mongodb_database=getenv("LLE_MONGODB_DATABASE"),
@@ -73,16 +69,9 @@ class Settings:
 
     @classmethod
     def local_development(cls, **kwargs: object) -> "Settings":
-        """Create an explicitly unauthenticated configuration for local tools and tests."""
+        """Create a configuration for local tools and tests."""
 
-        return cls(allow_insecure_local_auth=True, **kwargs)
-
-    def validate_authentication(self) -> None:
-        if self.admin_token or self.allow_insecure_local_auth:
-            return
-        raise ValueError(
-            "LLE_ADMIN_TOKEN is required unless LLE_ALLOW_INSECURE_LOCAL_AUTH=true is explicitly set for local development."
-        )
+        return cls(**kwargs)
 
     @property
     def is_sqlite(self) -> bool:

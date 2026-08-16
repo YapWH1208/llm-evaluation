@@ -212,6 +212,14 @@ def _upgrade_v26_judge_usage_and_cost(connection: Connection) -> None:
     _add_column_if_missing(connection, "judge_assessments", "estimated_cost", "estimated_cost FLOAT")
 
 
+def _upgrade_v27_remove_user_authentication_tables(connection: Connection) -> None:
+    """Drop the user-authentication tables removed with the user system."""
+
+    for table_name in ("audit_events", "users"):
+        if table_name in set(inspect(connection).get_table_names()):
+            connection.execute(text(f"DROP TABLE {table_name}"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -362,6 +370,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260812_add_judge_usage_and_cost",
         description="Add provider token usage and estimated cost evidence to judge assessments.",
         upgrade=_upgrade_v26_judge_usage_and_cost,
+    ),
+    Migration(
+        version=27,
+        migration_id="20260816_remove_user_authentication_tables",
+        description="Drop the users and audit_events tables removed with the user system.",
+        upgrade=_upgrade_v27_remove_user_authentication_tables,
     ),
 )
 

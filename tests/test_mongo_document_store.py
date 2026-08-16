@@ -188,7 +188,8 @@ def test_mongo_store_initializes_all_collections_indexes_and_versions() -> None:
     assert client.admin.commands == ["ping"]
     assert len(client["platform"]["schema_migrations"].documents) == len(MIGRATIONS)
     assert len(client["platform"]["task_units"].indexes) == 1
-    assert len(client["platform"]["users"].indexes) == 2
+    assert "users" not in client["platform"].list_collection_names()
+    assert "audit_events" not in client["platform"].list_collection_names()
 
 
 def test_mongo_store_backfills_missing_legacy_migration_ledger_before_upgrading() -> None:
@@ -745,10 +746,6 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         document_store=MongoDocumentStore(settings, client=client),
     )
     with TestClient(app) as api:
-        user = api.post("/api/v1/users", json={"email": "reviewer@example.test", "display_name": "Reviewer"})
-        assert user.status_code == 201
-        assert api.get("/api/v1/users").json()[0]["email"] == "reviewer@example.test"
-
         endpoint_ids: list[str] = []
         for model_name in ("target", "target-b", "judge"):
             endpoint = api.post(
@@ -799,7 +796,6 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         assert secondary_review.status_code == 201
         agreement = api.get(f"/api/v1/reviews/sample/{attempt['id']}/agreement")
         assert agreement.json()["status"] == "needs_adjudication"
-        assert api.get("/api/v1/audit-events").status_code == 200
 
 
 def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:

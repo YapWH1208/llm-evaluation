@@ -17,7 +17,6 @@ from app.db.models import (
     TaskStatus,
     TaskType,
     TaskUnit,
-    User,
 )
 
 
@@ -270,17 +269,6 @@ def _has_execution_capacity(
         ) or 0
         if run_active >= run.max_concurrency:
             return False
-    if run.created_by:
-        user = session.get(User, run.created_by)
-        if user is not None and user.max_concurrency is not None:
-            user_active = session.scalar(
-                select(func.count())
-                .select_from(TaskUnit)
-                .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
-                .where(TaskUnit.status.in_(active_statuses), EvaluationRun.created_by == run.created_by)
-            ) or 0
-            if user_active >= user.max_concurrency:
-                return False
     if endpoint.api_key_max_concurrency is not None and endpoint.api_key_fingerprint:
         credential_active = session.scalar(
             select(func.count())

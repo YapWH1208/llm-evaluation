@@ -48,7 +48,6 @@ class MongoValidation:
 _COLLECTIONS = (
     "schema_versions",
     "schema_migrations",
-    "users",
     "model_endpoints",
     "model_capabilities",
     "endpoint_rate_windows",
@@ -68,17 +67,12 @@ _COLLECTIONS = (
     "report_share_password_attempts",
     "human_reviews",
     "judge_assessments",
-    "audit_events",
 )
 
 
 # Collection references mirror the relational model while preserving JSON-like
 # configuration and evidence fields as document subtrees.
 _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
-    "users": (
-        ([("email", 1)], {"unique": True}),
-        ([("api_token_hash", 1)], {"unique": True, "sparse": True}),
-    ),
     "model_capabilities": (
         ((("model_endpoint_id", 1), ("capability_key", 1)), {"unique": True}),
     ),
@@ -128,7 +122,6 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
 _VALIDATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "schema_versions": ("version", "applied_at"),
     "schema_migrations": ("version", "migration_id", "description", "applied_at"),
-    "users": ("id", "email", "role", "status", "created_at"),
     "model_endpoints": ("id", "base_url", "model_name", "status", "created_at"),
     "model_capabilities": ("id", "model_endpoint_id", "capability_key"),
     "endpoint_rate_windows": ("id", "model_endpoint_id", "window_started_at"),
@@ -394,13 +387,6 @@ class MongoDocumentStore:
         if run_limit is not None and sum(task.get("run_id") == run["id"] for task in active) >= run_limit:
             return False
         active_runs = [self.get_document("evaluation_runs", str(active_task["run_id"])) for active_task in active]
-        created_by = run.get("created_by")
-        if created_by:
-            user = self.get_document("users", str(created_by))
-            user_limit = _positive_limit(user.get("max_concurrency")) if user else None
-            if user_limit is not None:
-                if sum(item is not None and item.get("created_by") == created_by for item in active_runs) >= user_limit:
-                    return False
         fingerprint = endpoint.get("api_key_fingerprint")
         credential_limit = _positive_limit(endpoint.get("api_key_max_concurrency"))
         if fingerprint and credential_limit is not None:
