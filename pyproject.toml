@@ -24,9 +24,6 @@ dependencies = [
 dev = [
   "pytest>=8.0,<9.0",
 ]
-postgresql = [
-  "psycopg[binary]>=3.2,<4.0",
-]
 mongodb = [
   "pymongo>=4.6,<5.0",
 ]
