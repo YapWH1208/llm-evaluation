@@ -8,19 +8,17 @@ Set `LLE_SECRET_ENCRYPTION_KEY` before adding an endpoint. Use a stable Fernet k
 
 Set `LLE_ADMIN_TOKEN` before serving shared or remote traffic. The API refuses to start without it unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly set for local development. The local launcher sets that opt-in only when no administrator token is supplied and binds both services to `127.0.0.1`.
 
-## PostgreSQL team mode
+## Team mode
 
-Install the PostgreSQL dependency extra, set `LLE_DATABASE_URL` to a `postgresql+psycopg://` URL, and run the database CLI before serving traffic:
+Run the database CLI before serving traffic:
 
 ```powershell
-python -m pip install -e ".[postgresql]"
-$env:LLE_DATABASE_URL = "postgresql+psycopg://lle:password@db.example/lle"
 python -m app.cli database preview
 python -m app.cli database initialize
 python -m app.cli database validate
 ```
 
-The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with PostgreSQL or another shared durable deployment; SQLite is intentionally optimized for local/lightweight use.
+The task lease protocol uses conditional state updates, lease tokens, and monotonically increasing lease versions. Admission serializes relational capacity/rate reservations before a task is leased, so a failed claim cannot consume budget and a reclaimed worker cannot extend its old lease. Run multiple worker processes only with MongoDB; SQLite is intentionally optimized for local/lightweight single-process use.
 
 Optional admission ceilings can be set before starting the API: `LLE_SYSTEM_MAX_CONCURRENCY` limits all active leases, and `LLE_WORKER_MAX_CONCURRENCY` limits leases held by one worker ID. Each queued run may set its own ceiling; administrators can set a user ceiling; each endpoint can set an endpoint ceiling and a shared API-key ceiling; and a benchmark manifest may set `max_concurrency`. The scheduler admits work only when every configured ceiling has capacity.
 
@@ -60,12 +58,12 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 ## Docker Compose
 
 1. Generate a Fernet key and choose a strong administrator token.
-2. Set `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`, and `LLE_POSTGRES_PASSWORD` in the deployment environment before use; Compose intentionally fails when any is missing and publishes the API only on loopback by default.
-3. Run `docker compose up --build` to bring up the full stack: `postgres` (PostgreSQL 16), `api` (FastAPI backend), and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
+2. Set `LLE_SECRET_ENCRYPTION_KEY` and `LLE_ADMIN_TOKEN` in the deployment environment before use; Compose intentionally fails when either is missing and publishes the API only on loopback by default.
+3. Run `docker compose up --build` to bring up the stack: `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
 4. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 5. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
-This delivery validates the Compose configuration with `docker compose config`, builds both images (`docker build ./frontend` and `docker build .`), and smoke-tests the full stack (PostgreSQL + API + nginx web) from the built images, including SPA deep-link rewrites.
+This delivery validates the Compose configuration with `docker compose config`, builds both images (`docker build ./frontend` and `docker build .`), and smoke-tests the full stack (API with SQLite + nginx web) from the built images, including SPA deep-link rewrites.
 
 ## Container image releases
 
@@ -106,7 +104,7 @@ Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include th
 
 ## Worker rollout and verification
 
-Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use PostgreSQL or MongoDB; keep SQLite to a single controlled API/worker process.
+Deploy the lease-aware API before increasing worker count. Confirm a worker can claim, heartbeat, complete, and reclaim a test task after the deployment, then monitor the bounded worker event stream and queue counters. For remote/multi-worker use MongoDB; keep SQLite to a single controlled API/worker process.
 
 Run the following non-Docker checks before publishing a deployment artifact:
 

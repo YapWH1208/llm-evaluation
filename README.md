@@ -41,7 +41,7 @@ continue to use `/shared-reports/<token>`. The API is available at
 
 ## Database operations
 
-SQLite and PostgreSQL share the SQLAlchemy schema, forward-only migrations, queue semantics, and database initialization controls.
+SQLite owns the relational schema, forward-only migrations, queue semantics, and database initialization controls; MongoDB is the optional document store for the same contracts.
 
 ```powershell
 # Show pending migrations without changing a database
@@ -62,13 +62,10 @@ A step-by-step guide from dataset registration through scored evaluation runs
 (including Hugging Face `hf://` sources) lives in
 [docs/evaluation-workflow.md](docs/evaluation-workflow.md).
 
-## PostgreSQL team deployment
+## Docker Compose deployment
 
 ```powershell
-python -m pip install -e ".[dev,postgresql]"
-$env:LLE_DATABASE_URL = "postgresql+psycopg://lle:change-me@127.0.0.1:5432/lle"
-$env:LLE_SECRET_ENCRYPTION_KEY = "your-Fernet-key"
-uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+docker compose up --build
 ```
 
 See [deployment.md](docs/deployment.md) for Docker Compose, environment variables, backups, and production checks.

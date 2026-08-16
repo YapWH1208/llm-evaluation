@@ -19,7 +19,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   removes both the artifact file and its share links.
 - The web frontend is now containerized: a multi-stage Node/nginx image serves
   the built SPA (including SPA deep-link rewrites) from a "web" service in
-  Docker Compose alongside the API and PostgreSQL.
+  Docker Compose alongside the API (SQLite).
 - The Configure navigation now includes a `/prompts` page that lists existing
   versioned prompt packages and creates new versions through the existing API.
 - Prompt packages now use a Dataset-style tabbed workspace with a selectable
@@ -56,6 +56,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- PostgreSQL support has been removed (`BREAKING`). The platform is now
+  SQLite-only on the relational side with the optional MongoDB document store;
+  the Docker Compose stack runs the API on SQLite (under the mounted `./data`
+  volume) with no Postgres service, the `postgresql` dependency extra and
+  psycopg driver are gone, and `postgresql+psycopg://` database URLs are no
+  longer recognized. `docker compose up --build` no longer requires
+  `LLE_POSTGRES_PASSWORD`.
 - Run-details evidence now renders as a compact, aligned list with expandable
   per-sample details instead of wrapped summary chips.
 - The run lifecycle log is grouped by task id (with run-level entries under

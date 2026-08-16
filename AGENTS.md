@@ -1,6 +1,6 @@
 # Project guidance
 
-LLM/SLM evaluation platform: FastAPI backend (`backend/`, Python ≥3.12, SQLite-first with PostgreSQL and MongoDB stores) + React 19 / Vite / TypeScript web app (`frontend/`). End-to-end flow: [docs/evaluation-workflow.md](docs/evaluation-workflow.md). Ops: [docs/deployment.md](docs/deployment.md).
+LLM/SLM evaluation platform: FastAPI backend (`backend/`, Python ≥3.12, SQLite-first with an optional MongoDB document store) + React 19 / Vite / TypeScript web app (`frontend/`). End-to-end flow: [docs/evaluation-workflow.md](docs/evaluation-workflow.md). Ops: [docs/deployment.md](docs/deployment.md).
 
 ## Skills — STOP. Load a skill before you act.
 
@@ -33,11 +33,11 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 ## Commands (repo root)
 
-- Install backend deps: `python -m pip install -e ".[dev]"` (editable install from repo root; `pythonpath=["backend"]` comes from pyproject.toml). No requirements.txt. PostgreSQL/MongoDB backends need extras: `"…[dev,postgresql]"` / `"…[dev,mongodb]"` (psycopg/pymongo are not in the base dev install).
+- Install backend deps: `python -m pip install -e ".[dev]"` (editable install from repo root; `pythonpath=["backend"]` comes from pyproject.toml). No requirements.txt. MongoDB needs the extra: `"…[dev,mongodb]"` (pymongo is not in the base dev install).
 - Backend tests: `python -m pytest -q` (config sets `pythonpath=["backend"]`, `testpaths=["tests"]`). Single file: `python -m pytest tests/test_x.py -q`.
 - Run API: `uvicorn app.main:app --app-dir backend --reload` (docs at `/docs` on port 8000).
 - DB CLI: `python -m app.cli database preview|initialize|validate` (migrations also run automatically at startup).
-- PostgreSQL team deploy: `docker-compose.yml` (Postgres 16 + API container) needs `LLE_POSTGRES_PASSWORD`, `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`; see docs/deployment.md.
+- Docker deploy: `docker compose up --build` (API with SQLite + web container) needs `LLE_SECRET_ENCRYPTION_KEY`, `LLE_ADMIN_TOKEN`; see docs/deployment.md.
 - Frontend deps/dev server: `npm ci` / `npm run dev` **inside `frontend/`** (vite, port 5173). Root `package-lock.json` is a stub — never `npm install` at repo root. Node 22 is what CI uses.
 - Frontend tests: `npm test -- --run` in `frontend/` — bare `npm test` is vitest **watch mode** (config lives in `vite.config.ts`: jsdom, `src/test-setup.ts`).
 - Frontend typecheck + build: `npm run build` (runs `tsc -b && vite build`). No lint script exists for either end.
@@ -47,14 +47,14 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 - `LLE_ADMIN_TOKEN` is required at startup unless `LLE_ALLOW_INSECURE_LOCAL_AUTH=true` (enforced in `backend/app/core/config.py`).
 - `LLE_SECRET_ENCRYPTION_KEY` — Fernet key for encrypted endpoint credentials; if unset the launchers persist one at `data/.lle-secret-key` (gitignored).
-- `LLE_DATABASE_URL` — defaults to `sqlite:///./data/llm_evaluation.db`; `postgresql+psycopg://` or `mongodb://` switch the storage kind.
+- `LLE_DATABASE_URL` — defaults to `sqlite:///./data/llm_evaluation.db`; `mongodb://` switches to the document store.
 - `LLE_DATABASE_INIT_MODE` — `auto_migrate` (default) | `preview` | `validate`.
 - Full list (concurrency ceilings, dataset host allowlists, CORS, etc.): `backend/app/core/config.py` is the single source of truth.
 
 ## Architecture
 
 - App factory `create_app()` in `backend/app/main.py`; routers in `backend/app/api/*.py`; business logic in `backend/app/services/*.py`; SQLAlchemy models in `backend/app/db/models.py`.
-- SQLite + PostgreSQL share the SQLAlchemy schema and forward-only migrations (`backend/app/db/migrations.py`). MongoDB is a separate document store (`backend/app/db/mongo.py`) with parallel service modules (`mongo_*.py`) — changes to a feature usually need both relational and Mongo paths.
+- SQLite owns the SQLAlchemy schema and forward-only migrations (`backend/app/db/migrations.py`). MongoDB is a separate document store (`backend/app/db/mongo.py`) with parallel service modules (`mongo_*.py`) — changes to a feature usually need both relational and Mongo paths.
 - Builtin benchmark plugins live in `backend/app/benchmarks/` (registry + `text_quick_check.py`).
 
 ## Testing quirks
