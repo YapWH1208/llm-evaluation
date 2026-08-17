@@ -59,14 +59,14 @@ Evaluators submit `credential_binding_id: "huggingface"`; they never submit an e
 
 1. Run `docker compose up --build` — no environment variables are required. The stack is `api` (FastAPI backend, SQLite database under the mounted `./data` volume) and `web` (nginx serving the built SPA). The API is published on `http://127.0.0.1:8000` and the SPA on `http://127.0.0.1:5173`.
 2. On first start the API container auto-provisions a Fernet key at `./data/.lle-secret-key` (mode 0600) and reuses it on later starts, so endpoint API keys stay encrypted at rest and remain decryptable across restarts. To use your own key instead, set `LLE_SECRET_ENCRYPTION_KEY` in the environment (or pass it to the container); the entrypoint honors it and skips provisioning. Never delete or change the key file after endpoints have been saved, or their stored credentials can no longer be decrypted.
-3. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/runs`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
+3. The `web` container builds the frontend with Vite, and nginx rewrites `/dashboard`, `/guide`, `/models`, `/datasets`, `/prompts`, `/runs`, `/leaderboard`, `/analysis`, `/settings`, and `/shared-reports/<token>` to `index.html` so direct loads and refreshes reach the client router. These are internal rewrites, not redirects.
 4. For a remote API deployment, rebuild the `web` image with the API base URL baked in: `docker compose build --build-arg VITE_API_BASE_URL=https://api.example/api/v1 web`. For password-protected public shares, follow the `LLE_PUBLIC_WEB_URL` / `VITE_PUBLIC_API_BASE_URL` origin guidance in the [Public report sharing](#public-report-sharing) section below.
 
 This delivery validates the Compose configuration with `docker compose config`, builds both images (`docker build ./frontend` and `docker build .`), and smoke-tests the full stack (API with SQLite + nginx web) from the built images, including SPA deep-link rewrites.
 
 ## Container image releases
 
-Tagging the repository with a `v*` tag (for example `v0.3.0`) triggers the
+Tagging the repository with a `v*` tag (for example `v0.4.4`) triggers the
 `Docker release` workflow (`.github/workflows/docker-release.yml`): it first
 runs the backend and frontend test suites and, only when they pass, builds and
 publishes two images to GitHub Container Registry:
@@ -76,10 +76,10 @@ publishes two images to GitHub Container Registry:
   `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` baked in; rebuild with the
   `VITE_API_BASE_URL` build arg for a remote API origin.
 
-Each image is tagged with the release version (for example `0.3.0`) and
+Each image is tagged with the release version (for example `0.4.4`) and
 `latest`. To consume a release in Compose, replace a service's `build:`
 block with its published image, for example
-`image: ghcr.io/yapwh1208/llm-evaluation-api:0.3.0`. Packages inherit the
+`image: ghcr.io/yapwh1208/llm-evaluation-api:0.4.4`. Packages inherit the
 repository visibility; on a private repository, pull with a GitHub token.
 
 ## Migration and backup policy
@@ -99,7 +99,7 @@ Before upgrades, run `python -m app.cli database preview`. After upgrades, run `
 
 ## Public report sharing
 
-Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Apply the same `index.html` SPA rewrite to `/shared-reports/<token>` as the seven workspace paths above, and allow `X-Report-Password` in CORS preflights.
+Set `LLE_PUBLIC_WEB_URL` to the externally served frontend origin and include that exact origin in `LLE_CORS_ORIGINS` (for example, `LLE_PUBLIC_WEB_URL=https://evaluation.example.test`, `LLE_CORS_ORIGINS=https://evaluation.example.test`). Public report links use this origin and the frontend posts the optional password only as the `X-Report-Password` request header to `VITE_PUBLIC_API_BASE_URL`; never place a password in a URL, query string, or browser storage. Apply the same `index.html` SPA rewrite to `/shared-reports/<token>` as the workspace paths above, and allow `X-Report-Password` in CORS preflights.
 
 ## Worker rollout and verification
 

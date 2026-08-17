@@ -1,6 +1,6 @@
 # Project guidance
 
-LLM/SLM evaluation platform: FastAPI backend (`backend/`, Python ≥3.12, SQLite-first with an optional MongoDB document store) + React 19 / Vite / TypeScript web app (`frontend/`). End-to-end flow: [docs/evaluation-workflow.md](docs/evaluation-workflow.md). Ops: [docs/deployment.md](docs/deployment.md).
+LLM/SLM evaluation platform: FastAPI backend (`backend/`, Python ≥3.12, SQLite-first with an optional MongoDB document store) + React 19 / Vite / TypeScript web app (`frontend/`). End-to-end flow: [docs/evaluation-workflow.md](docs/evaluation-workflow.md). Ops: [docs/deployment.md](docs/deployment.md). Human-facing developer guide: [DEVELOPER.md](DEVELOPER.md).
 
 ## Skills — STOP. Load a skill before you act.
 

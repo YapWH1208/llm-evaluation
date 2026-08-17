@@ -4,6 +4,16 @@ All notable changes to the LLM/SLM Evaluation Platform are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Added a top-level `DEVELOPER.md` developer guide with local setup, common
+  commands, environment variables, architecture notes, and repository
+  conventions.
+- README and deployment/evaluation docs now list the `/prompts` and
+  `/leaderboard` workspace routes and current container image version examples.
+
 ## 0.4.4 — 2026-08-16
 
 ### Added

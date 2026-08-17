@@ -32,10 +32,11 @@ npm.cmd run dev
 
 Open the web workspace at
 [`http://127.0.0.1:5173/dashboard`](http://127.0.0.1:5173/dashboard). The
-browser workspace has seven direct routes: `/dashboard`, `/guide`, `/models`,
-`/datasets`, `/runs`, `/analysis`, and `/settings`. Opening `/` or an unknown
-workspace path is canonicalized to `/dashboard`; read-only public report links
-continue to use `/shared-reports/<token>`. The API is available at
+browser workspace has direct routes for `/dashboard`, `/guide`, `/models`,
+`/datasets`, `/prompts`, `/runs`, `/leaderboard`, `/analysis`, and
+`/settings`. Opening `/` or an unknown workspace path is canonicalized to
+`/dashboard`; read-only public report links continue to use
+`/shared-reports/<token>`. The API is available at
 [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) and defaults to
 `data/llm_evaluation.db`.
 
@@ -61,6 +62,11 @@ Set `LLE_DATABASE_INIT_MODE` to `auto_migrate` (default), `preview`, or `validat
 A step-by-step guide from dataset registration through scored evaluation runs
 (including Hugging Face `hf://` sources) lives in
 [docs/evaluation-workflow.md](docs/evaluation-workflow.md).
+
+## Developer guide
+
+See [DEVELOPER.md](DEVELOPER.md) for local setup, architecture, testing, and
+repository conventions.
 
 ## Docker Compose deployment
 

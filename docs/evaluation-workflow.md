@@ -13,10 +13,11 @@ The retained browser workspace is available through these direct paths:
 | `/guide` | Getting started (default), `?tab=prepare-data`, and `?tab=run-and-analyze`. |
 | `/models` | Model inventory (default) and `?tab=add-endpoint`. |
 | `/datasets` | Dataset inventory (default) and `?tab=register-dataset`. |
+| `/prompts` | Prompt inventory (default) and `?tab=new-prompt-package`. |
 | `/runs` | Run inventory (default), `?tab=quick-start`, `?tab=dataset-evaluation`, and `?tab=run-details&run=<run-id>`. |
 | `/analysis` | Evidence scatter (default) and `?tab=compare-runs`. |
 | `/leaderboard` | Filterable and sortable evaluation leaderboard. |
-| `/settings` | Health (default), `?tab=access`, and `?tab=preferences`. |
+| `/settings` | Health (default) and `?tab=preferences`. |
 
 Opening `/` or an unknown workspace path resolves to `/dashboard`.
 The default tab uses the bare page path; non-default tabs use the `tab` query
