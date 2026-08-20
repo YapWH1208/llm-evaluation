@@ -281,7 +281,7 @@ class SqliteEvaluationRepository:
         system_max_concurrency: int | None = None,
         worker_max_concurrency: int | None = None,
     ) -> dict[str, Any] | None:
-        from app.modules.evaluations.queue import claim_task
+        from app.infrastructure.persistence.sqlite.queue import claim_task
 
         with self._database.get_session() as session:
             task = claim_task(
@@ -295,14 +295,14 @@ class SqliteEvaluationRepository:
             return _model_values(task) if task is not None else None
 
     def heartbeat_task(self, task_id: str, lease_token: str, lease_seconds: int) -> dict[str, Any] | None:
-        from app.modules.evaluations.queue import heartbeat_task
+        from app.infrastructure.persistence.sqlite.queue import heartbeat_task
 
         with self._database.get_session() as session:
             task = heartbeat_task(session, task_id, lease_token, lease_seconds)
             return _model_values(task) if task is not None else None
 
     def reclaim_expired_leases(self) -> int:
-        from app.modules.evaluations.queue import reclaim_expired_leases
+        from app.infrastructure.persistence.sqlite.queue import reclaim_expired_leases
 
         with self._database.get_session() as session:
             return reclaim_expired_leases(session)

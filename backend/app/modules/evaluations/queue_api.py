@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.execution import ExecutionService
+from app.modules.evaluations.queue_service import QueueService
 
 
 router = APIRouter(prefix="/api/v1/workers", tags=["workers"])
@@ -65,13 +66,18 @@ def get_execution_service(request: Request) -> ExecutionService:
     return request.app.state.execution_service
 
 
+def get_queue_service(request: Request) -> QueueService:
+    return request.app.state.queue_service
+
+
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 ExecutionServiceDependency = Annotated[ExecutionService, Depends(get_execution_service)]
+QueueServiceDependency = Annotated[QueueService, Depends(get_queue_service)]
 
 
 @router.post("/claim", response_model=TaskResponse | None)
-def claim(payload: ClaimRequest, service: ExecutionServiceDependency) -> dict[str, Any] | None:
+def claim(payload: ClaimRequest, service: QueueServiceDependency) -> dict[str, Any] | None:
     return service.claim(payload.worker_id, payload.lease_seconds)
 
 
@@ -79,7 +85,7 @@ def claim(payload: ClaimRequest, service: ExecutionServiceDependency) -> dict[st
 def heartbeat(
     task_id: str,
     payload: HeartbeatRequest,
-    service: ExecutionServiceDependency,
+    service: QueueServiceDependency,
 ) -> dict[str, Any]:
     return service.heartbeat(task_id, payload.lease_token, payload.lease_seconds)
 
@@ -102,20 +108,20 @@ def execute(
 
 
 @router.post("/reclaim-expired")
-def reclaim(service: ExecutionServiceDependency) -> dict[str, int]:
+def reclaim(service: QueueServiceDependency) -> dict[str, int]:
     return {"reclaimed": service.reclaim_expired()}
 
 
 @router.get("/events")
 async def worker_events(
-    service: ExecutionServiceDependency,
+    service: QueueServiceDependency,
     once: bool = False,
 ) -> StreamingResponse:
     """Stream task progress, active workers, and retry-exhaustion notices."""
 
     async def event_stream():
         while True:
-            yield f"event: worker\ndata: {json.dumps(service.queue_snapshot(), default=str)}\n\n"
+            yield f"event: worker\ndata: {json.dumps(service.snapshot(), default=str)}\n\n"
             if once:
                 return
             await asyncio.sleep(1)

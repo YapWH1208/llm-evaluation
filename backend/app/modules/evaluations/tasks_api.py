@@ -6,7 +6,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.evaluations.execution import ExecutionService
+from app.modules.evaluations.queue_service import QueueService
 
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["task queue"])
@@ -35,16 +35,16 @@ class TaskPriorityUpdate(BaseModel):
     priority: Annotated[int, Field(ge=-1000, le=1000)]
 
 
-def get_execution_service(request: Request) -> ExecutionService:
-    return request.app.state.execution_service
+def get_queue_service(request: Request) -> QueueService:
+    return request.app.state.queue_service
 
 
-ExecutionServiceDependency = Annotated[ExecutionService, Depends(get_execution_service)]
+QueueServiceDependency = Annotated[QueueService, Depends(get_queue_service)]
 
 
 @router.get("", response_model=list[TaskResponse])
 def list_tasks(
-    service: ExecutionServiceDependency,
+    service: QueueServiceDependency,
     run_id: str | None = None,
     task_status: str | None = None,
     offset: int = 0,
@@ -62,6 +62,6 @@ def list_tasks(
 def update_task_priority(
     task_id: str,
     payload: TaskPriorityUpdate,
-    service: ExecutionServiceDependency,
+    service: QueueServiceDependency,
 ) -> dict[str, Any]:
     return service.update_priority(task_id, payload.priority)
