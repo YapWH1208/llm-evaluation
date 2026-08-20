@@ -77,7 +77,18 @@ class MongoEvaluationRepository:
         return self._store.list_documents("judge_assessments", query={"sample_attempt_id": {"$in": ids}}) if ids else []
 
     def list_metrics(self, run_id: str) -> list[dict[str, Any]]:
-        return self._store.list_documents("aggregate_metrics", query={"run_id": run_id}, sort=[("metric_name", 1)])
+        latest: dict[str, dict[str, Any]] = {}
+        for metric in self._store.list_documents(
+            "aggregate_metrics",
+            query={"run_id": run_id},
+            sort=[("metric_name", 1), ("aggregation_version", -1)],
+        ):
+            latest.setdefault(str(metric["metric_name"]), metric)
+        return list(latest.values())
+
+    def replace_metrics(self, run_id: str, values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        self._store.delete_documents("aggregate_metrics", {"run_id": run_id})
+        return [self._store.insert_document("aggregate_metrics", item) for item in values]
 
     def get_endpoint(self, endpoint_id: str) -> dict[str, Any] | None:
         return self._store.get_document("model_endpoints", endpoint_id)
@@ -293,11 +304,6 @@ class MongoEvaluationRepository:
             raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
         if dataset.get("status") != "ready":
             DatasetService(MongoDatasetRepository(self._store)).download(str(dataset["id"]), data_root, settings)
-
-    def aggregate(self, run_id: str) -> int:
-        from app.modules.analytics.aggregation import recompute_mongo_aggregate_metrics
-
-        return len(recompute_mongo_aggregate_metrics(self._store, run_id))
 
     def query_tasks(
         self,

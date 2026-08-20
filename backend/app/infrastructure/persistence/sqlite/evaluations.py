@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
@@ -141,14 +141,24 @@ class SqliteEvaluationRepository:
 
     def list_metrics(self, run_id: str) -> list[dict[str, Any]]:
         with self._database.get_session() as session:
-            return [
-                _model_values(metric)
-                for metric in session.scalars(
-                    select(AggregateMetric)
-                    .where(AggregateMetric.run_id == run_id)
-                    .order_by(AggregateMetric.metric_name)
-                )
-            ]
+            latest: dict[str, dict[str, Any]] = {}
+            for metric in session.scalars(
+                select(AggregateMetric)
+                .where(AggregateMetric.run_id == run_id)
+                .order_by(AggregateMetric.metric_name, AggregateMetric.aggregation_version.desc())
+            ):
+                latest.setdefault(metric.metric_name, _model_values(metric))
+            return list(latest.values())
+
+    def replace_metrics(self, run_id: str, values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        with self._database.get_session() as session:
+            session.execute(delete(AggregateMetric).where(AggregateMetric.run_id == run_id))
+            rows = [AggregateMetric(**item) for item in values]
+            session.add_all(rows)
+            session.commit()
+            for row in rows:
+                session.refresh(row)
+            return [_model_values(row) for row in rows]
 
     def get_endpoint(self, endpoint_id: str) -> dict[str, Any] | None:
         with self._database.get_session() as session:
@@ -485,12 +495,6 @@ class SqliteEvaluationRepository:
                 raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
             if dataset.status != "ready":
                 DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
-
-    def aggregate(self, run_id: str) -> int:
-        from app.modules.analytics.aggregation import recompute_aggregate_metrics
-
-        with self._database.get_session() as session:
-            return len(recompute_aggregate_metrics(session, run_id))
 
     def query_tasks(
         self,

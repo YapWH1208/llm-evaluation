@@ -22,9 +22,10 @@ from app.infrastructure.providers.contracts import (
     ConnectionTestResult,
     SampleExecutionResult,
 )
+from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
 from app.modules.evaluations.names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
-from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
 from app.modules.benchmarks.metrics import METRIC_PROFILE_VERSION
 
 
@@ -1643,7 +1644,7 @@ def test_mongo_recompute_replaces_legacy_aggregation_rows_for_the_run() -> None:
             "aggregation_version": "1.0.0",
         },
     )
-    rows = recompute_mongo_aggregate_metrics(store, run["id"])
+    rows = AggregationService(MongoEvaluationRepository(store)).recompute(run["id"])
     remaining = store.list_documents("aggregate_metrics", query={"run_id": run["id"]})
     assert rows
     assert remaining

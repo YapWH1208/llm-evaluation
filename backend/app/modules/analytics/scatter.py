@@ -5,11 +5,32 @@ from datetime import datetime, timezone
 import math
 from typing import Any
 
+from app.core.errors import ValidationError
 from app.modules.benchmarks.metrics import metric_definition, metric_definitions
+from app.modules.datasets.metadata import EVALUATION_TYPES
 from app.modules.evaluations.names import resolve_run_display_name
+from app.modules.evaluations.ports import EvaluationRepository
 
 
 MAX_SCATTER_POINTS = 500
+MAX_SELECTED_RUNS = 1_000
+RUN_STATUSES = frozenset(
+    {
+        "waiting_for_dataset",
+        "queued",
+        "running",
+        "pausing",
+        "paused",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "completed_with_errors",
+        "failed",
+        "scoring",
+        "aggregating",
+        "generating_report",
+    }
+)
 
 
 class ScatterQueryError(ValueError):
@@ -36,6 +57,44 @@ class ScatterFilters:
     min_cost: float | None = None
     max_cost: float | None = None
     max_points: int = field(default=MAX_SCATTER_POINTS)
+
+
+class ScatterService:
+    """Build scatter data from repository-neutral evaluation evidence."""
+
+    def __init__(self, repository: EvaluationRepository) -> None:
+        self._repository = repository
+
+    def build(self, *, x_axis: str, y_axis: str, filters: ScatterFilters) -> dict[str, object]:
+        if filters.run_ids is not None and len(filters.run_ids) > MAX_SELECTED_RUNS:
+            raise ValidationError(f"At most {MAX_SELECTED_RUNS:,} run IDs may be selected.")
+        unknown_statuses = sorted((filters.statuses or frozenset()) - RUN_STATUSES)
+        if unknown_statuses:
+            raise ValidationError(f"Unknown run status: {', '.join(unknown_statuses)}.")
+        if filters.evaluation_type is not None and filters.evaluation_type not in EVALUATION_TYPES:
+            raise ValidationError("Unknown evaluation type.")
+
+        runs = self._repository.list_runs(include_archived=True)
+        endpoint_ids = {str(run["model_endpoint_id"]) for run in runs}
+        endpoints = {
+            endpoint_id: endpoint
+            for endpoint_id in endpoint_ids
+            if (endpoint := self._repository.get_endpoint(endpoint_id)) is not None
+        }
+        metrics_by_run = {
+            str(run["id"]): _metrics_by_name(self._repository.list_metrics(str(run["id"]))) for run in runs
+        }
+        try:
+            return build_scatter_response(
+                runs,
+                endpoints,
+                metrics_by_run,
+                x_axis=x_axis,
+                y_axis=y_axis,
+                filters=filters,
+            )
+        except ScatterQueryError as error:
+            raise ValidationError(str(error)) from error
 
 
 def build_scatter_response(
@@ -147,6 +206,10 @@ def _axis_registry() -> dict[str, dict[str, str]]:
         }
         for definition in metric_definitions()
     }
+
+
+def _metrics_by_name(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {str(row["metric_name"]): row for row in rows}
 
 
 def _run_context(run: Any, endpoint: Any) -> dict[str, object]:

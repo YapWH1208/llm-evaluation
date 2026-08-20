@@ -5,7 +5,7 @@ from typing import Any
 from app.core.config import Settings
 from app.core.errors import ApplicationError, ConflictError, NotFoundError
 from app.db.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
-from app.modules.analytics.aggregation import AGGREGATION_VERSION
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
 from app.modules.datasets.preparation import DatasetError
 from app.modules.evaluations.attempts import latest_attempts, task_payload, utc_now
 from app.modules.evaluations.ports import ExecutionRepository
@@ -15,10 +15,17 @@ from app.modules.reports.service import ReportService
 class PipelineStages:
     """Execute non-inference stages after evaluation shards fan in."""
 
-    def __init__(self, repository: ExecutionRepository, settings: Settings, reports: ReportService) -> None:
+    def __init__(
+        self,
+        repository: ExecutionRepository,
+        settings: Settings,
+        reports: ReportService,
+        aggregation: AggregationService,
+    ) -> None:
         self._repository = repository
         self._settings = settings
         self._reports = reports
+        self._aggregation = aggregation
 
     def execute_stage(
         self,
@@ -148,7 +155,7 @@ class PipelineStages:
         )
         if run is None:
             raise ConflictError("Evaluation run is no longer executable.")
-        metric_count = self._repository.aggregate(str(run["id"]))
+        metric_count = len(self._aggregation.recompute(str(run["id"])))
         task = self._update_leased_task(
             task,
             lease_token,

@@ -12,12 +12,6 @@ FRONTEND = ROOT / "frontend" / "src"
 
 # This inventory is deliberately exact. Each migration removes entries until the
 # sets are empty; adding another violating module fails immediately.
-KNOWN_PERSISTENCE_AWARE_APIS = {
-    "modules/analytics/api.py",
-    "modules/analytics/comparisons_api.py",
-    "modules/analytics/dashboard_api.py",
-    "modules/analytics/leaderboard_api.py",
-}
 KNOWN_STRING_ERROR_ROUTING: set[str] = set()
 KNOWN_SHARED_TO_FEATURE_IMPORTS: set[str] = set()
 KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT: set[str] = set()
@@ -54,7 +48,7 @@ def test_feature_api_persistence_debt_does_not_grow() -> None:
             for name in imports
         ):
             offenders.add(_relative(path, BACKEND))
-    assert offenders == KNOWN_PERSISTENCE_AWARE_APIS
+    assert offenders == set()
 
 
 def test_string_based_error_routing_debt_does_not_grow() -> None:

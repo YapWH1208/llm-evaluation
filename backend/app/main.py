@@ -67,6 +67,12 @@ from app.modules.evaluations.service import EvaluationService
 from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions
 from app.modules.benchmarks.repositories import MongoBenchmarkRepository, SqliteBenchmarkRepository
 from app.modules.benchmarks.service import BenchmarkService, PromptPackageService
+from app.modules.analytics.aggregation import AggregationService
+from app.modules.analytics.comparisons import ComparisonService
+from app.modules.analytics.dashboard import DashboardService
+from app.modules.analytics.leaderboard import LeaderboardService
+from app.modules.analytics.matrix import MatrixService
+from app.modules.analytics.scatter import ScatterService
 from sqlalchemy import select, text
 
 
@@ -152,6 +158,17 @@ def create_app(
         evaluation_repository,
         data_root=settings.data_root,
     )
+    app.state.aggregation_service = AggregationService(evaluation_repository)
+    app.state.comparison_service = ComparisonService(evaluation_repository)
+    app.state.dashboard_service = DashboardService(
+        evaluation_repository,
+        app.state.endpoint_service,
+        app.state.dataset_service,
+        app.state.report_service,
+    )
+    app.state.leaderboard_service = LeaderboardService(evaluation_repository)
+    app.state.matrix_service = MatrixService(evaluation_repository)
+    app.state.scatter_service = ScatterService(evaluation_repository)
     app.state.queue_service = QueueService(evaluation_repository, settings)
     app.state.execution_service = ExecutionService(
         evaluation_repository,
@@ -159,6 +176,7 @@ def create_app(
         app.state.queue_service,
         app.state.judge_service,
         app.state.report_service,
+        app.state.aggregation_service,
     )
     app.state.connection_tester = connection_tester or ProviderConnectionTester(
         max_response_bytes=settings.provider_response_max_bytes

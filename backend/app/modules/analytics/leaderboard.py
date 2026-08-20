@@ -6,8 +6,12 @@ from functools import cmp_to_key
 import math
 from typing import Any
 
+from app.core.errors import ValidationError
 from app.modules.benchmarks.metrics import metric_definition, metric_definitions
+from app.modules.datasets.metadata import EVALUATION_TYPES
 from app.modules.evaluations.names import resolve_run_display_name
+from app.modules.evaluations.ports import EvaluationRepository
+from app.modules.analytics.scatter import RUN_STATUSES
 
 
 MAX_PAGE_SIZE = 100
@@ -64,6 +68,46 @@ class LeaderboardQuery:
     direction: str = "desc"
     page: int = 1
     page_size: int = DEFAULT_PAGE_SIZE
+
+
+class LeaderboardService:
+    """Query the leaderboard without exposing persistence details to HTTP."""
+
+    def __init__(self, repository: EvaluationRepository) -> None:
+        self._repository = repository
+
+    def query(self, query: LeaderboardQuery) -> dict[str, object]:
+        unknown_statuses = sorted((query.filters.statuses or frozenset()) - RUN_STATUSES)
+        if unknown_statuses:
+            raise ValidationError(f"Unknown run status: {', '.join(unknown_statuses)}.")
+        if query.filters.evaluation_type is not None and query.filters.evaluation_type not in EVALUATION_TYPES:
+            raise ValidationError("Unknown evaluation type.")
+        if query.filters.available_metric is not None and query.filters.available_metric not in _metric_names():
+            raise ValidationError("Unknown available metric.")
+        if query.sort not in SORT_FIELDS:
+            raise ValidationError("Unknown leaderboard sort.")
+
+        runs = self._repository.list_runs()
+        endpoint_ids = {str(run["model_endpoint_id"]) for run in runs}
+        endpoints = {
+            endpoint_id: endpoint
+            for endpoint_id in endpoint_ids
+            if (endpoint := self._repository.get_endpoint(endpoint_id)) is not None
+        }
+        metrics_by_run = {
+            str(run["id"]): {
+                str(metric["metric_name"]): metric for metric in self._repository.list_metrics(str(run["id"]))
+            }
+            for run in runs
+        }
+        try:
+            return build_leaderboard(runs, endpoints, metrics_by_run, query)
+        except LeaderboardQueryError as error:
+            raise ValidationError(str(error)) from error
+
+
+def _metric_names() -> frozenset[str]:
+    return frozenset(definition.metric_name for definition in metric_definitions())
 
 
 def build_leaderboard(

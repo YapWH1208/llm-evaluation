@@ -5,137 +5,68 @@ from math import sqrt
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
-
-from app.db.models import AggregateMetric, EvaluationRun, SampleAttemptStatus
-from app.db.mongo import MongoDocumentStore
+from app.core.errors import NotFoundError
+from app.db.models import SampleAttemptStatus
 from app.modules.benchmarks.metrics import (
     MetricResult,
     compute_profile_metrics,
     evaluation_type_from_snapshot,
 )
 from app.modules.reviews.scoring import is_llm_judge_rule, is_valid_judge_score
-from app.modules.evaluations.analysis import latest_attempts, summarize_attempts
+from app.modules.evaluations.analysis import summarize_attempts
+from app.modules.evaluations.ports import EvaluationRepository
 
 
 AGGREGATION_VERSION = "2.0.0"
 
 
-class AggregationError(ValueError):
-    """Raised when a run cannot be aggregated."""
+class AggregationService:
+    """Compute metric materializations once and persist through an evaluation repository."""
 
+    def __init__(self, repository: EvaluationRepository) -> None:
+        self._repository = repository
 
-def recompute_aggregate_metrics(
-    session: Session,
-    run_id: str,
-    *,
-    commit: bool = True,
-) -> list[AggregateMetric]:
-    """Replace a run's versioned metric materialization from immutable attempts."""
+    def list(self, run_id: str) -> list[dict[str, Any]]:
+        self._require_run(run_id)
+        return self._repository.list_metrics(run_id)
 
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise AggregationError("Evaluation run not found.")
-    attempts = latest_attempts(session, run.id)
-    metrics = _metrics_for_attempts(
-        attempts,
-        total_samples=run.total_samples,
-        evaluation_type=evaluation_type_from_snapshot(run.configuration_snapshot),
-        include_llm_judge=_run_uses_llm_judge(run.configuration_snapshot),
-    )
-    session.execute(delete(AggregateMetric).where(AggregateMetric.run_id == run.id))
-    rows = [
-        AggregateMetric(
-            run_id=run.id,
-            benchmark_id=run.benchmark_id,
-            model_endpoint_id=run.model_endpoint_id,
-            metric_name=metric.metric_name,
-            metric_value=metric.value,
-            availability_reason=metric.availability_reason,
-            sample_count=metric.sample_count,
-            confidence_interval=metric.confidence_interval,
-            aggregation_version=AGGREGATION_VERSION,
+    def recompute(self, run_id: str) -> list[dict[str, Any]]:
+        run = self._require_run(run_id)
+        attempts_by_sample: dict[str, dict[str, Any]] = {}
+        for attempt in self._repository.list_attempts(run_id):
+            attempts_by_sample[str(attempt["sample_id"])] = attempt
+        attempts = list(attempts_by_sample.values())
+        metrics = _metrics_for_attempts(
+            attempts,
+            total_samples=int(run.get("total_samples", len(attempts))),
+            evaluation_type=evaluation_type_from_snapshot(run.get("configuration_snapshot")),
+            include_llm_judge=_run_uses_llm_judge(run.get("configuration_snapshot")),
         )
-        for metric in metrics
-    ]
-    session.add_all(rows)
-    if commit:
-        session.commit()
-        for row in rows:
-            session.refresh(row)
-    else:
-        session.flush()
-    return rows
-
-
-def list_aggregate_metrics(session: Session, run_id: str) -> list[AggregateMetric]:
-    rows = list(
-        session.scalars(
-            select(AggregateMetric)
-            .where(AggregateMetric.run_id == run_id)
-            .order_by(AggregateMetric.metric_name, AggregateMetric.aggregation_version.desc())
+        now = datetime.now(timezone.utc)
+        return self._repository.replace_metrics(
+            run_id,
+            [
+                {
+                    "run_id": run_id,
+                    "benchmark_id": run["benchmark_id"],
+                    "model_endpoint_id": run["model_endpoint_id"],
+                    "metric_name": metric.metric_name,
+                    "metric_value": metric.value,
+                    "availability_reason": metric.availability_reason,
+                    "sample_count": metric.sample_count,
+                    "confidence_interval": metric.confidence_interval,
+                    "aggregation_version": AGGREGATION_VERSION,
+                    "created_at": now,
+                }
+                for metric in metrics
+            ],
         )
-    )
-    latest: dict[str, AggregateMetric] = {}
-    for row in rows:
-        latest.setdefault(row.metric_name, row)
-    return list(latest.values())
 
-
-def recompute_mongo_aggregate_metrics(
-    store: MongoDocumentStore,
-    run_id: str,
-) -> list[dict[str, Any]]:
-    """Materialize the same aggregate contract for the document-store adapter."""
-
-    run = store.get_document("evaluation_runs", run_id)
-    if run is None:
-        raise AggregationError("Evaluation run not found.")
-    attempts = store.list_documents(
-        "sample_attempts", query={"run_id": run_id}, sort=[("sample_id", 1), ("attempt_number", -1)]
-    )
-    latest: dict[str, dict[str, Any]] = {}
-    for attempt in attempts:
-        latest.setdefault(str(attempt["sample_id"]), attempt)
-    metrics = _metrics_for_attempts(
-        list(latest.values()),
-        total_samples=int(run.get("total_samples", len(latest))),
-        evaluation_type=evaluation_type_from_snapshot(run.get("configuration_snapshot")),
-        include_llm_judge=_run_uses_llm_judge(run.get("configuration_snapshot")),
-    )
-    store.delete_documents(
-        "aggregate_metrics",
-        {"run_id": run_id},
-    )
-    return [
-        store.insert_document(
-            "aggregate_metrics",
-            {
-                "run_id": run_id,
-                "benchmark_id": run["benchmark_id"],
-                "model_endpoint_id": run["model_endpoint_id"],
-                "metric_name": metric.metric_name,
-                "metric_value": metric.value,
-                "availability_reason": metric.availability_reason,
-                "sample_count": metric.sample_count,
-                "confidence_interval": metric.confidence_interval,
-                "aggregation_version": AGGREGATION_VERSION,
-                "created_at": datetime.now(timezone.utc),
-            },
-        )
-        for metric in metrics
-    ]
-
-
-def list_mongo_aggregate_metrics(store: MongoDocumentStore, run_id: str) -> list[dict[str, Any]]:
-    rows = store.list_documents(
-        "aggregate_metrics", query={"run_id": run_id}, sort=[("metric_name", 1), ("aggregation_version", -1)]
-    )
-    latest: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        latest.setdefault(str(row["metric_name"]), row)
-    return list(latest.values())
+    def _require_run(self, run_id: str) -> dict[str, Any]:
+        run = self._repository.get_run(run_id)
+        if run is None:
+            raise NotFoundError("Evaluation run not found.", context={"run_id": run_id})
+        return run
 
 
 def _metrics_for_attempts(
