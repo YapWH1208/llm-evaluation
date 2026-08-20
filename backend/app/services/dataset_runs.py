@@ -20,7 +20,7 @@ from app.db.models import (
     TaskType,
     TaskUnit,
 )
-from app.services.dataset_records import DatasetRecordError, iter_dataset_records
+from app.modules.datasets.records import DatasetRecordError, iter_dataset_records
 from app.services.run_names import format_run_display_name
 from app.services.evaluation_runs import (
     RunCreationError,

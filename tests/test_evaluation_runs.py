@@ -36,7 +36,7 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
             yield content
 
     monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
-    monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
+    monkeypatch.setattr("app.modules.datasets.preparation.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 
 class SuccessfulTester:

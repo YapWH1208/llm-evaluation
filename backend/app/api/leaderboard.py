@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AggregateMetric, EvaluationRun, ModelEndpoint, RunStatus
 from app.db.mongo import MongoDocumentStore
-from app.services.dataset_metadata import EVALUATION_TYPES
+from app.modules.datasets.metadata import EVALUATION_TYPES
 from app.services.leaderboard import (
     LeaderboardFilters,
     LeaderboardQuery,

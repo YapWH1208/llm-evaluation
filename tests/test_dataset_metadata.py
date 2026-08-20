@@ -8,7 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
-from app.services.dataset_metadata import (
+from app.modules.datasets.metadata import (
     DatasetMetadataError,
     normalize_capabilities,
     normalize_languages,

@@ -12,13 +12,10 @@ from urllib.parse import quote, urljoin, urlparse
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
-from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
-from app.services.dataset_records import iter_dataset_records, iter_delimited_rows
+from app.db.models import DatasetStatus
+from app.modules.datasets.records import iter_dataset_records, iter_delimited_rows
+from app.modules.datasets.records import DatasetRecordError
 from app.infrastructure.network.outbound import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
@@ -333,177 +330,12 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
         yield 1
 
 
-def accept_license(session: Session, dataset: DatasetVersion) -> DatasetVersion:
-    from datetime import datetime, timezone
-    dataset.license_accepted_at = datetime.now(timezone.utc)
-    if dataset.status == DatasetStatus.LICENSE_REQUIRED.value:
-        dataset.status = DatasetStatus.NOT_DOWNLOADED.value
-    session.commit(); session.refresh(dataset)
-    return dataset
-
-
-def download_dataset(
-    session: Session,
-    dataset: DatasetVersion,
-    data_root: str,
-    settings: Settings | None = None,
-) -> DatasetVersion:
-    if not dataset.source_url:
-        raise DatasetError("Dataset has no downloadable source URL.")
-    if dataset.license_text and dataset.license_accepted_at is None:
-        dataset.status = DatasetStatus.LICENSE_REQUIRED.value; session.commit()
-        raise DatasetError("Dataset license must be accepted before download.")
-    destination = Path(data_root).resolve() / "datasets" / dataset.dataset_id / dataset.version / dataset.revision
-    destination.mkdir(parents=True, exist_ok=True)
-    target = destination / f"dataset{dataset_source_suffix(dataset.source_url)}"; temporary = destination / "dataset.part"
-    dataset.status = DatasetStatus.DOWNLOADING.value; dataset.error_message = None; session.commit()
-    try:
-        source, headers = resolve_dataset_source(
-            dataset.source_url,
-            dataset.revision,
-            dataset.credential_binding_id,
-            settings,
-        )
-        def ensure_not_paused() -> None:
-            session.refresh(dataset)
-            if dataset.status == DatasetStatus.WAITING.value:
-                raise DatasetDownloadPaused("Dataset download was paused and can be retried.")
-
-        actual_checksum = write_dataset_source(
-            source,
-            temporary,
-            headers,
-            ensure_not_paused,
-            max_bytes=(settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES),
-            allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
-        )
-        dataset.status = DatasetStatus.VERIFYING.value; session.commit()
-        if dataset.checksum and dataset.checksum.lower() != actual_checksum:
-            temporary.unlink(missing_ok=True)
-            raise DatasetError("Dataset checksum verification failed.")
-        temporary.replace(target)
-        dataset.status = DatasetStatus.PREPARING.value
-        session.commit()
-        prepared_path = prepare_dataset_cache(target)
-        dataset.checksum = actual_checksum; dataset.local_path = str(target); dataset.prepared_path = str(prepared_path); dataset.size_bytes = target.stat().st_size; dataset.status = DatasetStatus.READY.value
-    except DatasetDownloadPaused as error:
-        dataset.status = DatasetStatus.WAITING.value
-        dataset.error_message = None
-        session.commit()
-        raise DatasetError(str(error)) from error
-    except (httpx.HTTPStatusError, DatasetError) as error:
-        message = str(error)
-        status_code = getattr(getattr(error, "response", None), "status_code", None)
-        if status_code == 404:
-            message = f"{message} The repository or file may not exist; check the owner/repository name and revision."
-        elif status_code in {401, 403}:
-            message = (
-                f"{message} Hugging Face requires authentication for this source "
-                "(private or gated repository), or the repository is not a public dataset."
-            )
-        dataset.status = DatasetStatus.CREDENTIAL_REQUIRED.value if dataset.credential_binding_id and ("credential binding" in message or status_code in {401, 403}) else DatasetStatus.FAILED.value
-        dataset.error_message = message[:500]
-        session.commit()
-        raise DatasetError(str(error)) from error
-    except (httpx.HTTPError, OSError) as error:
-        dataset.status = DatasetStatus.FAILED.value; dataset.error_message = str(error)[:500]
-        session.commit()
-        raise DatasetError(str(error)) from error
-    session.commit(); session.refresh(dataset)
-    return dataset
-
-
-def pause_dataset_download(session: Session, dataset: DatasetVersion) -> DatasetVersion:
-    if dataset.status not in {DatasetStatus.DOWNLOADING.value, DatasetStatus.VERIFYING.value, DatasetStatus.PREPARING.value}:
-        raise DatasetError("Only an active dataset download can be paused.")
-    dataset.status = DatasetStatus.WAITING.value
-    dataset.error_message = None
-    session.commit()
-    session.refresh(dataset)
-    return dataset
-
-
-def validate_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
-    if not dataset.local_path:
-        raise DatasetError("Dataset has no cached file to validate.")
-    root = (Path(data_root).resolve() / "datasets").resolve()
-    target = Path(dataset.local_path).resolve()
-    if not target.is_relative_to(root) or not target.is_file():
-        dataset.status = DatasetStatus.CORRUPTED.value
-        dataset.error_message = "Dataset cache file is missing or outside the configured dataset root."
-        session.commit()
-        raise DatasetError(dataset.error_message)
-    dataset.status = DatasetStatus.VERIFYING.value
-    session.commit()
-    digest = hashlib.sha256()
-    with target.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    checksum = digest.hexdigest()
-    if dataset.checksum and checksum != dataset.checksum.lower():
-        dataset.status = DatasetStatus.CORRUPTED.value
-        dataset.error_message = "Dataset cache checksum verification failed."
-        session.commit()
-        raise DatasetError(dataset.error_message)
-    if not validate_prepared_dataset_cache(dataset.prepared_path, data_root):
-        dataset.status = DatasetStatus.PREPARING.value
-        session.commit()
-        dataset.prepared_path = str(prepare_dataset_cache(target))
-    dataset.checksum = checksum
-    dataset.size_bytes = target.stat().st_size
-    dataset.status = DatasetStatus.READY.value
-    dataset.error_message = None
-    session.commit()
-    session.refresh(dataset)
-    return dataset
-
-
 def dataset_disk_usage(data_root: str) -> dict[str, int | str]:
     root = (Path(data_root).resolve() / "datasets").resolve()
     root.mkdir(parents=True, exist_ok=True)
     used = sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
     disk = shutil.disk_usage(root)
     return {"root": str(root), "cache_bytes": used, "available_bytes": disk.free, "total_bytes": disk.total}
-
-
-def clear_dataset_cache(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
-    _ensure_dataset_is_not_referenced(session, dataset.id)
-    if dataset.local_path:
-        root = (Path(data_root).resolve() / "datasets").resolve()
-        target = Path(dataset.local_path).resolve()
-        if not target.is_relative_to(root):
-            raise DatasetError("Dataset cache path is outside the configured dataset root.")
-        target.unlink(missing_ok=True)
-    clear_prepared_dataset_cache(dataset.prepared_path, data_root)
-    dataset.local_path = None
-    dataset.prepared_path = None
-    dataset.size_bytes = None
-    dataset.status = DatasetStatus.LICENSE_REQUIRED.value if dataset.license_text and dataset.license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
-    dataset.error_message = None
-    session.commit(); session.refresh(dataset)
-    return dataset
-
-
-def delete_dataset(session: Session, dataset: DatasetVersion, data_root: str) -> DatasetVersion:
-    _ensure_dataset_is_not_referenced(session, dataset.id)
-    if dataset.status in {
-        DatasetStatus.DOWNLOADING.value, DatasetStatus.PREPARING.value,
-        DatasetStatus.VERIFYING.value, DatasetStatus.REMOVING.value,
-    }:
-        raise DatasetError("Dataset cannot be deleted while it is downloading or preparing.")
-    if dataset.local_path:
-        root = (Path(data_root).resolve() / "datasets").resolve()
-        target = Path(dataset.local_path).resolve()
-        if not target.is_relative_to(root):
-            raise DatasetError("Dataset cache path is outside the configured dataset root.")
-        target.unlink(missing_ok=True)
-    clear_prepared_dataset_cache(dataset.prepared_path, data_root)
-    upload_dir = (Path(data_root).resolve() / "datasets" / "uploads" / dataset.id).resolve()
-    if upload_dir.is_relative_to((Path(data_root).resolve() / "datasets").resolve()):
-        shutil.rmtree(upload_dir, ignore_errors=True)
-    session.delete(dataset)
-    session.commit()
-    return dataset
 
 
 def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -> dict[str, object]:
@@ -522,50 +354,6 @@ def preview_dataset_records(prepared_path: str, data_root: str, *, limit: int) -
     return {"fields": fields, "rows": rows}
 
 
-def update_dataset(session: Session, dataset: DatasetVersion, *, dataset_id: str, version: str, revision: str, source_url: str | None, checksum: str | None, license_text: str | None, credential_binding_id: str | None, input_field: str | None, reference_field: str | None, capabilities: list[str], languages: list[str], evaluation_type: str, data_root: str) -> DatasetVersion:
-    validate_dataset_field_defaults(
-        dataset.prepared_path,
-        data_root,
-        input_field=input_field,
-        reference_field=reference_field,
-    )
-    values = {
-        "dataset_id": dataset_id,
-        "version": version,
-        "revision": revision,
-        "source_url": source_url,
-        "checksum": checksum,
-        "license_text": license_text,
-        "credential_binding_id": credential_binding_id,
-        "input_field": input_field,
-        "reference_field": reference_field,
-        "capabilities": capabilities,
-        "languages": languages,
-        "evaluation_type": evaluation_type,
-    }
-    current = {
-        field: getattr(dataset, field)
-        for field in (
-            *MATERIAL_DATASET_SOURCE_FIELDS,
-            "license_accepted_at",
-            "local_path",
-            "prepared_path",
-            "status",
-            "error_message",
-        )
-    }
-    values.update(dataset_edit_lifecycle_updates(current, values))
-    for field, value in values.items():
-        setattr(dataset, field, value)
-    try:
-        session.commit()
-    except IntegrityError as error:
-        session.rollback()
-        raise DatasetError("Dataset revision already exists.") from error
-    session.refresh(dataset)
-    return dataset
-
-
 def validate_dataset_field_defaults(
     prepared_path: str | None,
     data_root: str,
@@ -573,8 +361,6 @@ def validate_dataset_field_defaults(
     input_field: str | None,
     reference_field: str | None,
 ) -> None:
-    """Validate persisted field defaults whenever a prepared preview exists."""
-
     if input_field is not None and input_field == reference_field:
         raise DatasetError("Input and reference fields must name different dataset columns.")
     if prepared_path is None:
@@ -584,48 +370,21 @@ def validate_dataset_field_defaults(
     except DatasetRecordError as error:
         raise DatasetError(f"Dataset preview schema is unavailable: {error}") from error
     fields = {str(field) for field in preview["fields"]}
-    missing = [
-        field
-        for field in (input_field, reference_field)
-        if field is not None and field not in fields
-    ]
+    missing = [field for field in (input_field, reference_field) if field is not None and field not in fields]
     if missing:
-        raise DatasetError(
-            "Dataset field selection is not present in the current preview schema: "
-            + ", ".join(missing)
-            + "."
-        )
+        raise DatasetError("Dataset field selection is not present in the current preview schema: " + ", ".join(missing) + ".")
 
 
-def dataset_edit_lifecycle_updates(
-    current: Mapping[str, object],
-    values: Mapping[str, object],
-) -> dict[str, object | None]:
-    """Reset stale inactive failures only after a material source correction."""
-
-    changed_fields = {
-        field
-        for field in MATERIAL_DATASET_SOURCE_FIELDS
-        if current.get(field) != values.get(field)
-    }
-    if (
-        not changed_fields
-        or current.get("local_path")
-        or current.get("prepared_path")
-        or current.get("status") not in INACTIVE_DATASET_EDIT_RESET_STATUSES
-    ):
+def dataset_edit_lifecycle_updates(current: Mapping[str, object], values: Mapping[str, object]) -> dict[str, object | None]:
+    changed_fields = {field for field in MATERIAL_DATASET_SOURCE_FIELDS if current.get(field) != values.get(field)}
+    if not changed_fields or current.get("local_path") or current.get("prepared_path") or current.get("status") not in INACTIVE_DATASET_EDIT_RESET_STATUSES:
         return {}
-
     lifecycle: dict[str, object | None] = {"error_message": None}
     license_accepted_at = current.get("license_accepted_at")
     if "license_text" in changed_fields:
         license_accepted_at = None
         lifecycle["license_accepted_at"] = None
-    lifecycle["status"] = (
-        DatasetStatus.LICENSE_REQUIRED.value
-        if values.get("license_text") and license_accepted_at is None
-        else DatasetStatus.NOT_DOWNLOADED.value
-    )
+    lifecycle["status"] = DatasetStatus.LICENSE_REQUIRED.value if values.get("license_text") and license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
     return lifecycle
 
 
@@ -635,67 +394,3 @@ def _stringify_preview_value(value: object) -> str:
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
-
-
-def _ensure_dataset_is_not_referenced(session: Session, dataset_version_id: str) -> None:
-    for run in session.scalars(select(EvaluationRun)):
-        snapshot = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
-        datasets = snapshot.get("datasets") if isinstance(snapshot, dict) else None
-        if isinstance(datasets, list) and any(
-            isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_version_id
-            for descriptor in datasets
-        ):
-            raise DatasetError("Dataset cannot be cleared or deleted while an evaluation run references this revision.")
-
-
-def store_uploaded_dataset(
-    session: Session,
-    dataset: DatasetVersion,
-    *,
-    filename: str,
-    content: bytes,
-    data_root: str,
-) -> DatasetVersion:
-    """Atomically persist a user-uploaded dataset outside the primary database."""
-
-    if not content:
-        raise DatasetError("Uploaded dataset is empty.")
-    if len(content) > 64 * 1024 * 1024:
-        raise DatasetError("Uploaded dataset exceeds the 64 MiB upload limit.")
-    safe_name = Path(filename).name
-    if not safe_name or safe_name in {".", ".."}:
-        raise DatasetError("Uploaded dataset filename is invalid.")
-    if Path(safe_name).suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"}:
-        raise DatasetError("Uploaded dataset file type is not supported.")
-    if dataset.license_text and dataset.license_accepted_at is None:
-        dataset.status = DatasetStatus.LICENSE_REQUIRED.value
-        session.commit()
-        raise DatasetError("Dataset license must be accepted before upload.")
-    destination = (Path(data_root).resolve() / "datasets" / "uploads" / dataset.id).resolve()
-    root = (Path(data_root).resolve() / "datasets").resolve()
-    if not destination.is_relative_to(root):
-        raise DatasetError("Dataset upload path is outside the configured dataset root.")
-    destination.mkdir(parents=True, exist_ok=True)
-    target = destination / safe_name
-    temporary = destination / f".{safe_name}.part"
-    checksum = hashlib.sha256(content).hexdigest()
-    if dataset.checksum and dataset.checksum.lower() != checksum:
-        dataset.status = DatasetStatus.CORRUPTED.value
-        dataset.error_message = "Uploaded dataset checksum verification failed."
-        session.commit()
-        raise DatasetError(dataset.error_message)
-    temporary.write_bytes(content)
-    temporary.replace(target)
-    dataset.status = DatasetStatus.PREPARING.value
-    session.commit()
-    prepared_path = prepare_dataset_cache(target)
-    dataset.source_url = target.as_uri()
-    dataset.checksum = checksum
-    dataset.size_bytes = len(content)
-    dataset.local_path = str(target)
-    dataset.prepared_path = str(prepared_path)
-    dataset.status = DatasetStatus.READY.value
-    dataset.error_message = None
-    session.commit()
-    session.refresh(dataset)
-    return dataset

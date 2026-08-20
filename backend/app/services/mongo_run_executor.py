@@ -38,7 +38,7 @@ from app.services.dataset_runs import (
     _validate_distinct_dataset_fields,
     effective_dataset_scoring_rule,
 )
-from app.services.dataset_records import DatasetRecordError
+from app.modules.datasets.records import DatasetRecordError
 from app.services.judge_scoring import (
     JudgeScoringError,
     is_llm_judge_rule,
@@ -62,7 +62,8 @@ from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.infrastructure.providers.common import resolve_request_body
 from app.services.prompt_templates import standardization_flags
-from app.services.mongo_datasets import download_mongo_dataset
+from app.modules.datasets.repositories import MongoDatasetRepository
+from app.modules.datasets.service import DatasetService
 
 
 class MongoRunExecutionError(ValueError):
@@ -1250,7 +1251,7 @@ def _execute_mongo_stage_task(
                     matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
                     dataset = matches[0] if matches else None
                 if dataset is None: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.get("status") != "ready": download_mongo_dataset(store, str(dataset["id"]), data_root, settings)
+                if dataset.get("status") != "ready": DatasetService(MongoDatasetRepository(store)).download(str(dataset["id"]), data_root, settings)
         except Exception as error:
             failed = store.update_task_if_current_lease(
                 task,

@@ -28,7 +28,7 @@ from app.services.analytics_scatter import (
     ScatterQueryError,
     build_scatter_response,
 )
-from app.services.dataset_metadata import EVALUATION_TYPES
+from app.modules.datasets.metadata import EVALUATION_TYPES
 
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])

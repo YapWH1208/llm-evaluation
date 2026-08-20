@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.dataset_records import DatasetRecordError, count_dataset_records, iter_dataset_records
+from app.modules.datasets.records import DatasetRecordError, count_dataset_records, iter_dataset_records
 
 
 def _write_prepared(tmp_path: Path, source_name: str, source_bytes: bytes, index_entries: list[dict[str, object]]) -> str:
@@ -80,7 +80,7 @@ def test_dataset_records_rejects_unsafe_prepared_path_and_unsupported_format(tmp
 
 
 def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) -> None:
-    from app.services.datasets import prepare_dataset_cache
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
@@ -97,7 +97,7 @@ def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) 
 
 
 def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tmp_path: Path) -> None:
-    from app.services.datasets import prepare_dataset_cache
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
@@ -112,7 +112,7 @@ def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tm
 
 
 def test_dataset_preparation_rejects_malformed_json(tmp_path: Path) -> None:
-    from app.services.datasets import DatasetError, prepare_dataset_cache
+    from app.modules.datasets.preparation import DatasetError, prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
@@ -134,7 +134,7 @@ def test_dataset_records_rejects_malformed_jsonl(tmp_path: Path) -> None:
 
 
 def test_dataset_preparation_rejects_malformed_csv(tmp_path: Path) -> None:
-    from app.services.datasets import DatasetError, prepare_dataset_cache
+    from app.modules.datasets.preparation import DatasetError, prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)

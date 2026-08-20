@@ -32,7 +32,9 @@ from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError, generate_report
 from app.services.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease
-from app.services.datasets import DatasetError, download_dataset
+from app.modules.datasets.preparation import DatasetError
+from app.modules.datasets.repositories import SqliteSessionDatasetRepository
+from app.modules.datasets.service import DatasetService
 from app.db.models import DatasetVersion
 
 
@@ -218,7 +220,7 @@ def _execute_leased_stage_task(
                     if isinstance(descriptor.get("revision"), str): query = query.where(DatasetVersion.revision == descriptor["revision"])
                     dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
                 if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.status != "ready": download_dataset(session, dataset, data_root, settings)
+                if dataset.status != "ready": DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
         except DatasetError as error:
             _require_current_lease(session, task, lease_token)
             task.status = TaskStatus.RETRY_SCHEDULED.value; task.payload = {**payload, "dataset_error": str(error)}; clear_lease(task); session.commit(); raise RunExecutionError(str(error)) from error

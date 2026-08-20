@@ -7,12 +7,12 @@ import httpx
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from app.api.datasets import DatasetCreate
+from app.modules.datasets.api import DatasetCreate
 from app.core.config import DatasetCredentialBinding, Settings
 from app.db.models import DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
-from app.services.datasets import DatasetError, dataset_edit_lifecycle_updates, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
+from app.modules.datasets.preparation import DatasetError, dataset_edit_lifecycle_updates, prepare_dataset_cache, resolve_dataset_source, write_dataset_source
 from tests.test_mongo_document_store import FakeClient
 
 
@@ -190,7 +190,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
 def test_dataset_download_enforces_streamed_byte_limit(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr(
-        "app.services.datasets.pinned_outbound_transport",
+        "app.modules.datasets.preparation.pinned_outbound_transport",
         lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=b"12345678")),
     )
     with pytest.raises(DatasetError, match="byte limit"):
@@ -212,7 +212,7 @@ def _redirect_transport(monkeypatch: pytest.MonkeyPatch, handler, *, extra_publi
         lambda host, *_args, **_kwargs: [(None, None, None, None, (("93.184.216.34", 0) if host in public else ("127.0.0.1", 0)))],
     )
     monkeypatch.setattr(
-        "app.services.datasets.pinned_outbound_transport",
+        "app.modules.datasets.preparation.pinned_outbound_transport",
         lambda *_args, **_kwargs: httpx.MockTransport(handler),
     )
 
