@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -10,9 +9,6 @@ BACKEND = ROOT / "backend" / "app"
 FRONTEND = ROOT / "frontend" / "src"
 
 
-# This inventory is deliberately exact. Each migration removes entries until the
-# sets are empty; adding another violating module fails immediately.
-KNOWN_STRING_ERROR_ROUTING: set[str] = set()
 KNOWN_SHARED_TO_FEATURE_IMPORTS: set[str] = set()
 KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT: set[str] = set()
 
@@ -35,30 +31,38 @@ def _import_names(tree: ast.AST) -> set[str]:
     return names
 
 
-def test_feature_api_persistence_debt_does_not_grow() -> None:
+def test_feature_apis_do_not_import_persistence() -> None:
     offenders: set[str] = set()
     for path in _python_files(BACKEND / "modules"):
         if not path.name.endswith("api.py"):
             continue
         imports = _import_names(ast.parse(path.read_text(encoding="utf-8")))
         if any(
-            name == "sqlalchemy"
-            or name.startswith("sqlalchemy.")
-            or name in {"app.db.models", "app.db.mongo", "app.db.database"}
+            name == "sqlalchemy" or name.startswith("sqlalchemy.") or name == "app.db" or name.startswith("app.db.")
             for name in imports
         ):
             offenders.add(_relative(path, BACKEND))
     assert offenders == set()
 
 
-def test_string_based_error_routing_debt_does_not_grow() -> None:
-    string_control_flow = re.compile(r"str\(error\)\s*(?:==|!=|\bin\b|\bnot\s+in\b)")
-    offenders = {
-        _relative(path, BACKEND)
-        for path in _python_files(BACKEND)
-        if string_control_flow.search(path.read_text(encoding="utf-8"))
-    }
-    assert offenders == KNOWN_STRING_ERROR_ROUTING
+def test_string_based_error_routing_is_not_used() -> None:
+    def calls_str_error(node: ast.AST) -> bool:
+        return any(
+            isinstance(item, ast.Call)
+            and isinstance(item.func, ast.Name)
+            and item.func.id == "str"
+            and len(item.args) == 1
+            and isinstance(item.args[0], ast.Name)
+            and item.args[0].id == "error"
+            for item in ast.walk(node)
+        )
+
+    offenders: set[str] = set()
+    for path in _python_files(BACKEND):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(isinstance(node, (ast.Compare, ast.Match)) and calls_str_error(node) for node in ast.walk(tree)):
+            offenders.add(_relative(path, BACKEND))
+    assert offenders == set()
 
 
 def test_evaluation_application_does_not_select_persistence_backend() -> None:
@@ -67,6 +71,16 @@ def test_evaluation_application_does_not_select_persistence_backend() -> None:
         _relative(path, BACKEND)
         for path in _python_files(BACKEND / "modules" / "evaluations")
         if any(token in path.read_text(encoding="utf-8") for token in forbidden)
+    }
+    assert offenders == set()
+
+
+def test_feature_application_code_does_not_select_persistence_backend() -> None:
+    forbidden = ("database_kind", "MongoDocumentStore", "SqliteEvaluationRepository", "MongoEvaluationRepository")
+    offenders = {
+        _relative(path, BACKEND)
+        for path in _python_files(BACKEND / "modules")
+        if path.name != "repositories.py" and any(token in path.read_text(encoding="utf-8") for token in forbidden)
     }
     assert offenders == set()
 

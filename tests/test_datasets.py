@@ -9,11 +9,11 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from app.modules.datasets.api import DatasetCreate
 from app.core.config import DatasetCredentialBinding, Settings
+from app.core.errors import ConflictError
 from app.db.models import DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
 from app.modules.datasets.preparation import (
-    DatasetError,
     dataset_edit_lifecycle_updates,
     prepare_dataset_cache,
     resolve_dataset_source,
@@ -183,11 +183,11 @@ def test_dataset_upload_is_checksum_verified_and_stored_outside_the_database(tmp
 def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bindings(
     tmp_path: Path, monkeypatch
 ) -> None:
-    with pytest.raises(DatasetError, match="private or restricted"):
+    with pytest.raises(ConflictError, match="private or restricted"):
         resolve_dataset_source("https://127.0.0.1/private.jsonl", "main", None)
-    with pytest.raises(DatasetError, match="HTTPS URL"):
+    with pytest.raises(ConflictError, match="HTTPS URL"):
         resolve_dataset_source("file:///private.jsonl", "main", None)
-    with pytest.raises(DatasetError, match="HTTPS URL"):
+    with pytest.raises(ConflictError, match="HTTPS URL"):
         resolve_dataset_source(str(tmp_path / "private.jsonl"), "main", None)
     monkeypatch.setattr(
         "app.infrastructure.network.outbound.getaddrinfo",
@@ -239,11 +239,11 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
             settings,
         )
         assert shorthand == (f"https://huggingface.co/datasets/{owner}/owner/resolve/main/repository/file.jsonl")
-        with pytest.raises(DatasetError, match="hf://owner/repository/path"):
+        with pytest.raises(ConflictError, match="hf://owner/repository/path"):
             resolve_dataset_source(f"hf://{owner}/owner", "main", None, settings)
-    with pytest.raises(DatasetError, match="not authorized"):
+    with pytest.raises(ConflictError, match="not authorized"):
         resolve_dataset_source("https://other.example.test/dataset.jsonl", "main", "huggingface", settings)
-    with pytest.raises(DatasetError, match="not configured"):
+    with pytest.raises(ConflictError, match="not configured"):
         resolve_dataset_source(
             "https://datasets.example.test/dataset.jsonl", "main", "LLE_DATASET_CREDENTIAL_TOKEN", settings
         )
@@ -258,7 +258,7 @@ def test_dataset_download_enforces_streamed_byte_limit(tmp_path: Path, monkeypat
         "app.modules.datasets.preparation.pinned_outbound_transport",
         lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=b"12345678")),
     )
-    with pytest.raises(DatasetError, match="byte limit"):
+    with pytest.raises(ConflictError, match="byte limit"):
         write_dataset_source("https://datasets.example.test/dataset.jsonl", tmp_path / "dataset.part", {}, max_bytes=6)
 
 
@@ -266,7 +266,7 @@ def test_dataset_preparation_rejects_archive_path_traversal(tmp_path: Path) -> N
     archive = tmp_path / "unsafe.zip"
     with zipfile.ZipFile(archive, "w") as output:
         output.writestr("../outside.jsonl", '{"question":"unsafe"}\n')
-    with pytest.raises(DatasetError, match="unsafe file path"):
+    with pytest.raises(ConflictError, match="unsafe file path"):
         prepare_dataset_cache(archive)
 
 
@@ -331,7 +331,7 @@ def test_dataset_download_rejects_redirect_to_private_target(tmp_path: Path, mon
         return httpx.Response(307, headers={"location": "https://127.0.0.1/secret.jsonl"})
 
     _redirect_transport(monkeypatch, handler)
-    with pytest.raises(DatasetError, match="private or restricted"):
+    with pytest.raises(ConflictError, match="private or restricted"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
 
 
@@ -342,14 +342,14 @@ def test_dataset_download_rejects_redirect_without_location_and_hop_loops(
         return httpx.Response(307)
 
     _redirect_transport(monkeypatch, no_location)
-    with pytest.raises(DatasetError, match="without a Location header"):
+    with pytest.raises(ConflictError, match="without a Location header"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
 
     def loop(request: httpx.Request) -> httpx.Response:
         return httpx.Response(307, headers={"location": str(request.url)})
 
     _redirect_transport(monkeypatch, loop)
-    with pytest.raises(DatasetError, match="redirected more than 5 times"):
+    with pytest.raises(ConflictError, match="redirected more than 5 times"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {})
 
 
@@ -360,7 +360,7 @@ def test_dataset_download_enforces_byte_limit_after_redirects(tmp_path: Path, mo
         return httpx.Response(307, headers={"location": "https://datasets.example.test/final.jsonl"})
 
     _redirect_transport(monkeypatch, handler)
-    with pytest.raises(DatasetError, match="byte limit"):
+    with pytest.raises(ConflictError, match="byte limit"):
         write_dataset_source("https://datasets.example.test/start.jsonl", tmp_path / "out.jsonl", {}, max_bytes=6)
 
 
@@ -391,7 +391,7 @@ def test_dataset_download_rejects_redirect_outside_allowed_hosts(
         return httpx.Response(307, headers={"location": "https://cdn.example.test/final.jsonl"})
 
     _redirect_transport(monkeypatch, handler, extra_public_hosts=("cdn.example.test",))
-    with pytest.raises(DatasetError, match="not allowed"):
+    with pytest.raises(ConflictError, match="not allowed"):
         write_dataset_source(
             "https://datasets.example.test/start.jsonl",
             tmp_path / "out.jsonl",

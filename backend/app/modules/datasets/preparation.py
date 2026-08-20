@@ -13,17 +13,14 @@ from uuid import uuid4
 
 import httpx
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
+from app.core.errors import ConflictError
 from app.db.models import DatasetStatus
 from app.modules.datasets.records import iter_dataset_records, iter_delimited_rows
 from app.modules.datasets.records import DatasetRecordError
 from app.infrastructure.network.outbound import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
-class DatasetError(ValueError):
-    pass
-
-
-class DatasetDownloadPaused(DatasetError):
+class DatasetDownloadPaused(ConflictError):
     pass
 
 
@@ -65,7 +62,7 @@ def resolve_dataset_source(
             relative_path = "/".join(path_parts[2:])
         else:
             if not parsed.netloc or len(path_parts) < 2:
-                raise DatasetError(
+                raise ConflictError(
                     "Hugging Face sources must use hf://owner/repository/path/to/file "
                     "or hf://datasets/owner/repository/path/to/file."
                 )
@@ -75,7 +72,7 @@ def resolve_dataset_source(
     elif parsed.scheme == "https" and parsed.netloc:
         resolved = source_url
     else:
-        raise DatasetError(
+        raise ConflictError(
             "Dataset source must be an HTTPS URL, hf://owner/repository/path, "
             "or hf://datasets/owner/repository/path. "
             "Use the upload endpoint for local files."
@@ -97,37 +94,42 @@ def _credential_headers(
         return {}
     binding = settings.dataset_credential_bindings.get(credential_binding_id) if settings is not None else None
     if binding is None:
-        raise DatasetError(
+        raise ConflictError(
             f"Dataset credential binding {credential_binding_id!r} is not configured. "
-            "Ask an administrator to configure LLE_DATASET_CREDENTIAL_BINDINGS_JSON."
+            "Ask an administrator to configure LLE_DATASET_CREDENTIAL_BINDINGS_JSON.",
+            context={"reason": "credential"},
         )
     host = urlparse(source_url).hostname
     if host is None or host.lower().rstrip(".") not in binding.allowed_hosts:
-        raise DatasetError(
-            f"Dataset credential binding {credential_binding_id!r} is not authorized for this source host."
+        raise ConflictError(
+            f"Dataset credential binding {credential_binding_id!r} is not authorized for this source host.",
+            context={"reason": "credential"},
         )
     token = os.getenv(binding.environment_variable)
     if not token:
-        raise DatasetError(f"Dataset credential binding {credential_binding_id!r} is not available in this deployment.")
+        raise ConflictError(
+            f"Dataset credential binding {credential_binding_id!r} is not available in this deployment.",
+            context={"reason": "credential"},
+        )
     return {"Authorization": f"Bearer {token}"}
 
 
 def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, ...]) -> tuple[str, ...]:
     parsed = urlparse(source_url)
     if parsed.scheme != "https":
-        raise DatasetError("Dataset URLs must use HTTPS.")
+        raise ConflictError("Dataset URLs must use HTTPS.")
     host = parsed.hostname
     if not host:
-        raise DatasetError("Dataset URL must include a hostname.")
+        raise ConflictError("Dataset URL must include a hostname.")
     normalized_host = host.lower().rstrip(".")
     if allowed_hosts and not any(
         normalized_host == item or normalized_host.endswith(f".{item}") for item in allowed_hosts
     ):
-        raise DatasetError("Dataset URL host is not allowed by the configured network policy.")
+        raise ConflictError("Dataset URL host is not allowed by the configured network policy.")
     try:
         return validate_outbound_url(source_url)
     except OutboundNetworkError as error:
-        raise DatasetError(str(error)) from error
+        raise ConflictError(str(error)) from error
 
 
 def _host_not_allowed(host: str | None, allowed_hosts: tuple[str, ...]) -> bool:
@@ -163,44 +165,44 @@ def write_dataset_source(
         try:
             addresses = validate_outbound_url(current)
         except OutboundNetworkError as error:
-            raise DatasetError(str(error)) from error
+            raise ConflictError(str(error)) from error
         with httpx.Client(transport=pinned_outbound_transport(addresses), timeout=60, follow_redirects=False) as client:
             with client.stream("GET", current, headers=hop_headers) as response:
                 if response.is_redirect:
                     location = response.headers.get("location")
                     if not location:
-                        raise DatasetError("Dataset source redirected without a Location header.")
+                        raise ConflictError("Dataset source redirected without a Location header.")
                     current = urljoin(current, location)
                     if urlparse(current).scheme != "https":
-                        raise DatasetError("Dataset redirects must use HTTPS.")
+                        raise ConflictError("Dataset redirects must use HTTPS.")
                     if _host_not_allowed(urlparse(current).hostname, allowed_hosts):
-                        raise DatasetError("Dataset redirect target is not allowed by the configured network policy.")
+                        raise ConflictError("Dataset redirect target is not allowed by the configured network policy.")
                     if urlparse(current).hostname != source_host:
                         hop_headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
                     continue
                 response.raise_for_status()
                 content_length = response.headers.get("content-length")
                 if content_length and content_length.isdigit() and int(content_length) > max_bytes:
-                    raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                    raise ConflictError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
                 written = 0
                 with target.open("wb") as output_file:
                     for chunk in response.iter_bytes():
                         written += len(chunk)
                         if written > max_bytes:
-                            raise DatasetError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
+                            raise ConflictError(f"Dataset download exceeds the configured {max_bytes} byte limit.")
                         output_file.write(chunk)
                         digest.update(chunk)
                         if on_chunk:
                             on_chunk()
                 return digest.hexdigest()
-    raise DatasetError(f"Dataset source redirected more than {MAX_DOWNLOAD_REDIRECTS} times.")
+    raise ConflictError(f"Dataset source redirected more than {MAX_DOWNLOAD_REDIRECTS} times.")
 
 
 def prepare_dataset_cache(target: Path) -> Path:
     """Build an atomic, database-neutral sample index for a verified cache file."""
 
     if not target.is_file():
-        raise DatasetError("Dataset cache file is unavailable for preparation.")
+        raise ConflictError("Dataset cache file is unavailable for preparation.")
     destination = target.parent / "prepared"
     temporary = target.parent / f".prepared-{uuid4().hex}"
     previous: Path | None = None
@@ -259,7 +261,7 @@ def clear_prepared_dataset_cache(prepared_path: str | None, data_root: str) -> N
     manifest = Path(prepared_path).resolve()
     prepared = manifest.parent
     if prepared.name != "prepared" or not prepared.is_relative_to(root):
-        raise DatasetError("Prepared dataset cache path is outside the configured dataset root.")
+        raise ConflictError("Prepared dataset cache path is outside the configured dataset root.")
     if prepared.exists():
         shutil.rmtree(prepared)
 
@@ -284,14 +286,14 @@ def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
         with zipfile.ZipFile(target) as archive:
             entries = [entry for entry in archive.infolist() if not entry.is_dir()]
             if len(entries) > MAX_PREPARED_ARCHIVE_FILES:
-                raise DatasetError("Dataset archive contains too many files to prepare safely.")
+                raise ConflictError("Dataset archive contains too many files to prepare safely.")
             for entry in entries:
                 total_size += entry.file_size
                 if total_size > MAX_PREPARED_ARCHIVE_BYTES:
-                    raise DatasetError("Dataset archive exceeds the safe preparation size limit.")
+                    raise ConflictError("Dataset archive exceeds the safe preparation size limit.")
                 output = (source_root / entry.filename).resolve()
                 if not output.is_relative_to(source_root.resolve()):
-                    raise DatasetError("Dataset archive contains an unsafe file path.")
+                    raise ConflictError("Dataset archive contains an unsafe file path.")
                 output.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(entry) as source, output.open("wb") as destination:
                     shutil.copyfileobj(source, destination, length=1024 * 1024)
@@ -307,7 +309,7 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
         try:
             value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
         except (json.JSONDecodeError, OSError) as error:
-            raise DatasetError(f"Dataset JSON source could not be parsed: {error}") from error
+            raise ConflictError(f"Dataset JSON source could not be parsed: {error}") from error
         if isinstance(value, dict):
             yield 1
             return
@@ -315,14 +317,14 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
             for number in range(1, len(value) + 1):
                 yield number
             return
-        raise DatasetError("Dataset JSON sources must be an object or an array of objects.")
+        raise ConflictError("Dataset JSON sources must be an object or an array of objects.")
     if path.suffix.lower() in {".csv", ".tsv"}:
         delimiter = "," if path.suffix.lower() == ".csv" else "\t"
         try:
             for start_line, _fields in iter_delimited_rows(path, delimiter=delimiter):
                 yield start_line
         except (csv.Error, OSError) as error:
-            raise DatasetError(f"Dataset delimited source could not be parsed: {error}") from error
+            raise ConflictError(f"Dataset delimited source could not be parsed: {error}") from error
         return
     if path.suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt"}:
         yield 1
@@ -335,7 +337,7 @@ def _indexable_record_numbers(path: Path) -> Iterator[int]:
                     found = True
                     yield number
     except OSError as error:
-        raise DatasetError("Dataset source could not be read during preparation.") from error
+        raise ConflictError("Dataset source could not be read during preparation.") from error
     if not found:
         yield 1
 
@@ -372,17 +374,17 @@ def validate_dataset_field_defaults(
     reference_field: str | None,
 ) -> None:
     if input_field is not None and input_field == reference_field:
-        raise DatasetError("Input and reference fields must name different dataset columns.")
+        raise ConflictError("Input and reference fields must name different dataset columns.")
     if prepared_path is None:
         return
     try:
         preview = preview_dataset_records(prepared_path, data_root, limit=50)
     except DatasetRecordError as error:
-        raise DatasetError(f"Dataset preview schema is unavailable: {error}") from error
+        raise ConflictError(f"Dataset preview schema is unavailable: {error}") from error
     fields = {str(field) for field in preview["fields"]}
     missing = [field for field in (input_field, reference_field) if field is not None and field not in fields]
     if missing:
-        raise DatasetError(
+        raise ConflictError(
             "Dataset field selection is not present in the current preview schema: " + ", ".join(missing) + "."
         )
 

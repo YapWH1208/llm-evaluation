@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
-from app.modules.datasets.preparation import DatasetError
+from app.core.errors import NotFoundError
 
 
 class MongoEvaluationRepository:
@@ -301,7 +301,10 @@ class MongoEvaluationRepository:
             matches = self._store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
             dataset = matches[0] if matches else None
         if dataset is None:
-            raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+            raise NotFoundError(
+                f"Required dataset {descriptor['dataset_id']} is not registered.",
+                context={"dataset_id": descriptor["dataset_id"]},
+            )
         if dataset.get("status") != "ready":
             DatasetService(MongoDatasetRepository(self._store)).download(str(dataset["id"]), data_root, settings)
 

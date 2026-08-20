@@ -9,11 +9,11 @@ from typing import Any
 import httpx
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
+from app.core.errors import ConflictError, NotFoundError
 from app.db.models import DatasetStatus
 from app.modules.datasets.ports import DatasetRepository
 from app.modules.datasets.preparation import (
     DatasetDownloadPaused,
-    DatasetError,
     clear_prepared_dataset_cache,
     dataset_disk_usage,
     dataset_edit_lifecycle_updates,
@@ -54,12 +54,12 @@ class DatasetService:
         try:
             return self.repository.create(values)
         except ValueError as error:
-            raise DatasetError(str(error)) from error
+            raise ConflictError(str(error)) from error
 
     def get(self, dataset_version_id: str) -> dict[str, Any]:
         dataset = self.repository.get(dataset_version_id)
         if dataset is None:
-            raise DatasetError("Dataset version not found")
+            raise NotFoundError("Dataset version not found", context={"dataset_version_id": dataset_version_id})
         return dataset
 
     def disk_usage(self, data_root: str) -> dict[str, int | str]:
@@ -69,11 +69,11 @@ class DatasetService:
         dataset = self.get(dataset_version_id)
         prepared_path = dataset.get("prepared_path")
         if dataset.get("status") != DatasetStatus.READY.value or not isinstance(prepared_path, str):
-            raise DatasetError("Dataset is not ready; download and verify it before previewing.")
+            raise ConflictError("Dataset is not ready; download and verify it before previewing.")
         try:
             return preview_dataset_records(prepared_path, data_root, limit=limit)
         except DatasetRecordError as error:
-            raise DatasetError(f"Dataset preview is unavailable: {error}") from error
+            raise ConflictError(f"Dataset preview is unavailable: {error}") from error
 
     def update(self, dataset_version_id: str, payload: Mapping[str, Any], *, data_root: str) -> dict[str, Any]:
         current = self.get(dataset_version_id)
@@ -104,9 +104,9 @@ class DatasetService:
         try:
             updated = self.repository.update(dataset_version_id, values)
         except ValueError as error:
-            raise DatasetError(str(error)) from error
+            raise ConflictError(str(error)) from error
         if updated is None:
-            raise DatasetError("Dataset version not found")
+            raise NotFoundError("Dataset version not found", context={"dataset_version_id": dataset_version_id})
         return updated
 
     def accept_license(self, dataset_version_id: str) -> dict[str, Any]:
@@ -131,10 +131,10 @@ class DatasetService:
         dataset = self.get(dataset_version_id)
         source_url = dataset.get("source_url")
         if not isinstance(source_url, str) or not source_url:
-            raise DatasetError("Dataset has no downloadable source URL.")
+            raise ConflictError("Dataset has no downloadable source URL.")
         if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
             self.repository.update(dataset_version_id, {"status": DatasetStatus.LICENSE_REQUIRED.value})
-            raise DatasetError("Dataset license must be accepted before download.")
+            raise ConflictError("Dataset license must be accepted before download.")
         destination = (
             Path(data_root).resolve()
             / "datasets"
@@ -171,7 +171,7 @@ class DatasetService:
             expected = dataset.get("checksum")
             if isinstance(expected, str) and expected.lower() != checksum:
                 temporary.unlink(missing_ok=True)
-                raise DatasetError("Dataset checksum verification failed.")
+                raise ConflictError("Dataset checksum verification failed.")
             temporary.replace(target)
             self.repository.update(dataset_version_id, {"status": DatasetStatus.PREPARING.value})
             prepared_path = prepare_dataset_cache(target)
@@ -190,11 +190,12 @@ class DatasetService:
             return updated
         except DatasetDownloadPaused as error:
             self.repository.update(dataset_version_id, {"status": DatasetStatus.WAITING.value, "error_message": None})
-            raise DatasetError(str(error)) from error
-        except (httpx.HTTPStatusError, DatasetError) as error:
+            raise ConflictError(str(error)) from error
+        except (httpx.HTTPStatusError, ConflictError) as error:
             status_code = getattr(getattr(error, "response", None), "status_code", 0)
             credential_required = bool(dataset.get("credential_binding_id")) and (
-                "credential binding" in str(error) or status_code in {401, 403}
+                (isinstance(error, ConflictError) and error.context.get("reason") == "credential")
+                or status_code in {401, 403}
             )
             self.repository.update(
                 dataset_version_id,
@@ -205,12 +206,12 @@ class DatasetService:
                     "error_message": str(error)[:500],
                 },
             )
-            raise DatasetError(str(error)) from error
+            raise ConflictError(str(error)) from error
         except (httpx.HTTPError, OSError) as error:
             self.repository.update(
                 dataset_version_id, {"status": DatasetStatus.FAILED.value, "error_message": str(error)[:500]}
             )
-            raise DatasetError(str(error)) from error
+            raise ConflictError(str(error)) from error
 
     def pause(self, dataset_version_id: str) -> dict[str, Any]:
         dataset = self.get(dataset_version_id)
@@ -219,7 +220,7 @@ class DatasetService:
             DatasetStatus.VERIFYING.value,
             DatasetStatus.PREPARING.value,
         }:
-            raise DatasetError("Only an active dataset download can be paused.")
+            raise ConflictError("Only an active dataset download can be paused.")
         updated = self.repository.update(
             dataset_version_id, {"status": DatasetStatus.WAITING.value, "error_message": None}
         )
@@ -230,7 +231,7 @@ class DatasetService:
         dataset = self.get(dataset_version_id)
         local_path = dataset.get("local_path")
         if not isinstance(local_path, str) or not local_path:
-            raise DatasetError("Dataset has no cached file to validate.")
+            raise ConflictError("Dataset has no cached file to validate.")
         root = (Path(data_root).resolve() / "datasets").resolve()
         target = Path(local_path).resolve()
         if not target.is_relative_to(root) or not target.is_file():
@@ -241,7 +242,7 @@ class DatasetService:
                     "error_message": "Dataset cache file is missing or outside the configured dataset root.",
                 },
             )
-            raise DatasetError("Dataset cache file is missing or outside the configured dataset root.")
+            raise ConflictError("Dataset cache file is missing or outside the configured dataset root.")
         self.repository.update(dataset_version_id, {"status": DatasetStatus.VERIFYING.value, "error_message": None})
         digest = hashlib.sha256()
         with target.open("rb") as file:
@@ -256,7 +257,7 @@ class DatasetService:
                     "error_message": "Dataset cache checksum verification failed.",
                 },
             )
-            raise DatasetError("Dataset cache checksum verification failed.")
+            raise ConflictError("Dataset cache checksum verification failed.")
         prepared_path = dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None
         if not validate_prepared_dataset_cache(prepared_path, data_root):
             self.repository.update(dataset_version_id, {"status": DatasetStatus.PREPARING.value})
@@ -299,7 +300,7 @@ class DatasetService:
             DatasetStatus.VERIFYING.value,
             DatasetStatus.REMOVING.value,
         }:
-            raise DatasetError("Dataset cannot be deleted while it is downloading or preparing.")
+            raise ConflictError("Dataset cannot be deleted while it is downloading or preparing.")
         self._remove_files(dataset, data_root)
         deleted = self.repository.delete(dataset_version_id)
         assert deleted is not None
@@ -308,21 +309,21 @@ class DatasetService:
     def upload(self, dataset_version_id: str, *, filename: str, content: bytes, data_root: str) -> dict[str, Any]:
         dataset = self.get(dataset_version_id)
         if not content:
-            raise DatasetError("Uploaded dataset is empty.")
+            raise ConflictError("Uploaded dataset is empty.")
         if len(content) > 64 * 1024 * 1024:
-            raise DatasetError("Uploaded dataset exceeds the 64 MiB upload limit.")
+            raise ConflictError("Uploaded dataset exceeds the 64 MiB upload limit.")
         safe_name = Path(filename).name
         if not safe_name or safe_name in {".", ".."}:
-            raise DatasetError("Uploaded dataset filename is invalid.")
+            raise ConflictError("Uploaded dataset filename is invalid.")
         if Path(safe_name).suffix.lower() not in {".json", ".jsonl", ".csv", ".tsv", ".txt", ".zip", ".parquet"}:
-            raise DatasetError("Uploaded dataset file type is not supported.")
+            raise ConflictError("Uploaded dataset file type is not supported.")
         if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
             self.repository.update(dataset_version_id, {"status": DatasetStatus.LICENSE_REQUIRED.value})
-            raise DatasetError("Dataset license must be accepted before upload.")
+            raise ConflictError("Dataset license must be accepted before upload.")
         destination = (Path(data_root).resolve() / "datasets" / "uploads" / dataset_version_id).resolve()
         root = (Path(data_root).resolve() / "datasets").resolve()
         if not destination.is_relative_to(root):
-            raise DatasetError("Dataset upload path is outside the configured dataset root.")
+            raise ConflictError("Dataset upload path is outside the configured dataset root.")
         destination.mkdir(parents=True, exist_ok=True)
         target = destination / safe_name
         checksum = hashlib.sha256(content).hexdigest()
@@ -335,7 +336,7 @@ class DatasetService:
                     "error_message": "Uploaded dataset checksum verification failed.",
                 },
             )
-            raise DatasetError("Uploaded dataset checksum verification failed.")
+            raise ConflictError("Uploaded dataset checksum verification failed.")
         temporary = destination / f".{safe_name}.part"
         temporary.write_bytes(content)
         temporary.replace(target)
@@ -358,7 +359,9 @@ class DatasetService:
 
     def _ensure_not_referenced(self, dataset_version_id: str) -> None:
         if self.repository.is_referenced(dataset_version_id):
-            raise DatasetError("Dataset cannot be cleared or deleted while an evaluation run references this revision.")
+            raise ConflictError(
+                "Dataset cannot be cleared or deleted while an evaluation run references this revision."
+            )
 
     @staticmethod
     def _remove_files(dataset: Mapping[str, Any], data_root: str) -> None:
@@ -367,7 +370,7 @@ class DatasetService:
             root = (Path(data_root).resolve() / "datasets").resolve()
             target = Path(local_path).resolve()
             if not target.is_relative_to(root):
-                raise DatasetError("Dataset cache path is outside the configured dataset root.")
+                raise ConflictError("Dataset cache path is outside the configured dataset root.")
             target.unlink(missing_ok=True)
         clear_prepared_dataset_cache(
             dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None, data_root
@@ -381,7 +384,6 @@ class DatasetService:
 
 __all__ = [
     "DatasetService",
-    "DatasetError",
     "DatasetDownloadPaused",
     "resolve_dataset_source",
     "write_dataset_source",

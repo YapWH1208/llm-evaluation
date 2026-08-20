@@ -126,13 +126,14 @@ def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tm
 
 
 def test_dataset_preparation_rejects_malformed_json(tmp_path: Path) -> None:
-    from app.modules.datasets.preparation import DatasetError, prepare_dataset_cache
+    from app.core.errors import ConflictError
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
     bad = root / "broken.json"
     bad.write_text('{"question": "q1"', encoding="utf-8")
-    with pytest.raises(DatasetError, match="could not be parsed"):
+    with pytest.raises(ConflictError, match="could not be parsed"):
         prepare_dataset_cache(bad)
 
 
@@ -148,13 +149,14 @@ def test_dataset_records_rejects_malformed_jsonl(tmp_path: Path) -> None:
 
 
 def test_dataset_preparation_rejects_malformed_csv(tmp_path: Path) -> None:
-    from app.modules.datasets.preparation import DatasetError, prepare_dataset_cache
+    from app.core.errors import ConflictError
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
     bad = root / "broken.csv"
     bad.write_text('question,answer\nq1,"unclosed\n', encoding="utf-8")
-    with pytest.raises(DatasetError, match="could not be parsed"):
+    with pytest.raises(ConflictError, match="could not be parsed"):
         prepare_dataset_cache(bad)
 
 

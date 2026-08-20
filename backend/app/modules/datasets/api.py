@@ -9,13 +9,14 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.errors import ConflictError
 from app.modules.datasets.metadata import (
     DatasetMetadataError,
     normalize_capabilities,
     normalize_evaluation_type,
     normalize_languages,
 )
-from app.modules.datasets.service import DatasetError, DatasetService
+from app.modules.datasets.service import DatasetService
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
 
@@ -146,16 +147,13 @@ def _decode_upload(value: str) -> bytes:
     try:
         return base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError) as error:
-        raise DatasetError("Uploaded dataset must be valid base64 data.") from error
+        raise ConflictError("Uploaded dataset must be valid base64 data.") from error
 
 
 @router.post("", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
 def create_dataset(payload: DatasetCreate, request: Request) -> dict[str, Any]:
     _validate_registration(payload, request)
-    try:
-        return _service(request).create(payload.model_dump(exclude={"credential_env_var"}))
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).create(payload.model_dump(exclude={"credential_env_var"}))
 
 
 @router.get("", response_model=list[DatasetResponse])
@@ -172,43 +170,29 @@ def get_dataset_disk_usage(request: Request) -> dict[str, int | str]:
 def preview_dataset_version(
     dataset_version_id: str, request: Request, limit: int = Query(default=5, ge=1, le=50)
 ) -> dict[str, object]:
-    try:
-        return _service(request).preview(dataset_version_id, request.app.state.settings.data_root, limit=limit)
-    except DatasetError as error:
-        code = status.HTTP_404_NOT_FOUND if "not found" in str(error).lower() else status.HTTP_409_CONFLICT
-        raise HTTPException(code, str(error)) from error
+    return _service(request).preview(dataset_version_id, request.app.state.settings.data_root, limit=limit)
 
 
 @router.put("/{dataset_version_id}", response_model=DatasetResponse)
 def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, request: Request) -> dict[str, Any]:
     _validate_registration(payload, request)
-    try:
-        return _service(request).update(
-            dataset_version_id,
-            payload.model_dump(exclude={"credential_env_var"}),
-            data_root=request.app.state.settings.data_root,
-        )
-    except DatasetError as error:
-        code = status.HTTP_404_NOT_FOUND if "not found" in str(error).lower() else status.HTTP_409_CONFLICT
-        raise HTTPException(code, str(error)) from error
+    return _service(request).update(
+        dataset_version_id,
+        payload.model_dump(exclude={"credential_env_var"}),
+        data_root=request.app.state.settings.data_root,
+    )
 
 
 @router.post("/{dataset_version_id}/accept-license", response_model=DatasetResponse)
 def accept_dataset_license(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).accept_license(dataset_version_id)
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    return _service(request).accept_license(dataset_version_id)
 
 
 @router.post("/{dataset_version_id}/download", response_model=DatasetResponse)
 def download_dataset_version(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).download(
-            dataset_version_id, request.app.state.settings.data_root, request.app.state.settings
-        )
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).download(
+        dataset_version_id, request.app.state.settings.data_root, request.app.state.settings
+    )
 
 
 @router.post("/{dataset_version_id}/retry", response_model=DatasetResponse)
@@ -218,18 +202,12 @@ def retry_dataset_download(dataset_version_id: str, request: Request) -> dict[st
 
 @router.post("/{dataset_version_id}/pause", response_model=DatasetResponse)
 def pause_dataset(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).pause(dataset_version_id)
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).pause(dataset_version_id)
 
 
 @router.post("/{dataset_version_id}/validate", response_model=DatasetResponse)
 def validate_dataset(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).validate(dataset_version_id, request.app.state.settings.data_root)
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).validate(dataset_version_id, request.app.state.settings.data_root)
 
 
 @router.put("/{dataset_version_id}/credential-reference", response_model=DatasetResponse)
@@ -237,37 +215,24 @@ def set_dataset_credential_reference(
     dataset_version_id: str, payload: DatasetCredentialReference, request: Request
 ) -> dict[str, Any]:
     _validate_credential_binding(payload.credential_binding_id, request)
-    try:
-        return _service(request).set_credential_binding(dataset_version_id, payload.credential_binding_id)
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    return _service(request).set_credential_binding(dataset_version_id, payload.credential_binding_id)
 
 
 @router.post("/{dataset_version_id}/upload", response_model=DatasetResponse)
 def upload_dataset_version(dataset_version_id: str, payload: DatasetUpload, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).upload(
-            dataset_version_id,
-            filename=payload.filename,
-            content=_decode_upload(payload.base64_data),
-            data_root=request.app.state.settings.data_root,
-        )
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).upload(
+        dataset_version_id,
+        filename=payload.filename,
+        content=_decode_upload(payload.base64_data),
+        data_root=request.app.state.settings.data_root,
+    )
 
 
 @router.delete("/{dataset_version_id}/cache", response_model=DatasetResponse)
 def clear_dataset_version_cache(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).clear_cache(dataset_version_id, request.app.state.settings.data_root)
-    except DatasetError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return _service(request).clear_cache(dataset_version_id, request.app.state.settings.data_root)
 
 
 @router.delete("/{dataset_version_id}", response_model=DatasetResponse)
 def delete_dataset_version(dataset_version_id: str, request: Request) -> dict[str, Any]:
-    try:
-        return _service(request).delete(dataset_version_id, request.app.state.settings.data_root)
-    except DatasetError as error:
-        code = status.HTTP_404_NOT_FOUND if "not found" in str(error).lower() else status.HTTP_409_CONFLICT
-        raise HTTPException(code, str(error)) from error
+    return _service(request).delete(dataset_version_id, request.app.state.settings.data_root)

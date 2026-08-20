@@ -25,7 +25,7 @@ from app.db.models import (
     SampleAttempt,
     TaskUnit,
 )
-from app.modules.datasets.preparation import DatasetError
+from app.core.errors import NotFoundError
 
 
 def _model_values(model: Any) -> dict[str, Any]:
@@ -492,7 +492,10 @@ class SqliteEvaluationRepository:
                     query = query.where(DatasetVersion.revision == descriptor["revision"])
                 dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
             if dataset is None:
-                raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                raise NotFoundError(
+                    f"Required dataset {descriptor['dataset_id']} is not registered.",
+                    context={"dataset_id": descriptor["dataset_id"]},
+                )
             if dataset.status != "ready":
                 DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
 

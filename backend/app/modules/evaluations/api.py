@@ -10,8 +10,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.db import RunStatus
 from app.modules.evaluations.execution import ExecutionService
+from app.modules.evaluations.lifecycle import RunLifecycle
 from app.modules.evaluations.service import (
     EvaluationService,
 )
@@ -434,19 +434,13 @@ async def stream_run_events(run_id: str, request: Request, service: EvaluationSe
 
     async def event_stream():
         previous: str | None = None
-        terminal_statuses = {
-            RunStatus.COMPLETED.value,
-            RunStatus.COMPLETED_WITH_ERRORS.value,
-            RunStatus.FAILED.value,
-            RunStatus.CANCELLED.value,
-        }
         while True:
             payload = service.event_payload(run_id)
             serialized = json.dumps(payload, separators=(",", ":"))
             if serialized != previous:
                 yield f"event: run\ndata: {serialized}\n\n"
                 previous = serialized
-            if payload["status"] in terminal_statuses:
+            if payload["status"] in RunLifecycle.terminal:
                 return
             if await request.is_disconnected():
                 return
