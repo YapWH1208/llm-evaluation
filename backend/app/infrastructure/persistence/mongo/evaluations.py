@@ -4,11 +4,13 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.db.mongo import MongoDocumentStore
+from app.infrastructure.persistence.mongo.queue import MongoQueueStore
 
 
 class MongoEvaluationRepository:
     def __init__(self, store: MongoDocumentStore) -> None:
         self._store = store
+        self._queue = MongoQueueStore(store)
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         return self._store.get_document("evaluation_runs", run_id)
@@ -210,7 +212,7 @@ class MongoEvaluationRepository:
         system_max_concurrency: int | None = None,
         worker_max_concurrency: int | None = None,
     ) -> dict[str, Any] | None:
-        return self._store.claim_task(
+        return self._queue.claim_task(
             worker_id=worker_id,
             lease_seconds=lease_seconds,
             run_id=run_id,
@@ -219,14 +221,14 @@ class MongoEvaluationRepository:
         )
 
     def heartbeat_task(self, task_id: str, lease_token: str, lease_seconds: int) -> dict[str, Any] | None:
-        return self._store.heartbeat_task(
+        return self._queue.heartbeat_task(
             task_id=task_id,
             lease_token=lease_token,
             lease_seconds=lease_seconds,
         )
 
     def reclaim_expired_leases(self) -> int:
-        return self._store.reclaim_expired_leases()
+        return self._queue.reclaim_expired_leases()
 
     def update_run_if(
         self,
@@ -251,7 +253,7 @@ class MongoEvaluationRepository:
         task = self._store.get_document("task_units", task_id)
         if task is None:
             return None
-        return self._store.update_task_if_current_lease(task, lease_token, values)
+        return self._queue.update_task_if_current_lease(task, lease_token, values)
 
     def create_task(self, values: dict[str, Any]) -> dict[str, Any]:
         return self._store.insert_document("task_units", values)

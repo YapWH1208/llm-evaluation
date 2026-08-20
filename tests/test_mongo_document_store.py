@@ -23,6 +23,7 @@ from app.infrastructure.providers.contracts import (
     SampleExecutionResult,
 )
 from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
+from app.infrastructure.persistence.mongo.queue import MongoQueueStore
 from app.modules.evaluations.names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
@@ -287,19 +288,20 @@ def test_mongo_validation_detects_missing_collection_validator() -> None:
         store.initialize("validate")
 
 
-def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
+def test_mongo_queue_claims_by_priority_and_reclaims_expired_leases() -> None:
     client = FakeClient()
     store = MongoDocumentStore(
         Settings.local_development(database_url="mongodb://mongo.test/platform", mongodb_database="override"),
         client=client,
     )
     store.initialize()
+    queue = MongoQueueStore(store)
     now = datetime.now(timezone.utc)
     tasks = client["override"]["task_units"]
     tasks.insert_one({"_id": "low", "status": "pending", "priority": 1, "created_at": now})
     tasks.insert_one({"_id": "high", "status": "pending", "priority": 9, "created_at": now})
 
-    claimed = store.claim_task(worker_id="worker-a", lease_seconds=30)
+    claimed = queue.claim_task(worker_id="worker-a", lease_seconds=30)
 
     assert claimed is not None
     assert claimed["id"] == "high"
@@ -310,22 +312,23 @@ def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     tasks.documents[1]["lease_expires_at"] = now - timedelta(seconds=1)
     client["override"]["sample_attempts"].insert_one({"_id": "attempt", "task_id": "high", "status": "running"})
 
-    assert store.reclaim_expired_leases() == 1
+    assert queue.reclaim_expired_leases() == 1
     assert tasks.documents[1]["status"] == "pending"
     assert tasks.documents[1]["lease_version"] == 2
     assert client["override"]["sample_attempts"].documents[0]["status"] == "pending"
-    reclaimed = store.claim_task(worker_id="worker-b", lease_seconds=30)
+    reclaimed = queue.claim_task(worker_id="worker-b", lease_seconds=30)
     assert reclaimed is not None
     assert reclaimed["id"] == "high"
     assert reclaimed["lease_version"] == 3
     assert reclaimed["lease_token"] != original_token
-    assert store.heartbeat_task(task_id="high", lease_token=str(original_token)) is None
+    assert queue.heartbeat_task(task_id="high", lease_token=str(original_token)) is None
 
 
-def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
+def test_mongo_queue_claim_honors_run_and_shared_credential_limits() -> None:
     client = FakeClient()
     store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
     store.initialize()
+    queue = MongoQueueStore(store)
     now = datetime.now(timezone.utc)
     first_endpoint = store.insert_document(
         "model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1}
@@ -358,9 +361,9 @@ def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
             },
         )
 
-    assert store.claim_task(worker_id="worker-a", run_id=first_run["id"]) is not None
-    assert store.claim_task(worker_id="worker-b", run_id=first_run["id"]) is None
-    assert store.claim_task(worker_id="worker-c", run_id=second_run["id"]) is None
+    assert queue.claim_task(worker_id="worker-a", run_id=first_run["id"]) is not None
+    assert queue.claim_task(worker_id="worker-b", run_id=first_run["id"]) is None
+    assert queue.claim_task(worker_id="worker-c", run_id=second_run["id"]) is None
 
 
 def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, capsys) -> None:
@@ -849,6 +852,7 @@ def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: P
         secret_encryption_key=Fernet.generate_key().decode(),
     )
     store = MongoDocumentStore(settings, client=client)
+    queue = MongoQueueStore(store)
 
     class LeaseLosingExecutor:
         def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
@@ -857,7 +861,7 @@ def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: P
             assert store.update_document(
                 "task_units", running[0]["id"], {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}
             )
-            assert store.reclaim_expired_leases() == 1
+            assert queue.reclaim_expired_leases() == 1
             return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
 
     app = create_app(

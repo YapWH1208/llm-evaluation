@@ -108,6 +108,15 @@ def test_persistence_adapters_do_not_invoke_application_services() -> None:
     assert offenders == set()
 
 
+def test_mongo_document_store_does_not_own_queue_behavior() -> None:
+    source = (BACKEND / "db" / "mongo.py").read_text(encoding="utf-8")
+    assert "def claim_task(" not in source
+    assert "def heartbeat_task(" not in source
+    assert "def reclaim_expired_leases(" not in source
+    assert "def update_task_if_current_lease(" not in source
+    assert (BACKEND / "infrastructure" / "persistence" / "mongo" / "queue.py").exists()
+
+
 def test_production_modules_do_not_import_private_cross_module_helpers() -> None:
     offenders: set[str] = set()
     for path in _python_files(BACKEND):
