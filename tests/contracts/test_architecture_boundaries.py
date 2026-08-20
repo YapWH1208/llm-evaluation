@@ -21,7 +21,6 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
     "modules/benchmarks/prompts_api.py",
     "modules/reports/api.py",
     "modules/reports/assets_api.py",
-    "modules/reviews/api.py",
     "modules/reviews/judges_api.py",
 }
 KNOWN_STRING_ERROR_ROUTING: set[str] = set()
