@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 
-import { AnalyticsCell, AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterQuery, ScatterResponse } from "../../api";
+import { AnalyticsCell, AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterQuery, ScatterResponse } from "../../shared/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { comparisonCopy, workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api } from "./api";
+import { api } from "./shared/api";
 import { Guide } from "./components/Guide";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

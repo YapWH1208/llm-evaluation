@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterResponse } from "./api";
+import { AnalyticsMatrix, Comparison, Dataset, Endpoint, EvaluationRun, ScatterResponse } from "./shared/api";
 import { AnalysisPage, CapabilityChart, ComparisonEvidence, EvidenceScatterWorkspace, HeatmapBreakdown } from "./components/pages/InsightsPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

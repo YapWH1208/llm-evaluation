@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EvaluationRun } from "./api";
+import { EvaluationRun } from "./shared/api";
 import { RunInventory, RunsPage } from "./components/pages/OperationsPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Dataset, api } from "./api";
+import { Dataset, api } from "./shared/api";
 import { datasetEditForm, datasetPrepareLabel, DatasetInspector, DatasetsPage, loadDatasetPreview } from "./components/pages/CatalogPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

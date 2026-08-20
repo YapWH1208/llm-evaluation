@@ -4,7 +4,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, PromptPackage } from "./api";
+import { api, PromptPackage } from "./shared/api";
 import { PromptPackagesPage } from "./components/pages/PromptPackagesPage";
 import type { WorkspaceTabFor } from "./dashboard/routing";
 import { LocaleProvider } from "./i18n/LocaleProvider";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, SystemHealth } from "../../api";
+import { api, SystemHealth } from "../../shared/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { localeIds, localeNames, reportCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";

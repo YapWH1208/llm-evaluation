@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, type Report } from "./api";
+import { api, type Report } from "./shared/api";
 import { ReportsTable } from "./App";
 import { openSharedReport, SharedReportPage } from "./components/pages/SystemPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";

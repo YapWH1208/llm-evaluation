@@ -3,7 +3,7 @@ import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Capability, Endpoint } from "./api";
+import { Capability, Endpoint } from "./shared/api";
 import { Guide } from "./components/Guide";
 import { CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";

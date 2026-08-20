@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 
-import { Capability, Endpoint } from "../../api";
+import { Capability, Endpoint } from "../../shared/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { firstEvaluationCopy, formCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { PageHeader } from "../workspace/PageHeader";

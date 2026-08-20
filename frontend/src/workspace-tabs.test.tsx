@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, type Endpoint, type EvaluationRun } from "./api";
+import { api, type Endpoint, type EvaluationRun } from "./shared/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 const endpoint: Endpoint = {

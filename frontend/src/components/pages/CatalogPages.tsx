@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import { api, Dataset } from "../../api";
+import { api, Dataset } from "../../shared/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";

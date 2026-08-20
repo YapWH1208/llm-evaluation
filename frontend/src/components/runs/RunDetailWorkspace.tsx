@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 
-import type { AggregateMetric, EvaluationRun, RunLogEntry, RunSummary } from "../../api";
+import type { AggregateMetric, EvaluationRun, RunLogEntry, RunSummary } from "../../shared/api";
 import { runDetailCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import type { MetricUnit } from "../../metrics";

@@ -1,4 +1,4 @@
-import type { AnalyticsMatrix, Endpoint, EvaluationRun } from "../api";
+import type { AnalyticsMatrix, Endpoint, EvaluationRun } from "../shared/api";
 
 type AnalyticsRow = AnalyticsMatrix["heatmap"][number];
 

@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useId, useState } from "react";
 
-import type { Dataset } from "../../api";
+import type { Dataset } from "../../shared/api";
 import { useTranslation } from "../../i18n/LocaleProvider";
 
 

@@ -1,6 +1,6 @@
 import { ReactNode, useMemo, useState } from "react";
 
-import { EvaluationRun } from "../../api";
+import { EvaluationRun } from "../../shared/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { firstEvaluationCopy, workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
