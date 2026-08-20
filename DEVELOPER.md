@@ -82,17 +82,24 @@ provider limits.
 
 ## Architecture
 
-- The FastAPI app is created by `create_app()` in `backend/app/main.py`.
-- API routes live in `backend/app/api/*.py`.
-- Business logic lives in `backend/app/services/*.py`.
-- SQLAlchemy models live in `backend/app/db/models.py`; forward-only migrations
-  live in `backend/app/db/migrations.py`.
-- SQLite is the primary relational store. MongoDB is an optional document store
-  with parallel service modules prefixed `mongo_` (for example,
-  `mongo_datasets.py`). Feature changes usually need to keep both persistence
-  paths in sync.
-- Built-in benchmark plugins live in `backend/app/benchmarks/` and are registered
-  through `backend/app/services/benchmark_registry.py`.
+- The FastAPI app is composed by `create_app()` in `backend/app/main.py`. Bootstrap
+  selects SQLite or MongoDB once; feature code does not branch on the selected
+  backend.
+- Product capabilities are feature-oriented under `backend/app/modules/`:
+  `endpoints`, `datasets`, `benchmarks`, `evaluations`, `reports`, and `reviews`.
+  Each feature owns its API schemas, application service, lifecycle/policy code,
+  and repository ports. HTTP routers are thin adapters over those services.
+- Persistence adapters live under `backend/app/infrastructure/persistence/` and
+  implement the same repository contracts for SQLite and MongoDB. SQLAlchemy
+  models and forward-only migrations remain registered centrally under
+  `backend/app/db/`.
+- Provider protocol behavior has one registry and one adapter per protocol under
+  `backend/app/infrastructure/providers/`; shared outbound network safeguards are
+  in `backend/app/infrastructure/network/`.
+- The frontend keeps transport in `frontend/src/shared/api/` and feature API
+  modules under `frontend/src/features/*/api.ts`. `App.tsx` is the shell entrypoint;
+  feature rendering and state are composed by the workspace components.
+- Built-in benchmark definitions live under `backend/app/modules/benchmarks/`.
 
 ## Backend conventions
 

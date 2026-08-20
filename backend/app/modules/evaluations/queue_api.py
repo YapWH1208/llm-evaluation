@@ -15,7 +15,7 @@ from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.executor import RunExecutionError, execute_leased_text_task
 from app.modules.evaluations.mongo_executor import MongoRunExecutionError, execute_mongo_leased_task
-from app.services.task_queue import claim_task, heartbeat_task, reclaim_expired_leases
+from app.modules.evaluations.queue import claim_task, heartbeat_task, reclaim_expired_leases
 router=APIRouter(prefix="/api/v1/workers",tags=["workers"])
 class ClaimRequest(BaseModel): worker_id:str=Field(min_length=1,max_length=128);lease_seconds:int=Field(default=60,ge=10,le=3600)
 class HeartbeatRequest(BaseModel): lease_token:str;lease_seconds:int=Field(default=60,ge=10,le=3600)

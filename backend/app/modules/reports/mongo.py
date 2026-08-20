@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.db.mongo import MongoDocumentStore
 from app.modules.evaluations.mongo_executor import build_mongo_run_summary
-from app.services.aggregation import list_mongo_aggregate_metrics
+from app.modules.analytics.aggregation import list_mongo_aggregate_metrics
 from app.modules.reports.service import REPORT_TYPES, _COMPARISON_REPORT_TYPES, ReportError, _FORMAT_EXTENSIONS, _serialize_metric, _write_report
 
 

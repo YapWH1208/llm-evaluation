@@ -12,14 +12,14 @@ from sqlalchemy.orm import Session
 from app.db.models import AggregateMetric, EvaluationRun, ModelEndpoint, RunStatus
 from app.db.mongo import MongoDocumentStore
 from app.modules.datasets.metadata import EVALUATION_TYPES
-from app.services.leaderboard import (
+from app.modules.analytics.leaderboard import (
     LeaderboardFilters,
     LeaderboardQuery,
     LeaderboardQueryError,
     SORT_FIELDS,
     build_leaderboard,
 )
-from app.services.metric_profiles import metric_definitions
+from app.modules.benchmarks.metrics import metric_definitions
 
 
 router = APIRouter(prefix="/api/v1/leaderboard", tags=["leaderboard"])

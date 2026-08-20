@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AggregateMetric, EvaluationRun, SampleAttemptStatus
 from app.db.mongo import MongoDocumentStore
-from app.services.metric_profiles import (
+from app.modules.benchmarks.metrics import (
     MetricResult,
     compute_profile_metrics,
     evaluation_type_from_snapshot,

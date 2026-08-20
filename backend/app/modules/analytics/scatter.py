@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import math
 from typing import Any
 
-from app.services.metric_profiles import metric_definition, metric_definitions
+from app.modules.benchmarks.metrics import metric_definition, metric_definitions
 from app.modules.evaluations.names import resolve_run_display_name
 
 

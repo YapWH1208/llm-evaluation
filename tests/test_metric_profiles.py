@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.metric_profiles import (
+from app.modules.benchmarks.metrics import (
     METRIC_PROFILE_VERSION,
     build_execution_metric_evidence,
     compute_profile_metrics,

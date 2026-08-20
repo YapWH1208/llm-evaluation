@@ -17,7 +17,7 @@ from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus,
 from app.db.models import HumanReview, JudgeAssessment, Report
 from app.db.mongo import MongoDocumentStore
 from app.modules.evaluations.service import RunCreationError, create_benchmark_run, preflight_benchmark_run
-from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
+from app.modules.evaluations.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.modules.evaluations.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.analysis import build_run_summary

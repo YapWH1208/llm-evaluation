@@ -13,15 +13,15 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AggregateMetric, BenchmarkDefinition, EvaluationRun, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
-from app.services.aggregation import (
+from app.modules.analytics.aggregation import (
     AggregationError,
     list_aggregate_metrics,
     list_mongo_aggregate_metrics,
     recompute_aggregate_metrics,
     recompute_mongo_aggregate_metrics,
 )
-from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
-from app.services.analytics_scatter import (
+from app.modules.benchmarks.metrics import METRIC_PROFILE_VERSION, metric_definition
+from app.modules.analytics.scatter import (
     ScatterFilters,
     ScatterQueryError,
     build_scatter_response,

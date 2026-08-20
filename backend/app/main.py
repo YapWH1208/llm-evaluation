@@ -18,20 +18,20 @@ from app.modules.datasets.api import router as datasets_router
 from app.modules.evaluations.api import router as evaluation_runs_router
 from app.modules.endpoints.api import router as model_endpoints_router
 from app.modules.benchmarks.prompts_api import router as prompt_packages_router
-from app.api.workers import router as workers_router
+from app.modules.evaluations.queue_api import router as workers_router
 from app.modules.reports.api import public_router as shared_reports_router
 from app.modules.reports.api import router as reports_router
-from app.api.comparisons import router as comparisons_router
+from app.modules.analytics.comparisons_api import router as comparisons_router
 from app.modules.reviews.api import router as reviews_router
-from app.api.dashboard import router as dashboard_router
+from app.modules.analytics.dashboard_api import router as dashboard_router
 from app.modules.reports.assets_api import router as assets_router
 from app.modules.benchmarks.api import router as benchmarks_router
 from app.modules.reviews.judges_api import router as judge_assessments_router
-from app.api.tasks import router as tasks_router
-from app.api.analytics import router as analytics_router
+from app.modules.evaluations.tasks_api import router as tasks_router
+from app.modules.analytics.api import router as analytics_router
 from app.api.errors import register_application_error_handlers
-from app.api.suites import router as suites_router
-from app.api.leaderboard import router as leaderboard_router
+from app.modules.evaluations.suites_api import router as suites_router
+from app.modules.analytics.leaderboard_api import router as leaderboard_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.mongo import MongoDocumentStore

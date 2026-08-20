@@ -21,17 +21,17 @@ from app.db import (
     TaskUnit,
 )
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
-from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
 from app.modules.reviews.judges import JudgeAssessmentError, assess_sample_attempt
 from app.modules.reviews.scoring import (
     is_llm_judge_rule,
     judge_assessment_evidence,
     judge_failure_evidence,
 )
-from app.services.metric_profiles import build_execution_metric_evidence
+from app.modules.benchmarks.metrics import build_execution_metric_evidence
 from app.modules.reports.service import ReportError, generate_report
 from app.modules.benchmarks.scoring import ScoringError, score_prediction
-from app.services.task_queue import claim_task, clear_lease
+from app.modules.evaluations.queue import claim_task, clear_lease
 from app.modules.datasets.preparation import DatasetError
 from app.modules.datasets.repositories import SqliteSessionDatasetRepository
 from app.modules.datasets.service import DatasetService

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.models import AggregateMetric, EvaluationRun, ModelEndpoint, RunStatus
-from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
 
 
 def _endpoint() -> ModelEndpoint:

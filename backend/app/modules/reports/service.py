@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, HumanReview, JudgeAssessment, Report, SampleAttempt
-from app.services.aggregation import list_aggregate_metrics
-from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
+from app.modules.analytics.aggregation import list_aggregate_metrics
+from app.modules.benchmarks.metrics import METRIC_PROFILE_VERSION, metric_definition
 from app.modules.evaluations.analysis import all_attempts, build_run_summary, latest_attempts
 
 

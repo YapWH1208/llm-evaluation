@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.services.analytics_scatter import ScatterFilters, ScatterQueryError, build_scatter_response
+from app.modules.analytics.scatter import ScatterFilters, ScatterQueryError, build_scatter_response
 
 
 def _run(

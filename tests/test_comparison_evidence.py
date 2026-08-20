@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.services.comparison_evidence import build_comparison_extension
+from app.modules.analytics.comparison_evidence import build_comparison_extension
 
 
 def test_comparison_extension_preserves_legacy_names_and_missing_metric_reasons() -> None:

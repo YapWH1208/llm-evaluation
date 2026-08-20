@@ -53,8 +53,8 @@ from app.modules.reviews.judges import JudgeAssessmentError
 from app.modules.reviews.mongo_judges import assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.modules.benchmarks.scoring import ScoringError, score_prediction, validate_scoring_rule
-from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
-from app.services.metric_profiles import build_execution_metric_evidence
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.modules.benchmarks.metrics import build_execution_metric_evidence
 from app.modules.reports.service import ReportError
 from app.modules.evaluations.analysis import add_summary_insights, summarize_attempts
 from app.core.content import ContentValidationError, normalize_content_parts

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.leaderboard import (
+from app.modules.analytics.leaderboard import (
     LeaderboardFilters,
     LeaderboardQuery,
     LeaderboardQueryError,

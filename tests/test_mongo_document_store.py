@@ -20,8 +20,8 @@ from app.db.models import CapabilityDetection
 from app.infrastructure.providers.contracts import CapabilityDetectionResult, ConnectionTestResult, SampleExecutionResult
 from app.modules.evaluations.names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
-from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
-from app.services.metric_profiles import METRIC_PROFILE_VERSION
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
+from app.modules.benchmarks.metrics import METRIC_PROFILE_VERSION
 
 
 def _configure_dataset_download(monkeypatch, content: bytes) -> None:
