@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationSuite
 from app.db.mongo import MongoDocumentStore
-from app.modules.evaluations.service import RunCreationError, create_benchmark_run
-from app.modules.evaluations.mongo_executor import MongoRunExecutionError, create_mongo_benchmark_run
+from app.core.errors import ConflictError
+from app.modules.evaluations.service import EvaluationService
 
 
 router = APIRouter(prefix="/api/v1/evaluation-suites", tags=["evaluation suites"])
@@ -63,6 +63,13 @@ def get_session(request: Request) -> Generator[Session | None, None, None]:
 
 
 SessionDependency = Annotated[Session | None, Depends(get_session)]
+
+
+def get_evaluation_service(request: Request) -> EvaluationService:
+    return request.app.state.evaluation_service
+
+
+EvaluationServiceDependency = Annotated[EvaluationService, Depends(get_evaluation_service)]
 
 
 @router.post("", response_model=EvaluationSuiteResponse, status_code=status.HTTP_201_CREATED)
@@ -137,7 +144,11 @@ def update_suite(
 
 @router.post("/{suite_id}/runs", status_code=status.HTTP_201_CREATED)
 def create_suite_runs(
-    suite_id: str, payload: SuiteRunCreate, request: Request, session: SessionDependency
+    suite_id: str,
+    payload: SuiteRunCreate,
+    request: Request,
+    session: SessionDependency,
+    service: EvaluationServiceDependency,
 ) -> list[dict[str, Any]]:
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     suite: EvaluationSuite | dict[str, Any] | None = (
@@ -161,71 +172,39 @@ def create_suite_runs(
         }
     )
     results: list[dict[str, Any]] = []
-    try:
-        for selection in values["benchmark_list"]:
-            if not isinstance(selection, dict) or not isinstance(selection.get("benchmark_id"), str):
-                raise RunCreationError("Suite benchmarks require benchmark_id entries.")
-            benchmark_id = selection["benchmark_id"]
-            benchmark_version = str(selection.get("version", "1.0.0"))
-            prompt_package_id = selection.get("prompt_package_id")
-            if prompt_package_id is None:
-                overrides = values.get("default_prompt_overrides")
-                if isinstance(overrides, dict):
-                    prompt_package_id = overrides.get(
-                        f"{benchmark_id}@{benchmark_version}", overrides.get(benchmark_id)
-                    )
-            if prompt_package_id is not None and not isinstance(prompt_package_id, str):
-                raise RunCreationError("Suite prompt_package_id must be a string.")
-            snapshot = {
-                "id": values["id"],
-                "name": values["name"],
-                "version": values["version"],
-                "default_prompt_overrides": values.get("default_prompt_overrides", {}),
-                "default_request_body": values["default_request_body"],
-                "weight_configuration": values["weight_configuration"],
-                "selection": selection,
-                "effective_prompt_package_id": prompt_package_id,
-            }
-            if store is not None:
-                run = create_mongo_benchmark_run(
-                    store,
-                    model_endpoint_id=payload.model_endpoint_id,
-                    sample_limit=payload.sample_limit,
-                    prompt_package_id=prompt_package_id,
-                    benchmark_id=benchmark_id,
-                    benchmark_version=benchmark_version,
-                    suite_id=str(values["id"]),
-                    suite_snapshot=snapshot,
-                    request_body_override=payload.request_body_override,
-                    created_by=getattr(request.state, "actor_id", None),
-                    max_concurrency=payload.max_concurrency,
-                )
-            else:
-                assert session is not None
-                run = create_benchmark_run(
-                    session,
-                    model_endpoint_id=payload.model_endpoint_id,
-                    sample_limit=payload.sample_limit,
-                    prompt_package_id=prompt_package_id,
-                    benchmark_id=benchmark_id,
-                    benchmark_version=benchmark_version,
-                    suite_id=str(values["id"]),
-                    suite_snapshot=snapshot,
-                    request_body_override=payload.request_body_override,
-                    created_by=getattr(request.state, "actor_id", None),
-                    max_concurrency=payload.max_concurrency,
-                )
-            results.append(
-                run
-                if isinstance(run, dict)
-                else {
-                    "id": run.id,
-                    "suite_id": run.suite_id,
-                    "benchmark_id": run.benchmark_id,
-                    "benchmark_version": run.benchmark_version,
-                    "status": run.status,
-                }
-            )
-    except (RunCreationError, MongoRunExecutionError) as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    for selection in values["benchmark_list"]:
+        if not isinstance(selection, dict) or not isinstance(selection.get("benchmark_id"), str):
+            raise ConflictError("Suite benchmarks require benchmark_id entries.")
+        benchmark_id = selection["benchmark_id"]
+        benchmark_version = str(selection.get("version", "1.0.0"))
+        prompt_package_id = selection.get("prompt_package_id")
+        if prompt_package_id is None:
+            overrides = values.get("default_prompt_overrides")
+            if isinstance(overrides, dict):
+                prompt_package_id = overrides.get(f"{benchmark_id}@{benchmark_version}", overrides.get(benchmark_id))
+        if prompt_package_id is not None and not isinstance(prompt_package_id, str):
+            raise ConflictError("Suite prompt_package_id must be a string.")
+        snapshot = {
+            "id": values["id"],
+            "name": values["name"],
+            "version": values["version"],
+            "default_prompt_overrides": values.get("default_prompt_overrides", {}),
+            "default_request_body": values["default_request_body"],
+            "weight_configuration": values["weight_configuration"],
+            "selection": selection,
+            "effective_prompt_package_id": prompt_package_id,
+        }
+        run = service.create_benchmark(
+            model_endpoint_id=payload.model_endpoint_id,
+            sample_limit=payload.sample_limit,
+            prompt_package_id=prompt_package_id,
+            benchmark_id=benchmark_id,
+            benchmark_version=benchmark_version,
+            suite_id=str(values["id"]),
+            suite_snapshot=snapshot,
+            request_body_override=payload.request_body_override,
+            created_by=getattr(request.state, "actor_id", None),
+            max_concurrency=payload.max_concurrency,
+        )
+        results.append(run)
     return results

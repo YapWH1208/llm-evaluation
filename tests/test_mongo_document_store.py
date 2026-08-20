@@ -596,7 +596,7 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
-    monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.service.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
     settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform",
@@ -688,7 +688,7 @@ def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypa
             TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)
         ),
     )
-    monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.service.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
     settings = Settings.local_development(
         database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode()

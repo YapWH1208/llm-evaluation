@@ -16,26 +16,19 @@ from app.db import EvaluationRun, RunStatus
 from app.db.mongo import MongoDocumentStore
 from app.modules.evaluations.service import (
     EvaluationService,
-    RunCreationError,
-    create_benchmark_run,
-    preflight_benchmark_run,
 )
 from app.modules.evaluations.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.modules.evaluations.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
-from app.modules.evaluations.operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.modules.evaluations.operations import RunOperationError, retry_failed_samples
 from app.modules.evaluations.names import resolve_run_display_name
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.mongo_executor import (
     MongoRunExecutionError,
-    clone_mongo_run,
     create_mongo_custom_multimodal_run,
     create_mongo_dataset_run,
-    create_mongo_benchmark_run,
-    preflight_mongo_benchmark_run,
     preflight_mongo_dataset_run,
-    rerun_mongo_benchmark,
     execute_mongo_queued_run,
     retry_failed_mongo_samples,
 )
@@ -232,63 +225,28 @@ def get_document_store(request: Request) -> MongoDocumentStore | None:
 def create_evaluation_run(
     payload: EvaluationRunCreate,
     request: Request,
-    session: SessionDependency,
-) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    try:
-        if store is not None:
-            return create_mongo_benchmark_run(
-                store,
-                model_endpoint_id=payload.model_endpoint_id,
-                sample_limit=payload.sample_limit,
-                prompt_package_id=payload.prompt_package_id,
-                benchmark_id=payload.benchmark_id,
-                benchmark_version=payload.benchmark_version,
-                request_body_override=payload.request_body_override,
-                created_by=getattr(request.state, "actor_id", None),
-                max_concurrency=payload.max_concurrency,
-            )
-        assert session is not None
-        return create_benchmark_run(
-            session,
-            model_endpoint_id=payload.model_endpoint_id,
-            sample_limit=payload.sample_limit,
-            prompt_package_id=payload.prompt_package_id,
-            benchmark_id=payload.benchmark_id,
-            benchmark_version=payload.benchmark_version,
-            request_body_override=payload.request_body_override,
-            created_by=getattr(request.state, "actor_id", None),
-            max_concurrency=payload.max_concurrency,
-        )
-    except (RunCreationError, MongoRunExecutionError) as error:
-        status_code = (
-            status.HTTP_404_NOT_FOUND if str(error) == "Model endpoint not found." else status.HTTP_409_CONFLICT
-        )
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
+    service: EvaluationServiceDependency,
+) -> dict[str, Any]:
+    return service.create_benchmark(
+        model_endpoint_id=payload.model_endpoint_id,
+        sample_limit=payload.sample_limit,
+        prompt_package_id=payload.prompt_package_id,
+        benchmark_id=payload.benchmark_id,
+        benchmark_version=payload.benchmark_version,
+        request_body_override=payload.request_body_override,
+        created_by=getattr(request.state, "actor_id", None),
+        max_concurrency=payload.max_concurrency,
+    )
 
 
 @router.post("/validate", response_model=EvaluationRunPreflightResponse)
 def validate_evaluation_run(
     payload: EvaluationRunCreate,
-    request: Request,
-    session: SessionDependency,
+    service: EvaluationServiceDependency,
 ) -> dict[str, object]:
     """Preview schedule compatibility and cost without persisting a run or task."""
 
-    store = get_document_store(request)
-    if store is not None:
-        return preflight_mongo_benchmark_run(
-            store,
-            model_endpoint_id=payload.model_endpoint_id,
-            sample_limit=payload.sample_limit,
-            prompt_package_id=payload.prompt_package_id,
-            benchmark_id=payload.benchmark_id,
-            benchmark_version=payload.benchmark_version,
-            request_body_override=payload.request_body_override,
-        )
-    assert session is not None
-    return preflight_benchmark_run(
-        session,
+    return service.preflight_benchmark(
         model_endpoint_id=payload.model_endpoint_id,
         sample_limit=payload.sample_limit,
         prompt_package_id=payload.prompt_package_id,
@@ -475,37 +433,15 @@ def delete_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> 
 
 
 @router.post("/{run_id}/clone", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
-def clone_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    try:
-        if store is not None:
-            return clone_mongo_run(store, run_id)
-        assert session is not None
-        return clone_run(session, run_id)
-    except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = (
-            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
-        )
-        raise HTTPException(status_code, str(error)) from error
+def clone_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.clone(run_id)
 
 
 @router.post("/{run_id}/rerun-benchmark", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
-def rerun_evaluation_benchmark(
-    run_id: str, request: Request, session: SessionDependency
-) -> EvaluationRun | dict[str, Any]:
+def rerun_evaluation_benchmark(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
     """Create a new benchmark pass without mutating completed or historical evidence."""
 
-    store = get_document_store(request)
-    try:
-        if store is not None:
-            return rerun_mongo_benchmark(store, run_id)
-        assert session is not None
-        return rerun_benchmark(session, run_id)
-    except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = (
-            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
-        )
-        raise HTTPException(status_code, str(error)) from error
+    return service.rerun_benchmark(run_id)
 
 
 @router.patch("/{run_id}/scheduling", response_model=EvaluationRunResponse)

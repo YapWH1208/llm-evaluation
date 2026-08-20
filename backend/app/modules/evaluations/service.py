@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import select
@@ -12,18 +13,14 @@ from app.benchmarks import get_installed_plugin
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db import (
     EndpointStatus,
-    EvaluationRun,
     ModelEndpoint,
     PromptPackage,
     RunStatus,
-    SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
     TaskType,
-    TaskUnit,
 )
-from app.db.models import DatasetVersion, ModelCapability
-from app.db.models import BenchmarkDefinition
+from app.db.models import ModelCapability
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template, standardization_flags
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
@@ -69,6 +66,399 @@ class EvaluationService:
 
     def list(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         return self._repository.list_runs(include_archived=include_archived)
+
+    def preflight_benchmark(
+        self,
+        *,
+        model_endpoint_id: str,
+        sample_limit: int | None,
+        prompt_package_id: str | None,
+        benchmark_id: str,
+        benchmark_version: str,
+        request_body_override: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        endpoint = self._repository.get_endpoint(model_endpoint_id)
+        issues: list[str] = []
+        if endpoint is None:
+            return _empty_preflight("Model endpoint not found.")
+        if endpoint.get("status") != EndpointStatus.AVAILABLE.value:
+            issues.append("Model endpoint must pass a connection test before scheduling a run.")
+        definition = self._repository.get_benchmark_definition(benchmark_id, benchmark_version)
+        if definition is not None and definition.get("status") in {"disabled", "deprecated", "broken"}:
+            issues.append(
+                f"Benchmark {benchmark_id}@{benchmark_version} is {definition['status']} and cannot be scheduled."
+            )
+        plugin = get_installed_plugin(benchmark_id, benchmark_version)
+        if plugin is None:
+            return {
+                **_empty_preflight("Benchmark plugin is not installed for the requested version."),
+                "issues": [*issues, "Benchmark plugin is not installed for the requested version."],
+                "currency": endpoint.get("currency"),
+            }
+        samples = plugin.samples(sample_limit)
+        endpoint_proxy = _record_proxy(endpoint)
+        if not samples:
+            issues.append("At least one benchmark sample is required.")
+        else:
+            try:
+                _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
+            except RunCreationError as error:
+                issues.append(str(error))
+        compatibility = _capability_compatibility_records(
+            self._repository.list_capabilities(model_endpoint_id), plugin.manifest
+        )
+        if compatibility["unsupported"]:
+            issues.append(
+                "Model endpoint is incompatible with required benchmark capabilities: "
+                + ", ".join(compatibility["unsupported"])
+            )
+        prompt_package = self._repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
+        if prompt_package_id and prompt_package is None:
+            issues.append("Prompt package not found.")
+        prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+        try:
+            validate_scoring_rule(_effective_scoring_rule(plugin.manifest, prompt_proxy))
+        except ScoringError as error:
+            issues.append(f"Scoring rule is invalid: {error}")
+        datasets = self._preflight_declared_datasets(plugin.manifest.get("datasets"), issues)
+        estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
+        estimated_output_tokens = len(samples) * 64
+        input_cost = endpoint.get("input_cost_per_million")
+        output_cost = endpoint.get("output_cost_per_million")
+        estimated_cost = (
+            ((estimated_input_tokens * float(input_cost)) + (estimated_output_tokens * float(output_cost))) / 1_000_000
+            if input_cost is not None and output_cost is not None
+            else None
+        )
+        return {
+            "can_queue": not issues,
+            "issues": issues,
+            "sample_count": len(samples),
+            "estimated_requests": len(samples),
+            "estimated_input_tokens": estimated_input_tokens,
+            "estimated_output_tokens": estimated_output_tokens,
+            "estimated_cost": estimated_cost,
+            "currency": endpoint.get("currency"),
+            "compatibility": compatibility,
+            "datasets": datasets,
+            "request_body_evidence": _request_body_evidence(
+                endpoint=endpoint_proxy,
+                benchmark_manifest=plugin.manifest,
+                suite_snapshot=None,
+                request_body_override=request_body_override,
+            ),
+        }
+
+    def create_benchmark(
+        self,
+        *,
+        model_endpoint_id: str,
+        sample_limit: int | None,
+        prompt_package_id: str | None,
+        benchmark_id: str,
+        benchmark_version: str,
+        suite_id: str | None = None,
+        suite_snapshot: dict[str, object] | None = None,
+        request_body_override: dict[str, object] | None = None,
+        declared_datasets: list[dict[str, object]] | None = None,
+        created_by: str | None = None,
+        max_concurrency: int | None = None,
+    ) -> dict[str, Any]:
+        endpoint = self._repository.get_endpoint(model_endpoint_id)
+        if endpoint is None:
+            raise NotFoundError("Model endpoint not found.")
+        if endpoint.get("status") != EndpointStatus.AVAILABLE.value:
+            raise ConflictError("Model endpoint must pass a connection test before scheduling a run.")
+        definition = self._repository.get_benchmark_definition(benchmark_id, benchmark_version)
+        if definition is not None and definition.get("status") in {"disabled", "deprecated", "broken"}:
+            raise ConflictError(
+                f"Benchmark {benchmark_id}@{benchmark_version} is {definition['status']} and cannot be scheduled."
+            )
+        plugin = get_installed_plugin(benchmark_id, benchmark_version)
+        if plugin is None:
+            raise ConflictError("Benchmark plugin is not installed for the requested version.")
+        samples = plugin.samples(sample_limit)
+        if not samples:
+            raise ConflictError("At least one benchmark sample is required.")
+        compatibility = _capability_compatibility_records(
+            self._repository.list_capabilities(model_endpoint_id), plugin.manifest
+        )
+        if compatibility["unsupported"]:
+            raise ConflictError(
+                "Model endpoint is incompatible with required benchmark capabilities: "
+                + ", ".join(compatibility["unsupported"])
+            )
+        prompt_package = self._repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
+        if prompt_package_id and prompt_package is None:
+            raise NotFoundError("Prompt package not found.")
+        prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+        frozen_datasets = self._freeze_declared_datasets(
+            declared_datasets if declared_datasets is not None else plugin.manifest.get("datasets")
+        )
+        endpoint_proxy = _record_proxy(endpoint)
+        request_body_evidence = _request_body_evidence(
+            endpoint=endpoint_proxy,
+            benchmark_manifest=plugin.manifest,
+            suite_snapshot=suite_snapshot,
+            request_body_override=request_body_override,
+        )
+        scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_proxy)
+        try:
+            validate_scoring_rule(scoring_rule)
+            shards = _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
+        except (ScoringError, RunCreationError) as error:
+            raise ConflictError(str(error)) from error
+
+        now = datetime.now(timezone.utc)
+        snapshot = {
+            "benchmark": {"id": benchmark_id, "version": benchmark_version, "manifest": plugin.manifest},
+            "endpoint": _endpoint_snapshot(endpoint),
+            "sample_ids": [sample.sample_id for sample in samples],
+            "datasets": frozen_datasets,
+            "capability_compatibility": compatibility,
+            "prompt_package": _prompt_snapshot(prompt_package),
+            "prompt_standardization": (
+                {
+                    "is_standard": not standardization_flags(prompt_proxy),
+                    "flags": standardization_flags(prompt_proxy),
+                }
+                if prompt_proxy
+                else {"is_standard": True, "flags": []}
+            ),
+            "evaluation_suite": suite_snapshot,
+            "request_body_evidence": request_body_evidence,
+        }
+        run_values = {
+            "model_endpoint_id": model_endpoint_id,
+            "prompt_package_id": prompt_package_id,
+            "suite_id": suite_id,
+            "created_by": created_by,
+            "max_concurrency": max_concurrency,
+            "benchmark_id": benchmark_id,
+            "benchmark_version": benchmark_version,
+            "display_name": format_run_display_name(str(endpoint["model_name"]), benchmark_id, now),
+            "configuration_snapshot": snapshot,
+            "status": RunStatus.WAITING_FOR_DATASET.value if frozen_datasets else RunStatus.QUEUED.value,
+            "total_samples": len(samples),
+            "completed_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "created_at": now,
+            "started_at": None,
+            "completed_at": None,
+            "archived_at": None,
+        }
+        tasks = [
+            _task_values(
+                "dataset",
+                task_type=TaskType.DATASET_PREPARATION.value,
+                payload={"datasets": frozen_datasets, "prepared_inline": not bool(frozen_datasets)},
+                task_status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
+                now=now,
+            ),
+            _task_values(
+                "benchmark",
+                parent_key="dataset",
+                task_type=TaskType.BENCHMARK.value,
+                payload={
+                    "benchmark_id": benchmark_id,
+                    "benchmark_version": benchmark_version,
+                    "planned_samples": len(samples),
+                },
+                task_status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
+                now=now,
+            ),
+        ]
+        attempts: list[dict[str, Any]] = []
+        for shard_index, shard_samples in enumerate(shards, start=1):
+            task_key = f"shard-{shard_index}"
+            tasks.append(
+                _task_values(
+                    task_key,
+                    parent_key="benchmark",
+                    task_type=TaskType.EVALUATION_SHARD.value,
+                    payload={
+                        "sample_ids": [sample.sample_id for sample in shard_samples],
+                        "estimated_request_count": len(shard_samples),
+                        "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                        "sample_token_estimates": {
+                            sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                        },
+                        "shard_index": shard_index,
+                        "shard_count": len(shards),
+                        "retry_policy": {
+                            "max_attempts": 3,
+                            "base_delay_seconds": 2,
+                            "max_delay_seconds": 60,
+                        },
+                    },
+                    task_status=TaskStatus.PENDING.value,
+                    now=now,
+                )
+            )
+            attempts.extend(
+                _attempt_values(
+                    task_key,
+                    sample_id=sample.sample_id,
+                    input_snapshot={
+                        "messages": _build_sample_messages(sample, prompt_proxy),
+                        "modality": _sample_modality(sample),
+                        "metadata": dict(sample.metadata),
+                        "request_body_evidence": request_body_evidence,
+                    },
+                    reference_snapshot={
+                        "type": str(scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": scoring_rule,
+                    },
+                    now=now,
+                )
+                for sample in shard_samples
+            )
+        return self._repository.create_run_graph(run_values, tasks, attempts)
+
+    def clone(self, run_id: str) -> dict[str, Any]:
+        source = self.get(run_id)
+        snapshot = source.get("configuration_snapshot")
+        snapshot = snapshot if isinstance(snapshot, dict) else {}
+        datasets = snapshot.get("datasets")
+        return self.create_benchmark(
+            model_endpoint_id=str(source["model_endpoint_id"]),
+            sample_limit=int(source["total_samples"]),
+            prompt_package_id=(str(source["prompt_package_id"]) if source.get("prompt_package_id") else None),
+            benchmark_id=str(source["benchmark_id"]),
+            benchmark_version=str(source["benchmark_version"]),
+            declared_datasets=datasets if isinstance(datasets, list) else None,
+            created_by=str(source["created_by"]) if source.get("created_by") else None,
+            max_concurrency=(int(source["max_concurrency"]) if source.get("max_concurrency") is not None else None),
+        )
+
+    def rerun_benchmark(self, run_id: str) -> dict[str, Any]:
+        run = self.clone(run_id)
+        snapshot = run.get("configuration_snapshot")
+        snapshot = dict(snapshot) if isinstance(snapshot, dict) else {}
+        snapshot["rerun_of"] = {"run_id": run_id, "kind": "benchmark"}
+        return self._updated_run(str(run["id"]), {"configuration_snapshot": snapshot})
+
+    def _preflight_declared_datasets(self, descriptors: object, issues: list[str]) -> list[dict[str, object]]:
+        if not isinstance(descriptors, list):
+            return []
+        datasets: list[dict[str, object]] = []
+        for descriptor in descriptors:
+            if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+                continue
+            dataset = self._repository.find_dataset(
+                dataset_id=descriptor["dataset_id"],
+                version=descriptor.get("version") if isinstance(descriptor.get("version"), str) else None,
+                revision=(descriptor.get("revision") if isinstance(descriptor.get("revision"), str) else None),
+            )
+            if dataset is None:
+                source_url = descriptor.get("source_url")
+                if isinstance(source_url, str) and source_url.strip():
+                    datasets.append(
+                        {
+                            "dataset_id": descriptor["dataset_id"],
+                            "version": descriptor.get("version", "default"),
+                            "revision": descriptor.get("revision", "default"),
+                            "status": "will_register",
+                            "will_prepare": True,
+                        }
+                    )
+                else:
+                    issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                    datasets.append(
+                        {
+                            "dataset_id": descriptor["dataset_id"],
+                            "status": "missing",
+                            "will_prepare": False,
+                        }
+                    )
+            else:
+                datasets.append(
+                    {
+                        "id": dataset["id"],
+                        "dataset_id": dataset["dataset_id"],
+                        "version": dataset["version"],
+                        "revision": dataset["revision"],
+                        "status": dataset["status"],
+                        "will_prepare": dataset["status"] != "ready",
+                    }
+                )
+        return datasets
+
+    def _freeze_declared_datasets(self, descriptors: object) -> list[dict[str, object]]:
+        if not isinstance(descriptors, list):
+            return []
+        frozen: list[dict[str, object]] = []
+        for descriptor in descriptors:
+            if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+                raise ConflictError("Benchmark dataset descriptors require a dataset_id.")
+            existing_id = descriptor.get("dataset_version_id")
+            if isinstance(existing_id, str):
+                dataset = self._repository.get_dataset(existing_id)
+                if dataset is None:
+                    raise NotFoundError(f"Declared dataset revision {existing_id} is not registered.")
+            else:
+                dataset = self._repository.find_dataset(
+                    dataset_id=descriptor["dataset_id"],
+                    version=(descriptor.get("version") if isinstance(descriptor.get("version"), str) else None),
+                    revision=(descriptor.get("revision") if isinstance(descriptor.get("revision"), str) else None),
+                )
+                if dataset is None:
+                    dataset = self._register_declared_dataset(descriptor)
+            frozen.append(
+                {
+                    **descriptor,
+                    "dataset_version_id": dataset["id"],
+                    "dataset_id": dataset["dataset_id"],
+                    "version": dataset["version"],
+                    "revision": dataset["revision"],
+                    "checksum": dataset.get("checksum"),
+                }
+            )
+        return frozen
+
+    def _register_declared_dataset(self, descriptor: dict[str, object]) -> dict[str, Any]:
+        source_url = descriptor.get("source_url")
+        if not isinstance(source_url, str) or not source_url.strip():
+            raise NotFoundError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+        version = descriptor.get("version")
+        revision = descriptor.get("revision")
+        license_text = descriptor.get("license_text")
+        credential_binding_id = descriptor.get("credential_binding_id")
+        checksum = descriptor.get("checksum")
+        return self._repository.create_dataset(
+            {
+                "dataset_id": str(descriptor["dataset_id"]),
+                "version": version.strip() if isinstance(version, str) and version.strip() else "default",
+                "revision": (revision.strip() if isinstance(revision, str) and revision.strip() else "default"),
+                "source_url": source_url.strip(),
+                "credential_env_var": None,
+                "credential_binding_id": (
+                    credential_binding_id.strip()
+                    if isinstance(credential_binding_id, str) and credential_binding_id.strip()
+                    else None
+                ),
+                "checksum": checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
+                "size_bytes": None,
+                "local_path": None,
+                "prepared_path": None,
+                "license_text": (
+                    license_text.strip() if isinstance(license_text, str) and license_text.strip() else None
+                ),
+                "license_accepted_at": None,
+                "input_field": None,
+                "reference_field": None,
+                "capabilities": [],
+                "languages": [],
+                "evaluation_type": "custom",
+                "status": (
+                    "license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded"
+                ),
+                "error_message": None,
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
 
     def pause(self, run_id: str) -> dict[str, Any]:
         run = self.get(run_id)
@@ -218,430 +608,135 @@ def _latest_attempt_values(attempts: list[dict[str, Any]]) -> list[dict[str, Any
     return [latest[sample_id] for sample_id in sorted(latest)]
 
 
+def _empty_preflight(issue: str) -> dict[str, object]:
+    return {
+        "can_queue": False,
+        "issues": [issue],
+        "sample_count": 0,
+        "estimated_requests": 0,
+        "estimated_input_tokens": 0,
+        "estimated_output_tokens": 0,
+        "estimated_cost": None,
+        "currency": None,
+        "compatibility": {"required": [], "unsupported": [], "unverified": []},
+        "datasets": [],
+        "request_body_evidence": None,
+    }
+
+
+def _record_proxy(record: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(**record)
+
+
+def _endpoint_snapshot(endpoint: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": endpoint["id"],
+        "base_url": endpoint["base_url"],
+        "model_name": endpoint["model_name"],
+        "protocol_profile": endpoint.get("protocol_profile", "openai_chat_completions"),
+        "default_request_body": endpoint.get("default_request_body", {}),
+        "timeout_seconds": endpoint.get("timeout_seconds", 60),
+        "custom_headers": endpoint.get("custom_headers", {}),
+        "input_cost_per_million": endpoint.get("input_cost_per_million"),
+        "output_cost_per_million": endpoint.get("output_cost_per_million"),
+    }
+
+
+def _prompt_snapshot(prompt: dict[str, Any] | None) -> dict[str, Any] | None:
+    if prompt is None:
+        return None
+    return {
+        "id": prompt["id"],
+        "name": prompt["name"],
+        "version": prompt["version"],
+        "system_message": prompt.get("system_message"),
+        "user_template": prompt["user_template"],
+        "few_shot_examples": prompt.get("few_shot_examples", []),
+        "scoring_rule": prompt.get("scoring_rule"),
+    }
+
+
+def _task_values(
+    key: str,
+    *,
+    task_type: str,
+    payload: dict[str, Any],
+    task_status: str,
+    now: datetime,
+    parent_key: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "parent_key": parent_key,
+        "task_type": task_type,
+        "payload": payload,
+        "status": task_status,
+        "priority": 0,
+        "attempt_count": 0,
+        "leased_by": None,
+        "lease_token": None,
+        "lease_version": 0,
+        "lease_expires_at": None,
+        "next_retry_at": None,
+        "heartbeat_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _attempt_values(
+    task_key: str,
+    *,
+    sample_id: str,
+    input_snapshot: dict[str, Any],
+    reference_snapshot: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any]:
+    return {
+        "task_key": task_key,
+        "sample_id": sample_id,
+        "attempt_number": 1,
+        "input_snapshot": input_snapshot,
+        "reference_snapshot": reference_snapshot,
+        "request_snapshot": None,
+        "raw_response": None,
+        "parsed_prediction": None,
+        "metric_evidence": None,
+        "score": None,
+        "latency_ms": None,
+        "input_tokens": None,
+        "output_tokens": None,
+        "estimated_cost": None,
+        "error_type": None,
+        "error_message": None,
+        "status": SampleAttemptStatus.PENDING.value,
+        "created_at": now,
+        "started_at": None,
+        "completed_at": None,
+    }
+
+
+def _capability_compatibility_records(
+    capabilities: list[dict[str, Any]], manifest: dict[str, object]
+) -> dict[str, list[str]]:
+    required = [capability for capability in manifest.get("required_capabilities", []) if isinstance(capability, str)]
+    records = {str(record["capability_key"]): record for record in capabilities}
+    unsupported = [
+        capability
+        for capability in required
+        if capability in records
+        and records[capability].get("effective_status") in {"unsupported", "detected_user_unsupported"}
+    ]
+    unverified = [
+        capability
+        for capability in required
+        if capability not in records or records[capability].get("effective_status") == "unverified"
+    ]
+    return {"required": required, "unsupported": unsupported, "unverified": unverified}
+
+
 class RunCreationError(ValueError):
     """Raised when a requested evaluation run cannot be scheduled."""
-
-
-def create_text_quick_check_run(
-    session: Session,
-    *,
-    model_endpoint_id: str,
-    sample_limit: int | None,
-    prompt_package_id: str | None = None,
-) -> EvaluationRun:
-    return create_benchmark_run(
-        session,
-        model_endpoint_id=model_endpoint_id,
-        sample_limit=sample_limit,
-        prompt_package_id=prompt_package_id,
-        benchmark_id="text-quick-check",
-        benchmark_version="1.0.0",
-    )
-
-
-def preflight_benchmark_run(
-    session: Session,
-    *,
-    model_endpoint_id: str,
-    sample_limit: int | None,
-    prompt_package_id: str | None,
-    benchmark_id: str,
-    benchmark_version: str,
-    request_body_override: dict[str, object] | None = None,
-) -> dict[str, object]:
-    """Validate scheduling inputs and estimate work without creating a run."""
-
-    endpoint = session.get(ModelEndpoint, model_endpoint_id)
-    issues: list[str] = []
-    if endpoint is None:
-        return {
-            "can_queue": False,
-            "issues": ["Model endpoint not found."],
-            "sample_count": 0,
-            "estimated_requests": 0,
-            "estimated_input_tokens": 0,
-            "estimated_output_tokens": 0,
-            "estimated_cost": None,
-            "currency": None,
-            "compatibility": {"required": [], "unsupported": [], "unverified": []},
-            "datasets": [],
-            "request_body_evidence": None,
-        }
-    if endpoint.status != EndpointStatus.AVAILABLE.value:
-        issues.append("Model endpoint must pass a connection test before scheduling a run.")
-    definition = session.scalar(
-        select(BenchmarkDefinition).where(
-            BenchmarkDefinition.benchmark_id == benchmark_id,
-            BenchmarkDefinition.version == benchmark_version,
-        )
-    )
-    if definition is not None and definition.status in {"disabled", "deprecated", "broken"}:
-        issues.append(f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled.")
-    plugin = get_installed_plugin(benchmark_id, benchmark_version)
-    if plugin is None:
-        return {
-            "can_queue": False,
-            "issues": [*issues, "Benchmark plugin is not installed for the requested version."],
-            "sample_count": 0,
-            "estimated_requests": 0,
-            "estimated_input_tokens": 0,
-            "estimated_output_tokens": 0,
-            "estimated_cost": None,
-            "currency": endpoint.currency,
-            "compatibility": {"required": [], "unsupported": [], "unverified": []},
-            "datasets": [],
-            "request_body_evidence": None,
-        }
-    samples = plugin.samples(sample_limit)
-    if not samples:
-        issues.append("At least one benchmark sample is required.")
-    else:
-        try:
-            _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint)
-        except RunCreationError as error:
-            issues.append(str(error))
-    compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
-    if compatibility["unsupported"]:
-        issues.append(
-            "Model endpoint is incompatible with required benchmark capabilities: "
-            + ", ".join(compatibility["unsupported"])
-        )
-    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
-    if prompt_package_id and prompt_package is None:
-        issues.append("Prompt package not found.")
-    try:
-        validate_scoring_rule(_effective_scoring_rule(plugin.manifest, prompt_package))
-    except ScoringError as error:
-        issues.append(f"Scoring rule is invalid: {error}")
-    datasets: list[dict[str, object]] = []
-    for descriptor in plugin.manifest.get("datasets", []):
-        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
-            continue
-        query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
-        if isinstance(descriptor.get("version"), str):
-            query = query.where(DatasetVersion.version == descriptor["version"])
-        if isinstance(descriptor.get("revision"), str):
-            query = query.where(DatasetVersion.revision == descriptor["revision"])
-        dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
-        if dataset is None:
-            if isinstance(descriptor.get("source_url"), str) and descriptor["source_url"].strip():
-                datasets.append(
-                    {
-                        "dataset_id": descriptor["dataset_id"],
-                        "version": descriptor.get("version", "default"),
-                        "revision": descriptor.get("revision", "default"),
-                        "status": "will_register",
-                        "will_prepare": True,
-                    }
-                )
-            else:
-                issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
-        else:
-            datasets.append(
-                {
-                    "id": dataset.id,
-                    "dataset_id": dataset.dataset_id,
-                    "version": dataset.version,
-                    "revision": dataset.revision,
-                    "status": dataset.status,
-                    "will_prepare": dataset.status != "ready",
-                }
-            )
-    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
-    estimated_output_tokens = len(samples) * 64
-    estimated_cost = (
-        (
-            (estimated_input_tokens * endpoint.input_cost_per_million)
-            + (estimated_output_tokens * endpoint.output_cost_per_million)
-        )
-        / 1_000_000
-        if endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
-        else None
-    )
-    return {
-        "can_queue": not issues,
-        "issues": issues,
-        "sample_count": len(samples),
-        "estimated_requests": len(samples),
-        "estimated_input_tokens": estimated_input_tokens,
-        "estimated_output_tokens": estimated_output_tokens,
-        "estimated_cost": estimated_cost,
-        "currency": endpoint.currency,
-        "compatibility": compatibility,
-        "datasets": datasets,
-        "request_body_evidence": _request_body_evidence(
-            endpoint=endpoint,
-            benchmark_manifest=plugin.manifest,
-            suite_snapshot=None,
-            request_body_override=request_body_override,
-        ),
-    }
-
-
-def create_benchmark_run(
-    session: Session,
-    *,
-    model_endpoint_id: str,
-    sample_limit: int | None,
-    prompt_package_id: str | None,
-    benchmark_id: str,
-    benchmark_version: str,
-    suite_id: str | None = None,
-    suite_snapshot: dict[str, object] | None = None,
-    request_body_override: dict[str, object] | None = None,
-    declared_datasets: list[dict[str, object]] | None = None,
-    created_by: str | None = None,
-    max_concurrency: int | None = None,
-) -> EvaluationRun:
-    endpoint = session.get(ModelEndpoint, model_endpoint_id)
-    if endpoint is None:
-        raise RunCreationError("Model endpoint not found.")
-    if endpoint.status != EndpointStatus.AVAILABLE.value:
-        raise RunCreationError("Model endpoint must pass a connection test before scheduling a run.")
-
-    definition = session.scalar(
-        select(BenchmarkDefinition).where(
-            BenchmarkDefinition.benchmark_id == benchmark_id,
-            BenchmarkDefinition.version == benchmark_version,
-        )
-    )
-    if definition is not None and definition.status in {"disabled", "deprecated", "broken"}:
-        raise RunCreationError(
-            f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled."
-        )
-
-    plugin = get_installed_plugin(benchmark_id, benchmark_version)
-    if plugin is None:
-        raise RunCreationError("Benchmark plugin is not installed for the requested version.")
-    samples = plugin.samples(sample_limit)
-    if not samples:
-        raise RunCreationError("At least one benchmark sample is required.")
-    compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
-    if compatibility["unsupported"]:
-        raise RunCreationError(
-            "Model endpoint is incompatible with required benchmark capabilities: "
-            + ", ".join(compatibility["unsupported"])
-        )
-    prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
-    if prompt_package_id and prompt_package is None:
-        raise RunCreationError("Prompt package not found.")
-    frozen_datasets = _freeze_declared_datasets(
-        session,
-        declared_datasets if declared_datasets is not None else plugin.manifest.get("datasets"),
-    )
-
-    request_body_evidence = _request_body_evidence(
-        endpoint=endpoint,
-        benchmark_manifest=plugin.manifest,
-        suite_snapshot=suite_snapshot,
-        request_body_override=request_body_override,
-    )
-    scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_package)
-    try:
-        validate_scoring_rule(scoring_rule)
-    except ScoringError as error:
-        raise RunCreationError(f"Scoring rule is invalid: {error}") from error
-
-    snapshot = {
-        "benchmark": {
-            "id": benchmark_id,
-            "version": benchmark_version,
-            "manifest": plugin.manifest,
-        },
-        "endpoint": {
-            "id": endpoint.id,
-            "base_url": endpoint.base_url,
-            "model_name": endpoint.model_name,
-            "protocol_profile": endpoint.protocol_profile,
-            "default_request_body": endpoint.default_request_body,
-            "timeout_seconds": endpoint.timeout_seconds,
-            "custom_headers": endpoint.custom_headers,
-            "input_cost_per_million": endpoint.input_cost_per_million,
-            "output_cost_per_million": endpoint.output_cost_per_million,
-        },
-        "sample_ids": [sample.sample_id for sample in samples],
-        "datasets": frozen_datasets,
-        "capability_compatibility": compatibility,
-        "prompt_package": (
-            {
-                "id": prompt_package.id,
-                "name": prompt_package.name,
-                "version": prompt_package.version,
-                "system_message": prompt_package.system_message,
-                "user_template": prompt_package.user_template,
-                "few_shot_examples": prompt_package.few_shot_examples,
-                "scoring_rule": prompt_package.scoring_rule,
-            }
-            if prompt_package
-            else None
-        ),
-        "prompt_standardization": (
-            {"is_standard": not standardization_flags(prompt_package), "flags": standardization_flags(prompt_package)}
-            if prompt_package
-            else {"is_standard": True, "flags": []}
-        ),
-        "evaluation_suite": suite_snapshot,
-        "request_body_evidence": request_body_evidence,
-    }
-    created_at = datetime.now(timezone.utc)
-    run = EvaluationRun(
-        model_endpoint_id=endpoint.id,
-        prompt_package_id=prompt_package.id if prompt_package else None,
-        suite_id=suite_id,
-        created_by=created_by,
-        max_concurrency=max_concurrency,
-        benchmark_id=benchmark_id,
-        benchmark_version=benchmark_version,
-        display_name=format_run_display_name(endpoint.model_name, benchmark_id, created_at),
-        created_at=created_at,
-        configuration_snapshot=snapshot,
-        status=RunStatus.WAITING_FOR_DATASET.value if frozen_datasets else RunStatus.QUEUED.value,
-        total_samples=len(samples),
-    )
-    session.add(run)
-    session.flush()
-
-    dataset_task = TaskUnit(
-        run_id=run.id,
-        task_type=TaskType.DATASET_PREPARATION.value,
-        payload={
-            "datasets": frozen_datasets,
-            "prepared_inline": not bool(frozen_datasets),
-        },
-        status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
-    )
-    session.add(dataset_task)
-    session.flush()
-    benchmark_task = TaskUnit(
-        run_id=run.id,
-        parent_task_id=dataset_task.id,
-        task_type=TaskType.BENCHMARK.value,
-        payload={"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
-        status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
-    )
-    session.add(benchmark_task)
-    session.flush()
-    shards = _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint)
-    for shard_index, shard_samples in enumerate(shards, start=1):
-        task = TaskUnit(
-            run_id=run.id,
-            parent_task_id=benchmark_task.id,
-            task_type=TaskType.EVALUATION_SHARD.value,
-            payload={
-                "sample_ids": [sample.sample_id for sample in shard_samples],
-                "estimated_request_count": len(shard_samples),
-                "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
-                "sample_token_estimates": {
-                    sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
-                },
-                "shard_index": shard_index,
-                "shard_count": len(shards),
-                "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
-            },
-            status=TaskStatus.PENDING.value,
-        )
-        session.add(task)
-        session.flush()
-        session.add_all(
-            [
-                SampleAttempt(
-                    run_id=run.id,
-                    task_id=task.id,
-                    sample_id=sample.sample_id,
-                    input_snapshot={
-                        "messages": _build_sample_messages(sample, prompt_package),
-                        "modality": _sample_modality(sample),
-                        "metadata": dict(sample.metadata),
-                        "request_body_evidence": request_body_evidence,
-                    },
-                    reference_snapshot={
-                        "type": str(scoring_rule.get("type", "exact_match")),
-                        "answer": sample.reference_answer,
-                        "scoring": scoring_rule,
-                    },
-                )
-                for sample in shard_samples
-            ]
-        )
-    session.commit()
-    session.refresh(run)
-    return run
-
-
-def _freeze_declared_datasets(
-    session: Session,
-    descriptors: object,
-) -> list[dict[str, object]]:
-    """Resolve manifest descriptors to immutable registered dataset revisions."""
-
-    if not isinstance(descriptors, list):
-        return []
-    frozen: list[dict[str, object]] = []
-    for descriptor in descriptors:
-        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
-            raise RunCreationError("Benchmark dataset descriptors require a dataset_id.")
-        existing_id = descriptor.get("dataset_version_id")
-        if isinstance(existing_id, str):
-            dataset = session.get(DatasetVersion, existing_id)
-            if dataset is None:
-                raise RunCreationError(f"Declared dataset revision {existing_id} is not registered.")
-        else:
-            query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
-            if isinstance(descriptor.get("version"), str):
-                query = query.where(DatasetVersion.version == descriptor["version"])
-            if isinstance(descriptor.get("revision"), str):
-                query = query.where(DatasetVersion.revision == descriptor["revision"])
-            dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
-            if dataset is None:
-                dataset = _register_declared_dataset(session, descriptor)
-        frozen.append(
-            {
-                **descriptor,
-                "dataset_version_id": dataset.id,
-                "dataset_id": dataset.dataset_id,
-                "version": dataset.version,
-                "revision": dataset.revision,
-                "checksum": dataset.checksum,
-            }
-        )
-    return frozen
-
-
-def _register_declared_dataset(session: Session, descriptor: dict[str, object]) -> DatasetVersion:
-    """Register a manifest-owned remote revision before its preparation task runs.
-
-    Benchmark manifests are the authoritative source for reproducible public
-    datasets.  Capturing the descriptor at scheduling time lets the normal
-    licence, credential, checksum, download, and preparation workflow run
-    without a separate, error-prone administrator registration step.
-    """
-
-    source_url = descriptor.get("source_url")
-    if not isinstance(source_url, str) or not source_url.strip():
-        raise RunCreationError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-    version = descriptor.get("version")
-    revision = descriptor.get("revision")
-    license_text = descriptor.get("license_text")
-    credential_binding_id = descriptor.get("credential_binding_id")
-    checksum = descriptor.get("checksum")
-    dataset = DatasetVersion(
-        dataset_id=str(descriptor["dataset_id"]),
-        version=version.strip() if isinstance(version, str) and version.strip() else "default",
-        revision=revision.strip() if isinstance(revision, str) and revision.strip() else "default",
-        source_url=source_url.strip(),
-        checksum=checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
-        license_text=license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-        credential_binding_id=(
-            credential_binding_id.strip()
-            if isinstance(credential_binding_id, str) and credential_binding_id.strip()
-            else None
-        ),
-        status=("license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded"),
-    )
-    session.add(dataset)
-    session.flush()
-    return dataset
 
 
 def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:

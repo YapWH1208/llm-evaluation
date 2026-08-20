@@ -8,9 +8,13 @@ from sqlalchemy import select, update
 from app.db.database import Database
 from app.db.models import (
     EvaluationRun,
+    BenchmarkDefinition,
+    DatasetVersion,
     HumanReview,
     JudgeAssessment,
     ModelEndpoint,
+    ModelCapability,
+    PromptPackage,
     Report,
     SampleAttempt,
     TaskUnit,
@@ -101,7 +105,9 @@ class SqliteEvaluationRepository:
             return [
                 _model_values(attempt)
                 for attempt in session.scalars(
-                    select(SampleAttempt).where(SampleAttempt.run_id == run_id).order_by(SampleAttempt.created_at)
+                    select(SampleAttempt)
+                    .where(SampleAttempt.run_id == run_id)
+                    .order_by(SampleAttempt.sample_id, SampleAttempt.attempt_number)
                 )
             ]
 
@@ -131,6 +137,91 @@ class SqliteEvaluationRepository:
         with self._database.get_session() as session:
             endpoint = session.get(ModelEndpoint, endpoint_id)
             return _model_values(endpoint) if endpoint is not None else None
+
+    def get_prompt_package(self, prompt_package_id: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            prompt = session.get(PromptPackage, prompt_package_id)
+            return _model_values(prompt) if prompt is not None else None
+
+    def get_benchmark_definition(self, benchmark_id: str, benchmark_version: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            definition = session.scalar(
+                select(BenchmarkDefinition).where(
+                    BenchmarkDefinition.benchmark_id == benchmark_id,
+                    BenchmarkDefinition.version == benchmark_version,
+                )
+            )
+            return _model_values(definition) if definition is not None else None
+
+    def list_capabilities(self, endpoint_id: str) -> list[dict[str, Any]]:
+        with self._database.get_session() as session:
+            return [
+                _model_values(capability)
+                for capability in session.scalars(
+                    select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id)
+                )
+            ]
+
+    def get_dataset(self, dataset_version_id: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            dataset = session.get(DatasetVersion, dataset_version_id)
+            return _model_values(dataset) if dataset is not None else None
+
+    def find_dataset(self, *, dataset_id: str, version: str | None, revision: str | None) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            query = select(DatasetVersion).where(DatasetVersion.dataset_id == dataset_id)
+            if version is not None:
+                query = query.where(DatasetVersion.version == version)
+            if revision is not None:
+                query = query.where(DatasetVersion.revision == revision)
+            dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+            return _model_values(dataset) if dataset is not None else None
+
+    def create_dataset(self, values: dict[str, Any]) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            dataset = DatasetVersion(**values)
+            session.add(dataset)
+            session.commit()
+            session.refresh(dataset)
+            return _model_values(dataset)
+
+    def create_run_graph(
+        self,
+        run_values: dict[str, Any],
+        tasks: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            run = EvaluationRun(**run_values)
+            session.add(run)
+            session.flush()
+            task_ids: dict[str, str] = {}
+            for specification in tasks:
+                values = dict(specification)
+                key = str(values.pop("key"))
+                parent_key = values.pop("parent_key", None)
+                task = TaskUnit(
+                    run_id=run.id,
+                    parent_task_id=task_ids.get(str(parent_key)) if parent_key else None,
+                    **values,
+                )
+                session.add(task)
+                session.flush()
+                task_ids[key] = task.id
+            session.add_all(
+                [
+                    SampleAttempt(
+                        run_id=run.id,
+                        task_id=task_ids[str(values.pop("task_key"))],
+                        **values,
+                    )
+                    for item in attempts
+                    for values in [dict(item)]
+                ]
+            )
+            session.commit()
+            session.refresh(run)
+            return _model_values(run)
 
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         with self._database.get_session() as session:
@@ -215,7 +306,11 @@ class MongoEvaluationRepository:
         return self._store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", 1)])
 
     def list_attempts(self, run_id: str) -> list[dict[str, Any]]:
-        return self._store.list_documents("sample_attempts", query={"run_id": run_id}, sort=[("created_at", 1)])
+        return self._store.list_documents(
+            "sample_attempts",
+            query={"run_id": run_id},
+            sort=[("sample_id", 1), ("attempt_number", 1)],
+        )
 
     def list_reviews(self, attempt_ids: Iterable[str]) -> list[dict[str, Any]]:
         ids = tuple(attempt_ids)
@@ -227,6 +322,64 @@ class MongoEvaluationRepository:
 
     def get_endpoint(self, endpoint_id: str) -> dict[str, Any] | None:
         return self._store.get_document("model_endpoints", endpoint_id)
+
+    def get_prompt_package(self, prompt_package_id: str) -> dict[str, Any] | None:
+        return self._store.get_document("prompt_packages", prompt_package_id)
+
+    def get_benchmark_definition(self, benchmark_id: str, benchmark_version: str) -> dict[str, Any] | None:
+        definitions = self._store.list_documents(
+            "benchmark_definitions",
+            query={"benchmark_id": benchmark_id, "version": benchmark_version},
+        )
+        return definitions[0] if definitions else None
+
+    def list_capabilities(self, endpoint_id: str) -> list[dict[str, Any]]:
+        return self._store.list_documents("model_capabilities", query={"model_endpoint_id": endpoint_id})
+
+    def get_dataset(self, dataset_version_id: str) -> dict[str, Any] | None:
+        return self._store.get_document("dataset_versions", dataset_version_id)
+
+    def find_dataset(self, *, dataset_id: str, version: str | None, revision: str | None) -> dict[str, Any] | None:
+        query: dict[str, Any] = {"dataset_id": dataset_id}
+        if version is not None:
+            query["version"] = version
+        if revision is not None:
+            query["revision"] = revision
+        datasets = self._store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
+        return datasets[0] if datasets else None
+
+    def create_dataset(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self._store.insert_document("dataset_versions", values)
+
+    def create_run_graph(
+        self,
+        run_values: dict[str, Any],
+        tasks: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        run = self._store.insert_document("evaluation_runs", run_values)
+        task_ids: dict[str, str] = {}
+        for specification in tasks:
+            values = dict(specification)
+            key = str(values.pop("key"))
+            parent_key = values.pop("parent_key", None)
+            task = self._store.insert_document(
+                "task_units",
+                {
+                    "run_id": run["id"],
+                    "parent_task_id": task_ids.get(str(parent_key)) if parent_key else None,
+                    **values,
+                },
+            )
+            task_ids[key] = str(task["id"])
+        for specification in attempts:
+            values = dict(specification)
+            task_key = str(values.pop("task_key"))
+            self._store.insert_document(
+                "sample_attempts",
+                {"run_id": run["id"], "task_id": task_ids[task_key], **values},
+            )
+        return run
 
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         candidates = [

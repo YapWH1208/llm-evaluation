@@ -15,50 +15,12 @@ from app.db.models import (
     TaskType,
     TaskUnit,
 )
-from app.modules.evaluations.service import RunCreationError, _split_items_for_endpoint_budget, create_benchmark_run
+from app.modules.evaluations.service import RunCreationError, _split_items_for_endpoint_budget
 from app.modules.evaluations.analysis import latest_attempts
 
 
 class RunOperationError(ValueError):
     pass
-
-
-def clone_run(session: Session, run_id: str) -> EvaluationRun:
-    source = session.get(EvaluationRun, run_id)
-    if source is None:
-        raise RunOperationError("Evaluation run not found.")
-    snapshot_datasets = (
-        source.configuration_snapshot.get("datasets") if isinstance(source.configuration_snapshot, dict) else None
-    )
-    try:
-        return create_benchmark_run(
-            session,
-            model_endpoint_id=source.model_endpoint_id,
-            sample_limit=source.total_samples,
-            prompt_package_id=source.prompt_package_id,
-            benchmark_id=source.benchmark_id,
-            benchmark_version=source.benchmark_version,
-            declared_datasets=snapshot_datasets if isinstance(snapshot_datasets, list) else None,
-            created_by=source.created_by,
-            max_concurrency=source.max_concurrency,
-        )
-    except RunCreationError as error:
-        raise RunOperationError(str(error)) from error
-
-
-def rerun_benchmark(session: Session, run_id: str) -> EvaluationRun:
-    """Queue a fresh benchmark pass while preserving the source run and evidence."""
-
-    source = session.get(EvaluationRun, run_id)
-    if source is None:
-        raise RunOperationError("Evaluation run not found.")
-    run = clone_run(session, run_id)
-    snapshot = dict(run.configuration_snapshot)
-    snapshot["rerun_of"] = {"run_id": source.id, "kind": "benchmark"}
-    run.configuration_snapshot = snapshot
-    session.commit()
-    session.refresh(run)
-    return run
 
 
 def retry_failed_samples(session: Session, run_id: str) -> EvaluationRun:

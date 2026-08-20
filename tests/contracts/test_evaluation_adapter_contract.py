@@ -90,7 +90,17 @@ def evaluation_adapter(request: pytest.FixtureRequest, tmp_path: Path):
     store.initialize()
     store.insert_document(
         "model_endpoints",
-        {"id": endpoint_id, "model_name": "contract-model", "currency": "USD"},
+        {
+            "id": endpoint_id,
+            "base_url": "https://models.example.test/v1",
+            "model_name": "contract-model",
+            "protocol_profile": "openai_chat_completions",
+            "default_request_body": {},
+            "custom_headers": {},
+            "timeout_seconds": 60,
+            "status": "available",
+            "currency": "USD",
+        },
     )
     store.insert_document(
         "evaluation_runs",
@@ -162,3 +172,28 @@ def test_lifecycle_contract_is_identical_for_each_adapter(evaluation_adapter) ->
     assert archived["archived_at"] is not None
     service.delete(run_id)
     assert repository.get_run(run_id) is None
+
+
+def test_run_graph_contract_is_identical_for_each_adapter(evaluation_adapter) -> None:
+    repository, service, _run_id = evaluation_adapter
+
+    run = service.create_benchmark(
+        model_endpoint_id="endpoint-contract",
+        sample_limit=1,
+        prompt_package_id=None,
+        benchmark_id="text-quick-check",
+        benchmark_version="1.0.0",
+    )
+
+    tasks = repository.list_tasks(str(run["id"]))
+    attempts = repository.list_attempts(str(run["id"]))
+    assert [task["task_type"] for task in tasks] == [
+        "dataset_preparation",
+        "benchmark",
+        "evaluation_shard",
+    ]
+    assert tasks[1]["parent_task_id"] == tasks[0]["id"]
+    assert tasks[2]["parent_task_id"] == tasks[1]["id"]
+    assert len(attempts) == 1
+    assert attempts[0]["task_id"] == tasks[2]["id"]
+    assert run["configuration_snapshot"]["endpoint"]["model_name"] == "contract-model"
