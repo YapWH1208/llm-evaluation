@@ -2,29 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.db import EvaluationRun, RunStatus
-from app.db.mongo import MongoDocumentStore
+from app.db import RunStatus
+from app.modules.evaluations.execution import ExecutionService
 from app.modules.evaluations.service import (
     EvaluationService,
 )
 from app.infrastructure.providers.contracts import ModelExecutor
-from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
 from app.modules.evaluations.names import resolve_run_display_name
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
-from app.modules.evaluations.mongo_executor import (
-    MongoRunExecutionError,
-    execute_mongo_queued_run,
-)
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
 
@@ -178,17 +171,6 @@ class EvaluationRunProgress(BaseModel):
     completion_rate: float | None
 
 
-def get_session(request: Request) -> Generator[Session | None, None, None]:
-    if getattr(request.app.state, "document_store", None) is not None:
-        yield None
-        return
-    session = request.app.state.database.get_session()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
 def get_cipher(request: Request) -> SecretCipher:
     try:
         return SecretCipher(request.app.state.settings.secret_encryption_key)
@@ -204,14 +186,14 @@ def get_evaluation_service(request: Request) -> EvaluationService:
     return request.app.state.evaluation_service
 
 
-SessionDependency = Annotated[Session | None, Depends(get_session)]
+def get_execution_service(request: Request) -> ExecutionService:
+    return request.app.state.execution_service
+
+
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 EvaluationServiceDependency = Annotated[EvaluationService, Depends(get_evaluation_service)]
-
-
-def get_document_store(request: Request) -> MongoDocumentStore | None:
-    return getattr(request.app.state, "document_store", None)
+ExecutionServiceDependency = Annotated[ExecutionService, Depends(get_execution_service)]
 
 
 @router.post("", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
@@ -375,38 +357,11 @@ def retry_failed_evaluation_samples(
 @router.post("/{run_id}/execute", response_model=EvaluationRunResponse)
 def execute_evaluation_run(
     run_id: str,
-    request: Request,
-    session: SessionDependency,
+    service: ExecutionServiceDependency,
     cipher: CipherDependency,
     model_executor: ModelExecutorDependency,
-) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    try:
-        if store is not None:
-            return execute_mongo_queued_run(
-                store,
-                run_id=run_id,
-                cipher=cipher,
-                model_executor=model_executor,
-                data_root=str(request.app.state.settings.data_root),
-                settings=request.app.state.settings,
-            )
-        assert session is not None
-        return execute_queued_text_run(
-            session,
-            run_id=run_id,
-            cipher=cipher,
-            model_executor=model_executor,
-            data_root=str(request.app.state.settings.data_root),
-            settings=request.app.state.settings,
-        )
-    except (RunExecutionError, MongoRunExecutionError) as error:
-        status_code = (
-            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
-        )
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
-    except SecretConfigurationError as error:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+) -> dict[str, Any]:
+    return service.execute_run(run_id, cipher=cipher, model_executor=model_executor)
 
 
 @router.get("/{run_id}/attempts", response_model=list[SampleAttemptResponse])

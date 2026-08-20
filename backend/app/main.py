@@ -47,6 +47,7 @@ from app.modules.evaluations.repositories import (
     MongoEvaluationRepository,
     SqliteEvaluationRepository,
 )
+from app.modules.evaluations.execution import ExecutionService
 from app.modules.evaluations.service import EvaluationService
 from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions
 from sqlalchemy import select, text
@@ -108,12 +109,13 @@ def create_app(
     app.state.dataset_service = DatasetService(
         MongoDatasetRepository(document_store) if document_store is not None else SqliteDatasetRepository(database)  # type: ignore[arg-type]
     )
-    app.state.evaluation_service = EvaluationService(
+    evaluation_repository = (
         MongoEvaluationRepository(document_store)
         if document_store is not None
-        else SqliteEvaluationRepository(database),  # type: ignore[arg-type]
-        data_root=settings.data_root,
+        else SqliteEvaluationRepository(database)  # type: ignore[arg-type]
     )
+    app.state.evaluation_service = EvaluationService(evaluation_repository, data_root=settings.data_root)
+    app.state.execution_service = ExecutionService(evaluation_repository, settings)
     app.state.connection_tester = connection_tester or ProviderConnectionTester(
         max_response_bytes=settings.provider_response_max_bytes
     )

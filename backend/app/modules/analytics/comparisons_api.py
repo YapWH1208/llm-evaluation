@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt
 from app.db.mongo import MongoDocumentStore
-from app.modules.evaluations.mongo_executor import build_mongo_run_summary
-from app.modules.evaluations.analysis import latest_attempts, summarize_attempts
+from app.modules.evaluations.analysis import build_repository_run_summary, latest_attempts, summarize_attempts
+from app.modules.evaluations.repositories import MongoEvaluationRepository
 from app.modules.analytics.aggregation import list_aggregate_metrics, list_mongo_aggregate_metrics
 from app.modules.analytics.comparison_evidence import build_comparison_extension
 
@@ -120,21 +120,11 @@ def compare(
         "run_b_summary": summary_b,
         "differences": {
             "accuracy": _difference(summary_a["samples"]["accuracy"], summary_b["samples"]["accuracy"]),
-            "success_rate": _difference(
-                summary_a["samples"]["success_rate"], summary_b["samples"]["success_rate"]
-            ),
-            "error_rate": _difference(
-                summary_a["errors"]["rate"], summary_b["errors"]["rate"]
-            ),
-            "average_latency_ms": _difference(
-                summary_a["latency_ms"]["average"], summary_b["latency_ms"]["average"]
-            ),
-            "p95_latency_ms": _difference(
-                summary_a["latency_ms"]["p95"], summary_b["latency_ms"]["p95"]
-            ),
-            "estimated_cost": _difference(
-                summary_a["cost"]["estimated"], summary_b["cost"]["estimated"]
-            ),
+            "success_rate": _difference(summary_a["samples"]["success_rate"], summary_b["samples"]["success_rate"]),
+            "error_rate": _difference(summary_a["errors"]["rate"], summary_b["errors"]["rate"]),
+            "average_latency_ms": _difference(summary_a["latency_ms"]["average"], summary_b["latency_ms"]["average"]),
+            "p95_latency_ms": _difference(summary_a["latency_ms"]["p95"], summary_b["latency_ms"]["p95"]),
+            "estimated_cost": _difference(summary_a["cost"]["estimated"], summary_b["cost"]["estimated"]),
             "output_tokens": summary_a["tokens"]["output"] - summary_b["tokens"]["output"],
         },
         "sample_outcomes": outcomes,
@@ -166,6 +156,7 @@ def _difference(first: float | None, second: float | None) -> float | None:
 
 
 def _compare_documents(store: MongoDocumentStore, run_a: str, run_b: str) -> dict[str, Any]:
+    evaluation_repository = MongoEvaluationRepository(store)
     first = store.get_document("evaluation_runs", run_a)
     second = store.get_document("evaluation_runs", run_b)
     if first is None or second is None:
@@ -205,8 +196,8 @@ def _compare_documents(store: MongoDocumentStore, run_a: str, run_b: str) -> dic
                 "run_b": _document_attempt_evidence(second_attempt),
             }
         )
-    summary_a = build_mongo_run_summary(store, run_a)
-    summary_b = build_mongo_run_summary(store, run_b)
+    summary_a = build_repository_run_summary(evaluation_repository, run_a)
+    summary_b = build_repository_run_summary(evaluation_repository, run_b)
     endpoint_a = store.get_document("model_endpoints", str(first["model_endpoint_id"]))
     endpoint_b = store.get_document("model_endpoints", str(second["model_endpoint_id"]))
     outcome_counts = {

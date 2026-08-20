@@ -6,7 +6,9 @@ from typing import Any, Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import NotFoundError
 from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt, SampleAttemptStatus
+from app.modules.evaluations.ports import EvaluationRepository
 
 
 def latest_attempts(session: Session, run_id: str) -> list[SampleAttempt]:
@@ -63,6 +65,43 @@ def build_run_summary(session: Session, run: EvaluationRun) -> dict[str, Any]:
         else None
     )
     return add_summary_insights(summary, current_attempts, previous_summary)
+
+
+def build_repository_run_summary(repository: EvaluationRepository, run_id: str) -> dict[str, Any]:
+    """Build one run summary from the shared persistence contract."""
+
+    run = repository.get_run(run_id)
+    if run is None:
+        raise NotFoundError("Evaluation run not found", context={"run_id": run_id})
+    endpoint = repository.get_endpoint(str(run["model_endpoint_id"]))
+    current_attempts = _latest_record_attempts(repository.list_attempts(run_id))
+    currency = str(endpoint["currency"]) if endpoint and endpoint.get("currency") else None
+    summary = summarize_attempts(
+        current_attempts,
+        total_samples=int(run["total_samples"]),
+        currency=currency,
+    )
+    previous = repository.find_previous_completed_run(run)
+    previous_summary = (
+        summarize_attempts(
+            _latest_record_attempts(repository.list_attempts(str(previous["id"]))),
+            total_samples=int(previous["total_samples"]),
+            currency=currency,
+        )
+        if previous is not None
+        else None
+    )
+    return add_summary_insights(summary, current_attempts, previous_summary)
+
+
+def _latest_record_attempts(attempts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for attempt in attempts:
+        sample_id = str(attempt["sample_id"])
+        previous = latest.get(sample_id)
+        if previous is None or int(attempt.get("attempt_number", 1)) > int(previous.get("attempt_number", 1)):
+            latest[sample_id] = attempt
+    return [latest[sample_id] for sample_id in sorted(latest)]
 
 
 def summarize_attempts(

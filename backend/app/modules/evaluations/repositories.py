@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
+from app.core.config import Settings
+from app.core.secrets import SecretCipher
 from app.db.database import Database
 from app.db.models import (
     EvaluationRun,
@@ -21,6 +24,8 @@ from app.db.models import (
     TaskUnit,
 )
 from app.db.mongo import MongoDocumentStore
+from app.infrastructure.providers.contracts import ModelExecutor
+from app.modules.datasets.preparation import DatasetError
 
 
 def _model_values(model: Any) -> dict[str, Any]:
@@ -263,6 +268,286 @@ class SqliteEvaluationRepository:
             )
             session.commit()
 
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            task = session.get(TaskUnit, task_id)
+            return _model_values(task) if task is not None else None
+
+    def claim_task(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int,
+        run_id: str | None = None,
+        system_max_concurrency: int | None = None,
+        worker_max_concurrency: int | None = None,
+    ) -> dict[str, Any] | None:
+        from app.modules.evaluations.queue import claim_task
+
+        with self._database.get_session() as session:
+            task = claim_task(
+                session,
+                worker_id,
+                lease_seconds,
+                run_id=run_id,
+                system_max_concurrency=system_max_concurrency,
+                worker_max_concurrency=worker_max_concurrency,
+            )
+            return _model_values(task) if task is not None else None
+
+    def heartbeat_task(self, task_id: str, lease_token: str, lease_seconds: int) -> dict[str, Any] | None:
+        from app.modules.evaluations.queue import heartbeat_task
+
+        with self._database.get_session() as session:
+            task = heartbeat_task(session, task_id, lease_token, lease_seconds)
+            return _model_values(task) if task is not None else None
+
+    def reclaim_expired_leases(self) -> int:
+        from app.modules.evaluations.queue import reclaim_expired_leases
+
+        with self._database.get_session() as session:
+            return reclaim_expired_leases(session)
+
+    def update_run_if(
+        self,
+        run_id: str,
+        *,
+        statuses: Iterable[str],
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            result = session.execute(
+                update(EvaluationRun)
+                .where(EvaluationRun.id == run_id, EvaluationRun.status.in_(tuple(statuses)))
+                .values(**values)
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                session.rollback()
+                return None
+            session.commit()
+            run = session.get(EvaluationRun, run_id)
+            return _model_values(run) if run is not None else None
+
+    def update_task_for_lease(
+        self,
+        task_id: str,
+        lease_token: str,
+        values: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        now = datetime.now(timezone.utc)
+        persisted = {"heartbeat_at": now, **(values or {})}
+        with self._database.get_session() as session:
+            result = session.execute(
+                update(TaskUnit)
+                .where(
+                    TaskUnit.id == task_id,
+                    TaskUnit.lease_token == lease_token,
+                    TaskUnit.status.in_(("leased", "running")),
+                    TaskUnit.lease_expires_at >= now,
+                )
+                .values(**persisted)
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                session.rollback()
+                return None
+            session.commit()
+            task = session.get(TaskUnit, task_id)
+            return _model_values(task) if task is not None else None
+
+    def create_task(self, values: dict[str, Any]) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            task = TaskUnit(**values)
+            session.add(task)
+            session.commit()
+            session.refresh(task)
+            return _model_values(task)
+
+    def create_attempt(self, values: dict[str, Any]) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            attempt = SampleAttempt(**values)
+            session.add(attempt)
+            session.commit()
+            session.refresh(attempt)
+            return _model_values(attempt)
+
+    def begin_attempt(self, attempt_id: str, lease_token: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        del lease_token
+        with self._database.get_session() as session:
+            result = session.execute(
+                update(SampleAttempt)
+                .where(SampleAttempt.id == attempt_id, SampleAttempt.status == "pending")
+                .values(**values)
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                session.rollback()
+                return None
+            session.commit()
+            attempt = session.get(SampleAttempt, attempt_id)
+            return _model_values(attempt) if attempt is not None else None
+
+    def complete_attempt(
+        self,
+        attempt_id: str,
+        lease_token: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        del lease_token
+        with self._database.get_session() as session:
+            result = session.execute(
+                update(SampleAttempt)
+                .where(SampleAttempt.id == attempt_id, SampleAttempt.status == "running")
+                .values(**values)
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                session.rollback()
+                return None
+            session.commit()
+            attempt = session.get(SampleAttempt, attempt_id)
+            return _model_values(attempt) if attempt is not None else None
+
+    def update_attempt(self, attempt_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            attempt = session.get(SampleAttempt, attempt_id)
+            if attempt is None:
+                return None
+            for name, value in values.items():
+                setattr(attempt, name, value)
+            session.commit()
+            session.refresh(attempt)
+            return _model_values(attempt)
+
+    def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None:
+        from app.modules.datasets.repositories import SqliteSessionDatasetRepository
+        from app.modules.datasets.service import DatasetService
+
+        with self._database.get_session() as session:
+            frozen_id = descriptor.get("dataset_version_id")
+            if isinstance(frozen_id, str):
+                dataset = session.get(DatasetVersion, frozen_id)
+            else:
+                query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
+                if isinstance(descriptor.get("version"), str):
+                    query = query.where(DatasetVersion.version == descriptor["version"])
+                if isinstance(descriptor.get("revision"), str):
+                    query = query.where(DatasetVersion.revision == descriptor["revision"])
+                dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+            if dataset is None:
+                raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+            if dataset.status != "ready":
+                DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
+
+    def aggregate(self, run_id: str) -> int:
+        from app.modules.analytics.aggregation import recompute_aggregate_metrics
+
+        with self._database.get_session() as session:
+            return len(recompute_aggregate_metrics(session, run_id))
+
+    def generate_report(
+        self,
+        run_id: str,
+        format: str,
+        data_root: str,
+        *,
+        report_type: str,
+    ) -> dict[str, Any]:
+        from app.modules.reports.service import generate_report
+
+        with self._database.get_session() as session:
+            report = generate_report(session, run_id, format, data_root, report_type=report_type)
+            return _model_values(report)
+
+    def assess_judge(
+        self,
+        *,
+        sample_attempt_id: str,
+        judge_endpoint_id: str,
+        rubric: dict[str, Any],
+        system_message: str,
+        cipher: SecretCipher,
+        model_executor: ModelExecutor,
+        endpoint_override: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.modules.reviews.judges import assess_sample_attempt
+
+        with self._database.get_session() as session:
+            assessment = assess_sample_attempt(
+                session,
+                sample_attempt_id=sample_attempt_id,
+                judge_endpoint_id=judge_endpoint_id,
+                rubric=rubric,
+                system_message=system_message,
+                persist=True,
+                cipher=cipher,
+                model_executor=model_executor,
+                endpoint_override=endpoint_override,
+            )
+            return _model_values(assessment)
+
+    def query_tasks(
+        self,
+        *,
+        run_id: str | None,
+        status: str | None,
+        offset: int,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        with self._database.get_session() as session:
+            query = select(TaskUnit)
+            if run_id:
+                query = query.where(TaskUnit.run_id == run_id)
+            if status:
+                query = query.where(TaskUnit.status == status)
+            return [
+                _model_values(task)
+                for task in session.scalars(
+                    query.order_by(TaskUnit.priority.desc(), TaskUnit.created_at).offset(offset).limit(limit)
+                )
+            ]
+
+    def update_task_priority(self, task_id: str, priority: int) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            task = session.get(TaskUnit, task_id)
+            if task is None:
+                return None
+            task.priority = priority
+            session.commit()
+            session.refresh(task)
+            return _model_values(task)
+
+    def queue_snapshot(self) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            active = TaskUnit.status.in_(("leased", "running"))
+            workers = session.scalars(
+                select(TaskUnit.leased_by).where(active, TaskUnit.leased_by.is_not(None)).distinct().limit(500)
+            )
+            errors = session.scalars(
+                select(TaskUnit).where(TaskUnit.status == "failed").order_by(TaskUnit.updated_at.desc()).limit(20)
+            )
+            return {
+                "queue": {
+                    "pending": session.scalar(
+                        select(func.count())
+                        .select_from(TaskUnit)
+                        .where(TaskUnit.status.in_(("pending", "retry_scheduled")))
+                    )
+                    or 0,
+                    "active": session.scalar(select(func.count()).select_from(TaskUnit).where(active)) or 0,
+                },
+                "workers": sorted(str(worker) for worker in workers if worker),
+                "errors": [
+                    {
+                        "task_id": task.id,
+                        "run_id": task.run_id,
+                        "retry_exhausted_reason": (task.payload or {}).get("retry_exhausted_reason"),
+                    }
+                    for task in errors
+                ],
+            }
+
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         with self._database.get_session() as session:
             previous = session.scalar(
@@ -452,6 +737,204 @@ class MongoEvaluationRepository:
                 "sample_attempts",
                 {"run_id": run_id, "task_id": task_ids[task_key], **values},
             )
+
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
+        return self._store.get_document("task_units", task_id)
+
+    def claim_task(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int,
+        run_id: str | None = None,
+        system_max_concurrency: int | None = None,
+        worker_max_concurrency: int | None = None,
+    ) -> dict[str, Any] | None:
+        return self._store.claim_task(
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            run_id=run_id,
+            system_max_concurrency=system_max_concurrency,
+            worker_max_concurrency=worker_max_concurrency,
+        )
+
+    def heartbeat_task(self, task_id: str, lease_token: str, lease_seconds: int) -> dict[str, Any] | None:
+        return self._store.heartbeat_task(
+            task_id=task_id,
+            lease_token=lease_token,
+            lease_seconds=lease_seconds,
+        )
+
+    def reclaim_expired_leases(self) -> int:
+        return self._store.reclaim_expired_leases()
+
+    def update_run_if(
+        self,
+        run_id: str,
+        *,
+        statuses: Iterable[str],
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        return self._store.update_document_if(
+            "evaluation_runs",
+            run_id,
+            {"status": {"$in": tuple(statuses)}},
+            values,
+        )
+
+    def update_task_for_lease(
+        self,
+        task_id: str,
+        lease_token: str,
+        values: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        task = self._store.get_document("task_units", task_id)
+        if task is None:
+            return None
+        return self._store.update_task_if_current_lease(task, lease_token, values)
+
+    def create_task(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self._store.insert_document("task_units", values)
+
+    def create_attempt(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self._store.insert_document("sample_attempts", values)
+
+    def begin_attempt(self, attempt_id: str, lease_token: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        return self._store.update_document_if(
+            "sample_attempts",
+            attempt_id,
+            {"status": "pending"},
+            {**values, "worker_lease_token": lease_token},
+        )
+
+    def complete_attempt(
+        self,
+        attempt_id: str,
+        lease_token: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        return self._store.update_document_if(
+            "sample_attempts",
+            attempt_id,
+            {"status": "running", "worker_lease_token": lease_token},
+            {**values, "worker_lease_token": None},
+        )
+
+    def update_attempt(self, attempt_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        return self._store.update_document("sample_attempts", attempt_id, values)
+
+    def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None:
+        from app.modules.datasets.repositories import MongoDatasetRepository
+        from app.modules.datasets.service import DatasetService
+
+        frozen_id = descriptor.get("dataset_version_id")
+        if isinstance(frozen_id, str):
+            dataset = self._store.get_document("dataset_versions", frozen_id)
+        else:
+            query = {"dataset_id": descriptor["dataset_id"]}
+            if isinstance(descriptor.get("version"), str):
+                query["version"] = descriptor["version"]
+            if isinstance(descriptor.get("revision"), str):
+                query["revision"] = descriptor["revision"]
+            matches = self._store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
+            dataset = matches[0] if matches else None
+        if dataset is None:
+            raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+        if dataset.get("status") != "ready":
+            DatasetService(MongoDatasetRepository(self._store)).download(str(dataset["id"]), data_root, settings)
+
+    def aggregate(self, run_id: str) -> int:
+        from app.modules.analytics.aggregation import recompute_mongo_aggregate_metrics
+
+        return len(recompute_mongo_aggregate_metrics(self._store, run_id))
+
+    def generate_report(
+        self,
+        run_id: str,
+        format: str,
+        data_root: str,
+        *,
+        report_type: str,
+    ) -> dict[str, Any]:
+        from app.modules.reports.mongo import generate_mongo_report
+
+        return generate_mongo_report(self._store, run_id, format, data_root, report_type=report_type)
+
+    def assess_judge(
+        self,
+        *,
+        sample_attempt_id: str,
+        judge_endpoint_id: str,
+        rubric: dict[str, Any],
+        system_message: str,
+        cipher: SecretCipher,
+        model_executor: ModelExecutor,
+        endpoint_override: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.modules.reviews.mongo_judges import assess_mongo_sample_attempt
+
+        return assess_mongo_sample_attempt(
+            self._store,
+            sample_attempt_id=sample_attempt_id,
+            judge_endpoint_id=judge_endpoint_id,
+            rubric=rubric,
+            system_message=system_message,
+            cipher=cipher,
+            model_executor=model_executor,
+            endpoint_override=endpoint_override,
+        )
+
+    def query_tasks(
+        self,
+        *,
+        run_id: str | None,
+        status: str | None,
+        offset: int,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        query: dict[str, Any] = {}
+        if run_id:
+            query["run_id"] = run_id
+        if status:
+            query["status"] = status
+        return self._store.list_documents(
+            "task_units",
+            query=query,
+            sort=[("priority", -1), ("created_at", 1)],
+            offset=offset,
+            limit=limit,
+        )
+
+    def update_task_priority(self, task_id: str, priority: int) -> dict[str, Any] | None:
+        return self._store.update_document("task_units", task_id, {"priority": priority})
+
+    def queue_snapshot(self) -> dict[str, Any]:
+        active_query = {"status": {"$in": ["leased", "running"]}}
+        workers = self._store.distinct_values("task_units", "leased_by", active_query)
+        errors = self._store.list_documents(
+            "task_units",
+            query={"status": "failed"},
+            sort=[("updated_at", -1)],
+            limit=20,
+            projection={"id": 1, "run_id": 1, "payload": 1},
+        )
+        return {
+            "queue": {
+                "pending": self._store.count_documents(
+                    "task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}
+                ),
+                "active": self._store.count_documents("task_units", active_query),
+            },
+            "workers": sorted(str(worker) for worker in workers if worker),
+            "errors": [
+                {
+                    "task_id": task["id"],
+                    "run_id": task["run_id"],
+                    "retry_exhausted_reason": (task.get("payload") or {}).get("retry_exhausted_reason"),
+                }
+                for task in errors
+            ],
+        }
 
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         candidates = [

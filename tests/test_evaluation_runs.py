@@ -15,7 +15,7 @@ from app.main import create_app
 from app.benchmarks.text_quick_check import TextSample
 from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
 from app.modules.evaluations.names import format_run_display_name
-from app.modules.evaluations.executor import _retry_delay_seconds
+from app.modules.evaluations.execution import _retry_delay_seconds
 from app.modules.evaluations.queue import claim_task, reclaim_expired_leases
 
 

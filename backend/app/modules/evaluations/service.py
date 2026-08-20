@@ -26,7 +26,7 @@ from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template, standardization_flags
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.names import format_run_display_name
-from app.modules.evaluations.analysis import add_summary_insights, summarize_attempts
+from app.modules.evaluations.analysis import build_repository_run_summary
 from app.modules.evaluations.evidence import (
     decorate_attempts,
     filter_attempts,
@@ -665,23 +665,7 @@ class EvaluationService:
         ]
 
     def summary(self, run_id: str) -> dict[str, Any]:
-        run = self.get(run_id)
-        endpoint = self._repository.get_endpoint(str(run["model_endpoint_id"]))
-        current_attempts = _latest_attempt_values(self._repository.list_attempts(run_id))
-        summary = summarize_attempts(
-            current_attempts,
-            total_samples=int(run["total_samples"]),
-            currency=str(endpoint["currency"]) if endpoint and endpoint.get("currency") else None,
-        )
-        previous = self._repository.find_previous_completed_run(run)
-        previous_summary = None
-        if previous is not None:
-            previous_summary = summarize_attempts(
-                _latest_attempt_values(self._repository.list_attempts(str(previous["id"]))),
-                total_samples=int(previous["total_samples"]),
-                currency=(str(endpoint["currency"]) if endpoint and endpoint.get("currency") else None),
-            )
-        return add_summary_insights(summary, current_attempts, previous_summary)
+        return build_repository_run_summary(self._repository, run_id)
 
     def event_payload(self, run_id: str) -> dict[str, Any]:
         progress = self.progress(run_id)
@@ -692,16 +676,6 @@ class EvaluationService:
         if run is None:
             raise NotFoundError("Evaluation run not found", context={"run_id": run_id})
         return run
-
-
-def _latest_attempt_values(attempts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    latest: dict[str, dict[str, Any]] = {}
-    for attempt in sorted(
-        attempts,
-        key=lambda item: (str(item["sample_id"]), -int(item.get("attempt_number") or 1)),
-    ):
-        latest.setdefault(str(attempt["sample_id"]), attempt)
-    return [latest[sample_id] for sample_id in sorted(latest)]
 
 
 def _empty_preflight(issue: str) -> dict[str, object]:

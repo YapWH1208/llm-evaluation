@@ -20,19 +20,13 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
     "modules/benchmarks/api.py",
     "modules/benchmarks/prompts_api.py",
     "modules/endpoints/capabilities_api.py",
-    "modules/evaluations/api.py",
-    "modules/evaluations/queue_api.py",
     "modules/evaluations/suites_api.py",
-    "modules/evaluations/tasks_api.py",
     "modules/reports/api.py",
     "modules/reports/assets_api.py",
     "modules/reviews/api.py",
     "modules/reviews/judges_api.py",
 }
-KNOWN_STRING_ERROR_ROUTING = {
-    "modules/evaluations/api.py",
-    "modules/evaluations/queue_api.py",
-}
+KNOWN_STRING_ERROR_ROUTING: set[str] = set()
 KNOWN_SHARED_TO_FEATURE_IMPORTS = {"shared/api/index.ts"}
 KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT = {"components/ApplicationWorkspace.tsx"}
 
