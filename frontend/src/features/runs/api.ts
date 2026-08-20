@@ -1,5 +1,5 @@
 import { request, subscribeToEvents } from "../../shared/api/client";
-import type { AggregateMetric, EvaluationRun, RunLogEntry, RunPreflight, RunSummary, SampleAttempt } from "../../shared/api/types";
+import type { AggregateMetric, EvaluationRun, RunLogEntry, RunPreflight, RunSummary, SampleAttempt } from "./types";
 
 export const runsApi = {
   list: () => request<EvaluationRun[]>("/evaluation-runs"),
@@ -24,4 +24,4 @@ export const runsApi = {
   subscribe: (runId: string, onEvent: () => void) => subscribeToEvents(`/evaluation-runs/${runId}/events`, "run", onEvent),
 };
 
-export type { AggregateMetric, EvaluationRun, RunLogEntry, RunPreflight, RunSummary, SampleAttempt } from "../../shared/api/types";
+export type { AggregateMetric, EvaluationRun, RunLogEntry, RunPreflight, RunSummary, SampleAttempt } from "./types";

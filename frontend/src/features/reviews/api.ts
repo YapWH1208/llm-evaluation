@@ -1,5 +1,5 @@
 import { request } from "../../shared/api/client";
-import type { JudgeAssessment, JudgeAgreement, Review, ReviewAgreement } from "../../shared/api/types";
+import type { JudgeAssessment, JudgeAgreement, Review, ReviewAgreement } from "./types";
 
 export const reviewsApi = {
   create: (body: Record<string, unknown>) => request<Review>("/reviews", { method: "POST", body: JSON.stringify(body) }),
@@ -11,4 +11,4 @@ export const reviewsApi = {
   judgeAgreement: (attemptId: string) => request<JudgeAgreement>(`/judge-assessments/sample/${attemptId}/agreement`),
 };
 
-export type { JudgeAssessment, JudgeAgreement, Review, ReviewAgreement } from "../../shared/api/types";
+export type { JudgeAssessment, JudgeAgreement, Review, ReviewAgreement } from "./types";

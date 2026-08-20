@@ -1,5 +1,5 @@
 import { request } from "../../shared/api/client";
-import type { Benchmark, PromptPackage } from "../../shared/api/types";
+import type { Benchmark, PromptPackage } from "./types";
 
 export const benchmarksApi = {
   list: () => request<Benchmark[]>("/benchmarks"),
@@ -9,4 +9,4 @@ export const benchmarksApi = {
   removePrompt: (promptPackageId: string) => request<PromptPackage>(`/prompt-packages/${promptPackageId}`, { method: "DELETE" }),
 };
 
-export type { Benchmark, PromptPackage } from "../../shared/api/types";
+export type { Benchmark, PromptPackage } from "./types";

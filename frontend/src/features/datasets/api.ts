@@ -1,5 +1,5 @@
 import { request } from "../../shared/api/client";
-import type { Dataset } from "../../shared/api/types";
+import type { Dataset } from "./types";
 
 export const datasetsApi = {
   list: () => request<Dataset[]>("/datasets"),
@@ -17,4 +17,4 @@ export const datasetsApi = {
   upload: (datasetId: string, body: { filename: string; base64_data: string }) => request<Dataset>(`/datasets/${datasetId}/upload`, { method: "POST", body: JSON.stringify(body) }),
 };
 
-export type { Dataset } from "../../shared/api/types";
+export type { Dataset } from "./types";

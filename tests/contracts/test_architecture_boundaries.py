@@ -157,5 +157,7 @@ def test_superseded_frontend_owners_are_deleted() -> None:
     workspace = FRONTEND / "components" / "ApplicationWorkspace.tsx"
     assert not workspace.exists()
     assert not (FRONTEND / "shared" / "api" / "index.ts").exists()
+    assert not (FRONTEND / "shared" / "api" / "types.ts").exists()
+    assert {path.name for path in (FRONTEND / "shared" / "api").glob("*.ts")} == {"client.ts", "errors.ts"}
     assert KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT == set()
     assert len((FRONTEND / "App.tsx").read_text(encoding="utf-8").splitlines()) <= 25

@@ -1,5 +1,5 @@
 import { request } from "../../shared/api/client";
-import type { Capability, ConnectionTest, Endpoint } from "../../shared/api/types";
+import type { Capability, ConnectionTest, Endpoint } from "./types";
 
 export const endpointsApi = {
   list: () => request<Endpoint[]>("/model-endpoints"),
@@ -11,4 +11,4 @@ export const endpointsApi = {
   declareCapability: (endpointId: string, capabilityKey: string, userDeclaredStatus: "supported" | "unsupported" | "unknown") => request<Capability>(`/model-endpoints/${endpointId}/capabilities`, { method: "PUT", body: JSON.stringify({ capability_key: capabilityKey, user_declared_status: userDeclaredStatus }) }),
 };
 
-export type { Capability, ConnectionTest, Endpoint } from "../../shared/api/types";
+export type { Capability, ConnectionTest, Endpoint } from "./types";

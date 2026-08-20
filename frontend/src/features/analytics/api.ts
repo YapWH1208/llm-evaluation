@@ -1,5 +1,5 @@
 import { request, systemRequest } from "../../shared/api/client";
-import type { AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, ScatterQuery, ScatterResponse, SystemHealth, Task } from "../../shared/api/types";
+import type { AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, ScatterQuery, ScatterResponse, SystemHealth, Task } from "./types";
 
 export const analyticsApi = {
   dashboard: () => request<Dashboard>("/dashboard"),
@@ -23,4 +23,4 @@ export const analyticsApi = {
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };
 
-export type { AnalyticsCell, AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, LeaderboardRow, ScatterPoint, ScatterQuery, ScatterResponse, SystemHealth, Task } from "../../shared/api/types";
+export type { AnalyticsCell, AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, LeaderboardRow, ScatterPoint, ScatterQuery, ScatterResponse, SystemHealth, Task } from "./types";
