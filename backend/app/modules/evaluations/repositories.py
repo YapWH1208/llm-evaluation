@@ -12,6 +12,7 @@ from app.db.models import (
     DatasetVersion,
     HumanReview,
     JudgeAssessment,
+    MediaAsset,
     ModelEndpoint,
     ModelCapability,
     PromptPackage,
@@ -166,6 +167,11 @@ class SqliteEvaluationRepository:
         with self._database.get_session() as session:
             dataset = session.get(DatasetVersion, dataset_version_id)
             return _model_values(dataset) if dataset is not None else None
+
+    def get_media_asset(self, asset_id: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            asset = session.get(MediaAsset, asset_id)
+            return _model_values(asset) if asset is not None else None
 
     def find_dataset(self, *, dataset_id: str, version: str | None, revision: str | None) -> dict[str, Any] | None:
         with self._database.get_session() as session:
@@ -338,6 +344,9 @@ class MongoEvaluationRepository:
 
     def get_dataset(self, dataset_version_id: str) -> dict[str, Any] | None:
         return self._store.get_document("dataset_versions", dataset_version_id)
+
+    def get_media_asset(self, asset_id: str) -> dict[str, Any] | None:
+        return self._store.get_document("media_assets", asset_id)
 
     def find_dataset(self, *, dataset_id: str, version: str | None, revision: str | None) -> dict[str, Any] | None:
         query: dict[str, Any] = {"dataset_id": dataset_id}

@@ -340,6 +340,21 @@ class EvaluationService:
         snapshot["rerun_of"] = {"run_id": run_id, "kind": "benchmark"}
         return self._updated_run(str(run["id"]), {"configuration_snapshot": snapshot})
 
+    def create_dataset_run(self, **values: Any) -> dict[str, Any]:
+        from app.modules.evaluations.dataset_runs import create_dataset_run
+
+        return create_dataset_run(self._repository, data_root=self._data_root, **values)
+
+    def preflight_dataset_run(self, **values: Any) -> dict[str, object]:
+        from app.modules.evaluations.dataset_runs import preflight_dataset_run
+
+        return preflight_dataset_run(self._repository, data_root=self._data_root, **values)
+
+    def create_custom_run(self, **values: Any) -> dict[str, Any]:
+        from app.modules.evaluations.custom_runs import create_custom_multimodal_run
+
+        return create_custom_multimodal_run(self._repository, data_root=self._data_root, **values)
+
     def _preflight_declared_datasets(self, descriptors: object, issues: list[str]) -> list[dict[str, object]]:
         if not isinstance(descriptors, list):
             return []
