@@ -4,7 +4,7 @@ from typing import Any
 
 from app.db.models import ModelEndpoint
 from app.infrastructure.providers.adapters.base import ProviderAdapter
-from app.infrastructure.providers.common import translate_chat_messages
+from app.infrastructure.providers.adapters.chat_content import translate_chat_messages
 
 
 class CustomHttpJsonAdapter(ProviderAdapter):

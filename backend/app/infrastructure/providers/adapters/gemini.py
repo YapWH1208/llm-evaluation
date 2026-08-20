@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.content import ContentValidationError, normalize_content_parts
 from app.db.models import ModelEndpoint
 from app.infrastructure.providers.adapters.base import ProviderAdapter
-from app.infrastructure.providers.common import nonnegative_int, translate_gemini_messages
+from app.infrastructure.providers.common import nonnegative_int, validate_base64
 
 
 class GeminiGenerateContentAdapter(ProviderAdapter):
@@ -83,3 +84,47 @@ class GeminiGenerateContentAdapter(ProviderAdapter):
         if not isinstance(usage, dict):
             return None, None
         return nonnegative_int(usage.get("promptTokenCount")), nonnegative_int(usage.get("candidatesTokenCount"))
+
+
+def translate_gemini_messages(messages: list[object]) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    contents: list[dict[str, object]] = []
+    system_parts: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        parts = _translate_content(message.get("content"))
+        if role in {"system", "developer"}:
+            system_parts.extend(parts)
+        elif role == "assistant":
+            contents.append({"role": "model", "parts": parts})
+        elif role == "user":
+            contents.append({"role": "user", "parts": parts})
+        else:
+            raise ValueError("Gemini GenerateContent supports system, user, and assistant messages only.")
+    return contents, system_parts
+
+
+def _translate_content(content: object) -> list[dict[str, object]]:
+    if isinstance(content, str):
+        return [{"text": content}]
+    if not isinstance(content, list):
+        raise ValueError("Message content must be text or a list of content parts.")
+    try:
+        parts = normalize_content_parts(content)
+    except ContentValidationError as error:
+        raise ValueError(str(error)) from error
+    translated: list[dict[str, object]] = []
+    for part in parts:
+        if part["type"] == "text":
+            translated.append({"text": part["text"]})
+            continue
+        if part["type"] == "tool_result":
+            raise ValueError("Gemini GenerateContent does not support tool_result content through this adapter.")
+        source = part["source"]
+        encoded = source.get("base64_data") if isinstance(source, dict) else None
+        if not isinstance(encoded, str):
+            raise ValueError(f"Gemini {part['type']} content requires base64_data through this adapter.")
+        validate_base64(encoded)
+        translated.append({"inlineData": {"mimeType": part["mime_type"], "data": encoded}})
+    return translated

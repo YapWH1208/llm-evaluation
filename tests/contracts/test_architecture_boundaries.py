@@ -106,6 +106,11 @@ def test_provider_orchestrators_do_not_branch_on_protocol_profiles() -> None:
     assert "def extract_prediction(" not in common
     assert "def extract_token_logprobs(" not in common
     assert "def adapter_defaults(" not in common
+    assert "def translate_chat_messages(" not in common
+    assert "def translate_responses_messages(" not in common
+    assert "def translate_anthropic_messages(" not in common
+    assert "def translate_gemini_messages(" not in common
+    assert "def translate_ollama_messages(" not in common
 
 
 def test_shared_frontend_never_adds_more_feature_imports() -> None:

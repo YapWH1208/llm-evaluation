@@ -3,9 +3,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from app.core.content import ContentValidationError, normalize_content_parts
 from app.db.models import ModelEndpoint
 from app.infrastructure.providers.adapters.base import ProviderAdapter
-from app.infrastructure.providers.common import nonnegative_int, translate_ollama_messages
+from app.infrastructure.providers.common import nonnegative_int, validate_base64
 
 
 class OllamaChatAdapter(ProviderAdapter):
@@ -91,3 +92,41 @@ class OllamaChatAdapter(ProviderAdapter):
                 return None
             values.append(float(value))
         return tuple(values)
+
+
+def translate_ollama_messages(messages: list[object]) -> list[dict[str, object]]:
+    translated: list[dict[str, object]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        role = message.get("role")
+        if role not in {"system", "user", "assistant"}:
+            raise ValueError("Ollama Chat supports system, user, and assistant messages only.")
+        content = message.get("content")
+        if isinstance(content, str):
+            translated.append({"role": role, "content": content})
+            continue
+        if not isinstance(content, list):
+            raise ValueError("Message content must be text or a list of content parts.")
+        try:
+            parts = normalize_content_parts(content)
+        except ContentValidationError as error:
+            raise ValueError(str(error)) from error
+        text = "".join(part["text"] for part in parts if part["type"] == "text")
+        images: list[str] = []
+        for part in parts:
+            if part["type"] == "text":
+                continue
+            if part["type"] != "image":
+                raise ValueError(f"Ollama Chat does not support {part['type']} content through this adapter.")
+            source = part["source"]
+            encoded = source.get("base64_data") if isinstance(source, dict) else None
+            if not isinstance(encoded, str):
+                raise ValueError("Ollama image content requires base64_data through this adapter.")
+            validate_base64(encoded)
+            images.append(encoded)
+        rendered: dict[str, object] = {"role": role, "content": text}
+        if images:
+            rendered["images"] = images
+        translated.append(rendered)
+    return translated
