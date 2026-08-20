@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.models import (
+    AggregateMetric,
     BenchmarkDefinition,
     DatasetVersion,
     EvaluationRun,
@@ -135,6 +136,17 @@ class SqliteEvaluationRepository:
                 _model_values(assessment)
                 for assessment in session.scalars(
                     select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id.in_(ids))
+                )
+            ]
+
+    def list_metrics(self, run_id: str) -> list[dict[str, Any]]:
+        with self._database.get_session() as session:
+            return [
+                _model_values(metric)
+                for metric in session.scalars(
+                    select(AggregateMetric)
+                    .where(AggregateMetric.run_id == run_id)
+                    .order_by(AggregateMetric.metric_name)
                 )
             ]
 
@@ -479,20 +491,6 @@ class SqliteEvaluationRepository:
 
         with self._database.get_session() as session:
             return len(recompute_aggregate_metrics(session, run_id))
-
-    def generate_report(
-        self,
-        run_id: str,
-        format: str,
-        data_root: str,
-        *,
-        report_type: str,
-    ) -> dict[str, Any]:
-        from app.modules.reports.service import generate_report
-
-        with self._database.get_session() as session:
-            report = generate_report(session, run_id, format, data_root, report_type=report_type)
-            return _model_values(report)
 
     def query_tasks(
         self,

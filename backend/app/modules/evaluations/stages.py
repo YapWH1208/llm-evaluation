@@ -3,21 +3,22 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import Settings
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ApplicationError, ConflictError, NotFoundError
 from app.db.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
 from app.modules.analytics.aggregation import AGGREGATION_VERSION
 from app.modules.datasets.preparation import DatasetError
 from app.modules.evaluations.attempts import latest_attempts, task_payload, utc_now
 from app.modules.evaluations.ports import ExecutionRepository
-from app.modules.reports.service import ReportError
+from app.modules.reports.service import ReportService
 
 
 class PipelineStages:
     """Execute non-inference stages after evaluation shards fan in."""
 
-    def __init__(self, repository: ExecutionRepository, settings: Settings) -> None:
+    def __init__(self, repository: ExecutionRepository, settings: Settings, reports: ReportService) -> None:
         self._repository = repository
         self._settings = settings
+        self._reports = reports
 
     def execute_stage(
         self,
@@ -188,13 +189,12 @@ class PipelineStages:
         )
         payload = task_payload(task)
         try:
-            report = self._repository.generate_report(
+            report = self._reports.generate(
                 str(run["id"]),
                 str(payload.get("format", "html")),
-                self._settings.data_root,
                 report_type=str(payload.get("report_type", "single_model")),
             )
-        except ReportError as error:
+        except ApplicationError as error:
             task = self._update_leased_task(
                 task,
                 lease_token,

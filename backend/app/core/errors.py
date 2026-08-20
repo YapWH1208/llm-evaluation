@@ -37,3 +37,8 @@ class ExternalServiceError(ApplicationError):
 class ConfigurationError(ApplicationError):
     code = "configuration_error"
     http_status = 503
+
+
+class AccessDeniedError(ApplicationError):
+    code = "access_denied"
+    http_status = 401

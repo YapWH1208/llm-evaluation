@@ -40,6 +40,8 @@ class EvaluationRepository(Protocol):
 
     def list_judge_assessments(self, attempt_ids: Iterable[str]) -> list[dict[str, Any]]: ...
 
+    def list_metrics(self, run_id: str) -> list[dict[str, Any]]: ...
+
     def get_endpoint(self, endpoint_id: str) -> dict[str, Any] | None: ...
 
     def get_prompt_package(self, prompt_package_id: str) -> dict[str, Any] | None: ...
@@ -145,15 +147,6 @@ class ExecutionRepository(Protocol):
     def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None: ...
 
     def aggregate(self, run_id: str) -> int: ...
-
-    def generate_report(
-        self,
-        run_id: str,
-        format: str,
-        data_root: str,
-        *,
-        report_type: str,
-    ) -> dict[str, Any]: ...
 
     def query_tasks(
         self,

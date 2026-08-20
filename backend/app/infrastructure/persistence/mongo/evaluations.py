@@ -76,6 +76,9 @@ class MongoEvaluationRepository:
         ids = tuple(attempt_ids)
         return self._store.list_documents("judge_assessments", query={"sample_attempt_id": {"$in": ids}}) if ids else []
 
+    def list_metrics(self, run_id: str) -> list[dict[str, Any]]:
+        return self._store.list_documents("aggregate_metrics", query={"run_id": run_id}, sort=[("metric_name", 1)])
+
     def get_endpoint(self, endpoint_id: str) -> dict[str, Any] | None:
         return self._store.get_document("model_endpoints", endpoint_id)
 
@@ -295,18 +298,6 @@ class MongoEvaluationRepository:
         from app.modules.analytics.aggregation import recompute_mongo_aggregate_metrics
 
         return len(recompute_mongo_aggregate_metrics(self._store, run_id))
-
-    def generate_report(
-        self,
-        run_id: str,
-        format: str,
-        data_root: str,
-        *,
-        report_type: str,
-    ) -> dict[str, Any]:
-        from app.modules.reports.mongo import generate_mongo_report
-
-        return generate_mongo_report(self._store, run_id, format, data_root, report_type=report_type)
 
     def query_tasks(
         self,

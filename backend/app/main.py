@@ -52,7 +52,13 @@ from app.modules.reviews.repositories import (
 )
 from app.modules.reviews.service import ReviewService
 from app.modules.reports.assets import AssetService
-from app.modules.reports.repositories import MongoAssetRepository, SqliteAssetRepository
+from app.modules.reports.repositories import (
+    MongoAssetRepository,
+    MongoReportRepository,
+    SqliteAssetRepository,
+    SqliteReportRepository,
+)
+from app.modules.reports.service import ReportService
 from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
 from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
 from app.modules.evaluations.execution import ExecutionService
@@ -134,9 +140,18 @@ def create_app(
         else SqliteEvaluationRepository(database)  # type: ignore[arg-type]
     )
     app.state.evaluation_service = EvaluationService(evaluation_repository, data_root=settings.data_root)
+    app.state.report_service = ReportService(
+        MongoReportRepository(document_store) if document_store is not None else SqliteReportRepository(database),  # type: ignore[arg-type]
+        evaluation_repository,
+        data_root=settings.data_root,
+    )
     app.state.queue_service = QueueService(evaluation_repository, settings)
     app.state.execution_service = ExecutionService(
-        evaluation_repository, settings, app.state.queue_service, app.state.judge_service
+        evaluation_repository,
+        settings,
+        app.state.queue_service,
+        app.state.judge_service,
+        app.state.report_service,
     )
     app.state.connection_tester = connection_tester or ProviderConnectionTester(
         max_response_bytes=settings.provider_response_max_bytes
