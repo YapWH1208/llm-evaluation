@@ -10,10 +10,8 @@ from app.core.config import Settings
 from app.db.database import Database
 from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt, TaskUnit
 from app.db.mongo import MongoDocumentStore
-from app.modules.evaluations.repositories import (
-    MongoEvaluationRepository,
-    SqliteEvaluationRepository,
-)
+from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
+from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
 from app.modules.evaluations.service import EvaluationService
 from tests.test_mongo_document_store import FakeClient
 

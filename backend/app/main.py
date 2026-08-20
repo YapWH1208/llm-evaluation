@@ -43,10 +43,8 @@ from app.modules.endpoints.repositories import MongoEndpointRepository, SqliteEn
 from app.modules.endpoints.service import EndpointService
 from app.modules.datasets.repositories import MongoDatasetRepository, SqliteDatasetRepository
 from app.modules.datasets.service import DatasetService
-from app.modules.evaluations.repositories import (
-    MongoEvaluationRepository,
-    SqliteEvaluationRepository,
-)
+from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
+from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
 from app.modules.evaluations.execution import ExecutionService
 from app.modules.evaluations.service import EvaluationService
 from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions

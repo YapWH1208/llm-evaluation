@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.db.mongo import MongoDocumentStore
 from app.modules.evaluations.analysis import build_repository_run_summary
-from app.modules.evaluations.repositories import MongoEvaluationRepository
+from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
 from app.modules.analytics.aggregation import list_mongo_aggregate_metrics
 from app.modules.reports.service import (
     REPORT_TYPES,
