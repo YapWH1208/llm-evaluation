@@ -229,6 +229,40 @@ class SqliteEvaluationRepository:
             session.refresh(run)
             return _model_values(run)
 
+    def append_run_graph(
+        self,
+        run_id: str,
+        tasks: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> None:
+        with self._database.get_session() as session:
+            task_ids: dict[str, str] = {}
+            for specification in tasks:
+                values = dict(specification)
+                key = str(values.pop("key"))
+                parent_key = values.pop("parent_key", None)
+                parent_id = values.pop("parent_id", None)
+                task = TaskUnit(
+                    run_id=run_id,
+                    parent_task_id=parent_id or (task_ids.get(str(parent_key)) if parent_key else None),
+                    **values,
+                )
+                session.add(task)
+                session.flush()
+                task_ids[key] = task.id
+            session.add_all(
+                [
+                    SampleAttempt(
+                        run_id=run_id,
+                        task_id=task_ids[str(values.pop("task_key"))],
+                        **values,
+                    )
+                    for item in attempts
+                    for values in [dict(item)]
+                ]
+            )
+            session.commit()
+
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         with self._database.get_session() as session:
             previous = session.scalar(
@@ -389,6 +423,35 @@ class MongoEvaluationRepository:
                 {"run_id": run["id"], "task_id": task_ids[task_key], **values},
             )
         return run
+
+    def append_run_graph(
+        self,
+        run_id: str,
+        tasks: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> None:
+        task_ids: dict[str, str] = {}
+        for specification in tasks:
+            values = dict(specification)
+            key = str(values.pop("key"))
+            parent_key = values.pop("parent_key", None)
+            parent_id = values.pop("parent_id", None)
+            task = self._store.insert_document(
+                "task_units",
+                {
+                    "run_id": run_id,
+                    "parent_task_id": parent_id or (task_ids.get(str(parent_key)) if parent_key else None),
+                    **values,
+                },
+            )
+            task_ids[key] = str(task["id"])
+        for specification in attempts:
+            values = dict(specification)
+            task_key = str(values.pop("task_key"))
+            self._store.insert_document(
+                "sample_attempts",
+                {"run_id": run_id, "task_id": task_ids[task_key], **values},
+            )
 
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None:
         candidates = [

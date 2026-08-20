@@ -174,6 +174,31 @@ def test_lifecycle_contract_is_identical_for_each_adapter(evaluation_adapter) ->
     assert repository.get_run(run_id) is None
 
 
+def test_retry_failed_contract_is_identical_for_each_adapter(evaluation_adapter) -> None:
+    repository, service, run_id = evaluation_adapter
+    repository.update_run(
+        run_id,
+        {
+            "status": "completed_with_errors",
+            "completed_samples": 1,
+            "failed_samples": 1,
+            "completed_at": datetime.now(timezone.utc),
+        },
+    )
+    repository.update_attempts(run_id, statuses=("running",), values={"status": "failed"})
+
+    retried = service.retry_failed(run_id)
+
+    assert retried["status"] == "queued"
+    assert retried["completed_samples"] == 0
+    assert retried["failed_samples"] == 0
+    attempts = repository.list_attempts(run_id)
+    assert [(attempt["attempt_number"], attempt["status"]) for attempt in attempts] == [
+        (1, "failed"),
+        (2, "pending"),
+    ]
+
+
 def test_run_graph_contract_is_identical_for_each_adapter(evaluation_adapter) -> None:
     repository, service, _run_id = evaluation_adapter
 

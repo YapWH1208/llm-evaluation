@@ -61,6 +61,13 @@ class EvaluationRepository(Protocol):
         attempts: list[dict[str, Any]],
     ) -> dict[str, Any]: ...
 
+    def append_run_graph(
+        self,
+        run_id: str,
+        tasks: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> None: ...
+
     def find_previous_completed_run(self, run: dict[str, Any]) -> dict[str, Any] | None: ...
 
     def delete_run(self, run_id: str) -> list[str]:

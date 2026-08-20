@@ -19,13 +19,11 @@ from app.modules.evaluations.service import (
 )
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
-from app.modules.evaluations.operations import RunOperationError, retry_failed_samples
 from app.modules.evaluations.names import resolve_run_display_name
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.mongo_executor import (
     MongoRunExecutionError,
     execute_mongo_queued_run,
-    retry_failed_mongo_samples,
 )
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
@@ -368,19 +366,10 @@ def update_run_scheduling(
 
 @router.post("/{run_id}/retry-failed", response_model=EvaluationRunResponse)
 def retry_failed_evaluation_samples(
-    run_id: str, request: Request, session: SessionDependency
-) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    try:
-        if store is not None:
-            return retry_failed_mongo_samples(store, run_id)
-        assert session is not None
-        return retry_failed_samples(session, run_id)
-    except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = (
-            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
-        )
-        raise HTTPException(status_code, str(error)) from error
+    run_id: str,
+    service: EvaluationServiceDependency,
+) -> dict[str, Any]:
+    return service.retry_failed(run_id)
 
 
 @router.post("/{run_id}/execute", response_model=EvaluationRunResponse)

@@ -8,16 +8,11 @@ database is MongoDB.  All storage-specific operations remain in
 """
 
 from datetime import datetime, timedelta, timezone
-import json
 from typing import Any
 
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.modules.evaluations.service import (
-    RunCreationError,
-    _split_items_for_endpoint_budget,
-)
 from app.modules.reviews.scoring import (
     JudgeScoringError,
     is_llm_judge_rule,
@@ -132,108 +127,6 @@ def execute_mongo_queued_run(
         )
         if run.get("status") in {"completed", "completed_with_errors"}:
             return run
-
-
-def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[str, Any]:
-    run = store.get_document("evaluation_runs", run_id)
-    if run is None:
-        raise MongoRunExecutionError("Evaluation run not found.")
-    if run["status"] not in {"completed", "completed_with_errors"}:
-        raise MongoRunExecutionError("Only completed evaluation runs can retry failed samples.")
-    attempts = store.list_documents(
-        "sample_attempts", query={"run_id": run_id}, sort=[("sample_id", 1), ("attempt_number", -1)]
-    )
-    latest: dict[str, dict[str, Any]] = {}
-    for attempt in attempts:
-        latest.setdefault(str(attempt["sample_id"]), attempt)
-    failed = [attempt for attempt in latest.values() if attempt.get("status") == "failed"]
-    if not failed:
-        raise MongoRunExecutionError("This run has no failed samples to retry.")
-    endpoint = store.get_document("model_endpoints", str(run["model_endpoint_id"]))
-    if endpoint is None:
-        raise MongoRunExecutionError("The model endpoint for this run no longer exists.")
-    source_tasks = [
-        task
-        for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
-        if task.get("task_type") == "evaluation_shard"
-    ]
-    source_payload = _task_payload(source_tasks[0]) if source_tasks else {}
-    retry_policy = (
-        source_payload.get("retry_policy")
-        if isinstance(source_payload.get("retry_policy"), dict)
-        else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
-    )
-    benchmark_tasks = [
-        task
-        for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
-        if task.get("task_type") == "benchmark"
-    ]
-    now = _utc_now()
-    try:
-        retry_groups = _split_items_for_endpoint_budget(
-            (tuple(failed),), endpoint, token_estimate=_estimate_mongo_retry_attempt_tokens
-        )
-    except RunCreationError as error:
-        raise MongoRunExecutionError(str(error)) from error
-    for group in retry_groups:
-        token_estimates = {
-            str(attempt["sample_id"]): _estimate_mongo_retry_attempt_tokens(attempt) for attempt in group
-        }
-        task = store.insert_document(
-            "task_units",
-            {
-                "run_id": run_id,
-                "parent_task_id": benchmark_tasks[0]["id"] if benchmark_tasks else None,
-                "task_type": "evaluation_shard",
-                "payload": {
-                    "sample_ids": [attempt["sample_id"] for attempt in group],
-                    "estimated_request_count": len(group),
-                    "estimated_token_count": sum(token_estimates.values()),
-                    "sample_token_estimates": token_estimates,
-                    "retry_policy": retry_policy,
-                    "manual_retry": True,
-                },
-                "status": "pending",
-                "priority": 0,
-                "attempt_count": 0,
-                "leased_by": None,
-                "lease_token": None,
-                "lease_expires_at": None,
-                "next_retry_at": None,
-                "heartbeat_at": None,
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-        for attempt in group:
-            store.insert_document(
-                "sample_attempts",
-                {
-                    "run_id": run_id,
-                    "task_id": task["id"],
-                    "sample_id": attempt["sample_id"],
-                    "attempt_number": int(attempt["attempt_number"]) + 1,
-                    "input_snapshot": attempt["input_snapshot"],
-                    "reference_snapshot": attempt["reference_snapshot"],
-                    "request_snapshot": None,
-                    "raw_response": None,
-                    "parsed_prediction": None,
-                    "score": None,
-                    "latency_ms": None,
-                    "input_tokens": None,
-                    "output_tokens": None,
-                    "estimated_cost": None,
-                    "error_type": None,
-                    "error_message": None,
-                    "status": "pending",
-                    "created_at": now,
-                    "started_at": None,
-                    "completed_at": None,
-                },
-            )
-    updated = store.update_document("evaluation_runs", run_id, {"status": "queued", "completed_at": None})
-    assert updated is not None
-    return updated
 
 
 def execute_mongo_leased_task(
@@ -943,23 +836,6 @@ def _capability_compatibility(
         if capability not in records or records[capability].get("effective_status") == "unverified"
     ]
     return {"required": required, "unsupported": unsupported, "unverified": unverified}
-
-
-def _estimate_mongo_retry_attempt_tokens(attempt: object) -> int:
-    """Recover a conservative quota estimate from a persisted Mongo attempt."""
-
-    value = attempt if isinstance(attempt, dict) else {}
-    snapshot = value.get("input_snapshot") if isinstance(value.get("input_snapshot"), dict) else {}
-    messages = snapshot.get("messages") if isinstance(snapshot.get("messages"), list) else []
-    encoded = json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    media_parts = sum(
-        1
-        for message in messages
-        if isinstance(message, dict) and isinstance(message.get("content"), list)
-        for part in message["content"]
-        if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
-    )
-    return max(1, (len(encoded) + 3) // 4) + 32 + (media_parts * 256)
 
 
 def _lease_values(status: str | None = None) -> dict[str, Any]:

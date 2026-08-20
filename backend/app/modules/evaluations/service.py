@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -354,6 +355,86 @@ class EvaluationService:
         from app.modules.evaluations.custom_runs import create_custom_multimodal_run
 
         return create_custom_multimodal_run(self._repository, data_root=self._data_root, **values)
+
+    def retry_failed(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if run.get("status") not in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
+            raise ConflictError("Only completed evaluation runs can retry failed samples.")
+
+        latest: dict[str, dict[str, Any]] = {}
+        for attempt in self._repository.list_attempts(run_id):
+            sample_id = str(attempt["sample_id"])
+            previous = latest.get(sample_id)
+            if previous is None or int(attempt.get("attempt_number", 1)) > int(previous.get("attempt_number", 1)):
+                latest[sample_id] = attempt
+        failed = [attempt for attempt in latest.values() if attempt.get("status") == SampleAttemptStatus.FAILED.value]
+        if not failed:
+            raise ConflictError("This run has no failed samples to retry.")
+
+        endpoint = self._repository.get_endpoint(str(run["model_endpoint_id"]))
+        if endpoint is None:
+            raise ConflictError("The model endpoint for this run no longer exists.")
+        tasks = self._repository.list_tasks(run_id)
+        source_tasks = [task for task in tasks if task.get("task_type") == TaskType.EVALUATION_SHARD.value]
+        source_payload = source_tasks[-1].get("payload") if source_tasks else None
+        retry_policy = (
+            source_payload.get("retry_policy")
+            if isinstance(source_payload, dict) and isinstance(source_payload.get("retry_policy"), dict)
+            else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+        )
+        benchmark_tasks = [task for task in tasks if task.get("task_type") == TaskType.BENCHMARK.value]
+        parent_id = str(benchmark_tasks[-1]["id"]) if benchmark_tasks else None
+        try:
+            retry_groups = _split_items_for_endpoint_budget(
+                (tuple(failed),),
+                _record_proxy(endpoint),
+                token_estimate=_estimate_retry_attempt_tokens,
+            )
+        except RunCreationError as error:
+            raise ConflictError(str(error)) from error
+
+        now = datetime.now(timezone.utc)
+        new_tasks: list[dict[str, Any]] = []
+        new_attempts: list[dict[str, Any]] = []
+        for index, group in enumerate(retry_groups):
+            task_key = f"retry-{index}"
+            token_estimates = {str(attempt["sample_id"]): _estimate_retry_attempt_tokens(attempt) for attempt in group}
+            task = _task_values(
+                task_key,
+                task_type=TaskType.EVALUATION_SHARD.value,
+                payload={
+                    "sample_ids": [attempt["sample_id"] for attempt in group],
+                    "estimated_request_count": len(group),
+                    "estimated_token_count": sum(token_estimates.values()),
+                    "sample_token_estimates": token_estimates,
+                    "retry_policy": retry_policy,
+                    "manual_retry": True,
+                },
+                task_status=TaskStatus.PENDING.value,
+                now=now,
+            )
+            task["parent_id"] = parent_id
+            new_tasks.append(task)
+            for attempt in group:
+                values = _attempt_values(
+                    task_key,
+                    sample_id=str(attempt["sample_id"]),
+                    input_snapshot=dict(attempt["input_snapshot"]),
+                    reference_snapshot=dict(attempt["reference_snapshot"]),
+                    now=now,
+                )
+                values["attempt_number"] = int(attempt.get("attempt_number", 1)) + 1
+                new_attempts.append(values)
+        self._repository.append_run_graph(run_id, new_tasks, new_attempts)
+        return self._updated_run(
+            run_id,
+            {
+                "status": RunStatus.QUEUED.value,
+                "completed_at": None,
+                "completed_samples": max(0, int(run.get("completed_samples", 0)) - len(failed)),
+                "failed_samples": 0,
+            },
+        )
 
     def _preflight_declared_datasets(self, descriptors: object, issues: list[str]) -> list[dict[str, object]]:
         if not isinstance(descriptors, list):
@@ -873,6 +954,23 @@ def _estimate_sample_tokens(sample: object) -> int:
         if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
     )
     return estimate + (media_parts * 256)
+
+
+def _estimate_retry_attempt_tokens(attempt: object) -> int:
+    """Recover a conservative admission estimate from durable attempt evidence."""
+
+    value = attempt if isinstance(attempt, dict) else {}
+    snapshot = value.get("input_snapshot") if isinstance(value.get("input_snapshot"), dict) else {}
+    messages = snapshot.get("messages") if isinstance(snapshot.get("messages"), list) else []
+    encoded = json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    media_parts = sum(
+        1
+        for message in messages
+        if isinstance(message, dict) and isinstance(message.get("content"), list)
+        for part in message["content"]
+        if isinstance(part, dict) and part.get("type") not in {"text", "tool_result"}
+    )
+    return max(1, (len(encoded) + 3) // 4) + 32 + (media_parts * 256)
 
 
 def _split_samples_into_shards(
