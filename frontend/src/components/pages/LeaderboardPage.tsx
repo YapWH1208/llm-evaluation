@@ -1,6 +1,8 @@
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
 
-import type { Dataset, Endpoint, LeaderboardQuery, LeaderboardResponse, LeaderboardRow } from "../../shared/api";
+import type { LeaderboardQuery, LeaderboardResponse, LeaderboardRow } from "../../features/analytics/api";
+import type { Dataset } from "../../features/datasets/api";
+import type { Endpoint } from "../../features/endpoints/api";
 import { workspacePath } from "../../dashboard/routing";
 import { leaderboardCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";

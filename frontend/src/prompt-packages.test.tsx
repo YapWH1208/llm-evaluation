@@ -4,7 +4,11 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, PromptPackage } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi, type PromptPackage } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi } from "./features/endpoints/api";
+import { runsApi } from "./features/runs/api";
 import { PromptPackagesPage } from "./components/pages/PromptPackagesPage";
 import type { WorkspaceTabFor } from "./dashboard/routing";
 import { LocaleProvider } from "./i18n/LocaleProvider";
@@ -69,15 +73,15 @@ function PromptPackagesHarness({ onCreate = vi.fn().mockResolvedValue(prompt), o
 }
 
 function mockWorkspace(promptPackages: PromptPackage[] = []) {
-  vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-  vi.spyOn(api, "listRuns").mockResolvedValue([]);
-  vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-  vi.spyOn(api, "listPromptPackages").mockResolvedValue(promptPackages);
-  vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-  vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-  vi.spyOn(api, "listTasks").mockResolvedValue([]);
-  vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+  vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+  vi.spyOn(runsApi, "list").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+  vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue(promptPackages);
+  vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+  vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+  vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
 }
 
 describe("PromptPackagesPage", () => {
@@ -171,8 +175,8 @@ describe("PromptPackagesPage", () => {
     const createdPrompt = { ...prompt, id: "prompt-2", name: "New package", version: "2" };
     window.history.replaceState(null, "", "/prompts?tab=new-prompt-package");
     mockWorkspace([]);
-    const createPromptPackage = vi.spyOn(api, "createPromptPackage").mockResolvedValue(createdPrompt);
-    vi.mocked(api.listPromptPackages).mockResolvedValueOnce([]).mockResolvedValue([createdPrompt]);
+    const createPromptPackage = vi.spyOn(benchmarksApi, "createPrompt").mockResolvedValue(createdPrompt);
+    vi.mocked(benchmarksApi.listPrompts).mockResolvedValueOnce([]).mockResolvedValue([createdPrompt]);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await screen.findByRole("heading", { level: 1, name: "Prompt packages" });

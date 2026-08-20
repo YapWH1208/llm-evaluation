@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi } from "./features/endpoints/api";
+import { runsApi } from "./features/runs/api";
 import { Guide } from "./components/Guide";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
@@ -16,15 +20,15 @@ afterEach(() => {
 describe("usage guide", () => {
   it("opens the guide from navigation and routes workflow steps to their workspace", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Guide" }));
@@ -37,16 +41,16 @@ describe("usage guide", () => {
 
   it("direct-loads, navigates, and restores retained pages through browser history", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ root: "/data", cache_bytes: 0, available_bytes: 1000, total_bytes: 2000 });
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(datasetsApi, "diskUsage").mockResolvedValue({ root: "/data", cache_bytes: 0, available_bytes: 1000, total_bytes: 2000 });
     window.history.replaceState(null, "", "/models");
 
     render(<LocaleProvider><App /></LocaleProvider>);

@@ -2,7 +2,9 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Dataset, Endpoint, LeaderboardQuery, LeaderboardResponse, LeaderboardRow } from "./shared/api";
+import type { LeaderboardQuery, LeaderboardResponse, LeaderboardRow } from "./features/analytics/api";
+import type { Dataset } from "./features/datasets/api";
+import type { Endpoint } from "./features/endpoints/api";
 import { LeaderboardPage } from "./components/pages/LeaderboardPage";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

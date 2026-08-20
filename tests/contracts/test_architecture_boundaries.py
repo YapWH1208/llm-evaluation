@@ -26,7 +26,7 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
     "modules/reviews/judges_api.py",
 }
 KNOWN_STRING_ERROR_ROUTING: set[str] = set()
-KNOWN_SHARED_TO_FEATURE_IMPORTS = {"shared/api/index.ts"}
+KNOWN_SHARED_TO_FEATURE_IMPORTS: set[str] = set()
 KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT = {"components/ApplicationWorkspace.tsx"}
 
 

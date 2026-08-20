@@ -1,30 +1,11 @@
 import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  api,
-  AggregateMetric,
-  ApiError,
-  AnalyticsMatrix,
-  Benchmark,
-  Capability,
-  Comparison,
-  Dashboard,
-  Dataset,
-  Endpoint,
-  EvaluationRun,
-  JudgeAssessment,
-  JudgeAgreement,
-  PromptPackage,
-  Report,
-  ReportFormat,
-  Review,
-  ReviewAgreement,
-  RunPreflight,
-  RunSummary,
-  RunLogEntry,
-  SampleAttempt,
-  SystemHealth,
-  Task,
-} from "../shared/api";
+import { analyticsApi, type AnalyticsMatrix, type Comparison, type Dashboard, type SystemHealth, type Task } from "../features/analytics/api";
+import { benchmarksApi, type Benchmark, type PromptPackage } from "../features/benchmarks/api";
+import { datasetsApi, type Dataset } from "../features/datasets/api";
+import { endpointsApi, type Capability, type Endpoint } from "../features/endpoints/api";
+import { reportsApi, type Report, type ReportFormat } from "../features/reports/api";
+import { reviewsApi, type JudgeAssessment, type JudgeAgreement, type Review, type ReviewAgreement } from "../features/reviews/api";
+import { runsApi, type AggregateMetric, type EvaluationRun, type RunLogEntry, type RunPreflight, type RunSummary, type SampleAttempt } from "../features/runs/api";
 import { AppShell } from "./AppShell";
 import { OverviewDashboard } from "./OverviewDashboard";
 import { Guide } from "./Guide";
@@ -135,7 +116,7 @@ function EvidenceMediaPreview({ attempt }: { attempt: SampleAttempt }) {
     const objectUrls: string[] = [];
     void Promise.all(media.map(async (item) => {
       try {
-        const url = await api.assetPreviewObjectUrl(item.assetId);
+        const url = await reportsApi.assetPreview(item.assetId);
         if (disposed) {
           URL.revokeObjectURL(url);
           return null;
@@ -237,7 +218,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     const [nextEndpoints, nextRuns, nextDashboard, nextPrompts, nextDatasets, nextBenchmarks, nextTasks, nextAnalytics, nextSystemHealth] = await Promise.all([
-      api.listEndpoints(), api.listRuns(), api.dashboard(), api.listPromptPackages(), api.listDatasets(), api.listBenchmarks(), api.listTasks(), api.analyticsMatrix(), api.systemHealth().catch(() => null),
+      endpointsApi.list(), runsApi.list(), analyticsApi.dashboard(), benchmarksApi.listPrompts(), datasetsApi.list(), benchmarksApi.list(), analyticsApi.listTasks(), analyticsApi.matrix(), analyticsApi.systemHealth().catch(() => null),
     ]);
     setEndpoints(nextEndpoints);
     setRuns(nextRuns);
@@ -285,7 +266,7 @@ export default function App() {
     setDatasetRunFields([]);
     setDatasetRunFieldsError(null);
     setDatasetRunFieldsLoading(true);
-    void api.previewDataset(datasetId, 50).then((preview) => {
+    void datasetsApi.preview(datasetId, 50).then((preview) => {
       if (disposed) return;
       const fields = Array.from(new Set(preview.fields.map(String).filter(Boolean)));
       const dataset = datasets.find((item) => item.id === datasetId);
@@ -308,7 +289,7 @@ export default function App() {
       void selectRun(selectedRun);
       void refresh();
     };
-    return api.subscribeToRunEvents(selectedRun, update);
+    return runsApi.subscribe(selectedRun, update);
   }, [selectedRun, selectedRunInfo?.status]);
 
   useEffect(() => {
@@ -392,14 +373,14 @@ export default function App() {
       };
       if (editingEndpointId) {
         if (!form.api_key.trim()) delete endpointPayload.api_key;
-        await api.updateEndpoint(editingEndpointId, endpointPayload);
+        await endpointsApi.update(editingEndpointId, endpointPayload);
         setTestRequests((current) => {
           const { [editingEndpointId]: _removed, ...remaining } = current;
           return remaining;
         });
         showNotice("Model configuration saved. Test its connection before starting a run.");
       } else {
-        const createdEndpoint = await api.createEndpoint(endpointPayload);
+        const createdEndpoint = await endpointsApi.create(endpointPayload);
         setPreferredEndpointId(createdEndpoint.id);
         showNotice("Endpoint saved. Test its connection before starting a run.");
       }
@@ -413,7 +394,7 @@ export default function App() {
   async function testEndpoint(id: string) {
     setBusy(`test-${id}`);
     try {
-      const result = await api.testEndpoint(id);
+      const result = await endpointsApi.test(id);
       setTestRequests((current) => ({ ...current, [id]: result.request }));
       setNotice(result.message);
       await refresh();
@@ -424,7 +405,7 @@ export default function App() {
     if (!window.confirm(translateStaticTemplate(locale, "Capability probing sends small requests to this provider and may incur API charges. Continue?"))) return;
     setBusy(`capabilities-${endpointId}`);
     try {
-      const detected = await api.detectCapabilities(endpointId);
+      const detected = await endpointsApi.detectCapabilities(endpointId);
       setCapabilities((current) => ({ ...current, [endpointId]: detected }));
       showNotice("Capability probe completed. Declared capability settings were not changed.");
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -433,7 +414,7 @@ export default function App() {
   async function declareCapability(endpointId: string, capability: Capability, status: "supported" | "unsupported" | "unknown") {
     setBusy(`declare-${endpointId}-${capability.capability_key}`);
     try {
-      const updated = await api.declareCapability(endpointId, capability.capability_key, status);
+      const updated = await endpointsApi.declareCapability(endpointId, capability.capability_key, status);
       setCapabilities((current) => ({ ...current, [endpointId]: (current[endpointId] ?? []).map((item) => item.capability_key === updated.capability_key ? updated : item) }));
       showNotice("User capability declaration saved alongside detection evidence.");
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -444,7 +425,7 @@ export default function App() {
     setBusy("preflight-quick-start");
     try {
       const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
-      const preflight = await api.validateRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
+      const preflight = await runsApi.validate(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       setLaunchPreflight({ kind: "quick-start", result: preflight });
       const cost = preflight.estimated_cost === null ? translateStaticTemplate(locale, "cost not configured") : `${display(preflight.estimated_cost, 6)} ${preflight.currency ?? ""}`;
       showNotice(preflight.can_queue ? "Preflight ready: {{samples}} samples, {{requests}} requests, {{tokens}} estimated tokens, {{cost}}." : "Preflight blocked: {{issues}}", preflight.can_queue
@@ -457,7 +438,7 @@ export default function App() {
     setBusy(`run-${endpointId}`);
     try {
       const [benchmarkId, benchmarkVersion] = benchmarkKey.split("@", 2);
-      const run = await api.createRun(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
+      const run = await runsApi.create(endpointId, selectedPromptId || undefined, parseJsonObject(runRequestBody, "Run Request Body override"), optionalNumber(runMaxConcurrency), benchmarkId, benchmarkVersion, sampleLimit);
       await selectRun(run.id);
       await refresh();
       navigate("runs", { tab: "run-details" });
@@ -468,14 +449,14 @@ export default function App() {
   async function changeRun(run: EvaluationRun, action: "execute" | "pause" | "resume" | "cancel" | "clone" | "rerun" | "retry" | "archive") {
     setBusy(`${action}-${run.id}`);
     try {
-      const result = action === "execute" ? await api.executeRun(run.id)
-        : action === "pause" ? await api.pauseRun(run.id)
-          : action === "resume" ? await api.resumeRun(run.id)
-            : action === "cancel" ? await api.cancelRun(run.id)
-              : action === "clone" ? await api.cloneRun(run.id)
-                : action === "rerun" ? await api.rerunBenchmark(run.id)
-                  : action === "retry" ? await api.retryFailedRun(run.id)
-                    : await api.archiveRun(run.id);
+      const result = action === "execute" ? await runsApi.execute(run.id)
+        : action === "pause" ? await runsApi.pause(run.id)
+          : action === "resume" ? await runsApi.resume(run.id)
+            : action === "cancel" ? await runsApi.cancel(run.id)
+              : action === "clone" ? await runsApi.clone(run.id)
+                : action === "rerun" ? await runsApi.rerunBenchmark(run.id)
+                  : action === "retry" ? await runsApi.retryFailed(run.id)
+                    : await runsApi.archive(run.id);
       if (action === "clone") showNotice("Run cloned with a new immutable configuration snapshot.");
       else if (action === "rerun") showNotice("Benchmark rerun queued with a link to its source run.");
       else if (action === "retry") showNotice("Failed samples were queued as new attempts.");
@@ -493,7 +474,7 @@ export default function App() {
     setBusy(`run-cap-${run.id}`);
     try {
       const value = runConcurrencyEdits[run.id] ?? (run.max_concurrency?.toString() ?? "");
-      const updated = await api.updateRunConcurrency(run.id, optionalNumber(value));
+      const updated = await runsApi.updateConcurrency(run.id, optionalNumber(value));
       setRunConcurrencyEdits((current) => ({ ...current, [run.id]: updated.max_concurrency?.toString() ?? "" }));
       showNotice("Run concurrency ceiling updated for future task claims; its evaluation snapshot remains unchanged.");
       await refresh();
@@ -504,7 +485,7 @@ export default function App() {
   async function pauseDataset(dataset: Dataset) {
     setBusy(`dataset-${dataset.id}`);
     try {
-      await api.pauseDataset(dataset.id);
+      await datasetsApi.pause(dataset.id);
       showNotice("{{dataset}} download paused.", { dataset: dataset.dataset_id });
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -524,7 +505,7 @@ export default function App() {
     setJudgeAgreement(null);
     try {
     const [nextAttempts, nextSummary, nextMetrics, nextReports, nextLogs] = await Promise.all([
-        api.listAttempts(runId), api.getRunSummary(runId), api.listRunMetrics(runId), api.listReports(runId), api.listRunLogs(runId),
+        runsApi.listAttempts(runId), runsApi.summary(runId), runsApi.metrics(runId), reportsApi.list(runId), runsApi.logs(runId),
       ]);
       setAttempts(nextAttempts);
       setRunSummary(nextSummary);
@@ -543,7 +524,7 @@ export default function App() {
     if (!selectedRun) return;
     setBusy("attempts-more");
     try {
-      const next = await api.listAttempts(selectedRun, attempts.length);
+      const next = await runsApi.listAttempts(selectedRun, attempts.length);
       setAttempts((current) => [...current, ...next.filter((item) => !current.some((existing) => existing.id === item.id))]);
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
@@ -551,9 +532,9 @@ export default function App() {
   async function generateReport(runId: string, format: ReportFormat) {
     setBusy(`report-${runId}-${format}`);
     try {
-      const report = await api.createReport(runId, format, "single_model", []);
+      const report = await reportsApi.create(runId, format, "single_model", []);
       showNotice("{{format}} {{reportType}} report generated.", { format: format.toUpperCase(), reportType: translateStaticTemplate(locale, "single model") });
-      const reportUrl = await api.downloadReport(report.id);
+      const reportUrl = await reportsApi.download(report.id);
       window.open(reportUrl, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
       if (selectedRun === runId) await selectRun(runId);
@@ -566,7 +547,7 @@ export default function App() {
     if (!window.confirm(copy.deleteConfirm)) return;
     setBusy(`report-delete-${report.id}`);
     try {
-      await api.deleteReport(report.id);
+      await reportsApi.remove(report.id);
       showNotice(copy.deletedNotice);
       if (selectedRun === report.run_id) await selectRun(selectedRun);
       await refresh();
@@ -579,7 +560,7 @@ export default function App() {
     event.preventDefault();
     setBusy("dataset");
     try {
-      await api.createDataset({ ...datasetForm, source_url: datasetForm.source_url || null, checksum: datasetForm.checksum || null, credential_binding_id: datasetForm.credential_binding_id || null, license_text: datasetForm.license_text || null, input_field: datasetForm.input_field || null, reference_field: datasetForm.reference_field || null });
+      await datasetsApi.create({ ...datasetForm, source_url: datasetForm.source_url || null, checksum: datasetForm.checksum || null, credential_binding_id: datasetForm.credential_binding_id || null, license_text: datasetForm.license_text || null, input_field: datasetForm.input_field || null, reference_field: datasetForm.reference_field || null });
       setDatasetForm(initialDataset);
       showNotice("Dataset version registered.");
       await refresh();
@@ -589,7 +570,7 @@ export default function App() {
   async function createPromptPackage(payload: PromptPackageCreatePayload): Promise<PromptPackage> {
     setBusy("prompt-package-create");
     try {
-      const created = await api.createPromptPackage({ ...payload });
+      const created = await benchmarksApi.createPrompt({ ...payload });
       showNotice(t("promptPackage.savedNotice"));
       await refresh();
       return created;
@@ -604,7 +585,7 @@ export default function App() {
   async function updatePromptPackage(promptPackageId: string, payload: PromptPackageCreatePayload): Promise<PromptPackage> {
     setBusy(`prompt-package-update-${promptPackageId}`);
     try {
-      const updated = await api.updatePromptPackage(promptPackageId, { ...payload });
+      const updated = await benchmarksApi.updatePrompt(promptPackageId, { ...payload });
       showNotice(t("promptPackage.updatedNotice"));
       await refresh();
       return updated;
@@ -619,7 +600,7 @@ export default function App() {
   async function deletePromptPackage(promptPackageId: string): Promise<void> {
     setBusy(`prompt-package-delete-${promptPackageId}`);
     try {
-      await api.deletePromptPackage(promptPackageId);
+      await benchmarksApi.removePrompt(promptPackageId);
       showNotice(t("promptPackage.deletedNotice"));
       await refresh();
     } catch (error) {
@@ -635,7 +616,7 @@ export default function App() {
   async function queueDatasetRun() {
     setBusy("dataset-run");
     try {
-      await api.createDatasetRun(datasetRunPayload(datasetRunForm));
+      await runsApi.createDataset(datasetRunPayload(datasetRunForm));
       setNotice(t("datasetRun.queued"));
       setDatasetRunForm({ ...initialDatasetRun, model_endpoint_id: datasetRunForm.model_endpoint_id });
       setDatasetHandoffId(null);
@@ -652,7 +633,7 @@ export default function App() {
     setLaunchPreflight(null);
     setBusy("preflight-dataset");
     try {
-      const result = await api.validateDatasetRun(datasetRunPayload(datasetRunForm));
+      const result = await runsApi.validateDataset(datasetRunPayload(datasetRunForm));
       setLaunchPreflight({ kind: "dataset", result });
       const judge = result.judge_estimate;
       showNotice(!result.can_queue
@@ -691,10 +672,10 @@ export default function App() {
     setBusy(`dataset-${dataset.id}`);
     try {
       if (dataset.license_text && !dataset.license_accepted_at) {
-        await api.acceptDatasetLicense(dataset.id);
+        await datasetsApi.acceptLicense(dataset.id);
         showNotice("License accepted. The dataset can now be downloaded.");
       } else {
-        await api.downloadDataset(dataset.id);
+        await datasetsApi.download(dataset.id);
         showNotice("Dataset downloaded, verified, and cached.");
       }
       await refresh();
@@ -707,7 +688,7 @@ export default function App() {
     setBusy(`dataset-upload-${dataset.id}`);
     try {
       const dataUrl = await fileAsDataUrl(file);
-      await api.uploadDataset(dataset.id, { filename: file.name, base64_data: dataUrl.split(",", 2)[1] ?? "" });
+      await datasetsApi.upload(dataset.id, { filename: file.name, base64_data: dataUrl.split(",", 2)[1] ?? "" });
       showNotice("Dataset upload checksum verified and stored in the local dataset cache.");
       await refresh();
     } catch (error) { showError(error); } finally { setBusy(null); }
@@ -715,20 +696,20 @@ export default function App() {
 
   async function validateDataset(dataset: Dataset) {
     setBusy(`dataset-validate-${dataset.id}`);
-    try { await api.validateDataset(dataset.id); showNotice("Dataset cache checksum and size were verified."); await refresh(); }
+    try { await datasetsApi.validate(dataset.id); showNotice("Dataset cache checksum and size were verified."); await refresh(); }
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function clearDatasetCache(dataset: Dataset) {
     if (!window.confirm(translateStaticTemplate(locale, "Remove the cached data for {{dataset}} v{{version}}? The registered version will remain.", { dataset: dataset.dataset_id, version: dataset.version }))) return;
     setBusy(`dataset-clear-${dataset.id}`);
-    try { await api.clearDatasetCache(dataset.id); showNotice("Dataset cache removed. You can download or upload it again."); await refresh(); }
+    try { await datasetsApi.clearCache(dataset.id); showNotice("Dataset cache removed. You can download or upload it again."); await refresh(); }
     catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function updateDatasetRecord(dataset: Dataset, payload: DatasetEditFormValues) {
     setBusy(`dataset-edit-${dataset.id}`);
-    try { await api.updateDataset(dataset.id, { ...payload, source_url: payload.source_url || null, checksum: payload.checksum || null, license_text: payload.license_text || null, credential_binding_id: payload.credential_binding_id || null, input_field: payload.input_field || null, reference_field: payload.reference_field || null }); showNotice("Dataset version updated."); await refresh(); }
+    try { await datasetsApi.update(dataset.id, { ...payload, source_url: payload.source_url || null, checksum: payload.checksum || null, license_text: payload.license_text || null, credential_binding_id: payload.credential_binding_id || null, input_field: payload.input_field || null, reference_field: payload.reference_field || null }); showNotice("Dataset version updated."); await refresh(); }
     catch (error) { showError(error); }
     finally { setBusy(null); }
   }
@@ -736,7 +717,7 @@ export default function App() {
   async function deleteDatasetRecord(dataset: Dataset) {
     if (!window.confirm(translateStaticTemplate(locale, "Delete dataset version?"))) return;
     setBusy(`dataset-delete-${dataset.id}`);
-    try { await api.deleteDataset(dataset.id); showNotice("Dataset version deleted."); await refresh(); }
+    try { await datasetsApi.remove(dataset.id); showNotice("Dataset version deleted."); await refresh(); }
     catch (error) { showError(error); }
     finally { setBusy(null); }
   }
@@ -749,14 +730,14 @@ export default function App() {
     }
     setBusy("compare");
     try {
-      setComparison(await api.compare(comparisonRunA, comparisonRunB));
+      setComparison(await analyticsApi.compare(comparisonRunA, comparisonRunB));
     } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function openReview(attempt: SampleAttempt) {
     setSelectedAttempt(attempt);
     setBusy(`review-${attempt.id}`);
-    try { const [nextReviews, nextAgreement, nextJudges, nextJudgeAgreement] = await Promise.all([api.listReviews(attempt.id), api.getReviewAgreement(attempt.id), api.listJudgeAssessments(attempt.id), api.getJudgeAgreement(attempt.id)]); setReviews(nextReviews); setReviewAgreement(nextAgreement); setJudgeAssessments(nextJudges); setJudgeAgreement(nextJudgeAgreement); } catch (error) { showError(error); } finally { setBusy(null); }
+    try { const [nextReviews, nextAgreement, nextJudges, nextJudgeAgreement] = await Promise.all([reviewsApi.list(attempt.id), reviewsApi.agreement(attempt.id), reviewsApi.listJudges(attempt.id), reviewsApi.judgeAgreement(attempt.id)]); setReviews(nextReviews); setReviewAgreement(nextAgreement); setJudgeAssessments(nextJudges); setJudgeAgreement(nextJudgeAgreement); } catch (error) { showError(error); } finally { setBusy(null); }
   }
 
   async function createReview(event: FormEvent) {
@@ -765,7 +746,7 @@ export default function App() {
     setBusy("review-submit");
     try {
       const labels = reviewForm.labels.split(",").map((label) => label.trim()).filter(Boolean);
-      await api.createReview({
+      await reviewsApi.create({
         sample_attempt_id: selectedAttempt.id,
         reviewer_id: reviewForm.reviewer_id,
         rubric: parseJsonObject(reviewForm.rubric, "Human-review rubric"),
@@ -776,7 +757,7 @@ export default function App() {
         adjudicates_review_ids: reviewForm.review_stage === "adjudication" ? reviews.filter((review) => review.review_stage !== "adjudication").map((review) => review.id) : [],
       });
       setReviewForm(initialReview);
-      const [nextReviews, nextAgreement] = await Promise.all([api.listReviews(selectedAttempt.id), api.getReviewAgreement(selectedAttempt.id)]);
+      const [nextReviews, nextAgreement] = await Promise.all([reviewsApi.list(selectedAttempt.id), reviewsApi.agreement(selectedAttempt.id)]);
       setReviews(nextReviews);
       setReviewAgreement(nextAgreement);
       showNotice("Human review saved separately from automated results.");
@@ -789,9 +770,9 @@ export default function App() {
     setBusy("judge-submit");
     try {
       const payload = { sample_attempt_id: selectedAttempt.id, judge_endpoint_id: judgeForm.endpoint_id, rubric: parseJsonObject(judgeForm.rubric, "Judge rubric") };
-      if (judgeForm.comparison_attempt_id.trim()) await api.createJudgeComparison({ ...payload, comparison_sample_attempt_id: judgeForm.comparison_attempt_id.trim(), swap_test: judgeForm.swap_test });
-      else await api.createJudgeAssessment(payload);
-      const [nextAssessments, nextAgreement] = await Promise.all([api.listJudgeAssessments(selectedAttempt.id), api.getJudgeAgreement(selectedAttempt.id)]);
+      if (judgeForm.comparison_attempt_id.trim()) await reviewsApi.createJudgeComparison({ ...payload, comparison_sample_attempt_id: judgeForm.comparison_attempt_id.trim(), swap_test: judgeForm.swap_test });
+      else await reviewsApi.createJudge(payload);
+      const [nextAssessments, nextAgreement] = await Promise.all([reviewsApi.listJudges(selectedAttempt.id), reviewsApi.judgeAgreement(selectedAttempt.id)]);
       setJudgeAssessments(nextAssessments);
       setJudgeAgreement(nextAgreement);
       showNotice(judgeForm.comparison_attempt_id.trim() ? "Blinded pairwise judge evidence and swap-test results saved." : "Independent LLM-as-judge assessment saved with rationale evidence.");
@@ -924,8 +905,8 @@ export default function App() {
         selectedRunId={selectedRun}
       />}
 
-      {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={api.analyticsScatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
-      {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={api.leaderboard} onInspectRun={inspectRun} />}
+      {view === "analysis" && <AnalysisPage activeTab={route.tab as WorkspaceTabFor<"analysis">} busy={busy} comparison={comparison} completedRuns={completedRuns} datasets={datasets} endpoints={endpoints} loadScatter={analyticsApi.scatter} onRunAChange={setComparisonRunA} onRunBChange={setComparisonRunB} onSubmitComparison={compareRuns} onTabChange={(tab) => navigate("analysis", { tab })} runA={comparisonRunA} runB={comparisonRunB} runs={runs} />}
+      {view === "leaderboard" && <LeaderboardPage datasets={datasets} endpoints={endpoints} loadLeaderboard={analyticsApi.leaderboard} onInspectRun={inspectRun} />}
       {view === "settings" && <SettingsPage activeTab={route.tab as WorkspaceTabFor<"settings">} locale={locale} onLocaleChange={setLocale} onTabChange={(tab) => navigate("settings", { tab })} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} systemHealth={systemHealth} theme={theme} />}
       </StaticCopy>
     </AppShell>
@@ -1030,7 +1011,7 @@ export function ReportsTable({ reports, onDelete }: { reports: Report[]; onDelet
   async function downloadReport(report: Report) {
     setDownloadError(null);
     try {
-      const objectUrl = await api.downloadReport(report.id);
+      const objectUrl = await reportsApi.download(report.id);
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = `evaluation-report.${report.format === "markdown" ? "md" : report.format}`;

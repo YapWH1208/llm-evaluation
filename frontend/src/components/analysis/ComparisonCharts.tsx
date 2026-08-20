@@ -1,4 +1,4 @@
-import type { Comparison } from "../../shared/api";
+import type { Comparison } from "../../features/analytics/api";
 import { comparisonCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";

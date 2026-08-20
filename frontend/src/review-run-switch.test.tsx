@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, SampleAttempt } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi } from "./features/endpoints/api";
+import { reportsApi } from "./features/reports/api";
+import { runsApi, type SampleAttempt } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -49,25 +54,25 @@ describe("review run switching", () => {
   it("clears the previous run's samples while the next run's attempts load", async () => {
     const user = userEvent.setup();
     const secondAttempts = deferred<SampleAttempt[]>();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([
       { id: "run-a", benchmark_id: "math-check", benchmark_version: "1", status: "completed", created_at: "2026-08-08T12:00:00Z", completed_at: "2026-08-08T12:05:00Z" },
       { id: "run-b", benchmark_id: "code-check", benchmark_version: "1", status: "completed", created_at: "2026-08-08T13:00:00Z", completed_at: "2026-08-08T13:05:00Z" },
     ] as never);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    vi.spyOn(api, "listAttempts")
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(runsApi, "listAttempts")
       .mockResolvedValueOnce([firstAttempt] as never)
       .mockReturnValue(secondAttempts.promise as never);
-    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
-    vi.spyOn(api, "listReports").mockResolvedValue([]);
-    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
-    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
+    vi.spyOn(runsApi, "summary").mockResolvedValue(null as never);
+    vi.spyOn(reportsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "logs").mockResolvedValue([]);
+    vi.spyOn(runsApi, "metrics").mockResolvedValue([]);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Runs" }));

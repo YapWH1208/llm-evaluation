@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, type Dataset } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi, type Dataset } from "./features/datasets/api";
+import { endpointsApi } from "./features/endpoints/api";
+import { runsApi } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -34,16 +38,16 @@ const readyDataset: Dataset = {
 };
 
 async function renderApp(datasets = [readyDataset]) {
-  vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-  vi.spyOn(api, "listRuns").mockResolvedValue([]);
-  vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-  vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-  vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
-  vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-  vi.spyOn(api, "listTasks").mockResolvedValue([]);
-  vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-  vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ root: "/data", cache_bytes: 10, available_bytes: 1000, total_bytes: 2000 });
+  vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+  vi.spyOn(runsApi, "list").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+  vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+  vi.spyOn(datasetsApi, "list").mockResolvedValue(datasets);
+  vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+  vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+  vi.spyOn(datasetsApi, "diskUsage").mockResolvedValue({ root: "/data", cache_bytes: 10, available_bytes: 1000, total_bytes: 2000 });
   render(<LocaleProvider><App /></LocaleProvider>);
   const user = userEvent.setup();
   await user.click(screen.getByRole("link", { name: "Datasets" }));
@@ -52,7 +56,7 @@ async function renderApp(datasets = [readyDataset]) {
 
 describe("dataset catalog", () => {
   it("previews the first rows of a ready dataset", async () => {
-    const preview = vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [{ question: "2+2?", answer: "4" }] });
+    const preview = vi.spyOn(datasetsApi, "preview").mockResolvedValue({ fields: ["question", "answer"], rows: [{ question: "2+2?", answer: "4" }] });
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: /Data preview/i })).toBeTruthy());
@@ -61,9 +65,9 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("edits dataset metadata through the inline form", async () => {
-    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
-    const update = vi.spyOn(api, "updateDataset").mockResolvedValue({ ...readyDataset, dataset_id: "renamed" });
-    const list = vi.spyOn(api, "listDatasets");
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
+    const update = vi.spyOn(datasetsApi, "update").mockResolvedValue({ ...readyDataset, dataset_id: "renamed" });
+    const list = vi.spyOn(datasetsApi, "list");
     list.mockResolvedValue([readyDataset]);
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -80,9 +84,9 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("converts cleared optional fields to null when saving edits", async () => {
-    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
-    const update = vi.spyOn(api, "updateDataset").mockResolvedValue({ ...readyDataset });
-    vi.spyOn(api, "listDatasets").mockResolvedValue([readyDataset]);
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
+    const update = vi.spyOn(datasetsApi, "update").mockResolvedValue({ ...readyDataset });
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([readyDataset]);
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -109,11 +113,11 @@ describe("dataset catalog", () => {
       languages: ["en"],
       evaluation_type: "classification",
     };
-    const preview = vi.spyOn(api, "previewDataset").mockResolvedValue({
+    const preview = vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "prompt", "answer"],
       rows: [],
     });
-    const update = vi.spyOn(api, "updateDataset").mockResolvedValue(dataset);
+    const update = vi.spyOn(datasetsApi, "update").mockResolvedValue(dataset);
     const { user } = await renderApp([dataset]);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -144,7 +148,7 @@ describe("dataset catalog", () => {
 
   it("keeps manual field inputs available for an unprepared dataset", async () => {
     const dataset = { ...readyDataset, status: "waiting", local_path: null };
-    const preview = vi.spyOn(api, "previewDataset");
+    const preview = vi.spyOn(datasetsApi, "preview");
     const { user } = await renderApp([dataset]);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -157,7 +161,7 @@ describe("dataset catalog", () => {
   it("disables the preview button while the preview request is in flight", async () => {
     let resolvePreview!: () => void;
     const pending = new Promise<void>((resolve) => { resolvePreview = resolve; });
-    vi.spyOn(api, "previewDataset").mockReturnValue(pending as never);
+    vi.spyOn(datasetsApi, "preview").mockReturnValue(pending as never);
     const { user } = await renderApp();
     const button = screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement;
     await user.click(button);
@@ -167,7 +171,7 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("deletes a dataset after confirmation", async () => {
-    const remove = vi.spyOn(api, "deleteDataset").mockResolvedValue({ ...readyDataset });
+    const remove = vi.spyOn(datasetsApi, "remove").mockResolvedValue({ ...readyDataset });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user } = await renderApp();
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -177,7 +181,7 @@ describe("dataset catalog", () => {
   it("disables the delete button while the delete request is in flight", async () => {
     let resolveDelete!: () => void;
     const pending = new Promise<void>((resolve) => { resolveDelete = resolve; });
-    vi.spyOn(api, "deleteDataset").mockReturnValue(pending as never);
+    vi.spyOn(datasetsApi, "remove").mockReturnValue(pending as never);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user } = await renderApp();
     const button = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
@@ -188,11 +192,11 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("hands a ready dataset to the Runs launcher without queueing automatically", async () => {
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2+2?", answer: "4" }],
     });
-    const createDatasetRun = vi.spyOn(api, "createDatasetRun");
+    const createDatasetRun = vi.spyOn(runsApi, "createDataset");
     const { user } = await renderApp();
 
     await user.click(screen.getByRole("button", { name: "Start evaluation" }));
@@ -208,7 +212,7 @@ describe("dataset catalog", () => {
   }, 10_000);
 
   it("refreshes schema mapping when the same dataset is handed off again", async () => {
-    const preview = vi.spyOn(api, "previewDataset").mockResolvedValue({
+    const preview = vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [],
     });

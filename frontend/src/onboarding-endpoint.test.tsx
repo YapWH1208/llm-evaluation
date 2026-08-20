@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, type Endpoint } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi, type Endpoint } from "./features/endpoints/api";
+import { runsApi } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 const createdEndpoint: Endpoint = {
@@ -41,16 +45,16 @@ afterEach(() => {
 describe("endpoint onboarding handoff", () => {
   it("selects a newly created endpoint and exposes connection testing", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValueOnce([]).mockResolvedValue([createdEndpoint]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    vi.spyOn(api, "createEndpoint").mockResolvedValue(createdEndpoint);
+    vi.spyOn(endpointsApi, "list").mockResolvedValueOnce([]).mockResolvedValue([createdEndpoint]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(endpointsApi, "create").mockResolvedValue(createdEndpoint);
     window.history.replaceState(null, "", "/models?tab=add-endpoint");
 
     render(<LocaleProvider><App /></LocaleProvider>);
@@ -70,17 +74,17 @@ describe("endpoint onboarding handoff", () => {
   it("keeps the user's endpoint selection when a later refresh repopulates the inventory", async () => {
     const user = userEvent.setup();
     const secondEndpoint: Endpoint = { ...createdEndpoint, display_name: "Second model", id: "endpoint-second" };
-    vi.spyOn(api, "listEndpoints").mockResolvedValueOnce([]).mockImplementation(async () => [createdEndpoint, secondEndpoint]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    vi.spyOn(api, "createEndpoint").mockResolvedValue(createdEndpoint);
-    vi.spyOn(api, "testEndpoint").mockResolvedValue({
+    vi.spyOn(endpointsApi, "list").mockResolvedValueOnce([]).mockImplementation(async () => [createdEndpoint, secondEndpoint]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(endpointsApi, "create").mockResolvedValue(createdEndpoint);
+    vi.spyOn(endpointsApi, "test").mockResolvedValue({
       provider_status_code: 200,
       request: { body: {}, method: "POST", url: secondEndpoint.base_url },
       status: "available",
@@ -111,16 +115,16 @@ describe("endpoint onboarding handoff", () => {
 
   it("keeps the user on the form after saving an edit instead of navigating to inventory", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([createdEndpoint]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    vi.spyOn(api, "updateEndpoint").mockResolvedValue(createdEndpoint);
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([createdEndpoint]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    vi.spyOn(endpointsApi, "update").mockResolvedValue(createdEndpoint);
     window.history.replaceState(null, "", "/models");
 
     render(<LocaleProvider><App /></LocaleProvider>);

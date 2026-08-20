@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { PromptPackage } from "../../shared/api";
+import type { PromptPackage } from "../../features/benchmarks/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { PageHeader } from "../workspace/PageHeader";

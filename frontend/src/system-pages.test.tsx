@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SystemHealth } from "./shared/api";
+import type { SystemHealth } from "./features/analytics/api";
 import { SettingsPage } from "./components/pages/SystemPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

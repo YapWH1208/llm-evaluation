@@ -23,4 +23,4 @@ export const analyticsApi = {
   systemHealth: () => systemRequest<SystemHealth>("/health"),
 };
 
-export type { AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, ScatterQuery, ScatterResponse, SystemHealth, Task } from "../../shared/api/types";
+export type { AnalyticsCell, AnalyticsMatrix, Comparison, Dashboard, LeaderboardQuery, LeaderboardResponse, LeaderboardRow, ScatterPoint, ScatterQuery, ScatterResponse, SystemHealth, Task } from "../../shared/api/types";

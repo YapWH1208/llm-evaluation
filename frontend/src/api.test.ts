@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from "./shared/api";
+import { analyticsApi } from "./features/analytics/api";
+import { datasetsApi } from "./features/datasets/api";
+import { reportsApi } from "./features/reports/api";
+import { runsApi } from "./features/runs/api";
 
 describe("browser transport", () => {
   beforeEach(() => {
@@ -13,7 +16,7 @@ describe("browser transport", () => {
   it("downloads a report artifact", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("report", { status: 200 }));
 
-    await expect(api.downloadReport("report-id")).resolves.toBe("blob:report");
+    await expect(reportsApi.download("report-id")).resolves.toBe("blob:report");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/reports/report-id/download");
   });
 
@@ -25,7 +28,7 @@ describe("browser transport", () => {
       },
     });
     vi.mocked(fetch).mockResolvedValue({ ok: true, body } as Response);
-    const close = api.subscribeToRunEvents("run-id", vi.fn());
+    const close = runsApi.subscribe("run-id", vi.fn());
 
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/evaluation-runs/run-id/events", expect.objectContaining({
@@ -37,7 +40,7 @@ describe("browser transport", () => {
   it("submits a public share password in a header rather than a URL", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("report", { status: 200 }));
 
-    await api.openSharedReport("share-token", "share-password");
+    await reportsApi.openShared("share-token", "share-password");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/shared-reports/share-token", {
       headers: { "X-Report-Password": "share-password" },
     });
@@ -46,7 +49,7 @@ describe("browser transport", () => {
   it("creates a dataset evaluation run", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: "run-1", benchmark_id: "dataset-evaluation", total_samples: 2, status: "queued" }), { status: 201, headers: { "Content-Type": "application/json" } }));
     const body = { model_endpoint_id: "ep-1", dataset_version_id: "ds-1", reference_field: "answer", sample_limit: 100 };
-    const run = await api.createDatasetRun(body);
+    const run = await runsApi.createDataset(body);
     expect(run.id).toBe("run-1");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/evaluation-runs/dataset", expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
   });
@@ -56,15 +59,15 @@ describe("browser transport", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ fields: ["q"], rows: [{ q: "?" }] }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ds-1", dataset_id: "x", version: "1", revision: "default", input_field: "q", reference_field: "a" }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ds-1" }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const preview = await api.previewDataset("ds-1", 3);
+    const preview = await datasetsApi.preview("ds-1", 3);
     expect(preview.rows).toEqual([{ q: "?" }]);
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1/preview?limit=3", expect.any(Object));
 
-    const updated = await api.updateDataset("ds-1", { dataset_id: "x", version: "1" });
+    const updated = await datasetsApi.update("ds-1", { dataset_id: "x", version: "1" });
     expect(updated.input_field).toBe("q");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1", expect.objectContaining({ method: "PUT", body: JSON.stringify({ dataset_id: "x", version: "1" }) }));
 
-    await api.deleteDataset("ds-1");
+    await datasetsApi.remove("ds-1");
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/datasets/ds-1", expect.objectContaining({ method: "DELETE" }));
   });
 
@@ -77,7 +80,7 @@ describe("browser transport", () => {
       truncated_count: 0, max_points: 500, points: [],
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
-    await api.analyticsScatter({
+    await analyticsApi.scatter({
       x_axis: "score",
       y_axis: "p95_latency_ms",
       run_ids: ["run-a", "run-b"],
@@ -97,7 +100,7 @@ describe("browser transport", () => {
       items: [], total: 0, page: 2, page_size: 25, total_pages: 0, sort: "score", direction: "desc",
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
-    await api.leaderboard({
+    await analyticsApi.leaderboard({
       dataset: "dataset-a",
       model_endpoint_id: "endpoint-a",
       statuses: ["completed", "completed_with_errors"],
@@ -120,7 +123,7 @@ describe("browser transport", () => {
   it("loads named metrics for a selected run", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } }));
 
-    await api.listRunMetrics("run/with spaces");
+    await runsApi.metrics("run/with spaces");
 
     expect(fetch).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/v1/analytics/runs/run%2Fwith%20spaces/metrics",

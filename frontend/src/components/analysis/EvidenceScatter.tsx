@@ -1,6 +1,9 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Dataset, Endpoint, EvaluationRun, ScatterPoint, ScatterQuery, ScatterResponse } from "../../shared/api";
+import type { ScatterPoint, ScatterQuery, ScatterResponse } from "../../features/analytics/api";
+import type { Dataset } from "../../features/datasets/api";
+import type { Endpoint } from "../../features/endpoints/api";
+import type { EvaluationRun } from "../../features/runs/api";
 import { analysisScatterCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
 import { METRIC_DEFINITIONS } from "../../metrics";
