@@ -89,10 +89,10 @@ provider limits.
   `endpoints`, `datasets`, `benchmarks`, `evaluations`, `reports`, and `reviews`.
   Each feature owns its API schemas, application service, lifecycle/policy code,
   and repository ports. HTTP routers are thin adapters over those services.
-- Persistence adapters live under `backend/app/infrastructure/persistence/` and
-  implement the same repository contracts for SQLite and MongoDB. SQLAlchemy
-  models and forward-only migrations remain registered centrally under
-  `backend/app/db/`.
+- Feature repository adapters implement the same SQLite/Mongo contracts beside
+  their owning modules (for example `modules/endpoints/repositories.py` and
+  `modules/datasets/repositories.py`); database primitives and forward-only
+  migrations remain registered centrally under `backend/app/db/`.
 - Provider protocol behavior has one registry and one adapter per protocol under
   `backend/app/infrastructure/providers/`; shared outbound network safeguards are
   in `backend/app/infrastructure/network/`.
