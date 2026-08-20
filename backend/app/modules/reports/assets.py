@@ -3,9 +3,14 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
+from app.core.content import asset_content_part
+from app.core.errors import NotFoundError, ValidationError
+from app.modules.reports.ports import AssetRepository
 
 SUPPORTED_MIME_TYPES = {
     "image/png": "image",
@@ -23,6 +28,55 @@ MAX_ASSET_BYTES = 25 * 1024 * 1024
 
 class MediaAssetError(ValueError):
     pass
+
+
+class AssetService:
+    """Media-asset validation, storage, and lookup independent of database kind."""
+
+    def __init__(self, repository: AssetRepository, data_root: str) -> None:
+        self._repository = repository
+        self._data_root = data_root
+
+    def create(self, payload: Any) -> Any:
+        try:
+            data, mime_type, media_kind = decode_and_validate_asset(payload.base64_data, payload.mime_type)
+            sha256, storage_path = store_asset(self._data_root, data)
+        except MediaAssetError as error:
+            raise ValidationError(str(error)) from error
+        existing = self._repository.find_by_digest(sha256)
+        if existing is not None:
+            return existing
+        return self._repository.create_asset(
+            {
+                "original_filename": safe_filename(payload.filename),
+                "media_kind": media_kind,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+                "sha256": sha256,
+                "storage_path": storage_path,
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
+
+    def get(self, asset_id: str) -> Any:
+        asset = self._repository.get_asset(asset_id)
+        if asset is None:
+            raise NotFoundError("Media asset not found", context={"asset_id": asset_id})
+        return asset
+
+    def content_part(self, asset_id: str) -> dict[str, object]:
+        asset = self.get(asset_id)
+        return asset_content_part(
+            str(_value(asset, "id")), str(_value(asset, "media_kind")), str(_value(asset, "mime_type"))
+        )
+
+    def download(self, asset_id: str) -> tuple[Path, str, str]:
+        asset = self.get(asset_id)
+        try:
+            path = safe_asset_path(self._data_root, str(_value(asset, "storage_path")))
+        except MediaAssetError as error:
+            raise NotFoundError(str(error), context={"asset_id": asset_id}) from error
+        return path, str(_value(asset, "mime_type")), str(_value(asset, "original_filename"))
 
 
 def decode_and_validate_asset(base64_data: str, mime_type: str) -> tuple[bytes, str, str]:
@@ -68,6 +122,10 @@ def safe_asset_path(data_root: str, storage_path: str) -> Path:
 def safe_filename(filename: str) -> str:
     name = Path(filename).name.strip()
     return name[:255] or "asset.bin"
+
+
+def _value(asset: Any, key: str) -> Any:
+    return asset.get(key) if isinstance(asset, dict) else getattr(asset, key)
 
 
 def _has_expected_signature(data: bytes, mime_type: str) -> bool:

@@ -51,6 +51,8 @@ from app.modules.reviews.repositories import (
     SqliteReviewRepository,
 )
 from app.modules.reviews.service import ReviewService
+from app.modules.reports.assets import AssetService
+from app.modules.reports.repositories import MongoAssetRepository, SqliteAssetRepository
 from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
 from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
 from app.modules.evaluations.execution import ExecutionService
@@ -118,6 +120,10 @@ def create_app(
     )
     app.state.review_service = ReviewService(
         MongoReviewRepository(document_store) if document_store is not None else SqliteReviewRepository(database)  # type: ignore[arg-type]
+    )
+    app.state.asset_service = AssetService(
+        MongoAssetRepository(document_store) if document_store is not None else SqliteAssetRepository(database),  # type: ignore[arg-type]
+        settings.data_root,
     )
     app.state.judge_service = JudgeService(
         MongoJudgeRepository(document_store) if document_store is not None else SqliteJudgeRepository(database)  # type: ignore[arg-type]
