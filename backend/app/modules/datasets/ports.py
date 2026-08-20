@@ -11,6 +11,14 @@ class DatasetRepository(Protocol):
 
     def list(self) -> list[dict[str, Any]]: ...
 
+    def find(
+        self,
+        *,
+        dataset_id: str,
+        version: str | None = None,
+        revision: str | None = None,
+    ) -> dict[str, Any] | None: ...
+
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]: ...
 
     def update(self, dataset_version_id: str, values: Mapping[str, Any]) -> dict[str, Any] | None: ...

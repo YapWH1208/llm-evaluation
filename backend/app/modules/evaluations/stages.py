@@ -6,6 +6,7 @@ from app.core.config import Settings
 from app.core.errors import ApplicationError, ConflictError, NotFoundError
 from app.db.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
 from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
+from app.modules.datasets.service import DatasetService
 from app.modules.evaluations.attempts import latest_attempts, task_payload, utc_now
 from app.modules.evaluations.ports import ExecutionRepository
 from app.modules.reports.service import ReportService
@@ -18,11 +19,13 @@ class PipelineStages:
         self,
         repository: ExecutionRepository,
         settings: Settings,
+        datasets: DatasetService,
         reports: ReportService,
         aggregation: AggregationService,
     ) -> None:
         self._repository = repository
         self._settings = settings
+        self._datasets = datasets
         self._reports = reports
         self._aggregation = aggregation
 
@@ -43,7 +46,7 @@ class PipelineStages:
             try:
                 for descriptor in payload.get("datasets", []):
                     if isinstance(descriptor, dict) and isinstance(descriptor.get("dataset_id"), str):
-                        self._repository.prepare_dataset(descriptor, self._settings.data_root, self._settings)
+                        self._datasets.prepare(descriptor, self._settings.data_root, self._settings)
             except ApplicationError as error:
                 self._update_leased_task(
                     task,

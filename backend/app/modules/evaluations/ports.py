@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, Protocol
 
-from app.core.config import Settings
-
 
 class EvaluationRepository(Protocol):
     """Persistence primitives used by evaluation application behavior."""
@@ -145,8 +143,6 @@ class ExecutionRepository(Protocol):
     ) -> dict[str, Any] | None: ...
 
     def update_attempt(self, attempt_id: str, values: dict[str, Any]) -> dict[str, Any] | None: ...
-
-    def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None: ...
 
     def query_tasks(
         self,

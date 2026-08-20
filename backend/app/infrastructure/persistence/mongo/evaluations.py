@@ -3,9 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
-from app.core.errors import NotFoundError
 
 
 class MongoEvaluationRepository:
@@ -284,29 +282,6 @@ class MongoEvaluationRepository:
 
     def update_attempt(self, attempt_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
         return self._store.update_document("sample_attempts", attempt_id, values)
-
-    def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None:
-        from app.modules.datasets.repositories import MongoDatasetRepository
-        from app.modules.datasets.service import DatasetService
-
-        frozen_id = descriptor.get("dataset_version_id")
-        if isinstance(frozen_id, str):
-            dataset = self._store.get_document("dataset_versions", frozen_id)
-        else:
-            query = {"dataset_id": descriptor["dataset_id"]}
-            if isinstance(descriptor.get("version"), str):
-                query["version"] = descriptor["version"]
-            if isinstance(descriptor.get("revision"), str):
-                query["revision"] = descriptor["revision"]
-            matches = self._store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
-            dataset = matches[0] if matches else None
-        if dataset is None:
-            raise NotFoundError(
-                f"Required dataset {descriptor['dataset_id']} is not registered.",
-                context={"dataset_id": descriptor["dataset_id"]},
-            )
-        if dataset.get("status") != "ready":
-            DatasetService(MongoDatasetRepository(self._store)).download(str(dataset["id"]), data_root, settings)
 
     def query_tasks(
         self,

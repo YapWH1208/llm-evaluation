@@ -85,6 +85,15 @@ def test_feature_application_code_does_not_select_persistence_backend() -> None:
     assert offenders == set()
 
 
+def test_persistence_adapters_do_not_invoke_application_services() -> None:
+    offenders: set[str] = set()
+    for path in _python_files(BACKEND / "infrastructure" / "persistence"):
+        imports = _import_names(ast.parse(path.read_text(encoding="utf-8")))
+        if any(name.startswith("app.modules.") and name.endswith(".service") for name in imports):
+            offenders.add(_relative(path, BACKEND))
+    assert offenders == set()
+
+
 def test_provider_orchestrators_do_not_branch_on_protocol_profiles() -> None:
     provider_root = BACKEND / "infrastructure" / "providers"
     orchestrators = ("capabilities.py", "connection.py", "executor.py")

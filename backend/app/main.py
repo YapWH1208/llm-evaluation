@@ -174,6 +174,7 @@ def create_app(
         evaluation_repository,
         settings,
         app.state.queue_service,
+        app.state.dataset_service,
         app.state.judge_service,
         app.state.report_service,
         app.state.aggregation_service,

@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.core.config import Settings
 from app.db.database import Database
 from app.db.models import (
     AggregateMetric,
@@ -25,7 +24,6 @@ from app.db.models import (
     SampleAttempt,
     TaskUnit,
 )
-from app.core.errors import NotFoundError
 
 
 def _model_values(model: Any) -> dict[str, Any]:
@@ -475,29 +473,6 @@ class SqliteEvaluationRepository:
             session.commit()
             session.refresh(attempt)
             return _model_values(attempt)
-
-    def prepare_dataset(self, descriptor: dict[str, Any], data_root: str, settings: Settings | None) -> None:
-        from app.modules.datasets.repositories import SqliteSessionDatasetRepository
-        from app.modules.datasets.service import DatasetService
-
-        with self._database.get_session() as session:
-            frozen_id = descriptor.get("dataset_version_id")
-            if isinstance(frozen_id, str):
-                dataset = session.get(DatasetVersion, frozen_id)
-            else:
-                query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
-                if isinstance(descriptor.get("version"), str):
-                    query = query.where(DatasetVersion.version == descriptor["version"])
-                if isinstance(descriptor.get("revision"), str):
-                    query = query.where(DatasetVersion.revision == descriptor["revision"])
-                dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
-            if dataset is None:
-                raise NotFoundError(
-                    f"Required dataset {descriptor['dataset_id']} is not registered.",
-                    context={"dataset_id": descriptor["dataset_id"]},
-                )
-            if dataset.status != "ready":
-                DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
 
     def query_tasks(
         self,

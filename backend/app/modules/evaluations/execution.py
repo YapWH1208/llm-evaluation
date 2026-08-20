@@ -22,6 +22,7 @@ from app.modules.evaluations.stages import PipelineStages
 from app.modules.reviews.judges import JudgeService
 from app.modules.reports.service import ReportService
 from app.modules.analytics.aggregation import AggregationService
+from app.modules.datasets.service import DatasetService
 
 
 _RUNNABLE_RUN_STATUSES = (RunStatus.QUEUED.value, RunStatus.RUNNING.value)
@@ -41,15 +42,15 @@ class ExecutionService:
         repository: ExecutionRepository,
         settings: Settings,
         queue: QueueService,
+        datasets: DatasetService,
         judges: JudgeService,
         reports: ReportService,
         aggregation: AggregationService,
     ) -> None:
         self._repository = repository
-        self._settings = settings
         self._queue = queue
         self._attempts = AttemptProcessor(repository, judges)
-        self._stages = PipelineStages(repository, settings, reports, aggregation)
+        self._stages = PipelineStages(repository, settings, datasets, reports, aggregation)
 
     def execute_run(
         self,

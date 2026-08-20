@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 from app.db.models import DatasetVersion, EvaluationRun
 from app.db.mongo import MongoDocumentStore
@@ -56,6 +55,22 @@ class SqliteDatasetRepository:
                 _copy_dataset_model(item)
                 for item in session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))
             ]
+
+    def find(
+        self,
+        *,
+        dataset_id: str,
+        version: str | None = None,
+        revision: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self.database.get_session() as session:
+            query = select(DatasetVersion).where(DatasetVersion.dataset_id == dataset_id)
+            if version is not None:
+                query = query.where(DatasetVersion.version == version)
+            if revision is not None:
+                query = query.where(DatasetVersion.revision == revision)
+            item = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
+            return _copy_dataset_model(item) if item is not None else None
 
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
         item = DatasetVersion(**{key: values[key] for key in _DATASET_FIELDS if key in values and key != "created_at"})
@@ -108,69 +123,6 @@ class SqliteDatasetRepository:
             return False
 
 
-class SqliteSessionDatasetRepository:
-    """Repository view for an already-open worker transaction."""
-
-    def __init__(self, session: Session) -> None:
-        self.session = session
-
-    def get(self, dataset_version_id: str) -> dict[str, Any] | None:
-        item = self.session.get(DatasetVersion, dataset_version_id)
-        return _copy_dataset_model(item) if item is not None else None
-
-    def list(self) -> list[dict[str, Any]]:
-        return [
-            _copy_dataset_model(item)
-            for item in self.session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))
-        ]
-
-    def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
-        item = DatasetVersion(**{key: values[key] for key in _DATASET_FIELDS if key in values and key != "created_at"})
-        self.session.add(item)
-        try:
-            self.session.commit()
-        except IntegrityError as error:
-            self.session.rollback()
-            raise ValueError("Dataset revision already exists") from error
-        self.session.refresh(item)
-        return _copy_dataset_model(item)
-
-    def update(self, dataset_version_id: str, values: Mapping[str, Any]) -> dict[str, Any] | None:
-        item = self.session.get(DatasetVersion, dataset_version_id)
-        if item is None:
-            return None
-        for key, value in values.items():
-            if key in _DATASET_FIELDS and key != "created_at":
-                setattr(item, key, value)
-        try:
-            self.session.commit()
-        except IntegrityError as error:
-            self.session.rollback()
-            raise ValueError("Dataset revision already exists") from error
-        self.session.refresh(item)
-        return _copy_dataset_model(item)
-
-    def delete(self, dataset_version_id: str) -> dict[str, Any] | None:
-        item = self.session.get(DatasetVersion, dataset_version_id)
-        if item is None:
-            return None
-        result = _copy_dataset_model(item)
-        self.session.delete(item)
-        self.session.commit()
-        return result
-
-    def is_referenced(self, dataset_version_id: str) -> bool:
-        for run in self.session.scalars(select(EvaluationRun)):
-            snapshot = run.configuration_snapshot if isinstance(run.configuration_snapshot, dict) else {}
-            datasets = snapshot.get("datasets") if isinstance(snapshot, dict) else None
-            if isinstance(datasets, list) and any(
-                isinstance(descriptor, dict) and descriptor.get("dataset_version_id") == dataset_version_id
-                for descriptor in datasets
-            ):
-                return True
-        return False
-
-
 class MongoDatasetRepository:
     def __init__(self, store: MongoDocumentStore) -> None:
         self.store = store
@@ -180,6 +132,21 @@ class MongoDatasetRepository:
 
     def list(self) -> list[dict[str, Any]]:
         return self.store.list_documents("dataset_versions", sort=[("created_at", -1)])
+
+    def find(
+        self,
+        *,
+        dataset_id: str,
+        version: str | None = None,
+        revision: str | None = None,
+    ) -> dict[str, Any] | None:
+        query = {"dataset_id": dataset_id}
+        if version is not None:
+            query["version"] = version
+        if revision is not None:
+            query["revision"] = revision
+        items = self.store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)], limit=1)
+        return items[0] if items else None
 
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
         existing = self.store.list_documents(

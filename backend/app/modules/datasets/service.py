@@ -65,6 +65,30 @@ class DatasetService:
     def disk_usage(self, data_root: str) -> dict[str, int | str]:
         return dataset_disk_usage(data_root)
 
+    def prepare(self, descriptor: Mapping[str, Any], data_root: str, settings: Settings) -> dict[str, Any]:
+        frozen_id = descriptor.get("dataset_version_id")
+        if isinstance(frozen_id, str):
+            dataset = self.repository.get(frozen_id)
+        else:
+            dataset_id = descriptor.get("dataset_id")
+            dataset = (
+                self.repository.find(
+                    dataset_id=dataset_id,
+                    version=descriptor.get("version") if isinstance(descriptor.get("version"), str) else None,
+                    revision=descriptor.get("revision") if isinstance(descriptor.get("revision"), str) else None,
+                )
+                if isinstance(dataset_id, str)
+                else None
+            )
+        if dataset is None:
+            raise NotFoundError(
+                f"Required dataset {descriptor.get('dataset_id', frozen_id)} is not registered.",
+                context={"dataset_version_id": frozen_id, "dataset_id": descriptor.get("dataset_id")},
+            )
+        if dataset.get("status") == DatasetStatus.READY.value:
+            return dataset
+        return self.download(str(dataset["id"]), data_root, settings)
+
     def preview(self, dataset_version_id: str, data_root: str, *, limit: int) -> dict[str, object]:
         dataset = self.get(dataset_version_id)
         prepared_path = dataset.get("prepared_path")
