@@ -11,6 +11,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   backend-neutral application path over SQLite and Mongo repository contracts.
 - Deleted the superseded service layer, parallel Mongo evaluation executor,
   persistence-aware route implementations, and internal compatibility wrappers.
+- Split Mongo queue admission, leases, fencing, and rate-window persistence out
+  of the generic document store into its dedicated infrastructure adapter.
 - Consolidated provider request construction, parsing, connection probes, and
   capability evidence into one authoritative adapter per protocol.
 - Moved frontend state, effects, commands, APIs, and DTOs into feature ownership;

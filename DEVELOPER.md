@@ -96,6 +96,9 @@ provider limits.
   feature adapters stay beside their owning modules. Repositories expose storage
   operations only—lifecycle, preparation, judging, reporting, and analytics rules
   remain in application services.
+- Mongo connection, schema, and generic document primitives remain in
+  `backend/app/db/mongo.py`; atomic queue admission, leases, fencing, and rate
+  windows live in `backend/app/infrastructure/persistence/mongo/queue.py`.
 - Provider protocol behavior has one registry and one adapter per protocol under
   `backend/app/infrastructure/providers/`; shared outbound network safeguards are
   in `backend/app/infrastructure/network/`.
