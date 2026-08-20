@@ -13,10 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.api.capabilities import router as capabilities_router
+from app.modules.endpoints.capabilities_api import router as capabilities_router
 from app.api.datasets import router as datasets_router
 from app.api.evaluation_runs import router as evaluation_runs_router
-from app.api.model_endpoints import router as model_endpoints_router
+from app.modules.endpoints.api import router as model_endpoints_router
 from app.api.prompt_packages import router as prompt_packages_router
 from app.api.workers import router as workers_router
 from app.api.reports import public_router as shared_reports_router
@@ -39,6 +39,8 @@ from app.infrastructure.providers.capabilities import CapabilityDetector, Provid
 from app.infrastructure.providers.connection import ProviderConnectionTester
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.infrastructure.providers.executor import ProviderExecutor
+from app.modules.endpoints.repositories import MongoEndpointRepository, SqliteEndpointRepository
+from app.modules.endpoints.service import EndpointService
 from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
 from sqlalchemy import select, text
 
@@ -97,6 +99,9 @@ def create_app(
     )
     register_application_error_handlers(app)
     app.state.settings = settings
+    app.state.endpoint_service = EndpointService(
+        MongoEndpointRepository(document_store) if document_store is not None else SqliteEndpointRepository(database)  # type: ignore[arg-type]
+    )
     app.state.connection_tester = connection_tester or ProviderConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
     app.state.model_executor = model_executor or ProviderExecutor(max_response_bytes=settings.provider_response_max_bytes)
     app.state.capability_detector = capability_detector or ProviderCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)

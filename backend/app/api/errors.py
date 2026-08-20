@@ -13,5 +13,5 @@ def register_application_error_handlers(app: FastAPI) -> None:
     async def application_error_handler(_request: Request, error: ApplicationError) -> JSONResponse:
         return JSONResponse(
             status_code=error.http_status,
-            content={"error": {"code": error.code, "message": str(error), "context": error.context}},
+            content={"detail": str(error), "error": {"code": error.code, "message": str(error), "context": error.context}},
         )
