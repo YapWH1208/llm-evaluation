@@ -384,6 +384,75 @@ def test_mongodb_dataset_update_and_delete_of_missing_version_return_404(tmp_pat
         assert missing_delete.status_code == 404
 
 
+def test_mongodb_dataset_update_enforces_revision_uniqueness(tmp_path: Path) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
+
+    with TestClient(app) as api:
+        api.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "duplicate", "version": "1", "revision": "main"},
+        )
+        target = api.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "target", "version": "1", "revision": "main"},
+        ).json()
+        response = api.put(
+            f"/api/v1/datasets/{target['id']}",
+            json={"dataset_id": "duplicate", "version": "1", "revision": "main"},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Dataset revision already exists"
+        persisted = next(
+            item for item in api.get("/api/v1/datasets").json() if item["id"] == target["id"]
+        )
+        assert persisted["dataset_id"] == "target"
+
+
+def test_mongodb_dataset_duplicate_key_update_returns_409(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(settings, document_store=store)
+
+    class DuplicateKeyError(Exception):
+        pass
+
+    with TestClient(app, raise_server_exceptions=False) as api:
+        dataset = api.post(
+            "/api/v1/datasets",
+            json={"dataset_id": "target", "version": "1", "revision": "main"},
+        ).json()
+
+        def duplicate_update(
+            collection_name: str,
+            document_id: str,
+            values: dict[str, object],
+        ) -> dict[str, object] | None:
+            raise DuplicateKeyError
+
+        monkeypatch.setattr(store, "update_document", duplicate_update)
+        response = api.put(
+            f"/api/v1/datasets/{dataset['id']}",
+            json={"dataset_id": "duplicate", "version": "1", "revision": "main"},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Dataset revision already exists"
+
+
 def test_dataset_update_edits_metadata_and_enforces_uniqueness(tmp_path: Path) -> None:
     app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path/'db.sqlite'}", data_root=str(tmp_path / "data")))
     with TestClient(app) as client:

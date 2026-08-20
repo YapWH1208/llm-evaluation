@@ -172,7 +172,22 @@ class MongoDatasetRepository:
         return self.store.insert_document("dataset_versions", document)
 
     def update(self, dataset_version_id: str, values: Mapping[str, Any]) -> dict[str, Any] | None:
-        return self.store.update_document("dataset_versions", dataset_version_id, dict(values))
+        current = self.get(dataset_version_id)
+        if current is None:
+            return None
+        identity = {
+            field: values[field] if field in values else current.get(field)
+            for field in ("dataset_id", "version", "revision")
+        }
+        existing = self.store.list_documents("dataset_versions", query=identity)
+        if any(str(item.get("id")) != dataset_version_id for item in existing):
+            raise ValueError("Dataset revision already exists")
+        try:
+            return self.store.update_document("dataset_versions", dataset_version_id, dict(values))
+        except Exception as error:
+            if type(error).__name__ != "DuplicateKeyError":
+                raise
+            raise ValueError("Dataset revision already exists") from error
 
     def delete(self, dataset_version_id: str) -> dict[str, Any] | None:
         current = self.get(dataset_version_id)
