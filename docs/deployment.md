@@ -66,7 +66,7 @@ This delivery validates the Compose configuration with `docker compose config`, 
 
 ## Container image releases
 
-Tagging the repository with a `v*` tag (for example `v0.4.4`) triggers the
+Tagging the repository with a `v*` tag (for example `v1.0.0`) triggers the
 `Docker release` workflow (`.github/workflows/docker-release.yml`): it first
 runs the backend and frontend test suites and, only when they pass, builds and
 publishes two images to GitHub Container Registry:
@@ -76,10 +76,10 @@ publishes two images to GitHub Container Registry:
   `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` baked in; rebuild with the
   `VITE_API_BASE_URL` build arg for a remote API origin.
 
-Each image is tagged with the release version (for example `0.4.4`) and
+Each image is tagged with the release version (for example `1.0.0`) and
 `latest`. To consume a release in Compose, replace a service's `build:`
 block with its published image, for example
-`image: ghcr.io/yapwh1208/llm-evaluation-api:0.4.4`. Packages inherit the
+`image: ghcr.io/yapwh1208/llm-evaluation-api:1.0.0`. Packages inherit the
 repository visibility; on a private repository, pull with a GitHub token.
 
 ## Migration and backup policy
@@ -95,7 +95,6 @@ Before upgrades, run `python -m app.cli database preview`. After upgrades, run `
 - `/health` confirms the configured database type, schema version, disk capacity, and queue counters. It returns HTTP 503 when the backing store cannot be reached; do not route traffic to an instance until it returns HTTP 200 with `database_connected: true`.
 - `/api/v1/dashboard` exposes queue, endpoint, dataset, cost, error-rate, and worker-lease summaries. Its evidence window is intentionally bounded to recent runs/samples so operators should use run-specific reports for full historical analysis.
 - `/api/v1/evaluation-runs/{run_id}/events` emits server-sent progress snapshots.
-- `/api/v1/audit-events` exposes successful mutating operation metadata to administrators.
 
 ## Public report sharing
 
@@ -109,8 +108,11 @@ Run the following non-Docker checks before publishing a deployment artifact:
 
 ```powershell
 python -m pytest -q
+python -m ruff check backend tests
+python -m ruff format --check backend tests
 Set-Location frontend
 npm.cmd ci
+npm.cmd run lint
 npm.cmd test -- --run
 npm.cmd run build
 ```

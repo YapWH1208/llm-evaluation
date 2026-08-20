@@ -52,16 +52,16 @@ If you catch yourself about to explore, fix, or answer without loading a skill �
 
 ## Architecture
 
-- App factory `create_app()` in `backend/app/main.py`; routers in `backend/app/api/*.py`; business logic in `backend/app/services/*.py`; SQLAlchemy models in `backend/app/db/models.py`.
-- SQLite owns the SQLAlchemy schema and forward-only migrations (`backend/app/db/migrations.py`). MongoDB is a separate document store (`backend/app/db/mongo.py`) with parallel service modules (`mongo_*.py`) — changes to a feature usually need both relational and Mongo paths.
-- Builtin benchmark plugins live in `backend/app/benchmarks/` (registry + `text_quick_check.py`).
+- App factory `create_app()` in `backend/app/main.py`; feature routers, services, and ports live in `backend/app/modules/*`; SQLAlchemy models and forward-only migrations remain under `backend/app/db/`.
+- Application behavior is storage-neutral. SQLite and MongoDB differences live in repository adapters selected once by `create_app()`; feature APIs and services must not branch on the configured backend.
+- Provider protocols have one adapter each under `backend/app/infrastructure/providers/adapters/`. Built-in benchmark plugins live in `backend/app/benchmarks/`; their persisted catalog is owned by `backend/app/modules/benchmarks/`.
+- Frontend transport is limited to `frontend/src/shared/api/client.ts` and `errors.ts`; feature API operations, DTOs, state, and effects live under `frontend/src/features/*`.
 
 ## Testing quirks
 
-- pytest is configured with `asyncio_default_fixture_loop_scope = "function"`; no asyncio markers needed.
 - MongoDB tests fake the client — never require a live MongoDB.
 - Avoid wall-clock-dependent tests (history: rate-window tests were made deterministic for this reason).
-- CI (`.github/workflows/ci.yml`) runs exactly: `python -m pytest -q`, then in `frontend/`: `npm ci`, `npm test -- --run`, `npm run build`. Passing these is the definition of done.
+- CI (`.github/workflows/ci.yml`) runs Ruff lint/format and `python -m pytest -q`, then in `frontend/`: `npm ci`, ESLint, tests, and the production build.
 
 ## Frontend conventions
 

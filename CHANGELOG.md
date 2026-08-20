@@ -6,8 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## 1.0.0 — 2026-08-20
 
-- Consolidated provider protocol handling and endpoint capability operations into feature-owned application modules.
-- Preserved SQLite, MongoDB, API route, credential, and evaluation compatibility contracts while preparing the stable v1 architecture.
+- Consolidated evaluation creation, lifecycle, queue execution, aggregation,
+  analytics, judging, reviews, reports, and dataset preparation into one
+  backend-neutral application path over SQLite and Mongo repository contracts.
+- Deleted the superseded service layer, parallel Mongo evaluation executor,
+  persistence-aware route implementations, and internal compatibility wrappers.
+- Consolidated provider request construction, parsing, connection probes, and
+  capability evidence into one authoritative adapter per protocol.
+- Moved frontend state, effects, commands, APIs, and DTOs into feature ownership;
+  deleted the workspace god component and monolithic API/type façades.
+- Added typed application errors, behavioral adapter/provider contracts, import
+  boundary tests, Ruff/ESLint gates, and consistent `1.0.0` release metadata.
+- Preserved SQLite/Mongo data, public API routes, workspace URLs, encrypted
+  credentials, evaluation evidence, report artifacts, and security controls.
 
 ## Unreleased
 

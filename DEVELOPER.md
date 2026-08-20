@@ -9,7 +9,7 @@ conventions. For product usage and evaluation workflows, see
 
 | Path | Purpose |
 | --- | --- |
-| `backend/` | FastAPI application, SQLAlchemy models, migrations, services, and benchmark plugins. |
+| `backend/` | FastAPI modular monolith, feature services/ports, persistence adapters, migrations, and benchmark plugins. |
 | `frontend/` | React 19 + TypeScript + Vite web application. |
 | `tests/` | Backend pytest suite. |
 | `docs/` | Deployment, evaluation workflow, and project planning documents. |
@@ -55,6 +55,7 @@ key at `data/.lle-secret-key` when `LLE_SECRET_ENCRYPTION_KEY` is not set.
 | Install backend dependencies | `python -m pip install -e ".[dev]"` |
 | Install backend + MongoDB support | `python -m pip install -e ".[dev,mongodb]"` |
 | Run backend tests | `python -m pytest -q` |
+| Lint and format-check backend | `python -m ruff check backend tests && python -m ruff format --check backend tests` |
 | Run one backend test file | `python -m pytest tests/test_datasets.py -q` |
 | Run the API locally | `uvicorn app.main:app --app-dir backend --reload` |
 | Inspect database migrations | `python -m app.cli database preview` |
@@ -63,6 +64,7 @@ key at `data/.lle-secret-key` when `LLE_SECRET_ENCRYPTION_KEY` is not set.
 | Install frontend dependencies | `cd frontend && npm ci` |
 | Start the frontend dev server | `cd frontend && npm run dev` |
 | Run frontend tests once | `cd frontend && npm test -- --run` |
+| Lint frontend | `cd frontend && npm run lint` |
 | Type-check and build the frontend | `cd frontend && npm run build` |
 | Start the full local stack with Docker | `docker compose up --build` |
 
@@ -89,17 +91,20 @@ provider limits.
   `endpoints`, `datasets`, `benchmarks`, `evaluations`, `reports`, and `reviews`.
   Each feature owns its API schemas, application service, lifecycle/policy code,
   and repository ports. HTTP routers are thin adapters over those services.
-- Feature repository adapters implement the same SQLite/Mongo contracts beside
-  their owning modules (for example `modules/endpoints/repositories.py` and
-  `modules/datasets/repositories.py`); database primitives and forward-only
-  migrations remain registered centrally under `backend/app/db/`.
+- Feature repository adapters implement the same SQLite/Mongo contracts. The
+  evaluation adapters live under `infrastructure/persistence/`; the smaller
+  feature adapters stay beside their owning modules. Repositories expose storage
+  operations only—lifecycle, preparation, judging, reporting, and analytics rules
+  remain in application services.
 - Provider protocol behavior has one registry and one adapter per protocol under
   `backend/app/infrastructure/providers/`; shared outbound network safeguards are
   in `backend/app/infrastructure/network/`.
-- The frontend keeps transport in `frontend/src/shared/api/` and feature API
-  modules under `frontend/src/features/*/api.ts`. `App.tsx` is the shell entrypoint;
-  feature rendering and state are composed by the workspace components.
-- Built-in benchmark definitions live under `backend/app/modules/benchmarks/`.
+- The frontend keeps only HTTP transport and generic errors in
+  `frontend/src/shared/api/`. Each `frontend/src/features/*` module owns its API
+  operations, DTOs, state, effects, actions, and route composition. `App.tsx`
+  remains the shell entrypoint.
+- Built-in benchmark plugins live under `backend/app/benchmarks/`; benchmark and
+  prompt-package application behavior lives under `backend/app/modules/benchmarks/`.
 
 ## Backend conventions
 
@@ -124,14 +129,9 @@ provider limits.
 
 ## Testing and CI
 
-CI runs exactly:
-
-1. `python -m pytest -q` from the repository root.
-2. `npm ci`
-3. `npm test -- --run`
-4. `npm run build`
-
-from `frontend/`.
+CI runs Ruff lint, Ruff format-check, and `python -m pytest -q` from the
+repository root. From `frontend/` it runs `npm ci`, `npm run lint`,
+`npm test -- --run`, and `npm run build`.
 
 The pytest configuration sets `pythonpath=["backend"]` and
 `testpaths=["tests"]`, so backend tests can be run without setting
