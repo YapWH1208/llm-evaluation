@@ -10,7 +10,7 @@ from app.db.models import EndpointStatus, RunStatus, TaskStatus, TaskType
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository
-from app.modules.evaluations.planning import _attempt_values, _endpoint_snapshot, _task_values
+from app.modules.evaluations.planning import attempt_values, endpoint_snapshot, task_values
 from app.modules.reports.assets import MediaAssetError, safe_asset_path
 
 
@@ -55,7 +55,7 @@ def create_custom_multimodal_run(
         "display_name": format_run_display_name(str(endpoint["model_name"]), "custom-multimodal", now),
         "configuration_snapshot": {
             "benchmark": {"id": "custom-multimodal", "version": "1.0.0", "source": "user"},
-            "endpoint": _endpoint_snapshot(endpoint),
+            "endpoint": endpoint_snapshot(endpoint),
             "sample_ids": [normalized_sample_id],
             "request_body_evidence": request_body_evidence,
         },
@@ -70,14 +70,14 @@ def create_custom_multimodal_run(
         "archived_at": None,
     }
     tasks = [
-        _task_values(
+        task_values(
             "dataset",
             task_type=TaskType.DATASET_PREPARATION.value,
             payload={"source": "user", "prepared_inline": True},
             task_status=TaskStatus.SUCCEEDED.value,
             now=now,
         ),
-        _task_values(
+        task_values(
             "benchmark",
             parent_key="dataset",
             task_type=TaskType.BENCHMARK.value,
@@ -89,7 +89,7 @@ def create_custom_multimodal_run(
             task_status=TaskStatus.SUCCEEDED.value,
             now=now,
         ),
-        _task_values(
+        task_values(
             "shard-0",
             parent_key="benchmark",
             task_type=TaskType.EVALUATION_SHARD.value,
@@ -104,12 +104,12 @@ def create_custom_multimodal_run(
         ),
     ]
     attempts = [
-        _attempt_values(
+        attempt_values(
             "shard-0",
             sample_id=normalized_sample_id,
             input_snapshot={
                 "messages": normalized_messages,
-                "modality": _sample_modality(normalized_messages),
+                "modality": sample_modality(normalized_messages),
                 "metadata": {"capability": "custom", "language": "unknown", "difficulty": "custom"},
                 "request_body_evidence": request_body_evidence,
             },
@@ -179,7 +179,7 @@ def _resolve_asset_source(
     }
 
 
-def _sample_modality(messages: list[dict[str, object]]) -> str:
+def sample_modality(messages: list[dict[str, object]]) -> str:
     media_types = {
         part["type"]
         for message in messages

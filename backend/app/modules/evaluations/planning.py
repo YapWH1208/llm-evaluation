@@ -13,7 +13,7 @@ from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template
 
 
-def _empty_preflight(issue: str) -> dict[str, object]:
+def empty_preflight(issue: str) -> dict[str, object]:
     return {
         "can_queue": False,
         "issues": [issue],
@@ -29,11 +29,11 @@ def _empty_preflight(issue: str) -> dict[str, object]:
     }
 
 
-def _record_proxy(record: dict[str, Any]) -> SimpleNamespace:
+def record_proxy(record: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(**record)
 
 
-def _endpoint_snapshot(endpoint: dict[str, Any]) -> dict[str, Any]:
+def endpoint_snapshot(endpoint: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": endpoint["id"],
         "base_url": endpoint["base_url"],
@@ -47,7 +47,7 @@ def _endpoint_snapshot(endpoint: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _prompt_snapshot(prompt: dict[str, Any] | None) -> dict[str, Any] | None:
+def prompt_snapshot(prompt: dict[str, Any] | None) -> dict[str, Any] | None:
     if prompt is None:
         return None
     return {
@@ -61,7 +61,7 @@ def _prompt_snapshot(prompt: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-def _task_values(
+def task_values(
     key: str,
     *,
     task_type: str,
@@ -89,7 +89,7 @@ def _task_values(
     }
 
 
-def _attempt_values(
+def attempt_values(
     task_key: str,
     *,
     sample_id: str,
@@ -121,9 +121,7 @@ def _attempt_values(
     }
 
 
-def _capability_compatibility_records(
-    capabilities: list[dict[str, Any]], manifest: dict[str, object]
-) -> dict[str, list[str]]:
+def capability_compatibility(capabilities: list[dict[str, Any]], manifest: dict[str, object]) -> dict[str, list[str]]:
     required = [capability for capability in manifest.get("required_capabilities", []) if isinstance(capability, str)]
     records = {str(record["capability_key"]): record for record in capabilities}
     unsupported = [
@@ -140,7 +138,7 @@ def _capability_compatibility_records(
     return {"required": required, "unsupported": unsupported, "unverified": unverified}
 
 
-def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:
+def effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:
     if prompt_package is not None and isinstance(prompt_package.scoring_rule, dict) and prompt_package.scoring_rule:
         return dict(prompt_package.scoring_rule)
     benchmark_rule = manifest.get("scoring")
@@ -149,7 +147,7 @@ def _effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptP
     return {"type": "exact_match"}
 
 
-def _request_body_evidence(
+def request_body_evidence(
     *,
     endpoint: ModelEndpoint,
     benchmark_manifest: dict[str, object],
@@ -207,7 +205,7 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
     return messages
 
 
-def _build_sample_messages(sample: object, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
+def build_sample_messages(sample: object, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
     """Preserve unified multimodal sample content while applying prompt packages to text samples."""
 
     raw_messages = getattr(sample, "messages", ())
@@ -221,7 +219,7 @@ def _build_sample_messages(sample: object, prompt_package: PromptPackage | None)
     return _build_messages(str(getattr(sample, "prompt", "")), prompt_package)
 
 
-def _sample_modality(sample: object) -> str:
+def sample_modality(sample: object) -> str:
     raw_messages = getattr(sample, "messages", ())
     if not isinstance(raw_messages, tuple) or not raw_messages:
         return "text"
@@ -244,7 +242,7 @@ def _estimate_request_tokens(prompt: str) -> int:
     return max(1, (len(prompt) + 3) // 4) + 32
 
 
-def _estimate_sample_tokens(sample: object) -> int:
+def estimate_sample_tokens(sample: object) -> int:
     """Estimate text plus a conservative token budget for each media part."""
 
     estimate = _estimate_request_tokens(str(getattr(sample, "prompt", "")))
@@ -261,7 +259,7 @@ def _estimate_sample_tokens(sample: object) -> int:
     return estimate + (media_parts * 256)
 
 
-def _estimate_retry_attempt_tokens(attempt: object) -> int:
+def estimate_retry_attempt_tokens(attempt: object) -> int:
     """Recover a conservative admission estimate from durable attempt evidence."""
 
     value = attempt if isinstance(attempt, dict) else {}
@@ -295,7 +293,7 @@ def _split_samples_into_shards(
     return tuple(tuple(samples[index : index + shard_size]) for index in range(0, len(samples), shard_size))
 
 
-def _split_samples_for_endpoint_budget(
+def split_samples_for_endpoint_budget(
     samples: tuple[object, ...],
     manifest: dict[str, object],
     endpoint: object,
@@ -307,14 +305,14 @@ def _split_samples_for_endpoint_budget(
     executable instead of creating work that can never be claimed.
     """
 
-    return _split_items_for_endpoint_budget(
+    return split_items_for_endpoint_budget(
         _split_samples_into_shards(samples, manifest),
         endpoint,
-        token_estimate=_estimate_sample_tokens,
+        token_estimate=estimate_sample_tokens,
     )
 
 
-def _split_items_for_endpoint_budget(
+def split_items_for_endpoint_budget(
     candidate_shards: tuple[tuple[object, ...], ...],
     endpoint: object,
     *,

@@ -24,21 +24,21 @@ from app.modules.evaluations.evidence import (
 )
 from app.modules.evaluations.lifecycle import RunLifecycle
 from app.modules.evaluations.planning import (
-    _attempt_values,
-    _build_sample_messages,
-    _capability_compatibility_records,
-    _effective_scoring_rule,
-    _empty_preflight,
-    _endpoint_snapshot,
-    _estimate_retry_attempt_tokens,
-    _estimate_sample_tokens,
-    _prompt_snapshot,
-    _record_proxy,
-    _request_body_evidence,
-    _sample_modality,
-    _split_items_for_endpoint_budget,
-    _split_samples_for_endpoint_budget,
-    _task_values,
+    attempt_values,
+    build_sample_messages,
+    capability_compatibility,
+    effective_scoring_rule,
+    empty_preflight,
+    endpoint_snapshot,
+    estimate_retry_attempt_tokens,
+    estimate_sample_tokens,
+    prompt_snapshot,
+    record_proxy,
+    request_body_evidence,
+    sample_modality,
+    split_items_for_endpoint_budget,
+    split_samples_for_endpoint_budget,
+    task_values,
 )
 from app.modules.evaluations.ports import EvaluationRepository
 from app.modules.reports.service import delete_report_artifact
@@ -87,7 +87,7 @@ class EvaluationService:
         endpoint = self._repository.get_endpoint(model_endpoint_id)
         issues: list[str] = []
         if endpoint is None:
-            return _empty_preflight("Model endpoint not found.")
+            return empty_preflight("Model endpoint not found.")
         if endpoint.get("status") != EndpointStatus.AVAILABLE.value:
             issues.append("Model endpoint must pass a connection test before scheduling a run.")
         definition = self._repository.get_benchmark_definition(benchmark_id, benchmark_version)
@@ -98,22 +98,20 @@ class EvaluationService:
         plugin = get_installed_plugin(benchmark_id, benchmark_version)
         if plugin is None:
             return {
-                **_empty_preflight("Benchmark plugin is not installed for the requested version."),
+                **empty_preflight("Benchmark plugin is not installed for the requested version."),
                 "issues": [*issues, "Benchmark plugin is not installed for the requested version."],
                 "currency": endpoint.get("currency"),
             }
         samples = plugin.samples(sample_limit)
-        endpoint_proxy = _record_proxy(endpoint)
+        endpoint_proxy = record_proxy(endpoint)
         if not samples:
             issues.append("At least one benchmark sample is required.")
         else:
             try:
-                _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
+                split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
             except ValidationError as error:
                 issues.append(str(error))
-        compatibility = _capability_compatibility_records(
-            self._repository.list_capabilities(model_endpoint_id), plugin.manifest
-        )
+        compatibility = capability_compatibility(self._repository.list_capabilities(model_endpoint_id), plugin.manifest)
         if compatibility["unsupported"]:
             issues.append(
                 "Model endpoint is incompatible with required benchmark capabilities: "
@@ -122,13 +120,13 @@ class EvaluationService:
         prompt_package = self._repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
         if prompt_package_id and prompt_package is None:
             issues.append("Prompt package not found.")
-        prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+        prompt_proxy = record_proxy(prompt_package) if prompt_package else None
         try:
-            validate_scoring_rule(_effective_scoring_rule(plugin.manifest, prompt_proxy))
+            validate_scoring_rule(effective_scoring_rule(plugin.manifest, prompt_proxy))
         except ScoringError as error:
             issues.append(f"Scoring rule is invalid: {error}")
         datasets = self._preflight_declared_datasets(plugin.manifest.get("datasets"), issues)
-        estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
+        estimated_input_tokens = sum(estimate_sample_tokens(sample) for sample in samples)
         estimated_output_tokens = len(samples) * 64
         input_cost = endpoint.get("input_cost_per_million")
         output_cost = endpoint.get("output_cost_per_million")
@@ -148,7 +146,7 @@ class EvaluationService:
             "currency": endpoint.get("currency"),
             "compatibility": compatibility,
             "datasets": datasets,
-            "request_body_evidence": _request_body_evidence(
+            "request_body_evidence": request_body_evidence(
                 endpoint=endpoint_proxy,
                 benchmark_manifest=plugin.manifest,
                 suite_snapshot=None,
@@ -187,9 +185,7 @@ class EvaluationService:
         samples = plugin.samples(sample_limit)
         if not samples:
             raise ConflictError("At least one benchmark sample is required.")
-        compatibility = _capability_compatibility_records(
-            self._repository.list_capabilities(model_endpoint_id), plugin.manifest
-        )
+        compatibility = capability_compatibility(self._repository.list_capabilities(model_endpoint_id), plugin.manifest)
         if compatibility["unsupported"]:
             raise ConflictError(
                 "Model endpoint is incompatible with required benchmark capabilities: "
@@ -198,32 +194,32 @@ class EvaluationService:
         prompt_package = self._repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
         if prompt_package_id and prompt_package is None:
             raise NotFoundError("Prompt package not found.")
-        prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+        prompt_proxy = record_proxy(prompt_package) if prompt_package else None
         frozen_datasets = self._freeze_declared_datasets(
             declared_datasets if declared_datasets is not None else plugin.manifest.get("datasets")
         )
-        endpoint_proxy = _record_proxy(endpoint)
-        request_body_evidence = _request_body_evidence(
+        endpoint_proxy = record_proxy(endpoint)
+        frozen_request_body = request_body_evidence(
             endpoint=endpoint_proxy,
             benchmark_manifest=plugin.manifest,
             suite_snapshot=suite_snapshot,
             request_body_override=request_body_override,
         )
-        scoring_rule = _effective_scoring_rule(plugin.manifest, prompt_proxy)
+        scoring_rule = effective_scoring_rule(plugin.manifest, prompt_proxy)
         try:
             validate_scoring_rule(scoring_rule)
-            shards = _split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
+            shards = split_samples_for_endpoint_budget(samples, plugin.manifest, endpoint_proxy)
         except (ScoringError, ValidationError) as error:
             raise ConflictError(str(error)) from error
 
         now = datetime.now(timezone.utc)
         snapshot = {
             "benchmark": {"id": benchmark_id, "version": benchmark_version, "manifest": plugin.manifest},
-            "endpoint": _endpoint_snapshot(endpoint),
+            "endpoint": endpoint_snapshot(endpoint),
             "sample_ids": [sample.sample_id for sample in samples],
             "datasets": frozen_datasets,
             "capability_compatibility": compatibility,
-            "prompt_package": _prompt_snapshot(prompt_package),
+            "prompt_package": prompt_snapshot(prompt_package),
             "prompt_standardization": (
                 {
                     "is_standard": not standardization_flags(prompt_proxy),
@@ -233,7 +229,7 @@ class EvaluationService:
                 else {"is_standard": True, "flags": []}
             ),
             "evaluation_suite": suite_snapshot,
-            "request_body_evidence": request_body_evidence,
+            "request_body_evidence": frozen_request_body,
         }
         run_values = {
             "model_endpoint_id": model_endpoint_id,
@@ -256,14 +252,14 @@ class EvaluationService:
             "archived_at": None,
         }
         tasks = [
-            _task_values(
+            task_values(
                 "dataset",
                 task_type=TaskType.DATASET_PREPARATION.value,
                 payload={"datasets": frozen_datasets, "prepared_inline": not bool(frozen_datasets)},
                 task_status=TaskStatus.PENDING.value if frozen_datasets else TaskStatus.SUCCEEDED.value,
                 now=now,
             ),
-            _task_values(
+            task_values(
                 "benchmark",
                 parent_key="dataset",
                 task_type=TaskType.BENCHMARK.value,
@@ -280,16 +276,16 @@ class EvaluationService:
         for shard_index, shard_samples in enumerate(shards, start=1):
             task_key = f"shard-{shard_index}"
             tasks.append(
-                _task_values(
+                task_values(
                     task_key,
                     parent_key="benchmark",
                     task_type=TaskType.EVALUATION_SHARD.value,
                     payload={
                         "sample_ids": [sample.sample_id for sample in shard_samples],
                         "estimated_request_count": len(shard_samples),
-                        "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                        "estimated_token_count": sum(estimate_sample_tokens(sample) for sample in shard_samples),
                         "sample_token_estimates": {
-                            sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                            sample.sample_id: estimate_sample_tokens(sample) for sample in shard_samples
                         },
                         "shard_index": shard_index,
                         "shard_count": len(shards),
@@ -304,14 +300,14 @@ class EvaluationService:
                 )
             )
             attempts.extend(
-                _attempt_values(
+                attempt_values(
                     task_key,
                     sample_id=sample.sample_id,
                     input_snapshot={
-                        "messages": _build_sample_messages(sample, prompt_proxy),
-                        "modality": _sample_modality(sample),
+                        "messages": build_sample_messages(sample, prompt_proxy),
+                        "modality": sample_modality(sample),
                         "metadata": dict(sample.metadata),
-                        "request_body_evidence": request_body_evidence,
+                        "request_body_evidence": frozen_request_body,
                     },
                     reference_snapshot={
                         "type": str(scoring_rule.get("type", "exact_match")),
@@ -391,10 +387,10 @@ class EvaluationService:
         benchmark_tasks = [task for task in tasks if task.get("task_type") == TaskType.BENCHMARK.value]
         parent_id = str(benchmark_tasks[-1]["id"]) if benchmark_tasks else None
         try:
-            retry_groups = _split_items_for_endpoint_budget(
+            retry_groups = split_items_for_endpoint_budget(
                 (tuple(failed),),
-                _record_proxy(endpoint),
-                token_estimate=_estimate_retry_attempt_tokens,
+                record_proxy(endpoint),
+                token_estimate=estimate_retry_attempt_tokens,
             )
         except ValidationError as error:
             raise ConflictError(str(error)) from error
@@ -404,8 +400,8 @@ class EvaluationService:
         new_attempts: list[dict[str, Any]] = []
         for index, group in enumerate(retry_groups):
             task_key = f"retry-{index}"
-            token_estimates = {str(attempt["sample_id"]): _estimate_retry_attempt_tokens(attempt) for attempt in group}
-            task = _task_values(
+            token_estimates = {str(attempt["sample_id"]): estimate_retry_attempt_tokens(attempt) for attempt in group}
+            task = task_values(
                 task_key,
                 task_type=TaskType.EVALUATION_SHARD.value,
                 payload={
@@ -422,7 +418,7 @@ class EvaluationService:
             task["parent_id"] = parent_id
             new_tasks.append(task)
             for attempt in group:
-                values = _attempt_values(
+                values = attempt_values(
                     task_key,
                     sample_id=str(attempt["sample_id"]),
                     input_snapshot=dict(attempt["input_snapshot"]),

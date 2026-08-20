@@ -16,16 +16,16 @@ from app.modules.datasets.records import DatasetRecordError, iter_dataset_record
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository
 from app.modules.evaluations.planning import (
-    _attempt_values,
-    _build_sample_messages,
-    _capability_compatibility_records,
-    _endpoint_snapshot,
-    _estimate_sample_tokens,
-    _prompt_snapshot,
-    _record_proxy,
-    _request_body_evidence,
-    _split_samples_for_endpoint_budget,
-    _task_values,
+    attempt_values,
+    build_sample_messages,
+    capability_compatibility,
+    endpoint_snapshot,
+    estimate_sample_tokens,
+    prompt_snapshot,
+    record_proxy,
+    request_body_evidence,
+    split_samples_for_endpoint_budget,
+    task_values,
 )
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template
 from app.modules.reviews.scoring import (
@@ -145,7 +145,7 @@ def _judge_endpoint_for_rule(
         return None
     normalized = normalize_judge_rule(scoring_rule)
     record = repository.get_endpoint(str(normalized["judge_endpoint_id"]))
-    endpoint = _record_proxy(record) if record is not None else None
+    endpoint = record_proxy(record) if record is not None else None
     try:
         validate_judge_endpoint(
             normalized,
@@ -213,7 +213,7 @@ def create_dataset_run(
     prompt_package = repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise NotFoundError("Prompt package not found.")
-    prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+    prompt_proxy = record_proxy(prompt_package) if prompt_package else None
     resolved_reference_field = reference_field or dataset.get("reference_field")
     if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         raise ConflictError("A reference field is required.")
@@ -252,9 +252,7 @@ def create_dataset_run(
                 reference_field=normalized_reference_field,
             )
         )
-    compatibility = _capability_compatibility_records(
-        repository.list_capabilities(model_endpoint_id), _DATASET_RUN_MANIFEST
-    )
+    compatibility = capability_compatibility(repository.list_capabilities(model_endpoint_id), _DATASET_RUN_MANIFEST)
     if compatibility["unsupported"]:
         raise ConflictError(
             "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
@@ -274,8 +272,8 @@ def create_dataset_run(
         if judge_endpoint is not None
         else None
     )
-    endpoint_proxy = _record_proxy(endpoint)
-    request_body_evidence = _request_body_evidence(
+    endpoint_proxy = record_proxy(endpoint)
+    frozen_request_body = request_body_evidence(
         endpoint=endpoint_proxy,
         benchmark_manifest=_DATASET_RUN_MANIFEST,
         suite_snapshot=None,
@@ -296,7 +294,7 @@ def create_dataset_run(
             "source": "user",
             "manifest": _DATASET_RUN_MANIFEST,
         },
-        "endpoint": _endpoint_snapshot(endpoint),
+        "endpoint": endpoint_snapshot(endpoint),
         "datasets": frozen_datasets,
         "dataset_version": {
             "id": dataset["id"],
@@ -312,25 +310,25 @@ def create_dataset_run(
         "sample_ids": [sample.sample_id for sample in samples],
         "scoring_rule": effective_scoring_rule,
         "capability_compatibility": compatibility,
-        "prompt_package": _prompt_snapshot(prompt_package),
-        "request_body_evidence": request_body_evidence,
+        "prompt_package": prompt_snapshot(prompt_package),
+        "request_body_evidence": frozen_request_body,
     }
     if judge_configuration is not None:
         snapshot["judge"] = judge_configuration
     now = datetime.now(timezone.utc)
     try:
-        shards = _split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint_proxy)
+        shards = split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint_proxy)
     except ValidationError as error:
         raise ConflictError(str(error)) from error
     tasks = [
-        _task_values(
+        task_values(
             "dataset",
             task_type=TaskType.DATASET_PREPARATION.value,
             payload={"datasets": frozen_datasets, "prepared_inline": False},
             task_status=TaskStatus.PENDING.value,
             now=now,
         ),
-        _task_values(
+        task_values(
             "benchmark",
             parent_key="dataset",
             task_type=TaskType.BENCHMARK.value,
@@ -347,16 +345,16 @@ def create_dataset_run(
     for shard_index, shard_samples in enumerate(shards, start=1):
         task_key = f"shard-{shard_index}"
         tasks.append(
-            _task_values(
+            task_values(
                 task_key,
                 parent_key="benchmark",
                 task_type=TaskType.EVALUATION_SHARD.value,
                 payload={
                     "sample_ids": [sample.sample_id for sample in shard_samples],
                     "estimated_request_count": len(shard_samples),
-                    "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
+                    "estimated_token_count": sum(estimate_sample_tokens(sample) for sample in shard_samples),
                     "sample_token_estimates": {
-                        sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                        sample.sample_id: estimate_sample_tokens(sample) for sample in shard_samples
                     },
                     "shard_index": shard_index,
                     "shard_count": len(shards),
@@ -371,14 +369,14 @@ def create_dataset_run(
             )
         )
         attempts.extend(
-            _attempt_values(
+            attempt_values(
                 task_key,
                 sample_id=sample.sample_id,
                 input_snapshot={
-                    "messages": _build_sample_messages(sample, None),
+                    "messages": build_sample_messages(sample, None),
                     "modality": "text",
                     "metadata": dict(sample.metadata),
-                    "request_body_evidence": request_body_evidence,
+                    "request_body_evidence": frozen_request_body,
                 },
                 reference_snapshot={
                     "type": str(effective_scoring_rule.get("type", "exact_match")),
@@ -446,7 +444,7 @@ def preflight_dataset_run(
     prompt_package = repository.get_prompt_package(prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
-    prompt_proxy = _record_proxy(prompt_package) if prompt_package else None
+    prompt_proxy = record_proxy(prompt_package) if prompt_package else None
     resolved_reference_field = reference_field or (dataset.get("reference_field") if dataset is not None else None)
     if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         issues.append("A reference field is required.")
@@ -517,7 +515,7 @@ def preflight_dataset_run(
         except (DatasetRecordError, ApplicationError) as error:
             issues.append(str(error))
     compatibility = (
-        _capability_compatibility_records(repository.list_capabilities(model_endpoint_id), _DATASET_RUN_MANIFEST)
+        capability_compatibility(repository.list_capabilities(model_endpoint_id), _DATASET_RUN_MANIFEST)
         if endpoint is not None and endpoint.get("status") == EndpointStatus.AVAILABLE.value
         else {"required": ["text_input"], "unsupported": [], "unverified": []}
     )
@@ -525,7 +523,7 @@ def preflight_dataset_run(
         issues.append(
             "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
         )
-    estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
+    estimated_input_tokens = sum(estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     input_cost = endpoint.get("input_cost_per_million") if endpoint is not None else None
     output_cost = endpoint.get("output_cost_per_million") if endpoint is not None else None
@@ -556,8 +554,8 @@ def preflight_dataset_run(
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (
-            _request_body_evidence(
-                endpoint=_record_proxy(endpoint),
+            request_body_evidence(
+                endpoint=record_proxy(endpoint),
                 benchmark_manifest=_DATASET_RUN_MANIFEST,
                 suite_snapshot=None,
                 request_body_override=request_body_override,
