@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import binascii
 import ipaddress
-import math
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -98,7 +97,9 @@ def translate_chat_messages(messages: list[object]) -> list[dict[str, object]]:
         if tool_results:
             if len(parts) != 1 or role != "tool":
                 raise ValueError("Chat Completions tool results must be a standalone message with role tool.")
-            translated.append({"role": "tool", "tool_call_id": tool_results[0]["tool_call_id"], "content": tool_results[0]["content"]})
+            translated.append(
+                {"role": "tool", "tool_call_id": tool_results[0]["tool_call_id"], "content": tool_results[0]["content"]}
+            )
             continue
         translated.append({"role": role, "content": [translate_chat_part(part) for part in parts]})
     return translated
@@ -148,7 +149,11 @@ def translate_responses_messages(messages: list[object]) -> list[dict[str, objec
             if normalized is None:
                 raise ValueError("Message content must be text or a list of content parts.")
             parts = [translate_responses_part(part) for part in normalized if part["type"] != "tool_result"]
-            tool_results = [{"type": "function_call_output", "call_id": part["tool_call_id"], "output": part["content"]} for part in normalized if part["type"] == "tool_result"]
+            tool_results = [
+                {"type": "function_call_output", "call_id": part["tool_call_id"], "output": part["content"]}
+                for part in normalized
+                if part["type"] == "tool_result"
+            ]
         if parts:
             translated.append({"role": role, "content": parts})
         translated.extend(tool_results)
@@ -218,7 +223,12 @@ def translate_anthropic_content(content: object) -> list[dict[str, object]]:
                 raise ValueError("Anthropic image content requires a source object.")
             if isinstance(source.get("base64_data"), str):
                 validate_base64(source["base64_data"])
-                translated.append({"type": "image", "source": {"type": "base64", "media_type": part["mime_type"], "data": source["base64_data"]}})
+                translated.append(
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": part["mime_type"], "data": source["base64_data"]},
+                    }
+                )
             elif isinstance(source.get("url"), str):
                 validate_remote_media_url(source["url"])
                 translated.append({"type": "image", "source": {"type": "url", "url": source["url"]}})
@@ -339,76 +349,6 @@ def validate_remote_media_url(value: str) -> None:
         raise ValueError("Remote media URLs must not target private or local IP addresses.")
 
 
-def extract_prediction(payload: dict[str, Any], profile: str) -> str:
-    if profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
-        prediction = payload["choices"][0]["message"]["content"]
-    elif profile == "openai_responses":
-        output_text = payload.get("output_text")
-        if isinstance(output_text, str):
-            return output_text
-        fragments = [
-            part["text"]
-            for item in payload.get("output", [])
-            if isinstance(item, dict) and item.get("type") == "message"
-            for part in item.get("content", [])
-            if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str)
-        ]
-        if fragments:
-            return "".join(fragments)
-        raise ValueError("Responses API response did not contain output text.")
-    elif profile == "anthropic_messages":
-        prediction = "".join(part["text"] for part in payload.get("content", []) if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str))
-    elif profile == "gemini_generate_content":
-        candidates = payload.get("candidates")
-        first = candidates[0] if isinstance(candidates, list) and candidates else {}
-        prediction = "".join(part["text"] for part in first.get("content", {}).get("parts", []) if isinstance(part, dict) and isinstance(part.get("text"), str)) if isinstance(first, dict) else ""
-    elif profile == "ollama_chat":
-        prediction = payload.get("message", {}).get("content") if isinstance(payload.get("message"), dict) else None
-    else:
-        prediction = next((payload.get(key) for key in ("output_text", "text", "response", "prediction") if isinstance(payload.get(key), str)), None)
-        if prediction is None:
-            choices = payload.get("choices")
-            first = choices[0] if isinstance(choices, list) and choices else {}
-            message = first.get("message") if isinstance(first, dict) else None
-            prediction = message.get("content") if isinstance(message, dict) else None
-    if not isinstance(prediction, str) or not prediction:
-        raise ValueError("Provider response did not contain text content.")
-    return prediction
-
-
-def extract_usage(payload: dict[str, Any]) -> tuple[int | None, int | None]:
-    usage = payload.get("usage")
-    if isinstance(usage, dict):
-        return nonnegative_int(usage.get("prompt_tokens", usage.get("input_tokens"))), nonnegative_int(usage.get("completion_tokens", usage.get("output_tokens")))
-    usage_metadata = payload.get("usageMetadata")
-    if isinstance(usage_metadata, dict):
-        return nonnegative_int(usage_metadata.get("promptTokenCount")), nonnegative_int(usage_metadata.get("candidatesTokenCount"))
-    return nonnegative_int(payload.get("prompt_eval_count")), nonnegative_int(payload.get("eval_count"))
-
-
-def extract_token_logprobs(payload: dict[str, Any], profile: str) -> tuple[float, ...] | None:
-    candidates: object = None
-    if profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
-        choices = payload.get("choices")
-        first = choices[0] if isinstance(choices, list) and choices else None
-        logprobs = first.get("logprobs") if isinstance(first, dict) else None
-        candidates = logprobs.get("content") if isinstance(logprobs, dict) else None
-    elif profile == "ollama_chat":
-        candidates = payload.get("logprobs")
-    if not isinstance(candidates, list) or not candidates:
-        return None
-    values: list[float] = []
-    for candidate in candidates:
-        value = candidate.get("logprob") if isinstance(candidate, dict) else None
-        if not isinstance(value, int | float) or isinstance(value, bool):
-            return None
-        parsed = float(value)
-        if not math.isfinite(parsed) or parsed > 0:
-            return None
-        values.append(parsed)
-    return tuple(values)
-
-
 def nonnegative_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
@@ -439,16 +379,6 @@ def elapsed_ms(started_at: float) -> float:
     return round((perf_counter() - started_at) * 1000, 3)
 
 
-def adapter_defaults(protocol_profile: str) -> dict[str, object]:
-    if protocol_profile == "openai_responses":
-        return {"max_output_tokens": 32, "store": False}
-    if protocol_profile == "gemini_generate_content":
-        return {"max_output_tokens": 32, "temperature": 0}
-    if protocol_profile == "ollama_chat":
-        return {"max_tokens": 32, "temperature": 0}
-    return {"max_tokens": 32, "temperature": 0}
-
-
 def resolve_request_body(
     *,
     protocol_profile: str,
@@ -458,8 +388,10 @@ def resolve_request_body(
     run_override: Mapping[str, object] | None = None,
     benchmark_forced: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    from app.infrastructure.providers.registry import ProviderRegistry
+
     layers: tuple[tuple[str, Mapping[str, object] | None], ...] = (
-        ("adapter_defaults", adapter_defaults(protocol_profile)),
+        ("adapter_defaults", ProviderRegistry().for_profile(protocol_profile).request_defaults()),
         ("model_defaults", model_defaults),
         ("suite_defaults", suite_defaults),
         ("benchmark_defaults", benchmark_defaults),
@@ -475,14 +407,24 @@ def resolve_request_body(
         safe_layer = _normalise_layer(raw_layer, layer_name, ignored_fields)
         snapshots[layer_name] = deepcopy(safe_layer)
         _deep_merge(effective, safe_layer, layer_name, provenance, overridden_fields)
-    return {"protocol_profile": protocol_profile, "layers": snapshots, "effective_request_body": effective, "overridden_fields": overridden_fields, "ignored_fields": ignored_fields}
+    return {
+        "protocol_profile": protocol_profile,
+        "layers": snapshots,
+        "effective_request_body": effective,
+        "overridden_fields": overridden_fields,
+        "ignored_fields": ignored_fields,
+    }
 
 
-def effective_request_options(input_snapshot: Mapping[str, object], *, protocol_profile: str, model_defaults: Mapping[str, object] | None) -> dict[str, object]:
+def effective_request_options(
+    input_snapshot: Mapping[str, object], *, protocol_profile: str, model_defaults: Mapping[str, object] | None
+) -> dict[str, object]:
     evidence = input_snapshot.get("request_body_evidence")
     if isinstance(evidence, Mapping) and isinstance(evidence.get("effective_request_body"), Mapping):
         return deepcopy(dict(evidence["effective_request_body"]))
-    return dict(resolve_request_body(protocol_profile=protocol_profile, model_defaults=model_defaults)["effective_request_body"])
+    return dict(
+        resolve_request_body(protocol_profile=protocol_profile, model_defaults=model_defaults)["effective_request_body"]
+    )
 
 
 def request_snapshot_metadata(input_snapshot: Mapping[str, object]) -> dict[str, object] | None:
@@ -490,7 +432,9 @@ def request_snapshot_metadata(input_snapshot: Mapping[str, object]) -> dict[str,
     return deepcopy(dict(evidence)) if isinstance(evidence, Mapping) else None
 
 
-def _normalise_layer(value: Mapping[str, object] | None, layer_name: str, ignored_fields: list[dict[str, object]]) -> dict[str, object]:
+def _normalise_layer(
+    value: Mapping[str, object] | None, layer_name: str, ignored_fields: list[dict[str, object]]
+) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
     safe: dict[str, object] = {}
@@ -505,7 +449,14 @@ def _normalise_layer(value: Mapping[str, object] | None, layer_name: str, ignore
     return safe
 
 
-def _deep_merge(target: dict[str, object], incoming: Mapping[str, object], layer_name: str, provenance: dict[str, str], overridden_fields: list[dict[str, object]], prefix: str = "") -> None:
+def _deep_merge(
+    target: dict[str, object],
+    incoming: Mapping[str, object],
+    layer_name: str,
+    provenance: dict[str, str],
+    overridden_fields: list[dict[str, object]],
+    prefix: str = "",
+) -> None:
     for key, value in incoming.items():
         field_path = f"{prefix}.{key}" if prefix else str(key)
         existing = target.get(key)
@@ -513,6 +464,8 @@ def _deep_merge(target: dict[str, object], incoming: Mapping[str, object], layer
             _deep_merge(existing, value, layer_name, provenance, overridden_fields, field_path)
             continue
         if key in target and target[key] != value:
-            overridden_fields.append({"field": field_path, "previous_layer": provenance.get(field_path), "new_layer": layer_name})
+            overridden_fields.append(
+                {"field": field_path, "previous_layer": provenance.get(field_path), "new_layer": layer_name}
+            )
         target[key] = deepcopy(value)
         provenance[field_path] = layer_name

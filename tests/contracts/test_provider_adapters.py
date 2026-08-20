@@ -20,7 +20,9 @@ PROFILES = (
 def _endpoint(profile: str) -> ModelEndpoint:
     return ModelEndpoint(
         display_name=profile,
-        base_url="https://models.example.test/v1?api-version=2025-01-01" if profile == "azure_openai_chat_completions" else "https://models.example.test/v1",
+        base_url="https://models.example.test/v1?api-version=2025-01-01"
+        if profile == "azure_openai_chat_completions"
+        else "https://models.example.test/v1",
         model_name="test-model",
         protocol_profile=profile,
         encrypted_api_key="unused",
@@ -46,6 +48,34 @@ def test_each_provider_profile_has_one_adapter_for_request_probe_and_response(pr
 
 def test_registry_profiles_are_explicit_and_complete() -> None:
     assert ProviderRegistry().profiles == frozenset(PROFILES)
+
+
+@pytest.mark.parametrize(
+    ("profile", "header", "value"),
+    (
+        ("openai_chat_completions", "Authorization", "Bearer secret"),
+        ("openai_responses", "Authorization", "Bearer secret"),
+        ("anthropic_messages", "x-api-key", "secret"),
+        ("gemini_generate_content", "x-goog-api-key", "secret"),
+        ("azure_openai_chat_completions", "api-key", "secret"),
+        ("ollama_chat", "Authorization", "Bearer secret"),
+        ("custom_http_json", "Authorization", "Bearer secret"),
+    ),
+)
+def test_each_adapter_owns_its_authentication_headers(profile: str, header: str, value: str) -> None:
+    endpoint = _endpoint(profile)
+    headers = ProviderRegistry().for_endpoint(endpoint).headers(endpoint, "secret")
+
+    assert headers[header] == value
+    if profile == "anthropic_messages":
+        assert headers["anthropic-version"] == "2023-06-01"
+
+
+def test_ollama_adapter_explicitly_allows_anonymous_loopback() -> None:
+    adapter = ProviderRegistry().for_profile("ollama_chat")
+
+    assert adapter.allow_loopback is True
+    assert adapter.headers(_endpoint("ollama_chat"), "") == {}
 
 
 @pytest.mark.parametrize(

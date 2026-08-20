@@ -18,7 +18,13 @@ from app.infrastructure.network.outbound import (
 
 
 class ProviderConnectionTester:
-    def __init__(self, transport: httpx.BaseTransport | None = None, *, registry: ProviderRegistry | None = None, max_response_bytes: int = 4 * 1024 * 1024) -> None:
+    def __init__(
+        self,
+        transport: httpx.BaseTransport | None = None,
+        *,
+        registry: ProviderRegistry | None = None,
+        max_response_bytes: int = 4 * 1024 * 1024,
+    ) -> None:
         self._registry = registry or ProviderRegistry()
         self._transport = transport
         self._max_response_bytes = max_response_bytes
@@ -28,8 +34,14 @@ class ProviderConnectionTester:
         adapter = self._registry.for_endpoint(endpoint)
         try:
             addresses = validate_outbound_url(request.url, allow_loopback=adapter.allow_loopback)
-            with httpx.Client(timeout=endpoint.timeout_seconds, follow_redirects=False, transport=pinned_outbound_transport(addresses, injected_transport=self._transport)) as client:
-                with client.stream("POST", request.url, headers=adapter.headers(endpoint, api_key), json=request.body) as response:
+            with httpx.Client(
+                timeout=endpoint.timeout_seconds,
+                follow_redirects=False,
+                transport=pinned_outbound_transport(addresses, injected_transport=self._transport),
+            ) as client:
+                with client.stream(
+                    "POST", request.url, headers=adapter.headers(endpoint, api_key), json=request.body
+                ) as response:
                     body = read_bounded_response(response, max_bytes=self._max_response_bytes)
                     status_code = response.status_code
                     is_error = response.is_error
@@ -55,6 +67,8 @@ class ProviderConnectionTester:
         return build_connection_test_request(endpoint, self._registry)
 
 
-def build_connection_test_request(endpoint: ModelEndpoint, registry: ProviderRegistry | None = None) -> ConnectionTestRequest:
+def build_connection_test_request(
+    endpoint: ModelEndpoint, registry: ProviderRegistry | None = None
+) -> ConnectionTestRequest:
     adapter = (registry or ProviderRegistry()).for_endpoint(endpoint)
     return ConnectionTestRequest("POST", adapter.endpoint_url(endpoint), adapter.build_connection_body(endpoint))

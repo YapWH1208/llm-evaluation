@@ -14,11 +14,25 @@ class CustomHttpJsonAdapter(ProviderAdapter):
     def path_suffix(self, endpoint: ModelEndpoint) -> None:
         return None
 
-    def build_request(self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]) -> dict[str, Any]:
-        return {**self.safe_defaults(options), "model": endpoint.model_name, "messages": translate_chat_messages(messages), "stream": False}
+    def build_request(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> dict[str, Any]:
+        return {
+            **self.safe_defaults(options),
+            "model": endpoint.model_name,
+            "messages": translate_chat_messages(messages),
+            "stream": False,
+        }
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
-        return {**self.safe_defaults(endpoint.default_request_body or {}), "model": endpoint.model_name, "messages": [{"role": "user", "content": "Respond with the single word OK."}], "temperature": 0, "max_tokens": 8, "stream": False}
+        return {
+            **self.safe_defaults(endpoint.default_request_body or {}),
+            "model": endpoint.model_name,
+            "messages": [{"role": "user", "content": "Respond with the single word OK."}],
+            "temperature": 0,
+            "max_tokens": 8,
+            "stream": False,
+        }
 
     def extract_prediction(self, payload: dict[str, Any]) -> str:
         for key in ("output_text", "text", "response", "prediction"):

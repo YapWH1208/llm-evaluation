@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from app.db.models import ModelEndpoint
-from app.infrastructure.providers.common import allowed_defaults
+from app.infrastructure.providers.common import allowed_defaults, nonnegative_int
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,10 +19,12 @@ class ProviderRequest:
 class ProviderAdapter(ABC):
     profile: str
     capabilities: frozenset[str] = frozenset()
-
-    @property
-    def allow_loopback(self) -> bool:
-        return self.profile == "ollama_chat"
+    allow_loopback = False
+    credential_header = "Authorization"
+    credential_prefix = "Bearer "
+    omit_empty_credential = False
+    static_headers: dict[str, str] = {}
+    output_token_option = "max_tokens"
 
     def endpoint_url(self, endpoint: ModelEndpoint) -> str:
         suffix = self.path_suffix(endpoint)
@@ -32,39 +34,51 @@ class ProviderAdapter(ABC):
         return urlunsplit((parsed.scheme, parsed.netloc, f"{parsed.path.rstrip('/')}{suffix}", parsed.query, ""))
 
     @abstractmethod
-    def path_suffix(self, endpoint: ModelEndpoint) -> str | None:
-        ...
+    def path_suffix(self, endpoint: ModelEndpoint) -> str | None: ...
 
     @abstractmethod
-    def build_request(self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]) -> dict[str, Any]:
-        ...
+    def build_request(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> dict[str, Any]: ...
 
     @abstractmethod
-    def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
-        ...
+    def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]: ...
 
     @abstractmethod
-    def extract_prediction(self, payload: dict[str, Any]) -> str:
-        ...
+    def extract_prediction(self, payload: dict[str, Any]) -> str: ...
 
     def headers(self, endpoint: ModelEndpoint, api_key: str) -> dict[str, str]:
         headers = {str(name): str(value) for name, value in (endpoint.custom_headers or {}).items()}
-        if self.profile == "anthropic_messages":
-            headers["x-api-key"] = api_key
-            headers.setdefault("anthropic-version", "2023-06-01")
-        elif self.profile == "gemini_generate_content":
-            headers["x-goog-api-key"] = api_key
-        elif self.profile == "azure_openai_chat_completions":
-            headers["api-key"] = api_key
-        elif self.profile != "ollama_chat" or api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        if api_key or not self.omit_empty_credential:
+            headers[self.credential_header] = f"{self.credential_prefix}{api_key}"
+        for name, value in self.static_headers.items():
+            headers.setdefault(name, value)
         return headers
 
-    def build_request_with_options(self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]) -> ProviderRequest:
+    def build_request_with_options(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> ProviderRequest:
         return ProviderRequest("POST", self.endpoint_url(endpoint), self.build_request(endpoint, messages, options))
 
     def supports(self, capability_key: str) -> bool:
         return capability_key in self.capabilities
+
+    def request_defaults(self) -> dict[str, object]:
+        return {"max_tokens": 32, "temperature": 0}
+
+    def capability_probe_options(self) -> dict[str, object]:
+        return {"temperature": 0, self.output_token_option: 8}
+
+    def extract_usage(self, payload: dict[str, Any]) -> tuple[int | None, int | None]:
+        usage = payload.get("usage")
+        if not isinstance(usage, dict):
+            return None, None
+        return nonnegative_int(usage.get("prompt_tokens", usage.get("input_tokens"))), nonnegative_int(
+            usage.get("completion_tokens", usage.get("output_tokens"))
+        )
+
+    def extract_token_logprobs(self, payload: dict[str, Any]) -> tuple[float, ...] | None:
+        return None
 
     def safe_defaults(self, options: dict[str, object]) -> dict[str, Any]:
         return allowed_defaults(options)

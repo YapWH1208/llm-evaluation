@@ -84,6 +84,30 @@ def test_evaluation_application_does_not_select_persistence_backend() -> None:
     assert offenders == set()
 
 
+def test_provider_orchestrators_do_not_branch_on_protocol_profiles() -> None:
+    provider_root = BACKEND / "infrastructure" / "providers"
+    orchestrators = ("capabilities.py", "connection.py", "executor.py")
+    profile_names = (
+        "openai_chat_completions",
+        "openai_responses",
+        "anthropic_messages",
+        "gemini_generate_content",
+        "azure_openai_chat_completions",
+        "ollama_chat",
+        "custom_http_json",
+    )
+    offenders = {
+        name
+        for name in orchestrators
+        if any(profile in (provider_root / name).read_text(encoding="utf-8") for profile in profile_names)
+    }
+    assert offenders == set()
+    common = (provider_root / "common.py").read_text(encoding="utf-8")
+    assert "def extract_prediction(" not in common
+    assert "def extract_token_logprobs(" not in common
+    assert "def adapter_defaults(" not in common
+
+
 def test_shared_frontend_never_adds_more_feature_imports() -> None:
     offenders: set[str] = set()
     for path in sorted((FRONTEND / "shared").rglob("*.ts*")):

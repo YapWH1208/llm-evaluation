@@ -9,21 +9,49 @@ from app.infrastructure.providers.common import translate_responses_messages
 
 class OpenAIResponsesAdapter(ProviderAdapter):
     profile = "openai_responses"
+    output_token_option = "max_output_tokens"
     capabilities = frozenset(
         {
-            "text_input", "text_output", "system_message", "multi_turn_conversation", "usage_reporting",
-            "image_input", "audio_input", "video_input", "multiple_images", "multiple_audio_files", "multiple_videos", "mixed_media_input",
+            "text_input",
+            "text_output",
+            "system_message",
+            "multi_turn_conversation",
+            "usage_reporting",
+            "image_input",
+            "audio_input",
+            "video_input",
+            "multiple_images",
+            "multiple_audio_files",
+            "multiple_videos",
+            "mixed_media_input",
         }
     )
 
     def path_suffix(self, endpoint: ModelEndpoint) -> str:
         return "/responses"
 
-    def build_request(self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]) -> dict[str, Any]:
-        return {**self.safe_defaults(options), "model": endpoint.model_name, "input": translate_responses_messages(messages), "stream": False, "store": False}
+    def build_request(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> dict[str, Any]:
+        return {
+            **self.safe_defaults(options),
+            "model": endpoint.model_name,
+            "input": translate_responses_messages(messages),
+            "stream": False,
+            "store": False,
+        }
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
-        return {**self.safe_defaults(endpoint.default_request_body or {}), "model": endpoint.model_name, "input": [{"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}], "max_output_tokens": 8, "stream": False, "store": False}
+        return {
+            **self.safe_defaults(endpoint.default_request_body or {}),
+            "model": endpoint.model_name,
+            "input": [
+                {"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}
+            ],
+            "max_output_tokens": 8,
+            "stream": False,
+            "store": False,
+        }
 
     def extract_prediction(self, payload: dict[str, Any]) -> str:
         output_text = payload.get("output_text")
@@ -39,3 +67,6 @@ class OpenAIResponsesAdapter(ProviderAdapter):
         if fragments:
             return "".join(fragments)
         raise ValueError("Responses API response did not contain output text.")
+
+    def request_defaults(self) -> dict[str, object]:
+        return {"max_output_tokens": 32, "store": False}
