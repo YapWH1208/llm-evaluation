@@ -18,6 +18,7 @@ from app.modules.benchmarks.metrics import METRIC_PROFILE_VERSION, metric_defini
 from app.modules.evaluations.analysis import build_repository_run_summary
 from app.modules.evaluations.ports import EvaluationRepository
 from app.modules.reports.ports import ReportRepository
+from app.version import VERSION
 
 
 _FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md"}
@@ -80,7 +81,7 @@ class ReportService:
                     "format": format,
                     "artifact_path": str(path),
                     "artifact_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                    "generator_version": "1.4.0",
+                    "generator_version": VERSION,
                     "generated_at": datetime.now(timezone.utc),
                 }
             )

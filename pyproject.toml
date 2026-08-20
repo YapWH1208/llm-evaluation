@@ -35,7 +35,6 @@ include = ["app*"]
 namespaces = true
 
 [tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["backend"]
 testpaths = ["tests"]
 

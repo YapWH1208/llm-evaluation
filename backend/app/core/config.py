@@ -8,6 +8,8 @@ from types import MappingProxyType
 from collections.abc import Mapping
 from urllib.parse import urlparse
 
+from app.version import VERSION
+
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 DEFAULT_DATASET_DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_PROVIDER_RESPONSE_MAX_BYTES = 4 * 1024 * 1024
@@ -36,7 +38,7 @@ class Settings:
     database_backup_before_migrate: bool = False
     mongodb_database: str | None = None
     application_name: str = "LLM/SLM Evaluation Platform"
-    application_version: str = "1.0.0"
+    application_version: str = VERSION
     system_max_concurrency: int | None = None
     worker_max_concurrency: int | None = None
     dataset_credential_bindings: Mapping[str, DatasetCredentialBinding] = field(default_factory=dict)
