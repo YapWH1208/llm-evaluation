@@ -35,7 +35,7 @@ class Settings:
     database_backup_before_migrate: bool = False
     mongodb_database: str | None = None
     application_name: str = "LLM/SLM Evaluation Platform"
-    application_version: str = "0.1.0"
+    application_version: str = "1.0.0"
     system_max_concurrency: int | None = None
     worker_max_concurrency: int | None = None
     dataset_credential_bindings: Mapping[str, DatasetCredentialBinding] = field(default_factory=dict)
