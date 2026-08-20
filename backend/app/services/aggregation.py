@@ -15,7 +15,7 @@ from app.services.metric_profiles import (
     compute_profile_metrics,
     evaluation_type_from_snapshot,
 )
-from app.services.judge_scoring import is_llm_judge_rule, is_valid_judge_score
+from app.modules.reviews.scoring import is_llm_judge_rule, is_valid_judge_score
 from app.modules.evaluations.analysis import latest_attempts, summarize_attempts
 
 

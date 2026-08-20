@@ -31,7 +31,7 @@ from app.modules.evaluations.service import (
     _split_samples_for_endpoint_budget,
 )
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template
-from app.services.judge_scoring import (
+from app.modules.reviews.scoring import (
     JudgeScoringError,
     is_llm_judge_rule,
     judge_configuration_snapshot,

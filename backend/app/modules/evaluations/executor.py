@@ -22,14 +22,14 @@ from app.db import (
 )
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
-from app.services.judge_assessments import JudgeAssessmentError, assess_sample_attempt
-from app.services.judge_scoring import (
+from app.modules.reviews.judges import JudgeAssessmentError, assess_sample_attempt
+from app.modules.reviews.scoring import (
     is_llm_judge_rule,
     judge_assessment_evidence,
     judge_failure_evidence,
 )
 from app.services.metric_profiles import build_execution_metric_evidence
-from app.services.reports import ReportError, generate_report
+from app.modules.reports.service import ReportError, generate_report
 from app.modules.benchmarks.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease
 from app.modules.datasets.preparation import DatasetError

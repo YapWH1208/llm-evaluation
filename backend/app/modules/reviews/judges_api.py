@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db.models import JudgeAssessment, SampleAttempt
 from app.db.mongo import MongoDocumentStore
-from app.services.judge_assessments import JudgeAssessmentError, assess_pairwise_sample_attempt, assess_sample_attempt, build_judge_agreement
-from app.services.mongo_judge_assessments import assess_mongo_pairwise_sample_attempt, assess_mongo_sample_attempt
+from app.modules.reviews.judges import JudgeAssessmentError, assess_pairwise_sample_attempt, assess_sample_attempt, build_judge_agreement
+from app.modules.reviews.mongo_judges import assess_mongo_pairwise_sample_attempt, assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor
 
 

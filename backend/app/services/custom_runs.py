@@ -18,7 +18,7 @@ from app.db.models import (
     TaskUnit,
 )
 from app.core.content import ContentValidationError, normalize_content_parts
-from app.services.media_assets import MediaAssetError, safe_asset_path
+from app.modules.reports.assets import MediaAssetError, safe_asset_path
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.evaluations.names import format_run_display_name
 

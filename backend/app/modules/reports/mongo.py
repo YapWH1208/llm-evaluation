@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.db.mongo import MongoDocumentStore
 from app.modules.evaluations.mongo_executor import MongoRunExecutionError, build_mongo_run_summary
 from app.services.aggregation import list_mongo_aggregate_metrics
-from app.services.reports import REPORT_TYPES, _COMPARISON_REPORT_TYPES, ReportError, _FORMAT_EXTENSIONS, _serialize_metric, _write_report
+from app.modules.reports.service import REPORT_TYPES, _COMPARISON_REPORT_TYPES, ReportError, _FORMAT_EXTENSIONS, _serialize_metric, _write_report
 
 
 def generate_mongo_report(store: MongoDocumentStore, run_id: str, format: str, data_root: str, *, report_type: str = "single_model", related_run_ids: list[str] | None = None) -> dict[str, Any]:

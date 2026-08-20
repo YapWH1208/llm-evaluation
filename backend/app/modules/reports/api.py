@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Report, ReportShare, ReportSharePasswordAttempt
 from app.db.mongo import MongoDocumentStore
-from app.services.reports import ReportError, delete_report_artifact, generate_report
-from app.services.mongo_reports import generate_mongo_report
+from app.modules.reports.service import ReportError, delete_report_artifact, generate_report
+from app.modules.reports.mongo import generate_mongo_report
 
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])

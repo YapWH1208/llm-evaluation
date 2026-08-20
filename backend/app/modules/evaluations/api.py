@@ -24,7 +24,7 @@ from app.modules.evaluations.analysis import build_run_summary
 from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
 from app.modules.evaluations.operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
 from app.modules.evaluations.names import resolve_run_display_name
-from app.services.reports import delete_report_artifact
+from app.modules.reports.service import delete_report_artifact
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.lifecycle import RunLifecycle
 from app.modules.evaluations.mongo_executor import (

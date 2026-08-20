@@ -39,7 +39,7 @@ from app.modules.evaluations.dataset_runs import (
     effective_dataset_scoring_rule,
 )
 from app.modules.datasets.records import DatasetRecordError
-from app.services.judge_scoring import (
+from app.modules.reviews.scoring import (
     JudgeScoringError,
     is_llm_judge_rule,
     judge_assessment_evidence,
@@ -49,16 +49,16 @@ from app.services.judge_scoring import (
     normalize_judge_rule,
     validate_judge_endpoint,
 )
-from app.services.judge_assessments import JudgeAssessmentError
-from app.services.mongo_judge_assessments import assess_mongo_sample_attempt
+from app.modules.reviews.judges import JudgeAssessmentError
+from app.modules.reviews.mongo_judges import assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.modules.benchmarks.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
 from app.services.metric_profiles import build_execution_metric_evidence
-from app.services.reports import ReportError
+from app.modules.reports.service import ReportError
 from app.modules.evaluations.analysis import add_summary_insights, summarize_attempts
 from app.core.content import ContentValidationError, normalize_content_parts
-from app.services.media_assets import MediaAssetError, safe_asset_path
+from app.modules.reports.assets import MediaAssetError, safe_asset_path
 from app.modules.evaluations.executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import standardization_flags
@@ -1366,7 +1366,7 @@ def _execute_mongo_report_task(
         raise MongoRunExecutionError("Task lease was lost before execution started.")
     payload = _task_payload(task)
     try:
-        from app.services.mongo_reports import generate_mongo_report
+        from app.modules.reports.mongo import generate_mongo_report
 
         report = generate_mongo_report(
             store,

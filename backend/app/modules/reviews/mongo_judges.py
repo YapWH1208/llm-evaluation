@@ -8,8 +8,8 @@ from uuid import uuid4
 
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.services.judge_assessments import JudgeAssessmentError
-from app.services.judge_scoring import (
+from app.modules.reviews.judges import JudgeAssessmentError
+from app.modules.reviews.scoring import (
     DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
     DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,
     JudgeScoringError,

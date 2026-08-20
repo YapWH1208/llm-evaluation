@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 import regex as safe_regex
 
-from app.services.judge_scoring import LLM_JUDGE_RULE_TYPE, JudgeScoringError, normalize_judge_rule
+from app.modules.reviews.scoring import LLM_JUDGE_RULE_TYPE, JudgeScoringError, normalize_judge_rule
 
 
 class ScoringError(ValueError):

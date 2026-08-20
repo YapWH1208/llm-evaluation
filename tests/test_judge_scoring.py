@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.judge_scoring import (
+from app.modules.reviews.scoring import (
     JudgeScoringError,
     build_pairwise_judge_input,
     build_single_judge_input,
