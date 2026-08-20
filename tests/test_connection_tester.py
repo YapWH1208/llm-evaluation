@@ -62,14 +62,23 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
         assert request.url == "https://models.example.test/v1/responses"
         assert json.loads(request.content) == {
             "model": "responses-model",
-            "input": [{"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}],
+            "input": [
+                {"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}
+            ],
             "max_output_tokens": 8,
             "stream": False,
             "store": False,
         }
         return httpx.Response(200, json={"output_text": "OK"})
 
-    endpoint = ModelEndpoint(display_name="Responses", base_url="https://models.example.test/v1", model_name="responses-model", protocol_profile="openai_responses", encrypted_api_key="not-used", api_key_mask="****test")
+    endpoint = ModelEndpoint(
+        display_name="Responses",
+        base_url="https://models.example.test/v1",
+        model_name="responses-model",
+        protocol_profile="openai_responses",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
     result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
@@ -102,7 +111,14 @@ def test_connection_probe_adapts_anthropic_messages_shape() -> None:
         }
         return httpx.Response(200, json={"content": [{"type": "text", "text": "OK"}]})
 
-    endpoint = ModelEndpoint(display_name="Anthropic", base_url="https://models.example.test", model_name="claude-test", protocol_profile="anthropic_messages", encrypted_api_key="not-used", api_key_mask="****test")
+    endpoint = ModelEndpoint(
+        display_name="Anthropic",
+        base_url="https://models.example.test",
+        model_name="claude-test",
+        protocol_profile="anthropic_messages",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+    )
     result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
@@ -115,7 +131,13 @@ def test_connection_probe_rejects_restricted_dns_and_oversized_responses(monkeyp
         called = True
         return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
 
-    endpoint = ModelEndpoint(display_name="Restricted", base_url="https://models.example.test/v1", model_name="model", encrypted_api_key="unused", api_key_mask="****")
+    endpoint = ModelEndpoint(
+        display_name="Restricted",
+        base_url="https://models.example.test/v1",
+        model_name="model",
+        encrypted_api_key="unused",
+        api_key_mask="****",
+    )
     monkeypatch.setattr(
         "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("127.0.0.1", 0))],
@@ -215,9 +237,9 @@ def test_connection_probe_accepts_an_empty_successful_response() -> None:
         encrypted_api_key="not-used",
         api_key_mask="****test",
     )
-    result = ProviderConnectionTester(
-        httpx.MockTransport(lambda _request: httpx.Response(200, content=b""))
-    ).test(endpoint, "secret")
+    result = ProviderConnectionTester(httpx.MockTransport(lambda _request: httpx.Response(200, content=b""))).test(
+        endpoint, "secret"
+    )
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 

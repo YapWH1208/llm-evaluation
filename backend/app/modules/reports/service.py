@@ -22,7 +22,18 @@ class ReportError(ValueError):
 
 
 _FORMAT_EXTENSIONS = {"json": "json", "csv": "csv", "html": "html", "markdown": "md"}
-REPORT_TYPES = frozenset({"single_model", "multi_model_comparison", "regression", "prompt_comparison", "benchmark", "reliability", "cost", "human_review"})
+REPORT_TYPES = frozenset(
+    {
+        "single_model",
+        "multi_model_comparison",
+        "regression",
+        "prompt_comparison",
+        "benchmark",
+        "reliability",
+        "cost",
+        "human_review",
+    }
+)
 _COMPARISON_REPORT_TYPES = frozenset({"multi_model_comparison", "regression", "prompt_comparison"})
 
 
@@ -89,7 +100,9 @@ def delete_report_artifact(data_root: str, artifact_path: str) -> None:
     path.unlink(missing_ok=True)
 
 
-def _related_run_overviews(session: Session, primary_run: EvaluationRun, related_run_ids: list[str]) -> list[dict[str, Any]]:
+def _related_run_overviews(
+    session: Session, primary_run: EvaluationRun, related_run_ids: list[str]
+) -> list[dict[str, Any]]:
     overviews: list[dict[str, Any]] = []
     seen = {primary_run.id}
     for run_id in related_run_ids:
@@ -117,9 +130,7 @@ def _related_run_overviews(session: Session, primary_run: EvaluationRun, related
 def _build_report_payload(session: Session, run: EvaluationRun) -> dict[str, Any]:
     latest_ids = {attempt.id for attempt in latest_attempts(session, run.id)}
     reviews_by_attempt: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    for review in session.scalars(
-        select(HumanReview).join(SampleAttempt).where(SampleAttempt.run_id == run.id)
-    ):
+    for review in session.scalars(select(HumanReview).join(SampleAttempt).where(SampleAttempt.run_id == run.id)):
         reviews_by_attempt[review.sample_attempt_id].append(
             {
                 "reviewer_id": review.reviewer_id,
@@ -337,7 +348,9 @@ def _markdown_report(payload: dict[str, Any]) -> str:
                     label=_markdown_cell(metric["metric_label"]),
                     value=_markdown_cell(_display(metric["metric_value"])),
                     samples=metric["sample_count"],
-                    availability=_markdown_cell(metric["availability_reason"] if metric["metric_value"] is None else "—"),
+                    availability=_markdown_cell(
+                        metric["availability_reason"] if metric["metric_value"] is None else "—"
+                    ),
                 )
                 for metric in payload["metrics"]
             ]
@@ -367,10 +380,20 @@ def _markdown_report(payload: dict[str, Any]) -> str:
             )
         )
     if payload.get("related_runs"):
-        rows.extend(["", "## Related completed runs", "", "| Run | Benchmark | Accuracy | Success | Estimated cost |", "| --- | --- | ---: | ---: | ---: |"])
+        rows.extend(
+            [
+                "",
+                "## Related completed runs",
+                "",
+                "| Run | Benchmark | Accuracy | Success | Estimated cost |",
+                "| --- | --- | ---: | ---: | ---: |",
+            ]
+        )
         for related in payload["related_runs"]:
             summary = related["summary"]
-            rows.append(f"| `{related['run_id']}` | {related['benchmark']['id']} | {_display_percent(summary['samples']['accuracy'])} | {_display_percent(summary['samples']['success_rate'])} | {_display(summary['cost']['estimated'])} |")
+            rows.append(
+                f"| `{related['run_id']}` | {related['benchmark']['id']} | {_display_percent(summary['samples']['accuracy'])} | {_display_percent(summary['samples']['success_rate'])} | {_display(summary['cost']['estimated'])} |"
+            )
     return "\n".join(rows) + "\n"
 
 
@@ -398,22 +421,21 @@ def _html_report(payload: dict[str, Any]) -> str:
 <html lang=\"en\"><head><meta charset=\"utf-8\"><title>Evaluation report</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1200px;margin:2rem auto;padding:0 1rem}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #cbd5e1;padding:.5rem;text-align:left}}th{{background:#f1f5f9}}.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem}}.metric{{padding:1rem;background:#f8fafc;border-radius:.5rem}}</style>
 </head><body>
-<h1>{html.escape(_report_title(payload))}: {html.escape(payload['benchmark']['id'])}</h1>
-<p>Run {html.escape(payload['run_id'])} · Status: <strong>{html.escape(payload['status'])}</strong></p>
+<h1>{html.escape(_report_title(payload))}: {html.escape(payload["benchmark"]["id"])}</h1>
+<p>Run {html.escape(payload["run_id"])} · Status: <strong>{html.escape(payload["status"])}</strong></p>
 <h2>Executive summary</h2>
 <div class=\"metrics\">
-<div class=\"metric\"><strong>Completion</strong><br>{samples['completed']}/{samples['total']} ({_display_percent(samples['completion_rate'])})</div>
-<div class=\"metric\"><strong>Accuracy</strong><br>{_display_percent(samples['accuracy'])}</div>
-<div class=\"metric\"><strong>Avg / P95 latency</strong><br>{_display(latency['average'])} / {_display(latency['p95'])} ms</div>
-<div class=\"metric\"><strong>Tokens in / out</strong><br>{tokens['input']} / {tokens['output']}</div>
-<div class=\"metric\"><strong>Estimated cost</strong><br>{_display(cost['estimated'])} {html.escape(cost['currency'] or '')}</div>
+<div class=\"metric\"><strong>Completion</strong><br>{samples["completed"]}/{samples["total"]} ({_display_percent(samples["completion_rate"])})</div>
+<div class=\"metric\"><strong>Accuracy</strong><br>{_display_percent(samples["accuracy"])}</div>
+<div class=\"metric\"><strong>Avg / P95 latency</strong><br>{_display(latency["average"])} / {_display(latency["p95"])} ms</div>
+<div class=\"metric\"><strong>Tokens in / out</strong><br>{tokens["input"]} / {tokens["output"]}</div>
+<div class=\"metric\"><strong>Estimated cost</strong><br>{_display(cost["estimated"])} {html.escape(cost["currency"] or "")}</div>
 </div>
 {_metrics_html(payload)}
 <h2>Sample evidence</h2>
 <table><thead><tr><th>Sample</th><th>Attempt</th><th>Current</th><th>Status</th><th>Score</th><th>Latency (ms)</th><th>Tokens</th><th>Estimated cost</th><th>Error</th></tr></thead><tbody>{table_rows}</tbody></table>
 {_related_runs_html(payload)}
 </body></html>"""
-
 
 
 def _metrics_html(payload: dict[str, Any]) -> str:

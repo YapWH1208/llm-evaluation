@@ -35,13 +35,9 @@ def build_comparison_extension(
             "b": _run_descriptor(run_b, endpoint_b),
         },
         "named_metrics": named_metrics,
-        "metric_groups": [
-            {"unit": unit, "metrics": rows}
-            for unit, rows in sorted(grouped.items())
-        ],
+        "metric_groups": [{"unit": unit, "metrics": rows} for unit, rows in sorted(grouped.items())],
         "outcome_distribution": [
-            {"outcome": outcome, "count": int(outcomes.get(outcome, 0))}
-            for outcome in _OUTCOME_ORDER
+            {"outcome": outcome, "count": int(outcomes.get(outcome, 0))} for outcome in _OUTCOME_ORDER
         ],
     }
 
@@ -89,15 +85,17 @@ def _named_metric_rows(metrics_a: list[Any], metrics_b: list[Any]) -> list[dict[
             profile = "custom"
         first_payload = _metric_side(first)
         second_payload = _metric_side(second)
-        rows.append({
-            "metric_name": metric_name,
-            "label": label,
-            "unit": unit,
-            "profile": profile,
-            "run_a": first_payload,
-            "run_b": second_payload,
-            "delta": _difference(first_payload["value"], second_payload["value"]),
-        })
+        rows.append(
+            {
+                "metric_name": metric_name,
+                "label": label,
+                "unit": unit,
+                "profile": profile,
+                "run_a": first_payload,
+                "run_b": second_payload,
+                "delta": _difference(first_payload["value"], second_payload["value"]),
+            }
+        )
     return rows
 
 

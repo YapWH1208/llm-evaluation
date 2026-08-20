@@ -73,36 +73,16 @@ _COLLECTIONS = (
 # Collection references mirror the relational model while preserving JSON-like
 # configuration and evidence fields as document subtrees.
 _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
-    "model_capabilities": (
-        ((("model_endpoint_id", 1), ("capability_key", 1)), {"unique": True}),
-    ),
-    "model_endpoints": (
-        ((("api_key_fingerprint", 1),), {"sparse": True}),
-    ),
-    "endpoint_rate_windows": (
-        ((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),
-    ),
-    "endpoint_second_rate_windows": (
-        ((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),
-    ),
-    "media_assets": (
-        ((("sha256", 1),), {"unique": True}),
-    ),
-    "benchmark_definitions": (
-        ((("benchmark_id", 1), ("version", 1)), {"unique": True}),
-    ),
-    "prompt_packages": (
-        ((("name", 1), ("version", 1)), {"unique": True}),
-    ),
-    "dataset_versions": (
-        ((("dataset_id", 1), ("version", 1), ("revision", 1)), {"unique": True}),
-    ),
-    "evaluation_suites": (
-        ((("name", 1), ("version", 1)), {"unique": True}),
-    ),
-    "report_shares": (
-        ((("token_hash", 1),), {"unique": True}),
-    ),
+    "model_capabilities": (((("model_endpoint_id", 1), ("capability_key", 1)), {"unique": True}),),
+    "model_endpoints": (((("api_key_fingerprint", 1),), {"sparse": True}),),
+    "endpoint_rate_windows": (((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),),
+    "endpoint_second_rate_windows": (((("model_endpoint_id", 1), ("window_started_at", 1)), {"unique": True}),),
+    "media_assets": (((("sha256", 1),), {"unique": True}),),
+    "benchmark_definitions": (((("benchmark_id", 1), ("version", 1)), {"unique": True}),),
+    "prompt_packages": (((("name", 1), ("version", 1)), {"unique": True}),),
+    "dataset_versions": (((("dataset_id", 1), ("version", 1), ("revision", 1)), {"unique": True}),),
+    "evaluation_suites": (((("name", 1), ("version", 1)), {"unique": True}),),
+    "report_shares": (((("token_hash", 1),), {"unique": True}),),
     "report_share_password_attempts": (
         ((("share_id", 1), ("client_key", 1)), {"unique": True}),
         ((("expires_at", 1),), {"expireAfterSeconds": 0}),
@@ -111,12 +91,8 @@ _INDEXES: dict[str, tuple[tuple[Any, dict[str, Any]], ...]] = {
         ((("run_id", 1), ("sample_id", 1), ("attempt_number", 1)), {"unique": True}),
         ((("run_id", 1), ("status", 1)), {}),
     ),
-    "task_units": (
-        ((("status", 1), ("next_retry_at", 1), ("priority", -1), ("created_at", 1)), {}),
-    ),
-    "aggregate_metrics": (
-        ((("run_id", 1), ("metric_name", 1), ("aggregation_version", 1)), {"unique": True}),
-    ),
+    "task_units": (((("status", 1), ("next_retry_at", 1), ("priority", -1), ("created_at", 1)), {}),),
+    "aggregate_metrics": (((("run_id", 1), ("metric_name", 1), ("aggregation_version", 1)), {"unique": True}),),
 }
 
 _VALIDATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -187,13 +163,20 @@ class MongoDocumentStore:
                 if _index_signature(keys) not in existing_indexes:
                     missing_indexes.append(f"{collection_name}.{_index_name(keys)}")
         for collection_name, validator in _VALIDATORS.items():
-            if collection_name in collection_names and _collection_validator(self.database[collection_name]) != validator:
+            if (
+                collection_name in collection_names
+                and _collection_validator(self.database[collection_name]) != validator
+            ):
                 missing_validators.append(collection_name)
-        applied = {
-            int(document.get("version", 0)): str(document.get("migration_id", ""))
-            for document in self.database["schema_migrations"].find({})
-            if isinstance(document, dict)
-        } if "schema_migrations" in collection_names else {}
+        applied = (
+            {
+                int(document.get("version", 0)): str(document.get("migration_id", ""))
+                for document in self.database["schema_migrations"].find({})
+                if isinstance(document, dict)
+            }
+            if "schema_migrations" in collection_names
+            else {}
+        )
         missing_migrations = [
             migration.migration_id
             for migration in MIGRATIONS
@@ -212,7 +195,9 @@ class MongoDocumentStore:
     def initialize(self, mode: str = "auto_migrate") -> MongoValidation | tuple[Migration, ...]:
         selected_mode = mode.lower().strip()
         if selected_mode not in {"auto_migrate", "validate", "preview"}:
-            raise MongoConfigurationError("Unsupported database initialization mode. Use auto_migrate, validate, or preview.")
+            raise MongoConfigurationError(
+                "Unsupported database initialization mode. Use auto_migrate, validate, or preview."
+            )
         if selected_mode == "preview":
             return self.migration_preview()
         if selected_mode == "validate":
@@ -327,7 +312,17 @@ class MongoDocumentStore:
                 lease_version = int(task.get("lease_version", 0))
                 document = self.database["task_units"].find_one_and_update(
                     {"_id": task["id"], **query, **_lease_version_query(task, lease_version)},
-                    {"$set": {"status": "leased", "leased_by": worker_id, "lease_token": str(uuid4()), "lease_version": lease_version + 1, "lease_expires_at": now + timedelta(seconds=lease_seconds), "heartbeat_at": now, "updated_at": now}},
+                    {
+                        "$set": {
+                            "status": "leased",
+                            "leased_by": worker_id,
+                            "lease_token": str(uuid4()),
+                            "lease_version": lease_version + 1,
+                            "lease_expires_at": now + timedelta(seconds=lease_seconds),
+                            "heartbeat_at": now,
+                            "updated_at": now,
+                        }
+                    },
                     return_document=_return_document_after(),
                 )
                 if isinstance(document, dict):
@@ -381,7 +376,10 @@ class MongoDocumentStore:
         active = self.list_documents("task_units", query={"status": {"$in": ["leased", "running"]}})
         if system_max_concurrency is not None and len(active) >= system_max_concurrency:
             return False
-        if worker_max_concurrency is not None and sum(task.get("leased_by") == worker_id for task in active) >= worker_max_concurrency:
+        if (
+            worker_max_concurrency is not None
+            and sum(task.get("leased_by") == worker_id for task in active) >= worker_max_concurrency
+        ):
             return False
         run_limit = _positive_limit(run.get("max_concurrency"))
         if run_limit is not None and sum(task.get("run_id") == run["id"] for task in active) >= run_limit:
@@ -390,30 +388,59 @@ class MongoDocumentStore:
         fingerprint = endpoint.get("api_key_fingerprint")
         credential_limit = _positive_limit(endpoint.get("api_key_max_concurrency"))
         if fingerprint and credential_limit is not None:
-            active_endpoints = [self.get_document("model_endpoints", str(item["model_endpoint_id"])) for item in active_runs if item]
-            if sum(item is not None and item.get("api_key_fingerprint") == fingerprint for item in active_endpoints) >= credential_limit:
+            active_endpoints = [
+                self.get_document("model_endpoints", str(item["model_endpoint_id"])) for item in active_runs if item
+            ]
+            if (
+                sum(item is not None and item.get("api_key_fingerprint") == fingerprint for item in active_endpoints)
+                >= credential_limit
+            ):
                 return False
-        definitions = self.list_documents("benchmark_definitions", query={"benchmark_id": run["benchmark_id"], "version": run["benchmark_version"]})
+        definitions = self.list_documents(
+            "benchmark_definitions", query={"benchmark_id": run["benchmark_id"], "version": run["benchmark_version"]}
+        )
         manifest = definitions[0].get("manifest") if definitions else {}
         benchmark_limit = _positive_limit(manifest.get("max_concurrency") if isinstance(manifest, dict) else None)
         if benchmark_limit is not None:
-            if sum(item is not None and item.get("benchmark_id") == run["benchmark_id"] and item.get("benchmark_version") == run["benchmark_version"] for item in active_runs) >= benchmark_limit:
+            if (
+                sum(
+                    item is not None
+                    and item.get("benchmark_id") == run["benchmark_id"]
+                    and item.get("benchmark_version") == run["benchmark_version"]
+                    for item in active_runs
+                )
+                >= benchmark_limit
+            ):
                 return False
         endpoint_limit = _positive_limit(endpoint.get("max_concurrency")) or 1
-        return sum(item is not None and item.get("model_endpoint_id") == endpoint["id"] for item in active_runs) < endpoint_limit
+        return (
+            sum(item is not None and item.get("model_endpoint_id") == endpoint["id"] for item in active_runs)
+            < endpoint_limit
+        )
 
     def _reserve_endpoint_budget(self, *, endpoint: dict[str, Any], task: dict[str, Any], now: datetime) -> bool:
         if task.get("task_type") != "evaluation_shard":
             return True
-        limits = ("requests_per_second", "requests_per_minute", "tokens_per_minute", "input_tokens_per_minute", "output_tokens_per_minute")
+        limits = (
+            "requests_per_second",
+            "requests_per_minute",
+            "tokens_per_minute",
+            "input_tokens_per_minute",
+            "output_tokens_per_minute",
+        )
         if not any(_positive_limit(endpoint.get(name)) is not None for name in limits):
             return True
         request_count, estimated_tokens, estimated_input_tokens, estimated_output_tokens = _task_budget(task)
         second_started_at = int(now.timestamp())
         minute_started_at = int(now.timestamp() // 60) * 60
         endpoint_id = str(endpoint["id"])
-        second_rows = self.list_documents("endpoint_second_rate_windows", query={"model_endpoint_id": endpoint_id, "window_started_at": second_started_at})
-        minute_rows = self.list_documents("endpoint_rate_windows", query={"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at})
+        second_rows = self.list_documents(
+            "endpoint_second_rate_windows",
+            query={"model_endpoint_id": endpoint_id, "window_started_at": second_started_at},
+        )
+        minute_rows = self.list_documents(
+            "endpoint_rate_windows", query={"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at}
+        )
         second_row = second_rows[0] if second_rows else None
         minute_row = minute_rows[0] if minute_rows else None
         existing_requests = int(minute_row.get("request_count", 0)) if minute_row else 0
@@ -421,23 +448,52 @@ class MongoDocumentStore:
         existing_input = int(minute_row.get("estimated_input_token_count", 0)) if minute_row else 0
         existing_output = int(minute_row.get("estimated_output_token_count", 0)) if minute_row else 0
         existing_second = int(second_row.get("request_count", 0)) if second_row else 0
-        if (_positive_limit(endpoint.get("requests_per_second")) is not None and existing_second + request_count > int(endpoint["requests_per_second"])):
+        if _positive_limit(endpoint.get("requests_per_second")) is not None and existing_second + request_count > int(
+            endpoint["requests_per_second"]
+        ):
             return False
-        if (_positive_limit(endpoint.get("requests_per_minute")) is not None and existing_requests + request_count > int(endpoint["requests_per_minute"])):
+        if _positive_limit(endpoint.get("requests_per_minute")) is not None and existing_requests + request_count > int(
+            endpoint["requests_per_minute"]
+        ):
             return False
-        if (_positive_limit(endpoint.get("tokens_per_minute")) is not None and existing_tokens + estimated_tokens > int(endpoint["tokens_per_minute"])):
+        if _positive_limit(endpoint.get("tokens_per_minute")) is not None and existing_tokens + estimated_tokens > int(
+            endpoint["tokens_per_minute"]
+        ):
             return False
-        if (_positive_limit(endpoint.get("input_tokens_per_minute")) is not None and existing_input + estimated_input_tokens > int(endpoint["input_tokens_per_minute"])):
+        if _positive_limit(
+            endpoint.get("input_tokens_per_minute")
+        ) is not None and existing_input + estimated_input_tokens > int(endpoint["input_tokens_per_minute"]):
             return False
-        if (_positive_limit(endpoint.get("output_tokens_per_minute")) is not None and existing_output + estimated_output_tokens > int(endpoint["output_tokens_per_minute"])):
+        if _positive_limit(
+            endpoint.get("output_tokens_per_minute")
+        ) is not None and existing_output + estimated_output_tokens > int(endpoint["output_tokens_per_minute"]):
             return False
         if second_row is None:
-            self.insert_document("endpoint_second_rate_windows", {"model_endpoint_id": endpoint_id, "window_started_at": second_started_at, "request_count": request_count})
+            self.insert_document(
+                "endpoint_second_rate_windows",
+                {
+                    "model_endpoint_id": endpoint_id,
+                    "window_started_at": second_started_at,
+                    "request_count": request_count,
+                },
+            )
         else:
-            self.update_document("endpoint_second_rate_windows", str(second_row["id"]), {"request_count": existing_second + request_count})
-        values = {"request_count": existing_requests + request_count, "estimated_token_count": existing_tokens + estimated_tokens, "estimated_input_token_count": existing_input + estimated_input_tokens, "estimated_output_token_count": existing_output + estimated_output_tokens}
+            self.update_document(
+                "endpoint_second_rate_windows",
+                str(second_row["id"]),
+                {"request_count": existing_second + request_count},
+            )
+        values = {
+            "request_count": existing_requests + request_count,
+            "estimated_token_count": existing_tokens + estimated_tokens,
+            "estimated_input_token_count": existing_input + estimated_input_tokens,
+            "estimated_output_token_count": existing_output + estimated_output_tokens,
+        }
         if minute_row is None:
-            self.insert_document("endpoint_rate_windows", {"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at, **values})
+            self.insert_document(
+                "endpoint_rate_windows",
+                {"model_endpoint_id": endpoint_id, "window_started_at": minute_started_at, **values},
+            )
         else:
             self.update_document("endpoint_rate_windows", str(minute_row["id"]), values)
         return True
@@ -496,7 +552,11 @@ class MongoDocumentStore:
         limit: int | None = None,
         projection: dict[str, int] | None = None,
     ) -> list[dict[str, Any]]:
-        cursor = self.database[collection_name].find(query or {}, projection) if projection is not None else self.database[collection_name].find(query or {})
+        cursor = (
+            self.database[collection_name].find(query or {}, projection)
+            if projection is not None
+            else self.database[collection_name].find(query or {})
+        )
         if sort:
             cursor = cursor.sort(sort)
         if offset:
@@ -519,7 +579,13 @@ class MongoDocumentStore:
         distinct = getattr(collection, "distinct", None)
         if callable(distinct):
             return list(distinct(field, query or {}))[:limit]
-        return list({item.get(field) for item in self.list_documents(collection_name, query=query, limit=limit) if item.get(field) is not None})
+        return list(
+            {
+                item.get(field)
+                for item in self.list_documents(collection_name, query=query, limit=limit)
+                if item.get(field) is not None
+            }
+        )
 
     def update_document(
         self,
@@ -752,7 +818,14 @@ class MongoDocumentStore:
         lock = self.database["queue_admission_locks"]
         if lock.find_one({"_id": "global"}) is None:
             try:
-                lock.insert_one({"_id": "global", "id": "global", "owner": None, "locked_until": datetime(1970, 1, 1, tzinfo=timezone.utc)})
+                lock.insert_one(
+                    {
+                        "_id": "global",
+                        "id": "global",
+                        "owner": None,
+                        "locked_until": datetime(1970, 1, 1, tzinfo=timezone.utc),
+                    }
+                )
             except Exception:
                 pass
 
@@ -812,10 +885,7 @@ def _existing_index_signatures(collection: Any) -> set[tuple[tuple[str, int], ..
             for index in list_indexes()
             if isinstance(index, dict)
         }
-    return {
-        _index_signature(keys)
-        for keys, _options in getattr(collection, "indexes", ())
-    }
+    return {_index_signature(keys) for keys, _options in getattr(collection, "indexes", ())}
 
 
 def _collection_validator(collection: Any) -> dict[str, Any] | None:
@@ -867,7 +937,9 @@ def _task_budget(task: dict[str, Any]) -> tuple[int, int, int, int]:
         if isinstance(per_sample, dict):
             selected = [sample_id for sample_id in sample_ids if isinstance(sample_id, str)]
             selected_estimates = [per_sample.get(sample_id) for sample_id in selected]
-            if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates):
+            if all(
+                isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates
+            ):
                 estimated_tokens = sum(int(value) for value in selected_estimates)
             else:
                 estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests

@@ -130,15 +130,23 @@ class ModelCapability(Base):
     __table_args__ = (UniqueConstraint("model_endpoint_id", "capability_key", name="uq_model_capability"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    model_endpoint_id: Mapped[str] = mapped_column(ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_endpoint_id: Mapped[str] = mapped_column(
+        ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     capability_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    user_declared_status: Mapped[str] = mapped_column(String(32), nullable=False, default=CapabilityDeclaration.UNKNOWN.value)
-    auto_detection_status: Mapped[str] = mapped_column(String(32), nullable=False, default=CapabilityDetection.NOT_TESTED.value)
+    user_declared_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=CapabilityDeclaration.UNKNOWN.value
+    )
+    auto_detection_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=CapabilityDetection.NOT_TESTED.value
+    )
     effective_status: Mapped[str] = mapped_column(String(64), nullable=False, default="unverified")
     detection_evidence: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     detector_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class EndpointRateWindow(Base):
@@ -165,10 +173,14 @@ class EndpointSecondRateWindow(Base):
     """Durable one-second request admission accounting for endpoint RPS limits."""
 
     __tablename__ = "endpoint_second_rate_windows"
-    __table_args__ = (UniqueConstraint("model_endpoint_id", "window_started_at", name="uq_endpoint_second_rate_window"),)
+    __table_args__ = (
+        UniqueConstraint("model_endpoint_id", "window_started_at", name="uq_endpoint_second_rate_window"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    model_endpoint_id: Mapped[str] = mapped_column(ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_endpoint_id: Mapped[str] = mapped_column(
+        ForeignKey("model_endpoints.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     window_started_at: Mapped[int] = mapped_column(Integer, nullable=False)
     request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -185,9 +197,7 @@ class MediaAsset(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     storage_path: Mapped[str] = mapped_column(String(2048), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class BenchmarkDefinition(Base):
@@ -203,9 +213,7 @@ class BenchmarkDefinition(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="registered")
     manifest: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class PromptPackage(Base):
@@ -226,8 +234,21 @@ class PromptPackage(Base):
     change_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+
 class DatasetStatus(StrEnum):
-    NOT_DOWNLOADED="not_downloaded"; WAITING="waiting"; DOWNLOADING="downloading"; VERIFYING="verifying"; PREPARING="preparing"; READY="ready"; UPDATE_AVAILABLE="update_available"; LICENSE_REQUIRED="license_required"; CREDENTIAL_REQUIRED="credential_required"; CORRUPTED="corrupted"; FAILED="failed"; REMOVING="removing"
+    NOT_DOWNLOADED = "not_downloaded"
+    WAITING = "waiting"
+    DOWNLOADING = "downloading"
+    VERIFYING = "verifying"
+    PREPARING = "preparing"
+    READY = "ready"
+    UPDATE_AVAILABLE = "update_available"
+    LICENSE_REQUIRED = "license_required"
+    CREDENTIAL_REQUIRED = "credential_required"
+    CORRUPTED = "corrupted"
+    FAILED = "failed"
+    REMOVING = "removing"
+
 
 class DatasetVersion(Base):
     __tablename__ = "dataset_versions"
@@ -272,10 +293,13 @@ class EvaluationSuite(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+
 class Report(Base):
     __tablename__ = "reports"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    run_id: Mapped[str] = mapped_column(ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     report_type: Mapped[str] = mapped_column(String(64), nullable=False)
     format: Mapped[str] = mapped_column(String(16), nullable=False)
     artifact_path: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -301,9 +325,7 @@ class ReportSharePasswordAttempt(Base):
     """One durable, expiring password-failure window per share and client partition."""
 
     __tablename__ = "report_share_password_attempts"
-    __table_args__ = (
-        UniqueConstraint("share_id", "client_key", name="uq_report_share_password_attempt_client"),
-    )
+    __table_args__ = (UniqueConstraint("share_id", "client_key", name="uq_report_share_password_attempt_client"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     share_id: Mapped[str] = mapped_column(
@@ -316,18 +338,21 @@ class ReportSharePasswordAttempt(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
+
 class HumanReview(Base):
-    __tablename__="human_reviews"
-    id: Mapped[str]=mapped_column(String(36),primary_key=True,default=lambda:str(uuid4()))
-    sample_attempt_id: Mapped[str]=mapped_column(ForeignKey("sample_attempts.id",ondelete="CASCADE"),nullable=False,index=True)
-    reviewer_id: Mapped[str]=mapped_column(String(128),nullable=False)
-    rubric: Mapped[dict[str,object]|None]=mapped_column(JSON,nullable=True)
-    score: Mapped[float|None]=mapped_column(nullable=True)
-    labels: Mapped[list[object]]=mapped_column(JSON,nullable=False,default=list)
-    notes: Mapped[str|None]=mapped_column(Text,nullable=True)
-    review_stage: Mapped[str]=mapped_column(String(32),nullable=False,default="primary")
-    adjudicates_review_ids: Mapped[list[object]]=mapped_column(JSON,nullable=False,default=list)
-    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
+    __tablename__ = "human_reviews"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    sample_attempt_id: Mapped[str] = mapped_column(
+        ForeignKey("sample_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reviewer_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    rubric: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    score: Mapped[float | None] = mapped_column(nullable=True)
+    labels: Mapped[list[object]] = mapped_column(JSON, nullable=False, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_stage: Mapped[str] = mapped_column(String(32), nullable=False, default="primary")
+    adjudicates_review_ids: Mapped[list[object]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class JudgeAssessment(Base):
@@ -358,9 +383,8 @@ class JudgeAssessment(Base):
     estimated_cost: Mapped[float | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 
 class RunStatus(StrEnum):
     DRAFT = "draft"
@@ -460,9 +484,7 @@ class TaskUnit(Base):
     """A durable work item, designed for lease-based worker execution."""
 
     __tablename__ = "task_units"
-    __table_args__ = (
-        Index("ix_task_units_claimable", "status", "next_retry_at", "priority"),
-    )
+    __table_args__ = (Index("ix_task_units_claimable", "status", "next_retry_at", "priority"),)
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -584,6 +606,4 @@ class AggregateMetric(Base):
     sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     confidence_interval: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     aggregation_version: Mapped[str] = mapped_column(String(64), nullable=False, default="1.0.0")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

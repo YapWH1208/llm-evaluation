@@ -13,27 +13,31 @@ from app.modules.evaluations.names import resolve_run_display_name
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 50
 COMPLETED_STATUSES = frozenset({"completed", "completed_with_errors"})
-SORT_FIELDS = frozenset({
-    "default",
-    "name",
-    "model",
-    "dataset",
-    "status",
-    "created_at",
-    "score",
-    "average_latency_ms",
-    "p95_latency_ms",
-    "estimated_cost",
-    "sample_count",
-    *(definition.metric_name for definition in metric_definitions()),
-})
-NUMERIC_SORT_FIELDS = frozenset({
-    "score",
-    "average_latency_ms",
-    "p95_latency_ms",
-    "estimated_cost",
-    *(definition.metric_name for definition in metric_definitions()),
-})
+SORT_FIELDS = frozenset(
+    {
+        "default",
+        "name",
+        "model",
+        "dataset",
+        "status",
+        "created_at",
+        "score",
+        "average_latency_ms",
+        "p95_latency_ms",
+        "estimated_cost",
+        "sample_count",
+        *(definition.metric_name for definition in metric_definitions()),
+    }
+)
+NUMERIC_SORT_FIELDS = frozenset(
+    {
+        "score",
+        "average_latency_ms",
+        "p95_latency_ms",
+        "estimated_cost",
+        *(definition.metric_name for definition in metric_definitions()),
+    }
+)
 
 
 class LeaderboardQueryError(ValueError):
@@ -84,15 +88,22 @@ def build_leaderboard(
     if query.sort == "default":
         rows.sort(key=cmp_to_key(_compare_default))
     else:
-        rows.sort(key=cmp_to_key(lambda left, right: _compare_explicit(
-            left, right, field=query.sort, direction=query.direction,
-        )))
+        rows.sort(
+            key=cmp_to_key(
+                lambda left, right: _compare_explicit(
+                    left,
+                    right,
+                    field=query.sort,
+                    direction=query.direction,
+                )
+            )
+        )
 
     total = len(rows)
     total_pages = math.ceil(total / query.page_size) if total else 0
     offset = (query.page - 1) * query.page_size
     return {
-        "items": rows[offset:offset + query.page_size],
+        "items": rows[offset : offset + query.page_size],
         "total": total,
         "page": query.page,
         "page_size": query.page_size,
@@ -108,10 +119,7 @@ def _leaderboard_row(
     metrics: dict[str, Any],
 ) -> dict[str, Any]:
     context = _run_context(run, endpoint)
-    named_metrics = {
-        name: _metric_payload(name, metric)
-        for name, metric in sorted(metrics.items())
-    }
+    named_metrics = {name: _metric_payload(name, metric) for name, metric in sorted(metrics.items())}
     score = _metric_value(metrics, "score")
     primary_metric = "score"
     if score is None and _metric_value(metrics, "accuracy") is not None:
@@ -142,9 +150,7 @@ def _leaderboard_row(
         "completed_samples": int(_value(run, "completed_samples", 0) or 0),
         "successful_samples": int(_value(run, "successful_samples", 0) or 0),
         "failed_samples": int(_value(run, "failed_samples", 0) or 0),
-        "available_metrics": sorted(
-            name for name in metrics if _metric_value(metrics, name) is not None
-        ),
+        "available_metrics": sorted(name for name in metrics if _metric_value(metrics, name) is not None),
         "named_metrics": named_metrics,
     }
 

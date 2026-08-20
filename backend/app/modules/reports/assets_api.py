@@ -61,7 +61,10 @@ def get_session(request: Request) -> Generator[Session | None, None, None]:
 
 
 SessionDependency = Annotated[Session | None, Depends(get_session)]
-def get_document_store(request: Request) -> MongoDocumentStore | None: return getattr(request.app.state, "document_store", None)
+
+
+def get_document_store(request: Request) -> MongoDocumentStore | None:
+    return getattr(request.app.state, "document_store", None)
 
 
 def get_asset_or_404(session: Session, asset_id: str) -> MediaAsset:
@@ -81,8 +84,20 @@ def create_asset(payload: AssetCreate, request: Request, session: SessionDepende
     store = get_document_store(request)
     if store is not None:
         existing = store.list_documents("media_assets", query={"sha256": sha256})
-        if existing: return existing[0]
-        return store.insert_document("media_assets", {"original_filename": safe_filename(payload.filename), "media_kind": media_kind, "mime_type": mime_type, "size_bytes": len(data), "sha256": sha256, "storage_path": storage_path, "created_at": datetime.now()})
+        if existing:
+            return existing[0]
+        return store.insert_document(
+            "media_assets",
+            {
+                "original_filename": safe_filename(payload.filename),
+                "media_kind": media_kind,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+                "sha256": sha256,
+                "storage_path": storage_path,
+                "created_at": datetime.now(),
+            },
+        )
     assert session is not None
     existing = session.scalar(select(MediaAsset).where(MediaAsset.sha256 == sha256))
     if existing is not None:
@@ -106,7 +121,8 @@ def get_asset(asset_id: str, request: Request, session: SessionDependency) -> Me
     store = get_document_store(request)
     if store is not None:
         asset = store.get_document("media_assets", asset_id)
-        if asset is None: raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
+        if asset is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
         return asset
     assert session is not None
     return get_asset_or_404(session, asset_id)
@@ -117,7 +133,8 @@ def get_asset_content_part(asset_id: str, request: Request, session: SessionDepe
     store = get_document_store(request)
     if store is not None:
         asset = store.get_document("media_assets", asset_id)
-        if asset is None: raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
+        if asset is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
         return asset_content_part(str(asset["id"]), str(asset["media_kind"]), str(asset["mime_type"]))
     assert session is not None
     asset = get_asset_or_404(session, asset_id)
@@ -129,14 +146,24 @@ def download_asset(asset_id: str, request: Request, session: SessionDependency) 
     store = get_document_store(request)
     if store is not None:
         asset = store.get_document("media_assets", asset_id)
-        if asset is None: raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
-        try: path = safe_asset_path(request.app.state.settings.data_root, str(asset["storage_path"]))
-        except MediaAssetError as error: raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        return FileResponse(path, media_type=str(asset["mime_type"]), filename=str(asset["original_filename"]), headers=PREVIEW_RESPONSE_HEADERS)
+        if asset is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Media asset not found")
+        try:
+            path = safe_asset_path(request.app.state.settings.data_root, str(asset["storage_path"]))
+        except MediaAssetError as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        return FileResponse(
+            path,
+            media_type=str(asset["mime_type"]),
+            filename=str(asset["original_filename"]),
+            headers=PREVIEW_RESPONSE_HEADERS,
+        )
     assert session is not None
     asset = get_asset_or_404(session, asset_id)
     try:
         path = safe_asset_path(request.app.state.settings.data_root, asset.storage_path)
     except MediaAssetError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-    return FileResponse(path, media_type=asset.mime_type, filename=asset.original_filename, headers=PREVIEW_RESPONSE_HEADERS)
+    return FileResponse(
+        path, media_type=asset.mime_type, filename=asset.original_filename, headers=PREVIEW_RESPONSE_HEADERS
+    )

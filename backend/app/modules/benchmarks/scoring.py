@@ -28,12 +28,43 @@ _MAX_RULE_DEPTH = 3
 _REGEX_TIMEOUT_SECONDS = 0.05
 _SUPPORTED_RULE_TYPES = frozenset(
     {
-        "exact_match", "normalized_exact_match", "multiple_choice", "numeric_match", "regex_match",
-        "json_schema", "token_f1", "f1", "bleu", "rouge", "rouge_l", "rouge_1", "rouge1", "wer", "cer",
-        "iou", "temporal_localization_error", "temporal_error", "unit_test_pass_rate", "unit_test", "length_limit",
-        "required_fields", "forbidden_fields", "output_format", "format", "refusal", "refusal_behavior",
-        "tool_selection", "tool_argument_validity", "tool_arguments", "citation_presence", "citations",
-        "schema_compliance", "json_schema_validation", "rules", "rule_checks", "contains",
+        "exact_match",
+        "normalized_exact_match",
+        "multiple_choice",
+        "numeric_match",
+        "regex_match",
+        "json_schema",
+        "token_f1",
+        "f1",
+        "bleu",
+        "rouge",
+        "rouge_l",
+        "rouge_1",
+        "rouge1",
+        "wer",
+        "cer",
+        "iou",
+        "temporal_localization_error",
+        "temporal_error",
+        "unit_test_pass_rate",
+        "unit_test",
+        "length_limit",
+        "required_fields",
+        "forbidden_fields",
+        "output_format",
+        "format",
+        "refusal",
+        "refusal_behavior",
+        "tool_selection",
+        "tool_argument_validity",
+        "tool_arguments",
+        "citation_presence",
+        "citations",
+        "schema_compliance",
+        "json_schema_validation",
+        "rules",
+        "rule_checks",
+        "contains",
     }
 )
 
@@ -166,7 +197,9 @@ def score_prediction(prediction: str, reference: dict[str, object]) -> float:
     if rule_type in {"token_f1", "f1"}:
         return _token_f1(prediction, str(expected))
     if rule_type == "bleu":
-        return _bleu(prediction, str(expected), max_order=_positive_int(rule.get("max_order", 4), "max_order", maximum=4))
+        return _bleu(
+            prediction, str(expected), max_order=_positive_int(rule.get("max_order", 4), "max_order", maximum=4)
+        )
     if rule_type in {"rouge", "rouge_l"}:
         return _rouge_l(prediction, str(expected))
     if rule_type in {"rouge_1", "rouge1"}:
@@ -203,7 +236,10 @@ def score_prediction(prediction: str, reference: dict[str, object]) -> float:
         checks = rule.get("checks")
         if not isinstance(checks, list) or not checks or any(not isinstance(check, dict) for check in checks):
             raise ScoringError("Rule-check scoring requires a non-empty checks list.")
-        return round(sum(score_prediction(prediction, {"answer": expected, "scoring": check}) for check in checks) / len(checks), 12)
+        return round(
+            sum(score_prediction(prediction, {"answer": expected, "scoring": check}) for check in checks) / len(checks),
+            12,
+        )
     if rule_type == "contains":
         return float(_normalized(str(expected)) in _normalized(prediction))
     raise ScoringError(f"Unsupported deterministic scoring type: {rule_type}.")
@@ -339,7 +375,9 @@ def _unit_test_pass_rate(prediction: str, rule: dict[str, object]) -> float:
     values = payload.get("tests") if isinstance(payload, dict) else payload
     if not isinstance(values, list) or not values:
         return 0.0
-    passed = [item if isinstance(item, bool) else item.get("passed") if isinstance(item, dict) else None for item in values]
+    passed = [
+        item if isinstance(item, bool) else item.get("passed") if isinstance(item, dict) else None for item in values
+    ]
     if any(not isinstance(item, bool) for item in passed):
         raise ScoringError("Unit-test results must be booleans or objects with a boolean passed field.")
     expected_count = rule.get("expected_count")
@@ -365,7 +403,12 @@ def _length_limit(prediction: str, rule: dict[str, object]) -> float:
 def _required_fields(prediction: str, rule: dict[str, object]) -> float:
     value = _json_object_or_none(prediction)
     fields = rule.get("fields", rule.get("required"))
-    if value is None or not isinstance(fields, list) or not fields or any(not isinstance(field, str) for field in fields):
+    if (
+        value is None
+        or not isinstance(fields, list)
+        or not fields
+        or any(not isinstance(field, str) for field in fields)
+    ):
         raise ScoringError("Required-fields scoring requires a non-empty fields list and JSON object output.")
     return float(all(_json_path_exists(value, field) for field in fields))
 
@@ -390,7 +433,14 @@ def _output_format(prediction: str, rule: dict[str, object]) -> float:
         pattern = rule.get("pattern")
         if not isinstance(pattern, str) or not pattern:
             raise ScoringError("Regex output-format scoring requires a pattern.")
-        return float(_matches_safe_regex(_compile_safe_regex(pattern, "Regex output-format scoring"), prediction, "Regex output-format scoring", fullmatch=True))
+        return float(
+            _matches_safe_regex(
+                _compile_safe_regex(pattern, "Regex output-format scoring"),
+                prediction,
+                "Regex output-format scoring",
+                fullmatch=True,
+            )
+        )
     if expected_format == "plain_text":
         return float(bool(prediction.strip()))
     raise ScoringError("Output-format scoring supports json, regex, and plain_text.")
@@ -455,7 +505,9 @@ def _levenshtein_distance(left: list[str], right: list[str]) -> int:
     for left_index, left_value in enumerate(left, start=1):
         current = [left_index]
         for right_index, right_value in enumerate(right, start=1):
-            current.append(min(previous[right_index] + 1, current[-1] + 1, previous[right_index - 1] + (left_value != right_value)))
+            current.append(
+                min(previous[right_index] + 1, current[-1] + 1, previous[right_index - 1] + (left_value != right_value))
+            )
         previous = current
     return previous[-1]
 

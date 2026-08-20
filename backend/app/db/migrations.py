@@ -108,9 +108,21 @@ def _upgrade_v12_run_suite_reference(connection: Connection) -> None:
 def _upgrade_v13_extended_rate_limits(connection: Connection) -> None:
     _add_column_if_missing(connection, "model_endpoints", "requests_per_second", "requests_per_second INTEGER")
     _add_column_if_missing(connection, "model_endpoints", "input_tokens_per_minute", "input_tokens_per_minute INTEGER")
-    _add_column_if_missing(connection, "model_endpoints", "output_tokens_per_minute", "output_tokens_per_minute INTEGER")
-    _add_column_if_missing(connection, "endpoint_rate_windows", "estimated_input_token_count", "estimated_input_token_count INTEGER NOT NULL DEFAULT 0")
-    _add_column_if_missing(connection, "endpoint_rate_windows", "estimated_output_token_count", "estimated_output_token_count INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(
+        connection, "model_endpoints", "output_tokens_per_minute", "output_tokens_per_minute INTEGER"
+    )
+    _add_column_if_missing(
+        connection,
+        "endpoint_rate_windows",
+        "estimated_input_token_count",
+        "estimated_input_token_count INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column_if_missing(
+        connection,
+        "endpoint_rate_windows",
+        "estimated_output_token_count",
+        "estimated_output_token_count INTEGER NOT NULL DEFAULT 0",
+    )
 
 
 def _upgrade_v14_hierarchical_concurrency_limits(connection: Connection) -> None:
@@ -130,8 +142,12 @@ def _upgrade_v16_run_archiving(connection: Connection) -> None:
 
 
 def _upgrade_v17_structured_human_review(connection: Connection) -> None:
-    _add_column_if_missing(connection, "human_reviews", "review_stage", "review_stage VARCHAR(32) NOT NULL DEFAULT 'primary'")
-    _add_column_if_missing(connection, "human_reviews", "adjudicates_review_ids", "adjudicates_review_ids JSON NOT NULL DEFAULT '[]'")
+    _add_column_if_missing(
+        connection, "human_reviews", "review_stage", "review_stage VARCHAR(32) NOT NULL DEFAULT 'primary'"
+    )
+    _add_column_if_missing(
+        connection, "human_reviews", "adjudicates_review_ids", "adjudicates_review_ids JSON NOT NULL DEFAULT '[]'"
+    )
 
 
 def _upgrade_v18_task_hierarchy_and_aggregate_metrics(connection: Connection) -> None:
@@ -139,7 +155,9 @@ def _upgrade_v18_task_hierarchy_and_aggregate_metrics(connection: Connection) ->
 
 
 def _upgrade_v19_pairwise_judge_evidence(connection: Connection) -> None:
-    _add_column_if_missing(connection, "judge_assessments", "comparison_sample_attempt_id", "comparison_sample_attempt_id VARCHAR(36)")
+    _add_column_if_missing(
+        connection, "judge_assessments", "comparison_sample_attempt_id", "comparison_sample_attempt_id VARCHAR(36)"
+    )
     _add_column_if_missing(connection, "judge_assessments", "answer_order", "answer_order JSON NOT NULL DEFAULT '[]'")
     _add_column_if_missing(connection, "judge_assessments", "swap_test_group_id", "swap_test_group_id VARCHAR(36)")
     _add_column_if_missing(connection, "judge_assessments", "selected_answer", "selected_answer VARCHAR(16)")
@@ -157,12 +175,18 @@ def _upgrade_v22_remediation_persistence_contracts(connection: Connection) -> No
     """Add non-destructive fields required by the security and fencing remediation."""
 
     _add_column_if_missing(connection, "task_units", "lease_version", "lease_version INTEGER NOT NULL DEFAULT 0")
-    _add_column_if_missing(connection, "dataset_versions", "credential_binding_id", "credential_binding_id VARCHAR(128)")
+    _add_column_if_missing(
+        connection, "dataset_versions", "credential_binding_id", "credential_binding_id VARCHAR(128)"
+    )
     _add_column_if_missing(connection, "reports", "artifact_sha256", "artifact_sha256 VARCHAR(64)")
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_archived_at", ("archived_at",))
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_created_by", ("created_by",))
-    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_model_endpoint_id", ("model_endpoint_id",))
-    _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_prompt_package_id", ("prompt_package_id",))
+    _create_index_if_missing(
+        connection, "evaluation_runs", "ix_evaluation_runs_model_endpoint_id", ("model_endpoint_id",)
+    )
+    _create_index_if_missing(
+        connection, "evaluation_runs", "ix_evaluation_runs_prompt_package_id", ("prompt_package_id",)
+    )
     _create_index_if_missing(connection, "evaluation_runs", "ix_evaluation_runs_suite_id", ("suite_id",))
 
 

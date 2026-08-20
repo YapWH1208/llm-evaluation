@@ -38,7 +38,9 @@ def normalize_content_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]
             raise ContentValidationError("Media content parts require a source object.")
         source_keys = [key for key in ("asset_id", "url", "base64_data") if source.get(key)]
         if len(source_keys) != 1:
-            raise ContentValidationError("Media content sources must contain exactly one of asset_id, url, or base64_data.")
+            raise ContentValidationError(
+                "Media content sources must contain exactly one of asset_id, url, or base64_data."
+            )
         mime_type = part.get("mime_type")
         if not isinstance(mime_type, str) or "/" not in mime_type:
             raise ContentValidationError("Media content parts require a MIME type.")

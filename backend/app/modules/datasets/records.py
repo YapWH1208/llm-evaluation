@@ -84,8 +84,7 @@ def _read_record(source_file: Path, record_number: int) -> dict[str, object] | N
     if suffix == ".txt":
         return _read_text_record(source_file, record_number)
     raise DatasetRecordError(
-        f"Dataset format {suffix or '(none)'} is not supported for evaluation runs; "
-        "use JSONL, JSON, CSV, TSV, or TXT."
+        f"Dataset format {suffix or '(none)'} is not supported for evaluation runs; use JSONL, JSON, CSV, TSV, or TXT."
     )
 
 

@@ -74,30 +74,24 @@ def leaderboard(
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
         runs: list[Any] = store.list_documents("evaluation_runs")
-        endpoints = {
-            str(endpoint["id"]): endpoint
-            for endpoint in store.list_documents("model_endpoints")
-        }
+        endpoints = {str(endpoint["id"]): endpoint for endpoint in store.list_documents("model_endpoints")}
         metric_rows: list[Any] = store.list_documents(
             "aggregate_metrics",
             sort=[("run_id", 1), ("metric_name", 1), ("aggregation_version", -1)],
         )
     else:
         assert session is not None
-        runs = list(session.scalars(
-            select(EvaluationRun).where(EvaluationRun.archived_at.is_(None))
-        ))
-        endpoints = {
-            endpoint.id: endpoint
-            for endpoint in session.scalars(select(ModelEndpoint))
-        }
-        metric_rows = list(session.scalars(
-            select(AggregateMetric).order_by(
-                AggregateMetric.run_id,
-                AggregateMetric.metric_name,
-                AggregateMetric.aggregation_version.desc(),
+        runs = list(session.scalars(select(EvaluationRun).where(EvaluationRun.archived_at.is_(None))))
+        endpoints = {endpoint.id: endpoint for endpoint in session.scalars(select(ModelEndpoint))}
+        metric_rows = list(
+            session.scalars(
+                select(AggregateMetric).order_by(
+                    AggregateMetric.run_id,
+                    AggregateMetric.metric_name,
+                    AggregateMetric.aggregation_version.desc(),
+                )
             )
-        ))
+        )
 
     query = LeaderboardQuery(
         filters=LeaderboardFilters(

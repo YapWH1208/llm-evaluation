@@ -21,7 +21,9 @@ class CapabilityUpdate(BaseModel):
 
 
 class CapabilityDetectionRequest(BaseModel):
-    capability_keys: list[str] = Field(default_factory=lambda: list(DEFAULT_CAPABILITY_KEYS), min_length=1, max_length=32)
+    capability_keys: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_CAPABILITY_KEYS), min_length=1, max_length=32
+    )
 
     def normalized_keys(self) -> list[str]:
         return list(dict.fromkeys(key.strip() for key in self.capability_keys if key.strip()))

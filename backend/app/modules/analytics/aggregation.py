@@ -44,9 +44,7 @@ def recompute_aggregate_metrics(
         evaluation_type=evaluation_type_from_snapshot(run.configuration_snapshot),
         include_llm_judge=_run_uses_llm_judge(run.configuration_snapshot),
     )
-    session.execute(
-        delete(AggregateMetric).where(AggregateMetric.run_id == run.id)
-    )
+    session.execute(delete(AggregateMetric).where(AggregateMetric.run_id == run.id))
     rows = [
         AggregateMetric(
             run_id=run.id,
@@ -147,10 +145,7 @@ def _metrics_for_attempts(
     evaluation_type: str,
     include_llm_judge: bool = False,
 ) -> list[MetricResult]:
-    summary_attempts = [
-        SimpleNamespace(**attempt) if isinstance(attempt, dict) else attempt
-        for attempt in attempts
-    ]
+    summary_attempts = [SimpleNamespace(**attempt) if isinstance(attempt, dict) else attempt for attempt in attempts]
     summary = summarize_attempts(summary_attempts, total_samples=total_samples)
     terminal = [
         attempt
@@ -208,10 +203,34 @@ def _metrics_for_attempts(
             )
         )
     return profile_metrics + [
-        MetricResult("completion_rate", _as_float(summary["samples"]["completion_rate"]), total_samples, None, _binomial_confidence_interval(completed, total_samples)),
-        MetricResult("success_rate", _as_float(summary["samples"]["success_rate"]), completed, None, _binomial_confidence_interval(len(successful), completed)),
-        MetricResult("error_rate", _as_float(summary["errors"]["rate"]), completed, None, _binomial_confidence_interval(failed, completed)),
-        MetricResult("average_latency_ms", _as_float(summary["latency_ms"]["average"]), len(latencies), None, _mean_confidence_interval(latencies)),
+        MetricResult(
+            "completion_rate",
+            _as_float(summary["samples"]["completion_rate"]),
+            total_samples,
+            None,
+            _binomial_confidence_interval(completed, total_samples),
+        ),
+        MetricResult(
+            "success_rate",
+            _as_float(summary["samples"]["success_rate"]),
+            completed,
+            None,
+            _binomial_confidence_interval(len(successful), completed),
+        ),
+        MetricResult(
+            "error_rate",
+            _as_float(summary["errors"]["rate"]),
+            completed,
+            None,
+            _binomial_confidence_interval(failed, completed),
+        ),
+        MetricResult(
+            "average_latency_ms",
+            _as_float(summary["latency_ms"]["average"]),
+            len(latencies),
+            None,
+            _mean_confidence_interval(latencies),
+        ),
         MetricResult("p50_latency_ms", _as_float(summary["latency_ms"]["p50"]), len(latencies)),
         MetricResult("p95_latency_ms", _as_float(summary["latency_ms"]["p95"]), len(latencies)),
         MetricResult("p99_latency_ms", _as_float(summary["latency_ms"]["p99"]), len(latencies)),
@@ -236,9 +255,7 @@ def _profile_confidence_interval(
         return metric.confidence_interval
     if metric.metric_name == "llm_judge":
         return judge_interval
-    if metric.metric_name == "score" or (
-        metric.metric_name == "accuracy" and evaluation_type != "classification"
-    ):
+    if metric.metric_name == "score" or (metric.metric_name == "accuracy" and evaluation_type != "classification"):
         return score_interval
     return metric.confidence_interval
 
@@ -270,4 +287,8 @@ def _binomial_confidence_interval(successes: int, total: int) -> dict[str, objec
     denominator = 1 + z * z / total
     centre = (proportion + z * z / (2 * total)) / denominator
     margin = z * sqrt((proportion * (1 - proportion) + z * z / (4 * total)) / total) / denominator
-    return {"method": "wilson_95", "lower": round(max(0.0, centre - margin), 6), "upper": round(min(1.0, centre + margin), 6)}
+    return {
+        "method": "wilson_95",
+        "lower": round(max(0.0, centre - margin), 6),
+        "upper": round(min(1.0, centre + margin), 6),
+    }

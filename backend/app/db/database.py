@@ -15,11 +15,13 @@ from app.db.models import Base, SchemaMigration, SchemaVersion
 
 
 INITIALIZATION_MODES = frozenset({"auto_migrate", "validate", "preview"})
-_LEGACY_UNENFORCEABLE_FOREIGN_KEYS = frozenset({
-    ("evaluation_runs", "model_endpoint_id"),
-    ("evaluation_runs", "prompt_package_id"),
-    ("evaluation_runs", "suite_id"),
-})
+_LEGACY_UNENFORCEABLE_FOREIGN_KEYS = frozenset(
+    {
+        ("evaluation_runs", "model_endpoint_id"),
+        ("evaluation_runs", "prompt_package_id"),
+        ("evaluation_runs", "suite_id"),
+    }
+)
 
 
 class DatabaseConfigurationError(ValueError):
@@ -106,9 +108,9 @@ class Database:
             table_names = set(connection.dialect.get_table_names(connection))
             if "schema_versions" not in table_names:
                 return MIGRATIONS
-            current_version = connection.scalar(
-                select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)
-            ) or 0
+            current_version = (
+                connection.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)) or 0
+            )
         return tuple(migration for migration in MIGRATIONS if migration.version > current_version)
 
     def validate_schema(self) -> DatabaseValidation:
@@ -127,9 +129,7 @@ class Database:
                     continue
                 actual_columns = {column["name"] for column in inspector.get_columns(table.name)}
                 missing_columns.extend(
-                    f"{table.name}.{column.name}"
-                    for column in table.columns
-                    if column.name not in actual_columns
+                    f"{table.name}.{column.name}" for column in table.columns if column.name not in actual_columns
                 )
                 actual_indexes = {index.get("name") for index in inspector.get_indexes(table.name)}
                 missing_indexes.extend(
@@ -137,7 +137,9 @@ class Database:
                     for index in table.indexes
                     if index.name and index.name not in actual_indexes
                 )
-                actual_constraints = {constraint.get("name") for constraint in inspector.get_unique_constraints(table.name)}
+                actual_constraints = {
+                    constraint.get("name") for constraint in inspector.get_unique_constraints(table.name)
+                }
                 missing_constraints.extend(
                     f"{table.name}.{constraint.name}"
                     for constraint in table.constraints
@@ -168,9 +170,10 @@ class Database:
             current_version = 0
             missing_migrations: list[str] = []
             if "schema_versions" in table_names:
-                current_version = connection.scalar(
-                    select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)
-                ) or 0
+                current_version = (
+                    connection.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1))
+                    or 0
+                )
             if "schema_migrations" not in table_names:
                 missing_migrations = [migration.migration_id for migration in MIGRATIONS]
             else:
@@ -223,16 +226,12 @@ class Database:
         if self.settings.database_backup_before_migrate and self.migration_preview():
             self.backup_before_migration()
         with self.engine.connect() as connection:
-            migration_ledger_existed = "schema_migrations" in set(
-                connection.dialect.get_table_names(connection)
-            )
+            migration_ledger_existed = "schema_migrations" in set(connection.dialect.get_table_names(connection))
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as connection:
-            current_version = connection.scalar(
-                select(SchemaVersion.version)
-                .order_by(SchemaVersion.version.desc())
-                .limit(1)
-            ) or 0
+            current_version = (
+                connection.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc()).limit(1)) or 0
+            )
             # v1-v21 deployments predate the migration ledger.  Their existing
             # schema_versions rows are the durable record that those canonical
             # upgrades completed, so restore the ledger before validation adds

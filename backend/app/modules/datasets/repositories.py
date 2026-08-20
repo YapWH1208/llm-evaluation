@@ -15,10 +15,25 @@ from app.db.database import Database
 
 
 _DATASET_FIELDS = (
-    "dataset_id", "version", "revision", "source_url", "credential_binding_id", "checksum",
-    "size_bytes", "local_path", "prepared_path", "license_text", "license_accepted_at",
-    "input_field", "reference_field", "capabilities", "languages", "evaluation_type",
-    "status", "error_message", "created_at",
+    "dataset_id",
+    "version",
+    "revision",
+    "source_url",
+    "credential_binding_id",
+    "checksum",
+    "size_bytes",
+    "local_path",
+    "prepared_path",
+    "license_text",
+    "license_accepted_at",
+    "input_field",
+    "reference_field",
+    "capabilities",
+    "languages",
+    "evaluation_type",
+    "status",
+    "error_message",
+    "created_at",
 )
 
 
@@ -37,7 +52,10 @@ class SqliteDatasetRepository:
 
     def list(self) -> list[dict[str, Any]]:
         with self.database.get_session() as session:
-            return [_copy_dataset_model(item) for item in session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))]
+            return [
+                _copy_dataset_model(item)
+                for item in session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))
+            ]
 
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
         item = DatasetVersion(**{key: values[key] for key in _DATASET_FIELDS if key in values and key != "created_at"})
@@ -101,7 +119,10 @@ class SqliteSessionDatasetRepository:
         return _copy_dataset_model(item) if item is not None else None
 
     def list(self) -> list[dict[str, Any]]:
-        return [_copy_dataset_model(item) for item in self.session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))]
+        return [
+            _copy_dataset_model(item)
+            for item in self.session.scalars(select(DatasetVersion).order_by(DatasetVersion.created_at.desc()))
+        ]
 
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
         item = DatasetVersion(**{key: values[key] for key in _DATASET_FIELDS if key in values and key != "created_at"})
@@ -161,9 +182,14 @@ class MongoDatasetRepository:
         return self.store.list_documents("dataset_versions", sort=[("created_at", -1)])
 
     def create(self, values: Mapping[str, Any]) -> dict[str, Any]:
-        existing = self.store.list_documents("dataset_versions", query={
-            "dataset_id": values.get("dataset_id"), "version": values.get("version"), "revision": values.get("revision"),
-        })
+        existing = self.store.list_documents(
+            "dataset_versions",
+            query={
+                "dataset_id": values.get("dataset_id"),
+                "version": values.get("version"),
+                "revision": values.get("revision"),
+            },
+        )
         if existing:
             raise ValueError("Dataset revision already exists")
         document = {key: value for key, value in values.items() if key in _DATASET_FIELDS and key != "created_at"}

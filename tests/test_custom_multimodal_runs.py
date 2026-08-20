@@ -21,7 +21,9 @@ class MultimodalExecutor:
         content = input_snapshot["messages"][0]["content"]
         assert isinstance(content, list)
         assert content[1]["source"]["base64_data"]
-        return SampleExecutionResult(True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"yes"}}]}', "yes")
+        return SampleExecutionResult(
+            True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"yes"}}]}', "yes"
+        )
 
 
 def test_custom_multimodal_run_resolves_uploaded_assets_and_uses_normal_execution(tmp_path: Path) -> None:
@@ -42,7 +44,11 @@ def test_custom_multimodal_run_resolves_uploaded_assets_and_uses_normal_executio
         ).json()
         endpoint = client.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "test-secret-key",
+                "model_name": "example-model",
+            },
         ).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         created = client.post(
@@ -51,7 +57,15 @@ def test_custom_multimodal_run_resolves_uploaded_assets_and_uses_normal_executio
                 "model_endpoint_id": endpoint["id"],
                 "sample_id": "image-1",
                 "reference_answer": "yes",
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "Does the image exist?"}, {"type": "image", "source": {"asset_id": asset["id"]}, "mime_type": "image/png"}]}],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Does the image exist?"},
+                            {"type": "image", "source": {"asset_id": asset["id"]}, "mime_type": "image/png"},
+                        ],
+                    }
+                ],
             },
         )
         assert created.status_code == 201

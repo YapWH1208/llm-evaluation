@@ -13,11 +13,21 @@ from app.modules.benchmarks.prompts import PromptTemplateError, validate_templat
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 
 router = APIRouter(prefix="/api/v1/prompt-packages", tags=["prompt packages"])
+
+
 class PromptPackageCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200); version: str = Field(min_length=1, max_length=64)
-    prompt_type: Literal["official", "platform_default", "user_custom", "benchmark_variant", "language_specific"] = "user_custom"; system_message: str | None = None; user_template: str = Field(min_length=1)
-    few_shot_examples: list[Any] = Field(default_factory=list); output_format: dict[str, Any] | None = None
-    response_parser: dict[str, Any] | None = None; scoring_rule: dict[str, Any] | None = None; change_log: str | None = None
+    name: str = Field(min_length=1, max_length=200)
+    version: str = Field(min_length=1, max_length=64)
+    prompt_type: Literal["official", "platform_default", "user_custom", "benchmark_variant", "language_specific"] = (
+        "user_custom"
+    )
+    system_message: str | None = None
+    user_template: str = Field(min_length=1)
+    few_shot_examples: list[Any] = Field(default_factory=list)
+    output_format: dict[str, Any] | None = None
+    response_parser: dict[str, Any] | None = None
+    scoring_rule: dict[str, Any] | None = None
+    change_log: str | None = None
 
     @field_validator("user_template")
     @classmethod
@@ -38,33 +48,53 @@ class PromptPackageCreate(BaseModel):
         except ScoringError as error:
             raise ValueError(str(error)) from error
         return value
+
+
 class PromptPackageResponse(PromptPackageCreate):
     model_config = ConfigDict(from_attributes=True)
-    id: str; created_at: datetime
+    id: str
+    created_at: datetime
+
+
 def get_session(request: Request) -> Generator[Session | None, None, None]:
     if getattr(request.app.state, "document_store", None) is not None:
         yield None
         return
     session = request.app.state.database.get_session()
-    try: yield session
-    finally: session.close()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 SessionDependency = Annotated[Session | None, Depends(get_session)]
+
 
 def get_document_store(request: Request) -> MongoDocumentStore | None:
     return getattr(request.app.state, "document_store", None)
+
+
 @router.post("", response_model=PromptPackageResponse, status_code=status.HTTP_201_CREATED)
-def create_prompt_package(payload: PromptPackageCreate, request: Request, session: SessionDependency) -> PromptPackage | dict[str, Any]:
+def create_prompt_package(
+    payload: PromptPackageCreate, request: Request, session: SessionDependency
+) -> PromptPackage | dict[str, Any]:
     store = get_document_store(request)
     if store is not None:
         if store.list_documents("prompt_packages", query={"name": payload.name, "version": payload.version}):
             raise HTTPException(409, "Prompt package name and version already exist")
         return store.insert_document("prompt_packages", {**payload.model_dump(), "created_at": datetime.now()})
     assert session is not None
-    item = PromptPackage(**payload.model_dump()); session.add(item)
-    try: session.commit()
+    item = PromptPackage(**payload.model_dump())
+    session.add(item)
+    try:
+        session.commit()
     except IntegrityError as error:
-        session.rollback(); raise HTTPException(409, "Prompt package name and version already exist") from error
-    session.refresh(item); return item
+        session.rollback()
+        raise HTTPException(409, "Prompt package name and version already exist") from error
+    session.refresh(item)
+    return item
+
+
 @router.get("", response_model=list[PromptPackageResponse])
 def list_prompt_packages(request: Request, session: SessionDependency) -> list[PromptPackage | dict[str, Any]]:
     store = get_document_store(request)
@@ -144,13 +174,11 @@ def delete_prompt_package(
 
 
 def _ensure_prompt_package_is_unreferenced(session: Session, prompt_package_id: str) -> None:
-    if session.scalar(
-        select(EvaluationRun.id)
-        .where(EvaluationRun.prompt_package_id == prompt_package_id)
-        .limit(1)
-    ):
+    if session.scalar(select(EvaluationRun.id).where(EvaluationRun.prompt_package_id == prompt_package_id).limit(1)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation run")
-    if any(_suite_references_prompt_package(suite, prompt_package_id) for suite in session.scalars(select(EvaluationSuite))):
+    if any(
+        _suite_references_prompt_package(suite, prompt_package_id) for suite in session.scalars(select(EvaluationSuite))
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Prompt package is referenced by an evaluation suite")
 
 
@@ -166,9 +194,7 @@ def _ensure_mongo_prompt_package_is_unreferenced(store: MongoDocumentStore, prom
 
 def _suite_references_prompt_package(suite: EvaluationSuite | dict[str, Any], prompt_package_id: str) -> bool:
     default_overrides = (
-        suite.get("default_prompt_overrides")
-        if isinstance(suite, dict)
-        else suite.default_prompt_overrides
+        suite.get("default_prompt_overrides") if isinstance(suite, dict) else suite.default_prompt_overrides
     )
     if isinstance(default_overrides, dict) and any(value == prompt_package_id for value in default_overrides.values()):
         return True

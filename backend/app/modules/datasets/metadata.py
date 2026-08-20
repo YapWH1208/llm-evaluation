@@ -4,9 +4,7 @@ import re
 from collections.abc import Iterable
 
 
-EVALUATION_TYPES = frozenset(
-    {"classification", "generation", "code", "language_modeling", "custom"}
-)
+EVALUATION_TYPES = frozenset({"classification", "generation", "code", "language_modeling", "custom"})
 MAX_DATASET_METADATA_VALUES = 32
 MAX_DATASET_METADATA_VALUE_LENGTH = 64
 _CAPABILITY = re.compile(r"^[a-z0-9][a-z0-9_]*$")
@@ -23,9 +21,7 @@ def normalize_capabilities(values: Iterable[str]) -> list[str]:
         item = _bounded_text(value, "capability").lower()
         item = re.sub(r"[\s-]+", "_", item)
         if not _CAPABILITY.fullmatch(item):
-            raise DatasetMetadataError(
-                "Capabilities may contain lowercase letters, numbers, and underscores."
-            )
+            raise DatasetMetadataError("Capabilities may contain lowercase letters, numbers, and underscores.")
         normalized.add(item)
     return _bounded_collection(normalized, "capabilities")
 
@@ -65,9 +61,7 @@ def _bounded_text(value: str, label: str) -> str:
     if not normalized:
         raise DatasetMetadataError(f"Each {label} must not be blank.")
     if len(normalized) > MAX_DATASET_METADATA_VALUE_LENGTH:
-        raise DatasetMetadataError(
-            f"Each {label} must be at most {MAX_DATASET_METADATA_VALUE_LENGTH} characters."
-        )
+        raise DatasetMetadataError(f"Each {label} must be at most {MAX_DATASET_METADATA_VALUE_LENGTH} characters.")
     if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
         raise DatasetMetadataError(f"Each {label} must not contain control characters.")
     return normalized
@@ -75,7 +69,5 @@ def _bounded_text(value: str, label: str) -> str:
 
 def _bounded_collection(values: set[str], label: str) -> list[str]:
     if len(values) > MAX_DATASET_METADATA_VALUES:
-        raise DatasetMetadataError(
-            f"Datasets may declare at most {MAX_DATASET_METADATA_VALUES} {label}."
-        )
+        raise DatasetMetadataError(f"Datasets may declare at most {MAX_DATASET_METADATA_VALUES} {label}.")
     return sorted(values, key=lambda item: (item.lower(), item))

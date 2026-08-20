@@ -7,11 +7,14 @@ from app.modules.evaluations.names import format_run_display_name, resolve_run_d
 def test_format_run_display_name_is_safe_bounded_and_uses_utc() -> None:
     created_at = datetime(2026, 8, 11, 9, 7, 6, tzinfo=timezone.utc)
 
-    assert format_run_display_name(
-        "  Módèl_Name/v2  ",
-        "  Data Set_01  ",
-        created_at,
-    ) == "Model-Name-v2_Data-Set-01_20260811T090706Z"
+    assert (
+        format_run_display_name(
+            "  Módèl_Name/v2  ",
+            "  Data Set_01  ",
+            created_at,
+        )
+        == "Model-Name-v2_Data-Set-01_20260811T090706Z"
+    )
     assert len(format_run_display_name("x" * 800, "y" * 800, created_at)) <= 500
 
 
@@ -33,9 +36,7 @@ def test_resolve_run_display_name_preserves_persisted_names_and_falls_back_deter
             "dataset_version": {"dataset_id": "legacy_data"},
         },
     }
-    assert resolve_run_display_name(legacy_dataset) == (
-        "legacy-model_legacy-data_20260811T090706Z"
-    )
+    assert resolve_run_display_name(legacy_dataset) == ("legacy-model_legacy-data_20260811T090706Z")
 
     legacy_benchmark = SimpleNamespace(
         display_name=None,
@@ -43,6 +44,4 @@ def test_resolve_run_display_name_preserves_persisted_names_and_falls_back_deter
         benchmark_id="text-quick-check",
         configuration_snapshot={"endpoint": {"model_name": "model"}},
     )
-    assert resolve_run_display_name(legacy_benchmark) == (
-        "model_text-quick-check_20260811T090706Z"
-    )
+    assert resolve_run_display_name(legacy_benchmark) == ("model_text-quick-check_20260811T090706Z")

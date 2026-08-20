@@ -215,8 +215,12 @@ def build_judge_agreement(assessments: list[JudgeAssessment | dict[str, Any]]) -
     """Make multi-judge disagreement explicit without merging judge evidence."""
 
     successful = [item for item in assessments if _assessment_value(item, "status") == "succeeded"]
-    scores = [float(score) for item in successful if isinstance(score := _assessment_value(item, "score"), (int, float))]
-    decisions = [_normalized_pairwise_decision(item) for item in successful if _normalized_pairwise_decision(item) is not None]
+    scores = [
+        float(score) for item in successful if isinstance(score := _assessment_value(item, "score"), (int, float))
+    ]
+    decisions = [
+        _normalized_pairwise_decision(item) for item in successful if _normalized_pairwise_decision(item) is not None
+    ]
     labels = [str(value) for item in successful if isinstance(value := _assessment_value(item, "label"), str) and value]
     decision_values = decisions or labels
     score_range = max(scores) - min(scores) if scores else None
@@ -239,7 +243,13 @@ def build_judge_agreement(assessments: list[JudgeAssessment | dict[str, Any]]) -
             "range": round(score_range, 12) if score_range is not None else None,
         },
         "decisions": {"distinct": distinct_decisions, "count": len(decision_values)},
-        "swap_test_group_count": len({_assessment_value(item, "swap_test_group_id") for item in successful if _assessment_value(item, "swap_test_group_id")}),
+        "swap_test_group_count": len(
+            {
+                _assessment_value(item, "swap_test_group_id")
+                for item in successful
+                if _assessment_value(item, "swap_test_group_id")
+            }
+        ),
     }
 
 

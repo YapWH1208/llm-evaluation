@@ -26,8 +26,7 @@ ProtocolProfile = Literal[
 ]
 
 
-def _validate_loopback_profile(
-    base_url: str, protocol_profile: str) -> None:
+def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
     hostname = urlparse(base_url).hostname
     if hostname is None:
         return
@@ -79,10 +78,7 @@ class EndpointBase(BaseModel):
     def validate_default_request_body(cls, value: dict[str, Any]) -> dict[str, Any]:
         protected_fields = sorted(set(value).intersection(PROTECTED_REQUEST_FIELDS))
         if protected_fields:
-            raise ValueError(
-                "default_request_body cannot override protected fields: "
-                + ", ".join(protected_fields)
-            )
+            raise ValueError("default_request_body cannot override protected fields: " + ", ".join(protected_fields))
         return value
 
     @field_validator("custom_headers")
@@ -257,7 +253,9 @@ def test_model_endpoint_connection(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
     result: ConnectionTestResult = connection_tester.test(endpoint, api_key)
     tested_at = datetime.now(timezone.utc)
-    updated = service.record_connection_test(endpoint_id, success=result.success, message=result.message, tested_at=tested_at)
+    updated = service.record_connection_test(
+        endpoint_id, success=result.success, message=result.message, tested_at=tested_at
+    )
     endpoint_status = updated["status"] if isinstance(updated, dict) else updated.status
 
     return ConnectionTestResponse(
@@ -281,7 +279,9 @@ def preview_model_request(
     service: EndpointServiceDependency,
 ) -> RequestPreviewResponse:
     profile, request_body = service.preview_request(endpoint_id, payload.messages)
-    return RequestPreviewResponse(protocol_profile=profile, request_body=request_body, protected_fields=sorted(PROTECTED_REQUEST_FIELDS))
+    return RequestPreviewResponse(
+        protocol_profile=profile, request_body=request_body, protected_fields=sorted(PROTECTED_REQUEST_FIELDS)
+    )
 
 
 @router.patch("/{endpoint_id}", response_model=ModelEndpointResponse)

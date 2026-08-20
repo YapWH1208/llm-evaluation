@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db.models import JudgeAssessment, SampleAttempt
 from app.db.mongo import MongoDocumentStore
-from app.modules.reviews.judges import JudgeAssessmentError, assess_pairwise_sample_attempt, assess_sample_attempt, build_judge_agreement
+from app.modules.reviews.judges import (
+    JudgeAssessmentError,
+    assess_pairwise_sample_attempt,
+    assess_sample_attempt,
+    build_judge_agreement,
+)
 from app.modules.reviews.mongo_judges import assess_mongo_pairwise_sample_attempt, assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor
 
@@ -152,7 +157,9 @@ def create_judge_comparison(
 
 
 @router.get("/sample/{sample_attempt_id}", response_model=list[JudgeAssessmentResponse])
-def list_judge_assessments(sample_attempt_id: str, request: Request, session: SessionDependency) -> list[JudgeAssessment | dict[str, Any]]:
+def list_judge_assessments(
+    sample_attempt_id: str, request: Request, session: SessionDependency
+) -> list[JudgeAssessment | dict[str, Any]]:
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
         return store.list_documents(
@@ -176,8 +183,12 @@ def get_judge_agreement(sample_attempt_id: str, request: Request, session: Sessi
     if store is not None:
         if store.get_document("sample_attempts", sample_attempt_id) is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Sample attempt not found.")
-        return build_judge_agreement(store.list_documents("judge_assessments", query={"sample_attempt_id": sample_attempt_id}))
+        return build_judge_agreement(
+            store.list_documents("judge_assessments", query={"sample_attempt_id": sample_attempt_id})
+        )
     assert session is not None
     if session.get(SampleAttempt, sample_attempt_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sample attempt not found.")
-    return build_judge_agreement(list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id == sample_attempt_id))))
+    return build_judge_agreement(
+        list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id == sample_attempt_id)))
+    )

@@ -33,8 +33,9 @@ router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
 def get_session(request: Request) -> Generator[Session | None, None, None]:
-    if getattr(request.app.state,"document_store",None) is not None:
-        yield None;return
+    if getattr(request.app.state, "document_store", None) is not None:
+        yield None
+        return
     session = request.app.state.database.get_session()
     try:
         yield session
@@ -145,9 +146,19 @@ def evidence_scatter(
     if run_ids is not None and len(run_ids) > 1_000:
         raise HTTPException(422, "At most 1,000 run IDs may be selected.")
     allowed_statuses = {
-        "waiting_for_dataset", "queued", "running", "pausing", "paused",
-        "cancelling", "cancelled", "completed", "completed_with_errors", "failed",
-        "scoring", "aggregating", "generating_report",
+        "waiting_for_dataset",
+        "queued",
+        "running",
+        "pausing",
+        "paused",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "completed_with_errors",
+        "failed",
+        "scoring",
+        "aggregating",
+        "generating_report",
     }
     unknown_statuses = sorted(set(statuses or ()) - allowed_statuses)
     if unknown_statuses:
@@ -158,10 +169,7 @@ def evidence_scatter(
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
         runs: list[Any] = store.list_documents("evaluation_runs")
-        endpoints = {
-            str(endpoint["id"]): endpoint
-            for endpoint in store.list_documents("model_endpoints")
-        }
+        endpoints = {str(endpoint["id"]): endpoint for endpoint in store.list_documents("model_endpoints")}
         metric_rows: list[Any] = store.list_documents(
             "aggregate_metrics",
             sort=[("run_id", 1), ("metric_name", 1), ("aggregation_version", -1)],
@@ -169,17 +177,16 @@ def evidence_scatter(
     else:
         assert session is not None
         runs = list(session.scalars(select(EvaluationRun)))
-        endpoints = {
-            endpoint.id: endpoint
-            for endpoint in session.scalars(select(ModelEndpoint))
-        }
-        metric_rows = list(session.scalars(
-            select(AggregateMetric).order_by(
-                AggregateMetric.run_id,
-                AggregateMetric.metric_name,
-                AggregateMetric.aggregation_version.desc(),
+        endpoints = {endpoint.id: endpoint for endpoint in session.scalars(select(ModelEndpoint))}
+        metric_rows = list(
+            session.scalars(
+                select(AggregateMetric).order_by(
+                    AggregateMetric.run_id,
+                    AggregateMetric.metric_name,
+                    AggregateMetric.aggregation_version.desc(),
+                )
             )
-        ))
+        )
     metrics_by_run = _latest_metrics_by_run(metric_rows)
     filters = ScatterFilters(
         run_ids=frozenset(run_ids) if run_ids is not None else None,
@@ -238,22 +245,47 @@ def capability_matrix(
 
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
-        runs = [item for item in store.list_documents("evaluation_runs", sort=[("completed_at", -1)]) if item.get("status") in {"completed", "completed_with_errors"}]
+        runs = [
+            item
+            for item in store.list_documents("evaluation_runs", sort=[("completed_at", -1)])
+            if item.get("status") in {"completed", "completed_with_errors"}
+        ]
         records: list[dict[str, Any]] = []
         for run in runs:
             endpoint = store.get_document("model_endpoints", str(run["model_endpoint_id"]))
-            definitions = store.list_documents("benchmark_definitions", query={"benchmark_id": run["benchmark_id"], "version": run["benchmark_version"]})
+            definitions = store.list_documents(
+                "benchmark_definitions",
+                query={"benchmark_id": run["benchmark_id"], "version": run["benchmark_version"]},
+            )
             manifest = definitions[0].get("manifest", {}) if definitions else {}
             records.append(_matrix_record(run, endpoint, manifest, _latest_mongo_attempts(store, str(run["id"]))))
         return _matrix_response(records, baseline_run_id)
 
     assert session is not None
-    runs = list(session.scalars(select(EvaluationRun).where(EvaluationRun.status.in_(["completed", "completed_with_errors"])).order_by(EvaluationRun.completed_at.desc())))
+    runs = list(
+        session.scalars(
+            select(EvaluationRun)
+            .where(EvaluationRun.status.in_(["completed", "completed_with_errors"]))
+            .order_by(EvaluationRun.completed_at.desc())
+        )
+    )
     records = []
     for run in runs:
         endpoint = session.get(ModelEndpoint, run.model_endpoint_id)
-        definition = session.scalar(select(BenchmarkDefinition).where(BenchmarkDefinition.benchmark_id == run.benchmark_id, BenchmarkDefinition.version == run.benchmark_version))
-        records.append(_matrix_record(run, endpoint, definition.manifest if definition is not None else {}, _latest_sqlite_attempts(session, run)))
+        definition = session.scalar(
+            select(BenchmarkDefinition).where(
+                BenchmarkDefinition.benchmark_id == run.benchmark_id,
+                BenchmarkDefinition.version == run.benchmark_version,
+            )
+        )
+        records.append(
+            _matrix_record(
+                run,
+                endpoint,
+                definition.manifest if definition is not None else {},
+                _latest_sqlite_attempts(session, run),
+            )
+        )
     return _matrix_response(records, baseline_run_id)
 
 
@@ -265,7 +297,9 @@ def _latest_sqlite_attempts(session: Session, run: EvaluationRun) -> list[Any]:
 
 def _latest_mongo_attempts(store: MongoDocumentStore, run_id: str) -> list[dict[str, Any]]:
     current: dict[str, dict[str, Any]] = {}
-    for attempt in store.list_documents("sample_attempts", query={"run_id": run_id}, sort=[("sample_id", 1), ("attempt_number", -1)]):
+    for attempt in store.list_documents(
+        "sample_attempts", query={"run_id": run_id}, sort=[("sample_id", 1), ("attempt_number", -1)]
+    ):
         current.setdefault(str(attempt["sample_id"]), attempt)
     return list(current.values())
 
@@ -296,13 +330,24 @@ def _matrix_response(records: list[dict[str, Any]], baseline_run_id: str | None)
     legacy_heatmap: list[dict[str, Any]] = []
     for record in records:
         metrics = _attempt_metrics(record["attempts"])
-        legacy_heatmap.append({
-            "run_id": record["run_id"], "model_endpoint_id": record["model_endpoint_id"], "model_name": record["model_name"],
-            "benchmark_id": record["benchmark_id"], "benchmark_version": record["benchmark_version"],
-            "accuracy": metrics["score"], "success_rate": metrics["success_rate"], "error_rate": metrics["error_rate"],
-            "average_latency_ms": metrics["average_latency_ms"], "estimated_cost": metrics["estimated_cost"], "currency": record["currency"],
-            "required_capabilities": record["required_capabilities"], "sample_count": metrics["sample_count"], "confidence_interval": metrics["confidence_interval"],
-        })
+        legacy_heatmap.append(
+            {
+                "run_id": record["run_id"],
+                "model_endpoint_id": record["model_endpoint_id"],
+                "model_name": record["model_name"],
+                "benchmark_id": record["benchmark_id"],
+                "benchmark_version": record["benchmark_version"],
+                "accuracy": metrics["score"],
+                "success_rate": metrics["success_rate"],
+                "error_rate": metrics["error_rate"],
+                "average_latency_ms": metrics["average_latency_ms"],
+                "estimated_cost": metrics["estimated_cost"],
+                "currency": record["currency"],
+                "required_capabilities": record["required_capabilities"],
+                "sample_count": metrics["sample_count"],
+                "confidence_interval": metrics["confidence_interval"],
+            }
+        )
     dimensions = {
         "model_benchmark": _dimension_cells(records, "model_benchmark", baseline_run_id),
         "model_capability": _dimension_cells(records, "model_capability", baseline_run_id),
@@ -314,26 +359,51 @@ def _matrix_response(records: list[dict[str, Any]], baseline_run_id: str | None)
     declared_capabilities = {capability for record in records for capability in record["required_capabilities"]}
     capability_matrix = [
         {
-            "model_endpoint_id": cell["x_key"], "capability": cell["y_key"], "run_count": len(cell["run_ids"]),
-            "accuracy": cell["score"], "success_rate": cell["success_rate"], "error_rate": cell["error_rate"],
-            "average_latency_ms": cell["average_latency_ms"], "estimated_cost": cell["estimated_cost"],
-            "sample_count": cell["sample_count"], "confidence_interval": cell["confidence_interval"],
-            "baseline_score": cell["baseline_score"], "delta": cell["delta"],
+            "model_endpoint_id": cell["x_key"],
+            "capability": cell["y_key"],
+            "run_count": len(cell["run_ids"]),
+            "accuracy": cell["score"],
+            "success_rate": cell["success_rate"],
+            "error_rate": cell["error_rate"],
+            "average_latency_ms": cell["average_latency_ms"],
+            "estimated_cost": cell["estimated_cost"],
+            "sample_count": cell["sample_count"],
+            "confidence_interval": cell["confidence_interval"],
+            "baseline_score": cell["baseline_score"],
+            "delta": cell["delta"],
         }
         for cell in dimensions["model_capability"]
         if cell["y_key"] in declared_capabilities
     ]
-    return {"baseline_run_id": baseline_run_id, "heatmap": legacy_heatmap, "capability_matrix": capability_matrix, "heatmaps": dimensions}
+    return {
+        "baseline_run_id": baseline_run_id,
+        "heatmap": legacy_heatmap,
+        "capability_matrix": capability_matrix,
+        "heatmaps": dimensions,
+    }
 
 
-def _dimension_cells(records: list[dict[str, Any]], dimension: str, baseline_run_id: str | None) -> list[dict[str, Any]]:
+def _dimension_cells(
+    records: list[dict[str, Any]], dimension: str, baseline_run_id: str | None
+) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for record in records:
         for y_key, attempts in _dimension_buckets(record, dimension):
             x_key = record["prompt_label"] if dimension == "prompt_benchmark" else record["model_endpoint_id"]
             x_label = record["prompt_label"] if dimension == "prompt_benchmark" else record["model_name"]
             key = (x_key, y_key)
-            group = grouped.setdefault(key, {"x_key": x_key, "x_label": x_label, "y_key": y_key, "y_label": y_key, "attempts": [], "by_run": {}, "currencies": set()})
+            group = grouped.setdefault(
+                key,
+                {
+                    "x_key": x_key,
+                    "x_label": x_label,
+                    "y_key": y_key,
+                    "y_label": y_key,
+                    "attempts": [],
+                    "by_run": {},
+                    "currencies": set(),
+                },
+            )
             group["attempts"].extend(attempts)
             group["by_run"].setdefault(record["run_id"], []).extend(attempts)
             if record["currency"]:
@@ -344,14 +414,25 @@ def _dimension_cells(records: list[dict[str, Any]], dimension: str, baseline_run
         baseline_attempts = group["by_run"].get(baseline_run_id, []) if baseline_run_id else []
         baseline_metrics = _attempt_metrics(baseline_attempts)
         baseline_score = baseline_metrics["score"] if baseline_attempts else None
-        cells.append({
-            "x_key": group["x_key"], "x_label": group["x_label"], "y_key": group["y_key"], "y_label": group["y_label"],
-            "run_ids": sorted(group["by_run"]), "score": metrics["score"], "sample_count": metrics["sample_count"],
-            "confidence_interval": metrics["confidence_interval"], "success_rate": metrics["success_rate"], "error_rate": metrics["error_rate"],
-            "average_latency_ms": metrics["average_latency_ms"], "estimated_cost": metrics["estimated_cost"],
-            "currency": next(iter(group["currencies"])) if len(group["currencies"]) == 1 else None,
-            "baseline_score": baseline_score, "delta": _difference(metrics["score"], baseline_score),
-        })
+        cells.append(
+            {
+                "x_key": group["x_key"],
+                "x_label": group["x_label"],
+                "y_key": group["y_key"],
+                "y_label": group["y_label"],
+                "run_ids": sorted(group["by_run"]),
+                "score": metrics["score"],
+                "sample_count": metrics["sample_count"],
+                "confidence_interval": metrics["confidence_interval"],
+                "success_rate": metrics["success_rate"],
+                "error_rate": metrics["error_rate"],
+                "average_latency_ms": metrics["average_latency_ms"],
+                "estimated_cost": metrics["estimated_cost"],
+                "currency": next(iter(group["currencies"])) if len(group["currencies"]) == 1 else None,
+                "baseline_score": baseline_score,
+                "delta": _difference(metrics["score"], baseline_score),
+            }
+        )
     return sorted(cells, key=lambda item: (item["y_label"], item["x_label"]))
 
 
@@ -390,8 +471,11 @@ def _attempt_metrics(attempts: list[Any]) -> dict[str, Any]:
     failed = sum(_value(item, "status") == "failed" for item in terminal)
     score = round(sum(scores) / len(scores), 6) if scores else None
     return {
-        "score": score, "sample_count": len(scores), "confidence_interval": _confidence_interval(scores),
-        "success_rate": _ratio(successful, len(terminal)), "error_rate": _ratio(failed, len(terminal)),
+        "score": score,
+        "sample_count": len(scores),
+        "confidence_interval": _confidence_interval(scores),
+        "success_rate": _ratio(successful, len(terminal)),
+        "error_rate": _ratio(failed, len(terminal)),
         "average_latency_ms": round(sum(latencies) / len(latencies), 6) if latencies else None,
         "estimated_cost": round(sum(costs), 12) if costs else None,
     }
@@ -402,7 +486,11 @@ def _confidence_interval(scores: list[float]) -> dict[str, object] | None:
         return None
     average = sum(scores) / len(scores)
     margin = 1.96 * math.sqrt(max(0.0, average * (1 - average)) / len(scores))
-    return {"method": "normal_95", "lower": round(max(0.0, average - margin), 6), "upper": round(min(1.0, average + margin), 6)}
+    return {
+        "method": "normal_95",
+        "lower": round(max(0.0, average - margin), 6),
+        "upper": round(min(1.0, average + margin), 6),
+    }
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:

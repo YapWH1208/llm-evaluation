@@ -39,8 +39,18 @@ class DatasetService:
 
     def create(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         values = dict(payload)
-        values["status"] = DatasetStatus.LICENSE_REQUIRED.value if values.get("license_text") else DatasetStatus.NOT_DOWNLOADED.value
-        values.update({"local_path": None, "prepared_path": None, "size_bytes": None, "license_accepted_at": None, "error_message": None})
+        values["status"] = (
+            DatasetStatus.LICENSE_REQUIRED.value if values.get("license_text") else DatasetStatus.NOT_DOWNLOADED.value
+        )
+        values.update(
+            {
+                "local_path": None,
+                "prepared_path": None,
+                "size_bytes": None,
+                "license_accepted_at": None,
+                "error_message": None,
+            }
+        )
         try:
             return self.repository.create(values)
         except ValueError as error:
@@ -67,10 +77,23 @@ class DatasetService:
 
     def update(self, dataset_version_id: str, payload: Mapping[str, Any], *, data_root: str) -> dict[str, Any]:
         current = self.get(dataset_version_id)
-        values = {key: payload.get(key) for key in (
-            "dataset_id", "version", "revision", "source_url", "checksum", "license_text",
-            "credential_binding_id", "input_field", "reference_field", "capabilities", "languages", "evaluation_type",
-        )}
+        values = {
+            key: payload.get(key)
+            for key in (
+                "dataset_id",
+                "version",
+                "revision",
+                "source_url",
+                "checksum",
+                "license_text",
+                "credential_binding_id",
+                "input_field",
+                "reference_field",
+                "capabilities",
+                "languages",
+                "evaluation_type",
+            )
+        }
         validate_dataset_field_defaults(
             current.get("prepared_path") if isinstance(current.get("prepared_path"), str) else None,
             data_root,
@@ -112,14 +135,22 @@ class DatasetService:
         if dataset.get("license_text") and dataset.get("license_accepted_at") is None:
             self.repository.update(dataset_version_id, {"status": DatasetStatus.LICENSE_REQUIRED.value})
             raise DatasetError("Dataset license must be accepted before download.")
-        destination = Path(data_root).resolve() / "datasets" / str(dataset["dataset_id"]) / str(dataset["version"]) / str(dataset["revision"])
+        destination = (
+            Path(data_root).resolve()
+            / "datasets"
+            / str(dataset["dataset_id"])
+            / str(dataset["version"])
+            / str(dataset["revision"])
+        )
         destination.mkdir(parents=True, exist_ok=True)
         target = destination / f"dataset{dataset_source_suffix(source_url)}"
         temporary = destination / "dataset.part"
         self.repository.update(dataset_version_id, {"status": DatasetStatus.DOWNLOADING.value, "error_message": None})
 
         try:
-            source, headers = resolve_dataset_source(source_url, str(dataset["revision"]), dataset.get("credential_binding_id"), settings)
+            source, headers = resolve_dataset_source(
+                source_url, str(dataset["revision"]), dataset.get("credential_binding_id"), settings
+            )
 
             def ensure_not_paused() -> None:
                 current = self.get(dataset_version_id)
@@ -131,7 +162,9 @@ class DatasetService:
                 temporary,
                 headers,
                 ensure_not_paused,
-                max_bytes=settings.dataset_download_max_bytes if settings is not None else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
+                max_bytes=settings.dataset_download_max_bytes
+                if settings is not None
+                else DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
                 allowed_hosts=settings.dataset_allowed_hosts if settings is not None else (),
             )
             self.repository.update(dataset_version_id, {"status": DatasetStatus.VERIFYING.value})
@@ -142,10 +175,17 @@ class DatasetService:
             temporary.replace(target)
             self.repository.update(dataset_version_id, {"status": DatasetStatus.PREPARING.value})
             prepared_path = prepare_dataset_cache(target)
-            updated = self.repository.update(dataset_version_id, {
-                "checksum": checksum, "size_bytes": target.stat().st_size, "local_path": str(target),
-                "prepared_path": str(prepared_path), "status": DatasetStatus.READY.value, "error_message": None,
-            })
+            updated = self.repository.update(
+                dataset_version_id,
+                {
+                    "checksum": checksum,
+                    "size_bytes": target.stat().st_size,
+                    "local_path": str(target),
+                    "prepared_path": str(prepared_path),
+                    "status": DatasetStatus.READY.value,
+                    "error_message": None,
+                },
+            )
             assert updated is not None
             return updated
         except DatasetDownloadPaused as error:
@@ -153,21 +193,36 @@ class DatasetService:
             raise DatasetError(str(error)) from error
         except (httpx.HTTPStatusError, DatasetError) as error:
             status_code = getattr(getattr(error, "response", None), "status_code", 0)
-            credential_required = bool(dataset.get("credential_binding_id")) and ("credential binding" in str(error) or status_code in {401, 403})
-            self.repository.update(dataset_version_id, {
-                "status": DatasetStatus.CREDENTIAL_REQUIRED.value if credential_required else DatasetStatus.FAILED.value,
-                "error_message": str(error)[:500],
-            })
+            credential_required = bool(dataset.get("credential_binding_id")) and (
+                "credential binding" in str(error) or status_code in {401, 403}
+            )
+            self.repository.update(
+                dataset_version_id,
+                {
+                    "status": DatasetStatus.CREDENTIAL_REQUIRED.value
+                    if credential_required
+                    else DatasetStatus.FAILED.value,
+                    "error_message": str(error)[:500],
+                },
+            )
             raise DatasetError(str(error)) from error
         except (httpx.HTTPError, OSError) as error:
-            self.repository.update(dataset_version_id, {"status": DatasetStatus.FAILED.value, "error_message": str(error)[:500]})
+            self.repository.update(
+                dataset_version_id, {"status": DatasetStatus.FAILED.value, "error_message": str(error)[:500]}
+            )
             raise DatasetError(str(error)) from error
 
     def pause(self, dataset_version_id: str) -> dict[str, Any]:
         dataset = self.get(dataset_version_id)
-        if dataset.get("status") not in {DatasetStatus.DOWNLOADING.value, DatasetStatus.VERIFYING.value, DatasetStatus.PREPARING.value}:
+        if dataset.get("status") not in {
+            DatasetStatus.DOWNLOADING.value,
+            DatasetStatus.VERIFYING.value,
+            DatasetStatus.PREPARING.value,
+        }:
             raise DatasetError("Only an active dataset download can be paused.")
-        updated = self.repository.update(dataset_version_id, {"status": DatasetStatus.WAITING.value, "error_message": None})
+        updated = self.repository.update(
+            dataset_version_id, {"status": DatasetStatus.WAITING.value, "error_message": None}
+        )
         assert updated is not None
         return updated
 
@@ -179,7 +234,13 @@ class DatasetService:
         root = (Path(data_root).resolve() / "datasets").resolve()
         target = Path(local_path).resolve()
         if not target.is_relative_to(root) or not target.is_file():
-            self.repository.update(dataset_version_id, {"status": DatasetStatus.CORRUPTED.value, "error_message": "Dataset cache file is missing or outside the configured dataset root."})
+            self.repository.update(
+                dataset_version_id,
+                {
+                    "status": DatasetStatus.CORRUPTED.value,
+                    "error_message": "Dataset cache file is missing or outside the configured dataset root.",
+                },
+            )
             raise DatasetError("Dataset cache file is missing or outside the configured dataset root.")
         self.repository.update(dataset_version_id, {"status": DatasetStatus.VERIFYING.value, "error_message": None})
         digest = hashlib.sha256()
@@ -188,13 +249,28 @@ class DatasetService:
                 digest.update(chunk)
         checksum = digest.hexdigest()
         if dataset.get("checksum") and checksum != str(dataset["checksum"]).lower():
-            self.repository.update(dataset_version_id, {"status": DatasetStatus.CORRUPTED.value, "error_message": "Dataset cache checksum verification failed."})
+            self.repository.update(
+                dataset_version_id,
+                {
+                    "status": DatasetStatus.CORRUPTED.value,
+                    "error_message": "Dataset cache checksum verification failed.",
+                },
+            )
             raise DatasetError("Dataset cache checksum verification failed.")
         prepared_path = dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None
         if not validate_prepared_dataset_cache(prepared_path, data_root):
             self.repository.update(dataset_version_id, {"status": DatasetStatus.PREPARING.value})
             prepared_path = str(prepare_dataset_cache(target))
-        updated = self.repository.update(dataset_version_id, {"checksum": checksum, "size_bytes": target.stat().st_size, "prepared_path": prepared_path, "status": DatasetStatus.READY.value, "error_message": None})
+        updated = self.repository.update(
+            dataset_version_id,
+            {
+                "checksum": checksum,
+                "size_bytes": target.stat().st_size,
+                "prepared_path": prepared_path,
+                "status": DatasetStatus.READY.value,
+                "error_message": None,
+            },
+        )
         assert updated is not None
         return updated
 
@@ -202,15 +278,27 @@ class DatasetService:
         dataset = self.get(dataset_version_id)
         self._ensure_not_referenced(dataset_version_id)
         self._remove_files(dataset, data_root)
-        status = DatasetStatus.LICENSE_REQUIRED.value if dataset.get("license_text") and dataset.get("license_accepted_at") is None else DatasetStatus.NOT_DOWNLOADED.value
-        updated = self.repository.update(dataset_version_id, {"local_path": None, "prepared_path": None, "size_bytes": None, "status": status, "error_message": None})
+        status = (
+            DatasetStatus.LICENSE_REQUIRED.value
+            if dataset.get("license_text") and dataset.get("license_accepted_at") is None
+            else DatasetStatus.NOT_DOWNLOADED.value
+        )
+        updated = self.repository.update(
+            dataset_version_id,
+            {"local_path": None, "prepared_path": None, "size_bytes": None, "status": status, "error_message": None},
+        )
         assert updated is not None
         return updated
 
     def delete(self, dataset_version_id: str, data_root: str) -> dict[str, Any]:
         dataset = self.get(dataset_version_id)
         self._ensure_not_referenced(dataset_version_id)
-        if dataset.get("status") in {DatasetStatus.DOWNLOADING.value, DatasetStatus.PREPARING.value, DatasetStatus.VERIFYING.value, DatasetStatus.REMOVING.value}:
+        if dataset.get("status") in {
+            DatasetStatus.DOWNLOADING.value,
+            DatasetStatus.PREPARING.value,
+            DatasetStatus.VERIFYING.value,
+            DatasetStatus.REMOVING.value,
+        }:
             raise DatasetError("Dataset cannot be deleted while it is downloading or preparing.")
         self._remove_files(dataset, data_root)
         deleted = self.repository.delete(dataset_version_id)
@@ -240,17 +328,31 @@ class DatasetService:
         checksum = hashlib.sha256(content).hexdigest()
         expected = dataset.get("checksum")
         if isinstance(expected, str) and expected.lower() != checksum:
-            self.repository.update(dataset_version_id, {"status": DatasetStatus.CORRUPTED.value, "error_message": "Uploaded dataset checksum verification failed."})
+            self.repository.update(
+                dataset_version_id,
+                {
+                    "status": DatasetStatus.CORRUPTED.value,
+                    "error_message": "Uploaded dataset checksum verification failed.",
+                },
+            )
             raise DatasetError("Uploaded dataset checksum verification failed.")
         temporary = destination / f".{safe_name}.part"
         temporary.write_bytes(content)
         temporary.replace(target)
         self.repository.update(dataset_version_id, {"status": DatasetStatus.PREPARING.value})
         prepared_path = prepare_dataset_cache(target)
-        updated = self.repository.update(dataset_version_id, {
-            "source_url": target.as_uri(), "checksum": checksum, "size_bytes": len(content), "local_path": str(target),
-            "prepared_path": str(prepared_path), "status": DatasetStatus.READY.value, "error_message": None,
-        })
+        updated = self.repository.update(
+            dataset_version_id,
+            {
+                "source_url": target.as_uri(),
+                "checksum": checksum,
+                "size_bytes": len(content),
+                "local_path": str(target),
+                "prepared_path": str(prepared_path),
+                "status": DatasetStatus.READY.value,
+                "error_message": None,
+            },
+        )
         assert updated is not None
         return updated
 
@@ -267,11 +369,22 @@ class DatasetService:
             if not target.is_relative_to(root):
                 raise DatasetError("Dataset cache path is outside the configured dataset root.")
             target.unlink(missing_ok=True)
-        clear_prepared_dataset_cache(dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None, data_root)
+        clear_prepared_dataset_cache(
+            dataset.get("prepared_path") if isinstance(dataset.get("prepared_path"), str) else None, data_root
+        )
         upload_dir = (Path(data_root).resolve() / "datasets" / "uploads" / str(dataset.get("id"))).resolve()
         if upload_dir.is_relative_to((Path(data_root).resolve() / "datasets").resolve()):
             import shutil
+
             shutil.rmtree(upload_dir, ignore_errors=True)
 
 
-__all__ = ["DatasetService", "DatasetError", "DatasetDownloadPaused", "resolve_dataset_source", "write_dataset_source", "prepare_dataset_cache", "dataset_edit_lifecycle_updates"]
+__all__ = [
+    "DatasetService",
+    "DatasetError",
+    "DatasetDownloadPaused",
+    "resolve_dataset_source",
+    "write_dataset_source",
+    "prepare_dataset_cache",
+    "dataset_edit_lifecycle_updates",
+]

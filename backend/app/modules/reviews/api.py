@@ -80,9 +80,7 @@ def create(payload: ReviewCreate, request: Request, session: SessionDependency) 
     if session.get(SampleAttempt, payload.sample_attempt_id) is None:
         raise HTTPException(404, "Sample attempt not found")
     existing = list(
-        session.scalars(
-            select(HumanReview).where(HumanReview.sample_attempt_id == payload.sample_attempt_id)
-        )
+        session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id == payload.sample_attempt_id))
     )
     _validate_new_review(payload, existing)
     item = HumanReview(**payload.model_dump())
@@ -127,13 +125,13 @@ def review_agreement(
     if store is not None:
         if store.get_document("sample_attempts", sample_attempt_id) is None:
             raise HTTPException(404, "Sample attempt not found")
-        return _agreement(sample_attempt_id, store.list_documents("human_reviews", query={"sample_attempt_id": sample_attempt_id}))
+        return _agreement(
+            sample_attempt_id, store.list_documents("human_reviews", query={"sample_attempt_id": sample_attempt_id})
+        )
     assert session is not None
     if session.get(SampleAttempt, sample_attempt_id) is None:
         raise HTTPException(404, "Sample attempt not found")
-    reviews = list(
-        session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id == sample_attempt_id))
-    )
+    reviews = list(session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id == sample_attempt_id)))
     return _agreement(sample_attempt_id, reviews)
 
 
@@ -173,7 +171,10 @@ def _agreement(sample_attempt_id: str, reviews: list[Any]) -> ReviewAgreementRes
         "standard_deviation": round(pstdev(scores), 6) if len(scores) > 1 else 0.0 if scores else None,
         "range": score_range,
     }
-    stage_counts = {stage: sum(row.get("review_stage", "primary") == stage for row in rows) for stage in ("primary", "secondary", "adjudication")}
+    stage_counts = {
+        stage: sum(row.get("review_stage", "primary") == stage for row in rows)
+        for stage in ("primary", "secondary", "adjudication")
+    }
     if adjudications:
         agreement_status = "adjudicated"
     elif len(independent) < 2 or len({str(row.get("reviewer_id")) for row in independent}) < 2:

@@ -71,7 +71,17 @@ class EndpointService:
 
     def update(self, endpoint_id: str, payload: Any, cipher: SecretCipher) -> Any:
         endpoint = self.get(endpoint_id)
-        nullable_fields = {"api_key_max_concurrency", "requests_per_second", "requests_per_minute", "tokens_per_minute", "input_tokens_per_minute", "output_tokens_per_minute", "input_cost_per_million", "output_cost_per_million", "notes"}
+        nullable_fields = {
+            "api_key_max_concurrency",
+            "requests_per_second",
+            "requests_per_minute",
+            "tokens_per_minute",
+            "input_tokens_per_minute",
+            "output_tokens_per_minute",
+            "input_cost_per_million",
+            "output_cost_per_million",
+            "notes",
+        }
         values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
         values = {key: value for key, value in values.items() if value is not None or key in nullable_fields}
         base_url = str(values.get("base_url", _value(endpoint, "base_url")))
@@ -81,9 +91,17 @@ class EndpointService:
             values["currency"] = str(values["currency"]).upper()
         if "api_key" in payload.model_fields_set and payload.api_key is not None:
             api_key = payload.api_key.get_secret_value()
-            values.update({"encrypted_api_key": cipher.encrypt(api_key), "api_key_mask": mask_secret(api_key), "api_key_fingerprint": _api_key_fingerprint(api_key)})
+            values.update(
+                {
+                    "encrypted_api_key": cipher.encrypt(api_key),
+                    "api_key_mask": mask_secret(api_key),
+                    "api_key_fingerprint": _api_key_fingerprint(api_key),
+                }
+            )
         if _connection_fields_changed(payload, values, endpoint):
-            values.update({"status": EndpointStatus.UNVERIFIED.value, "last_tested_at": None, "last_connection_error": None})
+            values.update(
+                {"status": EndpointStatus.UNVERIFIED.value, "last_tested_at": None, "last_connection_error": None}
+            )
         updated = self._repository.update(endpoint_id, values)
         if updated is None:
             raise NotFoundError("Model endpoint not found.", context={"endpoint_id": endpoint_id})
@@ -98,7 +116,14 @@ class EndpointService:
         return endpoint, build_connection_test_request(_endpoint_proxy(endpoint), self._providers)
 
     def record_connection_test(self, endpoint_id: str, *, success: bool, message: str, tested_at: datetime) -> Any:
-        updated = self._repository.update(endpoint_id, {"last_tested_at": tested_at, "status": EndpointStatus.AVAILABLE.value if success else EndpointStatus.UNAVAILABLE.value, "last_connection_error": None if success else message})
+        updated = self._repository.update(
+            endpoint_id,
+            {
+                "last_tested_at": tested_at,
+                "status": EndpointStatus.AVAILABLE.value if success else EndpointStatus.UNAVAILABLE.value,
+                "last_connection_error": None if success else message,
+            },
+        )
         if updated is None:
             raise NotFoundError("Model endpoint not found.", context={"endpoint_id": endpoint_id})
         return updated
@@ -110,7 +135,9 @@ class EndpointService:
             request = adapter.build_request_with_options(
                 _endpoint_proxy(endpoint),
                 messages,
-                effective_request_options({}, protocol_profile=adapter.profile, model_defaults=_value(endpoint, "default_request_body", {})),
+                effective_request_options(
+                    {}, protocol_profile=adapter.profile, model_defaults=_value(endpoint, "default_request_body", {})
+                ),
             )
         except ValueError as error:
             raise ValidationError(str(error)) from error
@@ -132,9 +159,22 @@ class EndpointService:
         self.get(endpoint_id)
         existing = self._repository.find_capability(endpoint_id, capability_key)
         detected = _value(existing, "auto_detection_status", CapabilityDetection.NOT_TESTED.value)
-        return self._repository.upsert_capability(endpoint_id, capability_key, {"user_declared_status": user_status.value, "auto_detection_status": detected, "effective_status": effective_capability(user_status, str(detected)), "detection_evidence": _value(existing, "detection_evidence"), "detector_version": _value(existing, "detector_version"), "last_detected_at": _value(existing, "last_detected_at")})
+        return self._repository.upsert_capability(
+            endpoint_id,
+            capability_key,
+            {
+                "user_declared_status": user_status.value,
+                "auto_detection_status": detected,
+                "effective_status": effective_capability(user_status, str(detected)),
+                "detection_evidence": _value(existing, "detection_evidence"),
+                "detector_version": _value(existing, "detector_version"),
+                "last_detected_at": _value(existing, "last_detected_at"),
+            },
+        )
 
-    def detect_capabilities(self, endpoint_id: str, capability_keys: list[str], cipher: SecretCipher, detector: CapabilityDetector) -> list[Any]:
+    def detect_capabilities(
+        self, endpoint_id: str, capability_keys: list[str], cipher: SecretCipher, detector: CapabilityDetector
+    ) -> list[Any]:
         endpoint = self.get(endpoint_id)
         keys = list(dict.fromkeys(key.strip() for key in capability_keys if key.strip()))
         if not keys:
@@ -150,8 +190,23 @@ class EndpointService:
             if result is None:
                 continue
             existing = self._repository.find_capability(endpoint_id, key)
-            user_status = CapabilityDeclaration(str(_value(existing, "user_declared_status", CapabilityDeclaration.UNKNOWN.value)))
-            updated.append(self._repository.upsert_capability(endpoint_id, key, {"user_declared_status": user_status.value, "auto_detection_status": result.status.value, "effective_status": effective_capability(user_status, result.status.value), "detection_evidence": result.evidence, "detector_version": str(result.evidence.get("adapter_version", "unknown")), "last_detected_at": now}))
+            user_status = CapabilityDeclaration(
+                str(_value(existing, "user_declared_status", CapabilityDeclaration.UNKNOWN.value))
+            )
+            updated.append(
+                self._repository.upsert_capability(
+                    endpoint_id,
+                    key,
+                    {
+                        "user_declared_status": user_status.value,
+                        "auto_detection_status": result.status.value,
+                        "effective_status": effective_capability(user_status, result.status.value),
+                        "detection_evidence": result.evidence,
+                        "detector_version": str(result.evidence.get("adapter_version", "unknown")),
+                        "last_detected_at": now,
+                    },
+                )
+            )
         return updated
 
 
@@ -160,7 +215,16 @@ def _value(endpoint: Any, key: str, default: Any = None) -> Any:
 
 
 def _capability_values(capability: Any) -> dict[str, Any]:
-    return {"id": str(_value(capability, "id")), "capability_key": str(_value(capability, "capability_key")), "user_declared_status": str(_value(capability, "user_declared_status")), "auto_detection_status": str(_value(capability, "auto_detection_status")), "effective_status": str(_value(capability, "effective_status")), "detection_evidence": _value(capability, "detection_evidence"), "detector_version": _value(capability, "detector_version"), "last_detected_at": _value(capability, "last_detected_at")}
+    return {
+        "id": str(_value(capability, "id")),
+        "capability_key": str(_value(capability, "capability_key")),
+        "user_declared_status": str(_value(capability, "user_declared_status")),
+        "auto_detection_status": str(_value(capability, "auto_detection_status")),
+        "effective_status": str(_value(capability, "effective_status")),
+        "detection_evidence": _value(capability, "detection_evidence"),
+        "detector_version": _value(capability, "detector_version"),
+        "last_detected_at": _value(capability, "last_detected_at"),
+    }
 
 
 def effective_capability(user: CapabilityDeclaration, detected: str) -> str:
@@ -184,7 +248,15 @@ def _endpoint_proxy(endpoint: Any) -> Any:
 
 
 def _connection_fields_changed(payload: Any, values: dict[str, Any], current: Any) -> bool:
-    connection_fields = {"api_key", "base_url", "model_name", "protocol_profile", "custom_headers", "default_request_body", "timeout_seconds"}
+    connection_fields = {
+        "api_key",
+        "base_url",
+        "model_name",
+        "protocol_profile",
+        "custom_headers",
+        "default_request_body",
+        "timeout_seconds",
+    }
     if "api_key" in payload.model_fields_set and payload.api_key is not None:
         return True
     for field in connection_fields.intersection(payload.model_fields_set):

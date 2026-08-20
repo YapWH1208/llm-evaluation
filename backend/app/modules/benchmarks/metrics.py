@@ -36,11 +36,17 @@ _DEFINITIONS = {
     for definition in (
         MetricDefinition("score", "Primary score", "ratio", "all", ("primary_score",)),
         MetricDefinition("accuracy", "Accuracy", "ratio", "classification", ("predicted_label", "reference_label")),
-        MetricDefinition("precision_macro", "Macro precision", "ratio", "classification", ("predicted_label", "reference_label")),
-        MetricDefinition("recall_macro", "Macro recall", "ratio", "classification", ("predicted_label", "reference_label")),
+        MetricDefinition(
+            "precision_macro", "Macro precision", "ratio", "classification", ("predicted_label", "reference_label")
+        ),
+        MetricDefinition(
+            "recall_macro", "Macro recall", "ratio", "classification", ("predicted_label", "reference_label")
+        ),
         MetricDefinition("f1_macro", "Macro F1", "ratio", "classification", ("predicted_label", "reference_label")),
         MetricDefinition("exact_match", "Exact match", "ratio", "generation", ("prediction", "reference_text")),
-        MetricDefinition("normalized_exact_match", "Normalized exact match", "ratio", "generation", ("prediction", "reference_text")),
+        MetricDefinition(
+            "normalized_exact_match", "Normalized exact match", "ratio", "generation", ("prediction", "reference_text")
+        ),
         MetricDefinition("token_f1", "Token F1", "ratio", "generation", ("prediction", "reference_text")),
         MetricDefinition("bleu", "BLEU", "ratio", "generation", ("prediction", "reference_text")),
         MetricDefinition("rouge_l", "ROUGE-L", "ratio", "generation", ("prediction", "reference_text")),
@@ -77,13 +83,19 @@ def evaluation_type_from_snapshot(snapshot: object) -> str:
         return "custom"
     profile = snapshot.get("dataset_profile")
     evaluation_type = profile.get("evaluation_type") if isinstance(profile, dict) else None
-    return evaluation_type if isinstance(evaluation_type, str) and evaluation_type in {
-        "classification",
-        "generation",
-        "code",
-        "language_modeling",
-        "custom",
-    } else "custom"
+    return (
+        evaluation_type
+        if isinstance(evaluation_type, str)
+        and evaluation_type
+        in {
+            "classification",
+            "generation",
+            "code",
+            "language_modeling",
+            "custom",
+        }
+        else "custom"
+    )
 
 
 def build_execution_metric_evidence(
@@ -100,23 +112,31 @@ def build_execution_metric_evidence(
         return evidence
     values = list(token_logprobs)
     if len(values) > MAX_RETAINED_TOKEN_LOGPROBS:
-        evidence.update({
-            "token_logprobs_complete": False,
-            "token_logprobs_reason": f"Token log probabilities exceed the {MAX_RETAINED_TOKEN_LOGPROBS}-value retention limit.",
-        })
+        evidence.update(
+            {
+                "token_logprobs_complete": False,
+                "token_logprobs_reason": f"Token log probabilities exceed the {MAX_RETAINED_TOKEN_LOGPROBS}-value retention limit.",
+            }
+        )
         evidence.pop("token_logprobs", None)
         return evidence
-    if not values or any(not isinstance(value, int | float) or not math.isfinite(float(value)) or float(value) > 0 for value in values):
-        evidence.update({
-            "token_logprobs_complete": False,
-            "token_logprobs_reason": "Token log probabilities are missing or invalid.",
-        })
+    if not values or any(
+        not isinstance(value, int | float) or not math.isfinite(float(value)) or float(value) > 0 for value in values
+    ):
+        evidence.update(
+            {
+                "token_logprobs_complete": False,
+                "token_logprobs_reason": "Token log probabilities are missing or invalid.",
+            }
+        )
         evidence.pop("token_logprobs", None)
         return evidence
-    evidence.update({
-        "token_logprobs": [float(value) for value in values],
-        "token_logprobs_complete": True,
-    })
+    evidence.update(
+        {
+            "token_logprobs": [float(value) for value in values],
+            "token_logprobs_complete": True,
+        }
+    )
     evidence.pop("token_logprobs_reason", None)
     return evidence
 
@@ -127,16 +147,8 @@ def compute_profile_metrics(
     evaluation_type: str,
     include_llm_judge: bool = False,
 ) -> list[MetricResult]:
-    successful = [
-        attempt
-        for attempt in attempts
-        if _value(attempt, "status") == SampleAttemptStatus.SUCCEEDED.value
-    ]
-    scores = [
-        float(score)
-        for attempt in successful
-        if _finite_number(score := _value(attempt, "score"))
-    ]
+    successful = [attempt for attempt in attempts if _value(attempt, "status") == SampleAttemptStatus.SUCCEEDED.value]
+    scores = [float(score) for attempt in successful if _finite_number(score := _value(attempt, "score"))]
     results = [
         MetricResult(
             "score",
@@ -226,13 +238,15 @@ def _generation_metrics(attempts: list[Any]) -> list[MetricResult]:
     return [
         MetricResult(
             name,
-            _average([
-                score_prediction(
-                    predicted,
-                    {"answer": reference, "scoring": {"type": rule}},
-                )
-                for predicted, reference in pairs
-            ]),
+            _average(
+                [
+                    score_prediction(
+                        predicted,
+                        {"answer": reference, "scoring": {"type": rule}},
+                    )
+                    for predicted, reference in pairs
+                ]
+            ),
             len(pairs),
         )
         for name, rule in names_and_rules

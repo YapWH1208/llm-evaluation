@@ -46,7 +46,9 @@ def _proxy(document: dict[str, Any]) -> Any:
     return type("DocumentEndpoint", (), document)()
 
 
-def _mongo_estimated_cost(endpoint: dict[str, Any], input_tokens: int | None, output_tokens: int | None) -> float | None:
+def _mongo_estimated_cost(
+    endpoint: dict[str, Any], input_tokens: int | None, output_tokens: int | None
+) -> float | None:
     if input_tokens is None and output_tokens is None:
         return None
     input_cost = (input_tokens or 0) * (float(endpoint.get("input_cost_per_million") or 0) / 1_000_000)
@@ -185,22 +187,22 @@ def assess_mongo_pairwise_sample_attempt(
                 "sample_attempt_id": sample_attempt_id,
                 "comparison_sample_attempt_id": comparison_sample_attempt_id,
                 "judge_endpoint_id": judge_endpoint_id,
-            "rubric": rubric_snapshot,
-            "answer_order": order,
-            "swap_test_group_id": group_id,
-            "selected_answer": None,
-            "score": None,
-            "label": None,
-            "rationale": None,
-            "raw_response": None,
-            "input_tokens": None,
-            "output_tokens": None,
-            "estimated_cost": None,
-            "status": "running",
-            "error_message": None,
-            "created_at": datetime.now(timezone.utc),
-        },
-    )
+                "rubric": rubric_snapshot,
+                "answer_order": order,
+                "swap_test_group_id": group_id,
+                "selected_answer": None,
+                "score": None,
+                "label": None,
+                "rationale": None,
+                "raw_response": None,
+                "input_tokens": None,
+                "output_tokens": None,
+                "estimated_cost": None,
+                "status": "running",
+                "error_message": None,
+                "created_at": datetime.now(timezone.utc),
+            },
+        )
         answers = {
             "A": attempt.get("parsed_prediction") if order[0] == "target" else comparison.get("parsed_prediction"),
             "B": comparison.get("parsed_prediction") if order[1] == "comparison" else attempt.get("parsed_prediction"),

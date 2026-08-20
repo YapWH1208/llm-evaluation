@@ -24,7 +24,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if arguments.action == "preview":
             pending = configured_database.migration_preview()
-            print(json.dumps([{"version": item.version, "id": item.migration_id, "description": item.description} for item in pending], indent=2))
+            print(
+                json.dumps(
+                    [
+                        {"version": item.version, "id": item.migration_id, "description": item.description}
+                        for item in pending
+                    ],
+                    indent=2,
+                )
+            )
             return 0
         if arguments.action == "validate":
             try:
@@ -35,7 +43,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             validation = configured_database.initialize("auto_migrate")
         assert not isinstance(validation, tuple)
-        print(json.dumps({"database": validation.database_kind, "schema_version": validation.current_version, "valid": validation.is_valid}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "database": validation.database_kind,
+                    "schema_version": validation.current_version,
+                    "valid": validation.is_valid,
+                },
+                indent=2,
+            )
+        )
         return 0
     except MongoConfigurationError as error:
         print(str(error))

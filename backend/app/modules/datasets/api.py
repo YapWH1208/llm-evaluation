@@ -9,7 +9,12 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.datasets.metadata import DatasetMetadataError, normalize_capabilities, normalize_evaluation_type, normalize_languages
+from app.modules.datasets.metadata import (
+    DatasetMetadataError,
+    normalize_capabilities,
+    normalize_evaluation_type,
+    normalize_languages,
+)
 from app.modules.datasets.service import DatasetError, DatasetService
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
@@ -33,7 +38,9 @@ class DatasetCreate(BaseModel):
     @model_validator(mode="after")
     def normalize(self) -> "DatasetCreate":
         if self.credential_env_var is not None:
-            raise ValueError("credential_env_var is no longer accepted. Configure an administrator-owned credential_binding_id instead.")
+            raise ValueError(
+                "credential_env_var is no longer accepted. Configure an administrator-owned credential_binding_id instead."
+            )
         if self.input_field is not None and not self.input_field.strip():
             raise ValueError("input_field must not be blank when provided.")
         if self.reference_field is not None and not self.reference_field.strip():
@@ -89,7 +96,9 @@ class DatasetCredentialReference(BaseModel):
     @model_validator(mode="after")
     def reject_legacy_credential_environment_variable(self) -> "DatasetCredentialReference":
         if self.credential_env_var is not None:
-            raise ValueError("credential_env_var is no longer accepted. Configure an administrator-owned credential_binding_id instead.")
+            raise ValueError(
+                "credential_env_var is no longer accepted. Configure an administrator-owned credential_binding_id instead."
+            )
         return self
 
 
@@ -118,12 +127,18 @@ def _validate_registration(payload: DatasetCreate, request: Request) -> None:
         return
     if parsed.scheme == "hf" and parsed.netloc and len([part for part in parsed.path.split("/") if part]) >= 2:
         return
-    raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Dataset source_url must be HTTPS or hf://owner/repository/path. Use the upload endpoint for local files.")
+    raise HTTPException(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "Dataset source_url must be HTTPS or hf://owner/repository/path. Use the upload endpoint for local files.",
+    )
 
 
 def _validate_credential_binding(binding_id: str | None, request: Request) -> None:
     if binding_id is not None and binding_id not in request.app.state.settings.dataset_credential_bindings:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Dataset credential binding {binding_id!r} is not configured. Ask an administrator to configure LLE_DATASET_CREDENTIAL_BINDINGS_JSON.")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Dataset credential binding {binding_id!r} is not configured. Ask an administrator to configure LLE_DATASET_CREDENTIAL_BINDINGS_JSON.",
+        )
 
 
 def _decode_upload(value: str) -> bytes:
@@ -154,7 +169,9 @@ def get_dataset_disk_usage(request: Request) -> dict[str, int | str]:
 
 
 @router.get("/{dataset_version_id}/preview", response_model=DatasetPreviewResponse)
-def preview_dataset_version(dataset_version_id: str, request: Request, limit: int = Query(default=5, ge=1, le=50)) -> dict[str, object]:
+def preview_dataset_version(
+    dataset_version_id: str, request: Request, limit: int = Query(default=5, ge=1, le=50)
+) -> dict[str, object]:
     try:
         return _service(request).preview(dataset_version_id, request.app.state.settings.data_root, limit=limit)
     except DatasetError as error:
@@ -166,7 +183,11 @@ def preview_dataset_version(dataset_version_id: str, request: Request, limit: in
 def update_dataset_version(dataset_version_id: str, payload: DatasetCreate, request: Request) -> dict[str, Any]:
     _validate_registration(payload, request)
     try:
-        return _service(request).update(dataset_version_id, payload.model_dump(exclude={"credential_env_var"}), data_root=request.app.state.settings.data_root)
+        return _service(request).update(
+            dataset_version_id,
+            payload.model_dump(exclude={"credential_env_var"}),
+            data_root=request.app.state.settings.data_root,
+        )
     except DatasetError as error:
         code = status.HTTP_404_NOT_FOUND if "not found" in str(error).lower() else status.HTTP_409_CONFLICT
         raise HTTPException(code, str(error)) from error
@@ -183,7 +204,9 @@ def accept_dataset_license(dataset_version_id: str, request: Request) -> dict[st
 @router.post("/{dataset_version_id}/download", response_model=DatasetResponse)
 def download_dataset_version(dataset_version_id: str, request: Request) -> dict[str, Any]:
     try:
-        return _service(request).download(dataset_version_id, request.app.state.settings.data_root, request.app.state.settings)
+        return _service(request).download(
+            dataset_version_id, request.app.state.settings.data_root, request.app.state.settings
+        )
     except DatasetError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
@@ -210,7 +233,9 @@ def validate_dataset(dataset_version_id: str, request: Request) -> dict[str, Any
 
 
 @router.put("/{dataset_version_id}/credential-reference", response_model=DatasetResponse)
-def set_dataset_credential_reference(dataset_version_id: str, payload: DatasetCredentialReference, request: Request) -> dict[str, Any]:
+def set_dataset_credential_reference(
+    dataset_version_id: str, payload: DatasetCredentialReference, request: Request
+) -> dict[str, Any]:
     _validate_credential_binding(payload.credential_binding_id, request)
     try:
         return _service(request).set_credential_binding(dataset_version_id, payload.credential_binding_id)
@@ -221,7 +246,12 @@ def set_dataset_credential_reference(dataset_version_id: str, payload: DatasetCr
 @router.post("/{dataset_version_id}/upload", response_model=DatasetResponse)
 def upload_dataset_version(dataset_version_id: str, payload: DatasetUpload, request: Request) -> dict[str, Any]:
     try:
-        return _service(request).upload(dataset_version_id, filename=payload.filename, content=_decode_upload(payload.base64_data), data_root=request.app.state.settings.data_root)
+        return _service(request).upload(
+            dataset_version_id,
+            filename=payload.filename,
+            content=_decode_upload(payload.base64_data),
+            data_root=request.app.state.settings.data_root,
+        )
     except DatasetError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 

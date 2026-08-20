@@ -37,14 +37,16 @@ MATERIAL_DATASET_SOURCE_FIELDS = (
     "license_text",
     "credential_binding_id",
 )
-INACTIVE_DATASET_EDIT_RESET_STATUSES = frozenset({
-    DatasetStatus.NOT_DOWNLOADED.value,
-    DatasetStatus.UPDATE_AVAILABLE.value,
-    DatasetStatus.LICENSE_REQUIRED.value,
-    DatasetStatus.CREDENTIAL_REQUIRED.value,
-    DatasetStatus.CORRUPTED.value,
-    DatasetStatus.FAILED.value,
-})
+INACTIVE_DATASET_EDIT_RESET_STATUSES = frozenset(
+    {
+        DatasetStatus.NOT_DOWNLOADED.value,
+        DatasetStatus.UPDATE_AVAILABLE.value,
+        DatasetStatus.LICENSE_REQUIRED.value,
+        DatasetStatus.CREDENTIAL_REQUIRED.value,
+        DatasetStatus.CORRUPTED.value,
+        DatasetStatus.FAILED.value,
+    }
+)
 
 
 def resolve_dataset_source(
@@ -118,7 +120,9 @@ def _validate_remote_dataset_url(source_url: str, *, allowed_hosts: tuple[str, .
     if not host:
         raise DatasetError("Dataset URL must include a hostname.")
     normalized_host = host.lower().rstrip(".")
-    if allowed_hosts and not any(normalized_host == item or normalized_host.endswith(f".{item}") for item in allowed_hosts):
+    if allowed_hosts and not any(
+        normalized_host == item or normalized_host.endswith(f".{item}") for item in allowed_hosts
+    ):
         raise DatasetError("Dataset URL host is not allowed by the configured network policy.")
     try:
         return validate_outbound_url(source_url)
@@ -149,8 +153,7 @@ def write_dataset_source(
     max_bytes: int = DEFAULT_DATASET_DOWNLOAD_MAX_BYTES,
     allowed_hosts: tuple[str, ...] = (),
 ) -> str:
-    """Redirects are followed only after every hop passes the same outbound URL and host-policy validation as the original source, so no unvalidated destination is ever contacted and the redirect body is never written to disk.
-    """
+    """Redirects are followed only after every hop passes the same outbound URL and host-policy validation as the original source, so no unvalidated destination is ever contacted and the redirect body is never written to disk."""
 
     digest = hashlib.sha256()
     current = source
@@ -212,7 +215,9 @@ def prepare_dataset_cache(target: Path) -> Path:
             for source_file in source_files:
                 relative = source_file.relative_to(source_root).as_posix()
                 for record_number in _indexable_record_numbers(source_file):
-                    index_file.write(json.dumps({"source": relative, "record_number": record_number}, separators=(",", ":")) + "\n")
+                    index_file.write(
+                        json.dumps({"source": relative, "record_number": record_number}, separators=(",", ":")) + "\n"
+                    )
                     record_count += 1
         manifest_path = temporary / "manifest.json"
         manifest_path.write_text(
@@ -264,7 +269,12 @@ def validate_prepared_dataset_cache(prepared_path: str | None, data_root: str) -
         return False
     root = (Path(data_root).resolve() / "datasets").resolve()
     manifest = Path(prepared_path).resolve()
-    return manifest.is_relative_to(root) and manifest.name == "manifest.json" and manifest.parent.name == "prepared" and manifest.is_file()
+    return (
+        manifest.is_relative_to(root)
+        and manifest.name == "manifest.json"
+        and manifest.parent.name == "prepared"
+        and manifest.is_file()
+    )
 
 
 def _materialize_dataset_sources(target: Path, source_root: Path) -> list[Path]:
@@ -372,19 +382,32 @@ def validate_dataset_field_defaults(
     fields = {str(field) for field in preview["fields"]}
     missing = [field for field in (input_field, reference_field) if field is not None and field not in fields]
     if missing:
-        raise DatasetError("Dataset field selection is not present in the current preview schema: " + ", ".join(missing) + ".")
+        raise DatasetError(
+            "Dataset field selection is not present in the current preview schema: " + ", ".join(missing) + "."
+        )
 
 
-def dataset_edit_lifecycle_updates(current: Mapping[str, object], values: Mapping[str, object]) -> dict[str, object | None]:
+def dataset_edit_lifecycle_updates(
+    current: Mapping[str, object], values: Mapping[str, object]
+) -> dict[str, object | None]:
     changed_fields = {field for field in MATERIAL_DATASET_SOURCE_FIELDS if current.get(field) != values.get(field)}
-    if not changed_fields or current.get("local_path") or current.get("prepared_path") or current.get("status") not in INACTIVE_DATASET_EDIT_RESET_STATUSES:
+    if (
+        not changed_fields
+        or current.get("local_path")
+        or current.get("prepared_path")
+        or current.get("status") not in INACTIVE_DATASET_EDIT_RESET_STATUSES
+    ):
         return {}
     lifecycle: dict[str, object | None] = {"error_message": None}
     license_accepted_at = current.get("license_accepted_at")
     if "license_text" in changed_fields:
         license_accepted_at = None
         lifecycle["license_accepted_at"] = None
-    lifecycle["status"] = DatasetStatus.LICENSE_REQUIRED.value if values.get("license_text") and license_accepted_at is None else DatasetStatus.NOT_DOWNLOADED.value
+    lifecycle["status"] = (
+        DatasetStatus.LICENSE_REQUIRED.value
+        if values.get("license_text") and license_accepted_at is None
+        else DatasetStatus.NOT_DOWNLOADED.value
+    )
     return lifecycle
 
 

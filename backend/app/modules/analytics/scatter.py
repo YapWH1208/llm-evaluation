@@ -51,11 +51,7 @@ def build_scatter_response(
     unknown = [axis for axis in (x_axis, y_axis) if axis not in axes]
     if unknown:
         raise ScatterQueryError(
-            "Unknown scatter axis: "
-            + ", ".join(unknown)
-            + ". Available axes: "
-            + ", ".join(sorted(axes))
-            + "."
+            "Unknown scatter axis: " + ", ".join(unknown) + ". Available axes: " + ", ".join(sorted(axes)) + "."
         )
     _validate_filters(filters)
 
@@ -97,26 +93,28 @@ def build_scatter_response(
         total_plottable += 1
         if len(points) >= filters.max_points:
             continue
-        points.append({
-            "run_id": str(_value(run, "id")),
-            "display_name": resolve_run_display_name(run),
-            "model_endpoint_id": context["model_endpoint_id"],
-            "model_name": context["model_name"],
-            "dataset": context["dataset"],
-            "benchmark_id": str(_value(run, "benchmark_id")),
-            "benchmark_version": str(_value(run, "benchmark_version")),
-            "status": str(_value(run, "status")),
-            "created_at": _datetime(_value(run, "created_at")).isoformat(),
-            "capabilities": context["capabilities"],
-            "languages": context["languages"],
-            "evaluation_type": context["evaluation_type"],
-            "x": x_value,
-            "y": y_value,
-            "x_metric": x_axis,
-            "y_metric": y_axis,
-            "x_availability_reason": x_reason,
-            "y_availability_reason": y_reason,
-        })
+        points.append(
+            {
+                "run_id": str(_value(run, "id")),
+                "display_name": resolve_run_display_name(run),
+                "model_endpoint_id": context["model_endpoint_id"],
+                "model_name": context["model_name"],
+                "dataset": context["dataset"],
+                "benchmark_id": str(_value(run, "benchmark_id")),
+                "benchmark_version": str(_value(run, "benchmark_version")),
+                "status": str(_value(run, "status")),
+                "created_at": _datetime(_value(run, "created_at")).isoformat(),
+                "capabilities": context["capabilities"],
+                "languages": context["languages"],
+                "evaluation_type": context["evaluation_type"],
+                "x": x_value,
+                "y": y_value,
+                "x_metric": x_axis,
+                "y_metric": y_axis,
+                "x_availability_reason": x_reason,
+                "y_availability_reason": y_reason,
+            }
+        )
 
     selected_run_ids = [str(_value(item["run"], "id")) for item in eligible]
     unavailable_count = sum(unavailable.values())
@@ -258,10 +256,7 @@ def _validate_filters(filters: ScatterFilters) -> None:
             raise ScatterQueryError(f"Minimum {label} must not exceed maximum {label}.")
         if any(value is not None and not math.isfinite(value) for value in (minimum, maximum)):
             raise ScatterQueryError(f"{label.title()} ranges must contain finite values.")
-    if any(
-        value is not None and value < 0
-        for value in (filters.min_latency_ms, filters.max_latency_ms)
-    ):
+    if any(value is not None and value < 0 for value in (filters.min_latency_ms, filters.max_latency_ms)):
         raise ScatterQueryError("Latency ranges must not be negative.")
     if any(value is not None and value < 0 for value in (filters.min_cost, filters.max_cost)):
         raise ScatterQueryError("Cost ranges must not be negative.")

@@ -150,8 +150,25 @@ def test_scatter_filters_are_combinable_and_default_to_all_eligible_runs() -> No
 )
 def test_scatter_each_filter_selects_the_expected_run(filters: ScatterFilters) -> None:
     runs = [
-        _run("r1", model_id="m1", dataset_id="dataset-a", capabilities=["reasoning"], languages=["en-US"], evaluation_type="classification", created_at=datetime(2026, 8, 2, tzinfo=timezone.utc)),
-        _run("r2", model_id="m2", dataset_id="dataset-b", status="failed", capabilities=["generation"], languages=["fr"], evaluation_type="generation", created_at=datetime(2026, 7, 1, tzinfo=timezone.utc)),
+        _run(
+            "r1",
+            model_id="m1",
+            dataset_id="dataset-a",
+            capabilities=["reasoning"],
+            languages=["en-US"],
+            evaluation_type="classification",
+            created_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+        ),
+        _run(
+            "r2",
+            model_id="m2",
+            dataset_id="dataset-b",
+            status="failed",
+            capabilities=["generation"],
+            languages=["fr"],
+            evaluation_type="generation",
+            created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        ),
     ]
     response = build_scatter_response(
         runs,
@@ -165,14 +182,8 @@ def test_scatter_each_filter_selects_the_expected_run(filters: ScatterFilters) -
 
 
 def test_scatter_counts_unavailable_axes_and_caps_visible_points() -> None:
-    runs = [
-        _run(f"r{index:03}", model_id="m1", dataset_id="dataset-a")
-        for index in range(502)
-    ]
-    metrics = {
-        run["id"]: _metrics(0.5, None if run["id"] == "r501" else 100)
-        for run in runs
-    }
+    runs = [_run(f"r{index:03}", model_id="m1", dataset_id="dataset-a") for index in range(502)]
+    metrics = {run["id"]: _metrics(0.5, None if run["id"] == "r501" else 100) for run in runs}
     response = build_scatter_response(
         runs,
         {"m1": {"model_name": "model"}},
@@ -187,9 +198,7 @@ def test_scatter_counts_unavailable_axes_and_caps_visible_points() -> None:
     assert response["unavailable_count"] == 1
     assert response["truncated_count"] == 1
     assert response["unavailable_by_axis"] == {"x": 0, "y": 1, "both": 0}
-    assert response["unavailable_reasons"] == [
-        {"axis": "y", "reason": "No latency evidence.", "count": 1}
-    ]
+    assert response["unavailable_reasons"] == [{"axis": "y", "reason": "No latency evidence.", "count": 1}]
     assert len(response["points"]) == 500
 
 

@@ -12,15 +12,11 @@ class SecretCipher:
 
     def __init__(self, key: str | None) -> None:
         if not key:
-            raise SecretConfigurationError(
-                "LLE_SECRET_ENCRYPTION_KEY must be configured before storing API keys."
-            )
+            raise SecretConfigurationError("LLE_SECRET_ENCRYPTION_KEY must be configured before storing API keys.")
         try:
             self._fernet = Fernet(key.encode("utf-8"))
         except (TypeError, ValueError) as error:
-            raise SecretConfigurationError(
-                "LLE_SECRET_ENCRYPTION_KEY must be a valid Fernet key."
-            ) from error
+            raise SecretConfigurationError("LLE_SECRET_ENCRYPTION_KEY must be a valid Fernet key.") from error
 
     def encrypt(self, value: str) -> str:
         return self._fernet.encrypt(value.encode("utf-8")).decode("utf-8")

@@ -65,9 +65,7 @@ EXPECTED_MONGO_COLLECTIONS = frozenset(
 
 
 def test_sqlite_schema_contract_is_stable(tmp_path: Path) -> None:
-    database = Database(
-        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'contract.db'}")
-    )
+    database = Database(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'contract.db'}"))
     try:
         validation = database.initialize()
         assert validation.is_valid

@@ -56,11 +56,21 @@ class SqliteEndpointRepository:
 
     def list_capabilities(self, endpoint_id: str) -> list[ModelCapability]:
         with self._database.get_session() as session:
-            return list(session.scalars(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id).order_by(ModelCapability.capability_key)))
+            return list(
+                session.scalars(
+                    select(ModelCapability)
+                    .where(ModelCapability.model_endpoint_id == endpoint_id)
+                    .order_by(ModelCapability.capability_key)
+                )
+            )
 
     def find_capability(self, endpoint_id: str, capability_key: str) -> ModelCapability | None:
         with self._database.get_session() as session:
-            item = session.scalar(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id, ModelCapability.capability_key == capability_key))
+            item = session.scalar(
+                select(ModelCapability).where(
+                    ModelCapability.model_endpoint_id == endpoint_id, ModelCapability.capability_key == capability_key
+                )
+            )
             if item is None:
                 return None
             values = {column.name: getattr(item, column.name) for column in ModelCapability.__table__.columns}
@@ -68,7 +78,11 @@ class SqliteEndpointRepository:
 
     def upsert_capability(self, endpoint_id: str, capability_key: str, values: dict[str, Any]) -> ModelCapability:
         with self._database.get_session() as session:
-            item = session.scalar(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id, ModelCapability.capability_key == capability_key))
+            item = session.scalar(
+                select(ModelCapability).where(
+                    ModelCapability.model_endpoint_id == endpoint_id, ModelCapability.capability_key == capability_key
+                )
+            )
             if item is None:
                 item = ModelCapability(model_endpoint_id=endpoint_id, capability_key=capability_key)
                 session.add(item)
@@ -99,10 +113,14 @@ class MongoEndpointRepository:
         return self._store.delete_document("model_endpoints", endpoint_id)
 
     def list_capabilities(self, endpoint_id: str) -> list[dict[str, Any]]:
-        return self._store.list_documents("model_capabilities", query={"model_endpoint_id": endpoint_id}, sort=[("capability_key", 1)])
+        return self._store.list_documents(
+            "model_capabilities", query={"model_endpoint_id": endpoint_id}, sort=[("capability_key", 1)]
+        )
 
     def find_capability(self, endpoint_id: str, capability_key: str) -> dict[str, Any] | None:
-        items = self._store.list_documents("model_capabilities", query={"model_endpoint_id": endpoint_id, "capability_key": capability_key})
+        items = self._store.list_documents(
+            "model_capabilities", query={"model_endpoint_id": endpoint_id, "capability_key": capability_key}
+        )
         return items[0] if items else None
 
     def upsert_capability(self, endpoint_id: str, capability_key: str, values: dict[str, Any]) -> dict[str, Any]:
@@ -111,4 +129,6 @@ class MongoEndpointRepository:
             updated = self._store.update_document("model_capabilities", str(existing["id"]), values)
             assert updated is not None
             return updated
-        return self._store.insert_document("model_capabilities", {"model_endpoint_id": endpoint_id, "capability_key": capability_key, **values})
+        return self._store.insert_document(
+            "model_capabilities", {"model_endpoint_id": endpoint_id, "capability_key": capability_key, **values}
+        )
