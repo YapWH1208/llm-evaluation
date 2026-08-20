@@ -17,7 +17,7 @@ from app.benchmarks.registry import BenchmarkSample
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.services.evaluation_runs import (
+from app.modules.evaluations.service import (
     RunCreationError,
     _build_sample_messages,
     _estimate_sample_tokens,
@@ -25,8 +25,8 @@ from app.services.evaluation_runs import (
     _sample_modality as _benchmark_sample_modality,
     _split_samples_for_endpoint_budget,
 )
-from app.services.run_names import format_run_display_name
-from app.services.dataset_runs import (
+from app.modules.evaluations.names import format_run_display_name
+from app.modules.evaluations.dataset_runs import (
     DATASET_RUN_BENCHMARK_ID,
     DATASET_RUN_BENCHMARK_VERSION,
     DatasetRunError,
@@ -56,10 +56,10 @@ from app.modules.benchmarks.scoring import ScoringError, score_prediction, valid
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
 from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError
-from app.services.run_analysis import add_summary_insights, summarize_attempts
+from app.modules.evaluations.analysis import add_summary_insights, summarize_attempts
 from app.core.content import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
-from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
+from app.modules.evaluations.executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import standardization_flags
 from app.modules.datasets.repositories import MongoDatasetRepository
@@ -774,7 +774,7 @@ def preflight_mongo_dataset_run(
 
 
 def _dataset_run_manifest() -> dict[str, object]:
-    from app.services.dataset_runs import _DATASET_RUN_MANIFEST
+    from app.modules.evaluations.dataset_runs import _DATASET_RUN_MANIFEST
 
     return dict(_DATASET_RUN_MANIFEST)
 

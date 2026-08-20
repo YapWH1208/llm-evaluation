@@ -16,17 +16,18 @@ from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
 from app.db.models import HumanReview, JudgeAssessment, Report
 from app.db.mongo import MongoDocumentStore
-from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
+from app.modules.evaluations.service import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
-from app.services.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
+from app.modules.evaluations.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
 from app.infrastructure.providers.contracts import ModelExecutor
-from app.services.run_analysis import build_run_summary
-from app.services.run_executor import RunExecutionError, execute_queued_text_run
-from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
-from app.services.run_names import resolve_run_display_name
+from app.modules.evaluations.analysis import build_run_summary
+from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
+from app.modules.evaluations.operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
+from app.modules.evaluations.names import resolve_run_display_name
 from app.services.reports import delete_report_artifact
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
-from app.services.mongo_run_executor import (
+from app.modules.evaluations.lifecycle import RunLifecycle
+from app.modules.evaluations.mongo_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,
     clone_mongo_run,
@@ -441,7 +442,7 @@ def pause_evaluation_run(run_id: str, request: Request, session: SessionDependen
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
         if run is None: raise HTTPException(404, "Evaluation run not found")
-        if run["status"] not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}: raise HTTPException(409, "Run cannot be paused in its current state")
+        if not RunLifecycle.can_pause(run["status"]): raise HTTPException(409, "Run cannot be paused in its current state")
         store.invalidate_run_tasks(run_id)
         for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
             store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.PENDING.value, "completed_at": None, "worker_lease_token": None})
@@ -451,7 +452,7 @@ def pause_evaluation_run(run_id: str, request: Request, session: SessionDependen
     assert session is not None
     run = session.get(EvaluationRun, run_id)
     if run is None: raise HTTPException(404, "Evaluation run not found")
-    if run.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}: raise HTTPException(409, "Run cannot be paused in its current state")
+    if not RunLifecycle.can_pause(run.status): raise HTTPException(409, "Run cannot be paused in its current state")
     run.status = RunStatus.PAUSED.value
     session.execute(
         update(TaskUnit)
@@ -480,7 +481,7 @@ def resume_evaluation_run(run_id: str, request: Request, session: SessionDepende
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
         if run is None: raise HTTPException(404, "Evaluation run not found")
-        if run["status"] != RunStatus.PAUSED.value: raise HTTPException(409, "Only paused runs can be resumed")
+        if not RunLifecycle.can_resume(run["status"]): raise HTTPException(409, "Only paused runs can be resumed")
         for task in store.list_documents("task_units", query={"run_id": run_id}):
             if task["status"] == TaskStatus.CANCELLED.value:
                 store.update_document("task_units", str(task["id"]), {"status": TaskStatus.PENDING.value})
@@ -490,7 +491,7 @@ def resume_evaluation_run(run_id: str, request: Request, session: SessionDepende
     assert session is not None
     run = session.get(EvaluationRun, run_id)
     if run is None: raise HTTPException(404, "Evaluation run not found")
-    if run.status != RunStatus.PAUSED.value: raise HTTPException(409, "Only paused runs can be resumed")
+    if not RunLifecycle.can_resume(run.status): raise HTTPException(409, "Only paused runs can be resumed")
     run.status = RunStatus.QUEUED.value
     for task in session.scalars(select(TaskUnit).where(TaskUnit.run_id == run.id)):
         if task.status == TaskStatus.CANCELLED.value: task.status = TaskStatus.PENDING.value
@@ -502,7 +503,7 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
         if run is None: raise HTTPException(404, "Evaluation run not found")
-        if run["status"] in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}: raise HTTPException(409, "Run cannot be cancelled in its current state")
+        if not RunLifecycle.can_cancel(run["status"]): raise HTTPException(409, "Run cannot be cancelled in its current state")
         store.invalidate_run_tasks(run_id)
         for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
             store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.CANCELLED.value, "worker_lease_token": None})
@@ -512,7 +513,7 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
     assert session is not None
     run = session.get(EvaluationRun, run_id)
     if run is None: raise HTTPException(404, "Evaluation run not found")
-    if run.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}: raise HTTPException(409, "Run cannot be cancelled in its current state")
+    if not RunLifecycle.can_cancel(run.status): raise HTTPException(409, "Run cannot be cancelled in its current state")
     run.status = RunStatus.CANCELLED.value
     session.execute(
         update(TaskUnit)
@@ -540,13 +541,13 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
 def archive_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
     """Hide a terminal run while retaining its complete immutable evidence."""
 
-    terminal = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+    terminal = RunLifecycle.terminal
     store = get_document_store(request)
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
         if run is None:
             raise HTTPException(404, "Evaluation run not found")
-        if run["status"] not in terminal:
+        if not RunLifecycle.can_archive(run["status"]):
             raise HTTPException(409, "Only terminal evaluation runs can be archived")
         updated = store.update_document("evaluation_runs", run_id, {"archived_at": run.get("archived_at") or datetime.now(timezone.utc)})
         assert updated is not None
@@ -555,7 +556,7 @@ def archive_evaluation_run(run_id: str, request: Request, session: SessionDepend
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise HTTPException(404, "Evaluation run not found")
-    if run.status not in terminal:
+    if not RunLifecycle.can_archive(run.status):
         raise HTTPException(409, "Only terminal evaluation runs can be archived")
     run.archived_at = run.archived_at or datetime.now(timezone.utc)
     session.commit()
@@ -572,7 +573,7 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
         run = store.get_document("evaluation_runs", run_id)
         if run is None:
             raise HTTPException(404, "Evaluation run not found")
-        if run.get("archived_at") is None:
+        if not RunLifecycle.can_delete(run.get("archived_at")):
             raise HTTPException(409, "Archive the evaluation run before deleting it")
         attempt_ids = [str(item["id"]) for item in store.list_documents("sample_attempts", query={"run_id": run_id})]
         reports = store.list_documents("reports", query={"run_id": run_id})
@@ -595,7 +596,7 @@ def delete_evaluation_run(run_id: str, request: Request, session: SessionDepende
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise HTTPException(404, "Evaluation run not found")
-    if run.archived_at is None:
+    if not RunLifecycle.can_delete(run.archived_at):
         raise HTTPException(409, "Archive the evaluation run before deleting it")
     for report in session.scalars(select(Report).where(Report.run_id == run.id)):
         delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
@@ -644,13 +645,13 @@ def update_run_scheduling(
     values = payload.model_dump(exclude_unset=True)
     if not values:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Specify a scheduling value to update")
-    terminal = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+    terminal = RunLifecycle.terminal
     store = get_document_store(request)
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
         if run is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-        if run.get("status") in terminal:
+        if not RunLifecycle.can_change_scheduling(run.get("status", "")):
             raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
         updated = store.update_document("evaluation_runs", run_id, values)
         assert updated is not None
@@ -659,7 +660,7 @@ def update_run_scheduling(
     run = session.get(EvaluationRun, run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-    if run.status in terminal:
+    if not RunLifecycle.can_change_scheduling(run.status):
         raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
     for field, value in values.items():
         setattr(run, field, value)

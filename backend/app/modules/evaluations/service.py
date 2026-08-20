@@ -23,7 +23,7 @@ from app.db.models import BenchmarkDefinition
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template, standardization_flags
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
-from app.services.run_names import format_run_display_name
+from app.modules.evaluations.names import format_run_display_name
 
 
 class RunCreationError(ValueError):

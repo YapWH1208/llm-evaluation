@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationSuite
 from app.db.mongo import MongoDocumentStore
-from app.services.evaluation_runs import RunCreationError, create_benchmark_run
-from app.services.mongo_run_executor import MongoRunExecutionError, create_mongo_benchmark_run
+from app.modules.evaluations.service import RunCreationError, create_benchmark_run
+from app.modules.evaluations.mongo_executor import MongoRunExecutionError, create_mongo_benchmark_run
 
 
 router = APIRouter(prefix="/api/v1/evaluation-suites", tags=["evaluation suites"])

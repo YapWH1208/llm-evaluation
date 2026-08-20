@@ -20,8 +20,8 @@ from app.services.aggregation import (
     recompute_aggregate_metrics,
     recompute_mongo_aggregate_metrics,
 )
-from app.services.run_analysis import build_run_summary
-from app.services.mongo_run_executor import build_mongo_run_summary
+from app.modules.evaluations.analysis import build_run_summary
+from app.modules.evaluations.mongo_executor import build_mongo_run_summary
 from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
 from app.services.analytics_scatter import (
     ScatterFilters,
@@ -260,7 +260,7 @@ def capability_matrix(
 
 
 def _latest_sqlite_attempts(session: Session, run: EvaluationRun) -> list[Any]:
-    from app.services.run_analysis import latest_attempts
+    from app.modules.evaluations.analysis import latest_attempts
 
     return latest_attempts(session, run.id)
 

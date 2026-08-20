@@ -21,8 +21,8 @@ from app.db.models import (
     TaskUnit,
 )
 from app.modules.datasets.records import DatasetRecordError, iter_dataset_records
-from app.services.run_names import format_run_display_name
-from app.services.evaluation_runs import (
+from app.modules.evaluations.names import format_run_display_name
+from app.modules.evaluations.service import (
     RunCreationError,
     _build_sample_messages,
     _capability_compatibility,

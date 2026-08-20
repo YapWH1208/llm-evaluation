@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.modules.endpoints.capabilities_api import router as capabilities_router
 from app.modules.datasets.api import router as datasets_router
-from app.api.evaluation_runs import router as evaluation_runs_router
+from app.modules.evaluations.api import router as evaluation_runs_router
 from app.modules.endpoints.api import router as model_endpoints_router
 from app.modules.benchmarks.prompts_api import router as prompt_packages_router
 from app.api.workers import router as workers_router

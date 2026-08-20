@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.main import create_app
 from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
-from app.services.run_names import format_run_display_name
+from app.modules.evaluations.names import format_run_display_name
 from cryptography.fernet import Fernet
 
 
@@ -124,7 +124,7 @@ def _prompt_package(
 
 
 def test_dataset_run_service_manifest_identity() -> None:
-    from app.services.dataset_runs import (
+    from app.modules.evaluations.dataset_runs import (
         DATASET_RUN_BENCHMARK_ID,
         DATASET_RUN_BENCHMARK_VERSION,
         DATASET_RUN_DEFAULT_SAMPLE_LIMIT,
@@ -141,7 +141,7 @@ def test_dataset_run_service_manifest_identity() -> None:
 def test_effective_dataset_scoring_rule_uses_requested_package_default_precedence() -> None:
     from types import SimpleNamespace
 
-    from app.services import dataset_runs
+    from app.modules.evaluations import dataset_runs
 
     package_rule = {"type": "regex_match", "pattern": "BLUE"}
     requested_rule = {"type": "token_f1"}
@@ -575,7 +575,7 @@ def test_dataset_run_judges_with_the_frozen_endpoint_configuration_and_records_j
 
 
 def test_effective_dataset_scoring_rule_rejects_overlong_judge_system_messages() -> None:
-    from app.services import dataset_runs
+    from app.modules.evaluations import dataset_runs
 
     with pytest.raises(dataset_runs.DatasetRunError, match="Scoring rule is invalid:"):
         dataset_runs.effective_dataset_scoring_rule(

@@ -18,7 +18,7 @@ from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
 from app.db.models import CapabilityDetection
 from app.infrastructure.providers.contracts import CapabilityDetectionResult, ConnectionTestResult, SampleExecutionResult
-from app.services.run_names import format_run_display_name
+from app.modules.evaluations.names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
 from app.services.metric_profiles import METRIC_PROFILE_VERSION
@@ -510,7 +510,7 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
-    monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
     settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
@@ -561,7 +561,7 @@ def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypa
         manifest={"benchmark_id": "text-quick-check", "version": "1.0.0", "required_capabilities": ["text_input"], "scoring": {"type": "exact_match"}, "datasets": [], "shard_size": 2},
         samples=lambda _limit: tuple(TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)),
     )
-    monkeypatch.setattr("app.services.mongo_run_executor.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
     settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
     app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
@@ -682,7 +682,7 @@ def test_mongodb_pause_invalidates_a_running_lease_before_a_late_result_can_comm
 
     class PausingExecutor:
         def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
-            from app.api.evaluation_runs import pause_evaluation_run
+            from app.modules.evaluations.api import pause_evaluation_run
 
             run = store.list_documents("evaluation_runs", query={"status": "running"})[0]
             pause_evaluation_run(str(run["id"]), SimpleNamespace(app=app), None)

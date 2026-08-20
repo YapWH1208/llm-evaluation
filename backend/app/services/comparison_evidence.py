@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.metric_profiles import metric_definition
-from app.services.run_names import resolve_run_display_name
+from app.modules.evaluations.names import resolve_run_display_name
 
 
 _OUTCOME_ORDER = (

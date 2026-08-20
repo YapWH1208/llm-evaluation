@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.models import EvaluationRun, HumanReview, JudgeAssessment, Report, SampleAttempt
 from app.services.aggregation import list_aggregate_metrics
 from app.services.metric_profiles import METRIC_PROFILE_VERSION, metric_definition
-from app.services.run_analysis import all_attempts, build_run_summary, latest_attempts
+from app.modules.evaluations.analysis import all_attempts, build_run_summary, latest_attempts
 
 
 class ReportError(ValueError):

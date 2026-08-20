@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, ModelEndpoint, RunStatus, SampleAttempt, SampleAttemptStatus, TaskStatus, TaskType, TaskUnit
-from app.services.evaluation_runs import RunCreationError, _split_items_for_endpoint_budget, create_benchmark_run
-from app.services.run_analysis import latest_attempts
+from app.modules.evaluations.service import RunCreationError, _split_items_for_endpoint_budget, create_benchmark_run
+from app.modules.evaluations.analysis import latest_attempts
 
 
 class RunOperationError(ValueError):

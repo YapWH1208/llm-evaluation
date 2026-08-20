@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DatasetVersion, EvaluationRun, ModelEndpoint, Report, SampleAttempt, TaskUnit
 from app.db.mongo import MongoDocumentStore
-from app.services.run_analysis import summarize_attempts
-from app.services.run_names import resolve_run_display_name
+from app.modules.evaluations.analysis import summarize_attempts
+from app.modules.evaluations.names import resolve_run_display_name
 
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])

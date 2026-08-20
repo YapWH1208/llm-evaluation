@@ -14,8 +14,8 @@ from app.db.models import BenchmarkDefinition, EndpointRateWindow, EndpointSecon
 from app.main import create_app
 from app.benchmarks.text_quick_check import TextSample
 from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
-from app.services.run_names import format_run_display_name
-from app.services.run_executor import _retry_delay_seconds
+from app.modules.evaluations.names import format_run_display_name
+from app.modules.evaluations.executor import _retry_delay_seconds
 from app.services.task_queue import claim_task, reclaim_expired_leases
 
 
@@ -208,7 +208,7 @@ def test_benchmark_samples_are_split_into_independent_shards_before_scoring(tmp_
         },
         samples=lambda _limit: tuple(TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)),
     )
-    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.service.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
@@ -489,7 +489,7 @@ def test_declared_dataset_is_prepared_before_benchmark_execution(tmp_path: Path,
             TextSample("declared-001", "Reply with only the number: what is 2 + 2?", "4"),
         ),
     )
-    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.service.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
@@ -541,7 +541,7 @@ def test_manifest_dataset_source_is_registered_and_prepared_automatically(tmp_pa
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
-    monkeypatch.setattr("app.services.evaluation_runs.get_installed_plugin", lambda *_args: plugin)
+    monkeypatch.setattr("app.modules.evaluations.service.get_installed_plugin", lambda *_args: plugin)
     app = create_app(
         Settings.local_development(database_url=f"sqlite:///{tmp_path / 'platform.db'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
         connection_tester=SuccessfulTester(),
@@ -880,7 +880,7 @@ def test_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: Path) -> 
 def test_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_path: Path) -> None:
     class PausingExecutor:
         def execute(self, _endpoint, _api_key: str, _input_snapshot: dict[str, object]) -> SampleExecutionResult:
-            from app.api.evaluation_runs import pause_evaluation_run
+            from app.modules.evaluations.api import pause_evaluation_run
 
             with app.state.database.get_session() as session:
                 run = session.scalar(select(EvaluationRun).where(EvaluationRun.status == "running"))

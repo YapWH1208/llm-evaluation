@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.services.run_names import format_run_display_name, resolve_run_display_name
+from app.modules.evaluations.names import format_run_display_name, resolve_run_display_name
 
 
 def test_format_run_display_name_is_safe_bounded_and_uses_utc() -> None:

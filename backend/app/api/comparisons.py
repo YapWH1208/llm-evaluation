@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt
 from app.db.mongo import MongoDocumentStore
-from app.services.mongo_run_executor import build_mongo_run_summary
-from app.services.run_analysis import latest_attempts, summarize_attempts
+from app.modules.evaluations.mongo_executor import build_mongo_run_summary
+from app.modules.evaluations.analysis import latest_attempts, summarize_attempts
 from app.services.aggregation import list_aggregate_metrics, list_mongo_aggregate_metrics
 from app.services.comparison_evidence import build_comparison_extension
 

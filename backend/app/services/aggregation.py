@@ -16,7 +16,7 @@ from app.services.metric_profiles import (
     evaluation_type_from_snapshot,
 )
 from app.services.judge_scoring import is_llm_judge_rule, is_valid_judge_score
-from app.services.run_analysis import latest_attempts, summarize_attempts
+from app.modules.evaluations.analysis import latest_attempts, summarize_attempts
 
 
 AGGREGATION_VERSION = "2.0.0"
