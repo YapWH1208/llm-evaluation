@@ -65,6 +65,8 @@ from app.modules.evaluations.execution import ExecutionService
 from app.modules.evaluations.queue_service import QueueService
 from app.modules.evaluations.service import EvaluationService
 from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions
+from app.modules.benchmarks.repositories import MongoBenchmarkRepository, SqliteBenchmarkRepository
+from app.modules.benchmarks.service import BenchmarkService, PromptPackageService
 from sqlalchemy import select, text
 
 
@@ -124,6 +126,11 @@ def create_app(
     app.state.dataset_service = DatasetService(
         MongoDatasetRepository(document_store) if document_store is not None else SqliteDatasetRepository(database)  # type: ignore[arg-type]
     )
+    benchmark_repository = (
+        MongoBenchmarkRepository(document_store) if document_store is not None else SqliteBenchmarkRepository(database)  # type: ignore[arg-type]
+    )
+    app.state.benchmark_service = BenchmarkService(benchmark_repository)
+    app.state.prompt_package_service = PromptPackageService(benchmark_repository)
     app.state.review_service = ReviewService(
         MongoReviewRepository(document_store) if document_store is not None else SqliteReviewRepository(database)  # type: ignore[arg-type]
     )

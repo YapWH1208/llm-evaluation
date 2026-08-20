@@ -17,8 +17,6 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
     "modules/analytics/comparisons_api.py",
     "modules/analytics/dashboard_api.py",
     "modules/analytics/leaderboard_api.py",
-    "modules/benchmarks/api.py",
-    "modules/benchmarks/prompts_api.py",
 }
 KNOWN_STRING_ERROR_ROUTING: set[str] = set()
 KNOWN_SHARED_TO_FEATURE_IMPORTS: set[str] = set()
