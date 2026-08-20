@@ -20,4 +20,3 @@ def test_project_versions_are_stable_v1() -> None:
     assert frontend_package["version"] == "1.0.0"
     assert frontend_lock["version"] == "1.0.0"
     assert frontend_lock["packages"][""]["version"] == "1.0.0"
-
