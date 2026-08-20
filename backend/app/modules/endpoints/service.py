@@ -155,7 +155,7 @@ class EndpointService:
                 conflicts.append({**values, "resolution_options": ["keep_disabled", "force_enable", "redetect"]})
         return conflicts
 
-    def declare_capability(self, endpoint_id: str, capability_key: str, user_status: CapabilityDeclaration) -> Any:
+    def declare_capability(self, endpoint_id: str, capability_key: str, user_status: str) -> Any:
         self.get(endpoint_id)
         existing = self._repository.find_capability(endpoint_id, capability_key)
         detected = _value(existing, "auto_detection_status", CapabilityDetection.NOT_TESTED.value)
@@ -163,7 +163,7 @@ class EndpointService:
             endpoint_id,
             capability_key,
             {
-                "user_declared_status": user_status.value,
+                "user_declared_status": user_status,
                 "auto_detection_status": detected,
                 "effective_status": effective_capability(user_status, str(detected)),
                 "detection_evidence": _value(existing, "detection_evidence"),
@@ -190,15 +190,13 @@ class EndpointService:
             if result is None:
                 continue
             existing = self._repository.find_capability(endpoint_id, key)
-            user_status = CapabilityDeclaration(
-                str(_value(existing, "user_declared_status", CapabilityDeclaration.UNKNOWN.value))
-            )
+            user_status = str(_value(existing, "user_declared_status", CapabilityDeclaration.UNKNOWN.value))
             updated.append(
                 self._repository.upsert_capability(
                     endpoint_id,
                     key,
                     {
-                        "user_declared_status": user_status.value,
+                        "user_declared_status": user_status,
                         "auto_detection_status": result.status.value,
                         "effective_status": effective_capability(user_status, result.status.value),
                         "detection_evidence": result.evidence,
@@ -227,16 +225,16 @@ def _capability_values(capability: Any) -> dict[str, Any]:
     }
 
 
-def effective_capability(user: CapabilityDeclaration, detected: str) -> str:
-    if user is CapabilityDeclaration.UNSUPPORTED and detected == CapabilityDetection.PASSED.value:
+def effective_capability(user: str, detected: str) -> str:
+    if user == CapabilityDeclaration.UNSUPPORTED.value and detected == CapabilityDetection.PASSED.value:
         return "detected_user_unsupported"
-    if user is CapabilityDeclaration.UNSUPPORTED:
+    if user == CapabilityDeclaration.UNSUPPORTED.value:
         return "unsupported"
-    if user is CapabilityDeclaration.SUPPORTED and detected == CapabilityDetection.PASSED.value:
+    if user == CapabilityDeclaration.SUPPORTED.value and detected == CapabilityDetection.PASSED.value:
         return "verified_by_both"
-    if user is CapabilityDeclaration.SUPPORTED and detected == CapabilityDetection.FAILED.value:
+    if user == CapabilityDeclaration.SUPPORTED.value and detected == CapabilityDetection.FAILED.value:
         return "user_declared_detection_failed"
-    if user is CapabilityDeclaration.SUPPORTED:
+    if user == CapabilityDeclaration.SUPPORTED.value:
         return "user_verified"
     if detected == CapabilityDetection.PASSED.value:
         return "auto_detected"

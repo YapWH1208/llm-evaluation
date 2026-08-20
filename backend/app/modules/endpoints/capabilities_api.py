@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.models import CapabilityDeclaration
 from app.infrastructure.providers.capabilities import CapabilityDetector, DEFAULT_CAPABILITY_KEYS
 from app.modules.endpoints.api import get_cipher
 from app.modules.endpoints.service import EndpointService
@@ -17,7 +16,7 @@ router = APIRouter(prefix="/api/v1/model-endpoints/{endpoint_id}/capabilities", 
 
 class CapabilityUpdate(BaseModel):
     capability_key: str = Field(min_length=1, max_length=128)
-    user_declared_status: CapabilityDeclaration
+    user_declared_status: Literal["unknown", "supported", "unsupported"]
 
 
 class CapabilityDetectionRequest(BaseModel):
