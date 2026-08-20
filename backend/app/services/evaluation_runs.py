@@ -21,8 +21,8 @@ from app.db import (
 from app.db.models import DatasetVersion, ModelCapability
 from app.db.models import BenchmarkDefinition
 from app.infrastructure.providers.common import resolve_request_body
-from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
-from app.services.scoring import ScoringError, validate_scoring_rule
+from app.modules.benchmarks.prompts import PromptTemplateError, render_template, standardization_flags
+from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.services.run_names import format_run_display_name
 
 

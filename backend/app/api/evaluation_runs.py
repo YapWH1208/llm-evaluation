@@ -25,7 +25,7 @@ from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
 from app.services.run_names import resolve_run_display_name
 from app.services.reports import delete_report_artifact
-from app.services.scoring import ScoringError, validate_scoring_rule
+from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.services.mongo_run_executor import (
     MongoRunExecutionError,
     build_mongo_run_summary,

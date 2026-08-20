@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.models import EvaluationRun, EvaluationSuite, PromptPackage
 from app.db.mongo import MongoDocumentStore
-from app.services.prompt_templates import PromptTemplateError, validate_template
-from app.services.scoring import ScoringError, validate_scoring_rule
+from app.modules.benchmarks.prompts import PromptTemplateError, validate_template
+from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 
 router = APIRouter(prefix="/api/v1/prompt-packages", tags=["prompt packages"])
 class PromptPackageCreate(BaseModel):

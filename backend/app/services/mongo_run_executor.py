@@ -52,7 +52,7 @@ from app.services.judge_scoring import (
 from app.services.judge_assessments import JudgeAssessmentError
 from app.services.mongo_judge_assessments import assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
-from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
+from app.modules.benchmarks.scoring import ScoringError, score_prediction, validate_scoring_rule
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
 from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError
@@ -61,7 +61,7 @@ from app.core.content import ContentValidationError, normalize_content_parts
 from app.services.media_assets import MediaAssetError, safe_asset_path
 from app.services.run_executor import _is_retryable, _retry_delay_seconds, _retry_policy
 from app.infrastructure.providers.common import resolve_request_body
-from app.services.prompt_templates import standardization_flags
+from app.modules.benchmarks.prompts import standardization_flags
 from app.modules.datasets.repositories import MongoDatasetRepository
 from app.modules.datasets.service import DatasetService
 

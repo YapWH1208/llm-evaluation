@@ -1,4 +1,4 @@
-from app.services.scoring import ScoringError, score_prediction, validate_scoring_rule
+from app.modules.benchmarks.scoring import ScoringError, score_prediction, validate_scoring_rule
 
 
 def test_deterministic_scoring_rules_cover_exact_numeric_regex_schema_and_f1() -> None:

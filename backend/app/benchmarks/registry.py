@@ -94,7 +94,7 @@ class StaticBenchmarkPlugin:
         return response
 
     def score_sample(self, sample: BenchmarkSample | TextSample, prediction: str) -> float:
-        from app.services.scoring import score_prediction
+        from app.modules.benchmarks.scoring import score_prediction
 
         return score_prediction(prediction, {"type": str(self.manifest.get("scorer_type", "exact_match")), "answer": sample.reference_answer})
 

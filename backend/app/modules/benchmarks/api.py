@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.models import BenchmarkDefinition, DatasetVersion
 from app.db.mongo import MongoDocumentStore
 from app.benchmarks import register_manifest_plugin, unregister_manifest_plugin, validate_manifest_plugin
-from app.services.scoring import ScoringError, validate_scoring_rule
+from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 
 
 router = APIRouter(prefix="/api/v1/benchmarks", tags=["benchmarks"])

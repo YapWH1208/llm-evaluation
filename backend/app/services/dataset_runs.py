@@ -30,7 +30,7 @@ from app.services.evaluation_runs import (
     _request_body_evidence,
     _split_samples_for_endpoint_budget,
 )
-from app.services.prompt_templates import PromptTemplateError, render_template
+from app.modules.benchmarks.prompts import PromptTemplateError, render_template
 from app.services.judge_scoring import (
     JudgeScoringError,
     is_llm_judge_rule,
@@ -39,7 +39,7 @@ from app.services.judge_scoring import (
     normalize_judge_rule,
     validate_judge_endpoint,
 )
-from app.services.scoring import ScoringError, validate_scoring_rule
+from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 
 
 class DatasetRunError(ValueError):

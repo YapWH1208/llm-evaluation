@@ -6,7 +6,7 @@ from typing import Any, Iterable
 
 from app.db.models import SampleAttemptStatus
 from app.services.judge_scoring import is_valid_judge_score
-from app.services.scoring import score_prediction
+from app.modules.benchmarks.scoring import score_prediction
 
 
 METRIC_PROFILE_VERSION = "1.1.0"

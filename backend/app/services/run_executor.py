@@ -30,7 +30,7 @@ from app.services.judge_scoring import (
 )
 from app.services.metric_profiles import build_execution_metric_evidence
 from app.services.reports import ReportError, generate_report
-from app.services.scoring import ScoringError, score_prediction
+from app.modules.benchmarks.scoring import ScoringError, score_prediction
 from app.services.task_queue import claim_task, clear_lease
 from app.modules.datasets.preparation import DatasetError
 from app.modules.datasets.repositories import SqliteSessionDatasetRepository
