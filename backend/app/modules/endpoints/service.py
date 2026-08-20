@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from app.core.errors import NotFoundError, ValidationError
 from app.core.secrets import SecretCipher, mask_secret
-from app.db.models import EndpointStatus, ModelEndpoint
+from app.db.models import EndpointStatus
 from app.db.models import CapabilityDeclaration, CapabilityDetection
 from app.infrastructure.providers.capabilities import CapabilityDetector
 from app.infrastructure.providers.contracts import CapabilityDetectionResult

@@ -9,7 +9,7 @@ contract and preparation pipeline.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Protocol
 
 from app.benchmarks.text_quick_check import TEXT_QUICK_CHECK, TextSample
 

@@ -61,7 +61,7 @@ class HealthResponse(BaseModel):
 
 def create_app(
     settings: Settings | None = None,
-    connection_tester: ConnectionTester | None = None,
+    connection_tester: ProviderConnectionTester | None = None,
     model_executor: ModelExecutor | None = None,
     capability_detector: CapabilityDetector | None = None,
     document_store: MongoDocumentStore | None = None,

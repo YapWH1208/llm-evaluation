@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.db.models import AggregateMetric, EvaluationRun, SampleAttempt, SampleAttemptStatus
+from app.db.models import AggregateMetric, EvaluationRun, SampleAttemptStatus
 from app.db.mongo import MongoDocumentStore
 from app.services.metric_profiles import (
     MetricResult,

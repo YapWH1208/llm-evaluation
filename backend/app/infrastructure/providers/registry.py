@@ -20,15 +20,18 @@ class ProviderRegistry:
     """Composition-bound registry for all supported provider protocols."""
 
     def __init__(self, adapters: Iterable[ProviderAdapter] | None = None) -> None:
-        configured = tuple(adapters or (
-            OpenAIChatCompletionsAdapter(),
-            OpenAIResponsesAdapter(),
-            AnthropicMessagesAdapter(),
-            GeminiGenerateContentAdapter(),
-            AzureOpenAIChatAdapter(),
-            OllamaChatAdapter(),
-            CustomHttpJsonAdapter(),
-        ))
+        configured = tuple(
+            adapters
+            or (
+                OpenAIChatCompletionsAdapter(),
+                OpenAIResponsesAdapter(),
+                AnthropicMessagesAdapter(),
+                GeminiGenerateContentAdapter(),
+                AzureOpenAIChatAdapter(),
+                OllamaChatAdapter(),
+                CustomHttpJsonAdapter(),
+            )
+        )
         self._adapters = {adapter.profile: adapter for adapter in configured}
 
     @property

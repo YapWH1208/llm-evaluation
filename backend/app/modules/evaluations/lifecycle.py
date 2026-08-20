@@ -6,12 +6,14 @@ from app.db.models import RunStatus
 class RunLifecycle:
     """Single policy table for user-visible evaluation-run transitions."""
 
-    terminal = frozenset({
-        RunStatus.COMPLETED.value,
-        RunStatus.COMPLETED_WITH_ERRORS.value,
-        RunStatus.FAILED.value,
-        RunStatus.CANCELLED.value,
-    })
+    terminal = frozenset(
+        {
+            RunStatus.COMPLETED.value,
+            RunStatus.COMPLETED_WITH_ERRORS.value,
+            RunStatus.FAILED.value,
+            RunStatus.CANCELLED.value,
+        }
+    )
 
     @classmethod
     def can_pause(cls, status: str) -> bool:
@@ -23,7 +25,11 @@ class RunLifecycle:
 
     @classmethod
     def can_cancel(cls, status: str) -> bool:
-        return status not in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.CANCELLED.value}
+        return status not in {
+            RunStatus.COMPLETED.value,
+            RunStatus.COMPLETED_WITH_ERRORS.value,
+            RunStatus.CANCELLED.value,
+        }
 
     @classmethod
     def can_archive(cls, status: str) -> bool:

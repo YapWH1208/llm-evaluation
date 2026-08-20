@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
 
 from app.db.models import CapabilityDetection, ModelEndpoint
-from app.infrastructure.providers.common import effective_request_options, extract_usage
+from app.infrastructure.providers.common import extract_usage
 from app.infrastructure.providers.contracts import CapabilityDetectionResult
 from app.infrastructure.providers.registry import ProviderRegistry
 from app.infrastructure.network.outbound import (

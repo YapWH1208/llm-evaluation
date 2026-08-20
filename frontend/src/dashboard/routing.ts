@@ -65,7 +65,7 @@ function validRunId(value: string | null | undefined): value is string {
 
 export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
   const normalized = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
-  let view: WorkspaceView = "dashboard";
+  const view: WorkspaceView = "dashboard";
   for (const [view, path] of Object.entries(workspacePaths) as Array<[WorkspaceView, `/${string}`]>) {
     if (normalized === path) {
       const normalizedSearch = search && !search.startsWith("?") ? `?${search}` : search;

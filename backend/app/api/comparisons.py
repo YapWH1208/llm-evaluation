@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request

@@ -2,7 +2,6 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from app.core.config import Settings
 from app.db.models import ModelEndpoint

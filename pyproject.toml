@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0,<9.0",
+  "ruff>=0.8,<1.0",
 ]
 mongodb = [
   "pymongo>=4.6,<5.0",
@@ -37,3 +38,11 @@ namespaces = true
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["backend"]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["data", "frontend/node_modules"]
+
+[tool.ruff.lint]
+select = ["F"]

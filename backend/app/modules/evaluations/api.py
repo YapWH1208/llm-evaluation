@@ -541,7 +541,6 @@ def cancel_evaluation_run(run_id: str, request: Request, session: SessionDepende
 def archive_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
     """Hide a terminal run while retaining its complete immutable evidence."""
 
-    terminal = RunLifecycle.terminal
     store = get_document_store(request)
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)
@@ -645,7 +644,6 @@ def update_run_scheduling(
     values = payload.model_dump(exclude_unset=True)
     if not values:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Specify a scheduling value to update")
-    terminal = RunLifecycle.terminal
     store = get_document_store(request)
     if store is not None:
         run = store.get_document("evaluation_runs", run_id)

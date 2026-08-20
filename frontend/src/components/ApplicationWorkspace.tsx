@@ -1052,10 +1052,3 @@ function fileAsDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
-undefined
-undefined
-undefined
-undefined
-undefined
-undefined

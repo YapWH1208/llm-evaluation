@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from app.core.config import Settings
 from app.db import TaskUnit
@@ -59,7 +58,7 @@ def test_reclaimed_task_fences_stale_heartbeat_and_issues_a_new_lease_version(tm
             json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
         ).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        run = client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
+        client.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         first = client.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
         assert first is not None
         with app.state.database.get_session() as session:

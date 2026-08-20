@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
-from typing import Any
 
 
 LLM_JUDGE_RULE_TYPE = "llm_judge"

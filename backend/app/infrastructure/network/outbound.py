@@ -174,9 +174,7 @@ def read_bounded_response(response: httpx.Response, *, max_bytes: int) -> bytes:
         except ValueError:
             declared_length = None
         if declared_length is not None and declared_length > max_bytes:
-            raise OutboundResponseTooLargeError(
-                f"Provider response exceeds the configured {max_bytes} byte limit."
-            )
+            raise OutboundResponseTooLargeError(f"Provider response exceeds the configured {max_bytes} byte limit.")
     return _read_chunks(response.iter_bytes(), max_bytes=max_bytes)
 
 
@@ -185,7 +183,5 @@ def _read_chunks(chunks: Iterable[bytes], *, max_bytes: int) -> bytes:
     for chunk in chunks:
         body.extend(chunk)
         if len(body) > max_bytes:
-            raise OutboundResponseTooLargeError(
-                f"Provider response exceeds the configured {max_bytes} byte limit."
-            )
+            raise OutboundResponseTooLargeError(f"Provider response exceeds the configured {max_bytes} byte limit.")
     return bytes(body)

@@ -4,7 +4,6 @@ import json
 import math
 import re
 from collections import Counter
-from typing import Any
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
