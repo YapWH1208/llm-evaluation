@@ -94,6 +94,20 @@ def test_persistence_adapters_do_not_invoke_application_services() -> None:
     assert offenders == set()
 
 
+def test_production_modules_do_not_import_private_cross_module_helpers() -> None:
+    offenders: set[str] = set()
+    for path in _python_files(BACKEND):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and any(alias.name.startswith("_") for alias in node.names)
+            for node in ast.walk(tree)
+        ):
+            offenders.add(_relative(path, BACKEND))
+    assert offenders == set()
+
+
 def test_provider_orchestrators_do_not_branch_on_protocol_profiles() -> None:
     provider_root = BACKEND / "infrastructure" / "providers"
     orchestrators = ("capabilities.py", "connection.py", "executor.py")
