@@ -244,11 +244,13 @@ def create_dataset_run(
     except DatasetRecordError as error:
         raise DatasetRunError(str(error)) from error
     if not samples:
-        raise DatasetRunError(_empty_dataset_samples_message(
-            sample_limit=sample_limit,
-            input_field=selected_input_field,
-            reference_field=normalized_reference_field,
-        ))
+        raise DatasetRunError(
+            _empty_dataset_samples_message(
+                sample_limit=sample_limit,
+                input_field=selected_input_field,
+                reference_field=normalized_reference_field,
+            )
+        )
     compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
     if compatibility["unsupported"]:
         raise DatasetRunError(
@@ -275,14 +277,21 @@ def create_dataset_run(
         suite_snapshot=None,
         request_body_override=request_body_override,
     )
-    frozen_datasets = [{
-        "dataset_id": dataset.dataset_id,
-        "version": dataset.version,
-        "revision": dataset.revision,
-        "dataset_version_id": dataset.id,
-    }]
+    frozen_datasets = [
+        {
+            "dataset_id": dataset.dataset_id,
+            "version": dataset.version,
+            "revision": dataset.revision,
+            "dataset_version_id": dataset.id,
+        }
+    ]
     snapshot = {
-        "benchmark": {"id": DATASET_RUN_BENCHMARK_ID, "version": DATASET_RUN_BENCHMARK_VERSION, "source": "user", "manifest": _DATASET_RUN_MANIFEST},
+        "benchmark": {
+            "id": DATASET_RUN_BENCHMARK_ID,
+            "version": DATASET_RUN_BENCHMARK_VERSION,
+            "source": "user",
+            "manifest": _DATASET_RUN_MANIFEST,
+        },
         "endpoint": {
             "id": endpoint.id,
             "base_url": endpoint.base_url,
@@ -295,7 +304,12 @@ def create_dataset_run(
             "output_cost_per_million": endpoint.output_cost_per_million,
         },
         "datasets": frozen_datasets,
-        "dataset_version": {"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision},
+        "dataset_version": {
+            "id": dataset.id,
+            "dataset_id": dataset.dataset_id,
+            "version": dataset.version,
+            "revision": dataset.revision,
+        },
         "input_field": selected_input_field,
         "reference_field": normalized_reference_field,
         "dataset_profile": dataset_profile,
@@ -305,10 +319,17 @@ def create_dataset_run(
         "scoring_rule": effective_scoring_rule,
         "capability_compatibility": compatibility,
         "prompt_package": (
-            {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
-             "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
-             "few_shot_examples": prompt_package.few_shot_examples, "scoring_rule": prompt_package.scoring_rule}
-            if prompt_package else None
+            {
+                "id": prompt_package.id,
+                "name": prompt_package.name,
+                "version": prompt_package.version,
+                "system_message": prompt_package.system_message,
+                "user_template": prompt_package.user_template,
+                "few_shot_examples": prompt_package.few_shot_examples,
+                "scoring_rule": prompt_package.scoring_rule,
+            }
+            if prompt_package
+            else None
         ),
         "request_body_evidence": request_body_evidence,
     }
@@ -342,7 +363,11 @@ def create_dataset_run(
         run_id=run.id,
         parent_task_id=dataset_task.id,
         task_type=TaskType.BENCHMARK.value,
-        payload={"benchmark_id": DATASET_RUN_BENCHMARK_ID, "benchmark_version": DATASET_RUN_BENCHMARK_VERSION, "planned_samples": len(samples)},
+        payload={
+            "benchmark_id": DATASET_RUN_BENCHMARK_ID,
+            "benchmark_version": DATASET_RUN_BENCHMARK_VERSION,
+            "planned_samples": len(samples),
+        },
         status=TaskStatus.PENDING.value,
     )
     session.add(benchmark_task)
@@ -360,7 +385,9 @@ def create_dataset_run(
                 "sample_ids": [sample.sample_id for sample in shard_samples],
                 "estimated_request_count": len(shard_samples),
                 "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
-                "sample_token_estimates": {sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples},
+                "sample_token_estimates": {
+                    sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                },
                 "shard_index": shard_index,
                 "shard_count": len(shards),
                 "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
@@ -429,7 +456,9 @@ def preflight_dataset_run(
     resolved_reference_field = reference_field or (dataset.reference_field if dataset is not None else None)
     if not resolved_reference_field or not resolved_reference_field.strip():
         issues.append("A reference field is required.")
-    resolved_input_field = input_field if input_field is not None else (dataset.input_field if dataset is not None else None)
+    resolved_input_field = (
+        input_field if input_field is not None else (dataset.input_field if dataset is not None else None)
+    )
     selected_input_field = _effective_dataset_input_field(
         resolved_input_field,
         prompt_package,
@@ -452,9 +481,20 @@ def preflight_dataset_run(
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.status == DatasetStatus.READY.value and dataset.prepared_path:
-        datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": False})
+        datasets.append(
+            {
+                "id": dataset.id,
+                "dataset_id": dataset.dataset_id,
+                "version": dataset.version,
+                "revision": dataset.revision,
+                "status": dataset.status,
+                "will_prepare": False,
+            }
+        )
         try:
-            normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, resolved_reference_field or "")
+            normalized_reference_field = _validate_distinct_dataset_fields(
+                selected_input_field, resolved_reference_field or ""
+            )
             dataset_profile = _dataset_profile(
                 capabilities=dataset.capabilities,
                 languages=dataset.languages,
@@ -474,24 +514,34 @@ def preflight_dataset_run(
                 dataset_profile=dataset_profile,
             )
             if not samples:
-                issues.append(_empty_dataset_samples_message(
-                    sample_limit=sample_limit,
-                    input_field=selected_input_field,
-                    reference_field=normalized_reference_field,
-                ))
+                issues.append(
+                    _empty_dataset_samples_message(
+                        sample_limit=sample_limit,
+                        input_field=selected_input_field,
+                        reference_field=normalized_reference_field,
+                    )
+                )
         except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))
     if endpoint is not None and endpoint.status == EndpointStatus.AVAILABLE.value:
         compatibility = _capability_compatibility(session, endpoint.id, _DATASET_RUN_MANIFEST)
         if compatibility["unsupported"]:
-            issues.append("Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"]))
+            issues.append(
+                "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
+            )
     else:
         compatibility = {"required": ["text_input"], "unsupported": [], "unverified": []}
     estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     estimated_cost = (
-        ((estimated_input_tokens * endpoint.input_cost_per_million) + (estimated_output_tokens * endpoint.output_cost_per_million)) / 1_000_000
-        if endpoint is not None and endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
+        (
+            (estimated_input_tokens * endpoint.input_cost_per_million)
+            + (estimated_output_tokens * endpoint.output_cost_per_million)
+        )
+        / 1_000_000
+        if endpoint is not None
+        and endpoint.input_cost_per_million is not None
+        and endpoint.output_cost_per_million is not None
         else None
     )
     judge_estimate = (
@@ -516,8 +566,14 @@ def preflight_dataset_run(
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (
-            _request_body_evidence(endpoint=endpoint, benchmark_manifest=_DATASET_RUN_MANIFEST, suite_snapshot=None, request_body_override=request_body_override)
-            if endpoint is not None else None
+            _request_body_evidence(
+                endpoint=endpoint,
+                benchmark_manifest=_DATASET_RUN_MANIFEST,
+                suite_snapshot=None,
+                request_body_override=request_body_override,
+            )
+            if endpoint is not None
+            else None
         ),
     }
 
@@ -627,7 +683,11 @@ def _build_record_messages(
     if prompt_package is not None and prompt_package.system_message:
         messages.append({"role": "system", "content": prompt_package.system_message})
     for example in prompt_package.few_shot_examples if prompt_package is not None else []:
-        if isinstance(example, dict) and isinstance(example.get("role"), str) and isinstance(example.get("content"), str):
+        if (
+            isinstance(example, dict)
+            and isinstance(example.get("role"), str)
+            and isinstance(example.get("content"), str)
+        ):
             messages.append({"role": example["role"], "content": example["content"]})
     messages.append({"role": "user", "content": rendered_prompt})
     return messages

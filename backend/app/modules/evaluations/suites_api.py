@@ -66,13 +66,18 @@ SessionDependency = Annotated[Session | None, Depends(get_session)]
 
 
 @router.post("", response_model=EvaluationSuiteResponse, status_code=status.HTTP_201_CREATED)
-def create_suite(payload: EvaluationSuiteCreate, request: Request, session: SessionDependency) -> EvaluationSuite | dict[str, Any]:
+def create_suite(
+    payload: EvaluationSuiteCreate, request: Request, session: SessionDependency
+) -> EvaluationSuite | dict[str, Any]:
     created_by = getattr(request.state, "actor_id", None)
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
         if store.list_documents("evaluation_suites", query={"name": payload.name, "version": payload.version}):
             raise HTTPException(status.HTTP_409_CONFLICT, "Suite name and version already exist")
-        return store.insert_document("evaluation_suites", {**payload.model_dump(), "created_by": created_by, "created_at": datetime.now(timezone.utc)})
+        return store.insert_document(
+            "evaluation_suites",
+            {**payload.model_dump(), "created_by": created_by, "created_at": datetime.now(timezone.utc)},
+        )
     assert session is not None
     suite = EvaluationSuite(**payload.model_dump(), created_by=created_by)
     session.add(suite)
@@ -108,7 +113,9 @@ def get_suite(suite_id: str, request: Request, session: SessionDependency) -> Ev
 
 
 @router.patch("/{suite_id}", response_model=EvaluationSuiteResponse)
-def update_suite(suite_id: str, payload: EvaluationSuiteUpdate, request: Request, session: SessionDependency) -> EvaluationSuite | dict[str, Any]:
+def update_suite(
+    suite_id: str, payload: EvaluationSuiteUpdate, request: Request, session: SessionDependency
+) -> EvaluationSuite | dict[str, Any]:
     values = payload.model_dump(exclude_unset=True)
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
     if store is not None:
@@ -129,16 +136,30 @@ def update_suite(suite_id: str, payload: EvaluationSuiteUpdate, request: Request
 
 
 @router.post("/{suite_id}/runs", status_code=status.HTTP_201_CREATED)
-def create_suite_runs(suite_id: str, payload: SuiteRunCreate, request: Request, session: SessionDependency) -> list[dict[str, Any]]:
+def create_suite_runs(
+    suite_id: str, payload: SuiteRunCreate, request: Request, session: SessionDependency
+) -> list[dict[str, Any]]:
     store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
-    suite: EvaluationSuite | dict[str, Any] | None = store.get_document("evaluation_suites", suite_id) if store is not None else session.get(EvaluationSuite, suite_id)  # type: ignore[union-attr]
+    suite: EvaluationSuite | dict[str, Any] | None = (
+        store.get_document("evaluation_suites", suite_id)
+        if store is not None
+        else session.get(EvaluationSuite, suite_id)
+    )  # type: ignore[union-attr]
     if suite is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation suite not found")
-    values = suite if isinstance(suite, dict) else {
-        "id": suite.id, "name": suite.name, "version": suite.version, "benchmark_list": suite.benchmark_list,
-        "default_prompt_overrides": suite.default_prompt_overrides, "default_request_body": suite.default_request_body,
-        "weight_configuration": suite.weight_configuration,
-    }
+    values = (
+        suite
+        if isinstance(suite, dict)
+        else {
+            "id": suite.id,
+            "name": suite.name,
+            "version": suite.version,
+            "benchmark_list": suite.benchmark_list,
+            "default_prompt_overrides": suite.default_prompt_overrides,
+            "default_request_body": suite.default_request_body,
+            "weight_configuration": suite.weight_configuration,
+        }
+    )
     results: list[dict[str, Any]] = []
     try:
         for selection in values["benchmark_list"]:
@@ -150,16 +171,61 @@ def create_suite_runs(suite_id: str, payload: SuiteRunCreate, request: Request, 
             if prompt_package_id is None:
                 overrides = values.get("default_prompt_overrides")
                 if isinstance(overrides, dict):
-                    prompt_package_id = overrides.get(f"{benchmark_id}@{benchmark_version}", overrides.get(benchmark_id))
+                    prompt_package_id = overrides.get(
+                        f"{benchmark_id}@{benchmark_version}", overrides.get(benchmark_id)
+                    )
             if prompt_package_id is not None and not isinstance(prompt_package_id, str):
                 raise RunCreationError("Suite prompt_package_id must be a string.")
-            snapshot = {"id": values["id"], "name": values["name"], "version": values["version"], "default_prompt_overrides": values.get("default_prompt_overrides", {}), "default_request_body": values["default_request_body"], "weight_configuration": values["weight_configuration"], "selection": selection, "effective_prompt_package_id": prompt_package_id}
+            snapshot = {
+                "id": values["id"],
+                "name": values["name"],
+                "version": values["version"],
+                "default_prompt_overrides": values.get("default_prompt_overrides", {}),
+                "default_request_body": values["default_request_body"],
+                "weight_configuration": values["weight_configuration"],
+                "selection": selection,
+                "effective_prompt_package_id": prompt_package_id,
+            }
             if store is not None:
-                run = create_mongo_benchmark_run(store, model_endpoint_id=payload.model_endpoint_id, sample_limit=payload.sample_limit, prompt_package_id=prompt_package_id, benchmark_id=benchmark_id, benchmark_version=benchmark_version, suite_id=str(values["id"]), suite_snapshot=snapshot, request_body_override=payload.request_body_override, created_by=getattr(request.state, "actor_id", None), max_concurrency=payload.max_concurrency)
+                run = create_mongo_benchmark_run(
+                    store,
+                    model_endpoint_id=payload.model_endpoint_id,
+                    sample_limit=payload.sample_limit,
+                    prompt_package_id=prompt_package_id,
+                    benchmark_id=benchmark_id,
+                    benchmark_version=benchmark_version,
+                    suite_id=str(values["id"]),
+                    suite_snapshot=snapshot,
+                    request_body_override=payload.request_body_override,
+                    created_by=getattr(request.state, "actor_id", None),
+                    max_concurrency=payload.max_concurrency,
+                )
             else:
                 assert session is not None
-                run = create_benchmark_run(session, model_endpoint_id=payload.model_endpoint_id, sample_limit=payload.sample_limit, prompt_package_id=prompt_package_id, benchmark_id=benchmark_id, benchmark_version=benchmark_version, suite_id=str(values["id"]), suite_snapshot=snapshot, request_body_override=payload.request_body_override, created_by=getattr(request.state, "actor_id", None), max_concurrency=payload.max_concurrency)
-            results.append(run if isinstance(run, dict) else {"id": run.id, "suite_id": run.suite_id, "benchmark_id": run.benchmark_id, "benchmark_version": run.benchmark_version, "status": run.status})
+                run = create_benchmark_run(
+                    session,
+                    model_endpoint_id=payload.model_endpoint_id,
+                    sample_limit=payload.sample_limit,
+                    prompt_package_id=prompt_package_id,
+                    benchmark_id=benchmark_id,
+                    benchmark_version=benchmark_version,
+                    suite_id=str(values["id"]),
+                    suite_snapshot=snapshot,
+                    request_body_override=payload.request_body_override,
+                    created_by=getattr(request.state, "actor_id", None),
+                    max_concurrency=payload.max_concurrency,
+                )
+            results.append(
+                run
+                if isinstance(run, dict)
+                else {
+                    "id": run.id,
+                    "suite_id": run.suite_id,
+                    "benchmark_id": run.benchmark_id,
+                    "benchmark_version": run.benchmark_version,
+                    "status": run.status,
+                }
+            )
     except (RunCreationError, MongoRunExecutionError) as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     return results

@@ -92,9 +92,7 @@ def claim_task(
     )
     if run_id is not None:
         query = query.where(TaskUnit.run_id == run_id)
-    candidate_ids = list(
-        session.scalars(query.order_by(TaskUnit.priority.desc(), TaskUnit.created_at).limit(20))
-    )
+    candidate_ids = list(session.scalars(query.order_by(TaskUnit.priority.desc(), TaskUnit.created_at).limit(20)))
     for task_id in candidate_ids:
         task = session.get(TaskUnit, task_id)
         if task is None:
@@ -248,38 +246,47 @@ def _has_execution_capacity(
     if run is None:
         return False
     if system_max_concurrency is not None:
-        system_active = session.scalar(
-            select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(active_statuses))
-        ) or 0
+        system_active = (
+            session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(active_statuses))) or 0
+        )
         if system_active >= system_max_concurrency:
             return False
     if worker_max_concurrency is not None:
-        worker_active = session.scalar(
-            select(func.count()).select_from(TaskUnit).where(
-                TaskUnit.status.in_(active_statuses), TaskUnit.leased_by == worker_id
+        worker_active = (
+            session.scalar(
+                select(func.count())
+                .select_from(TaskUnit)
+                .where(TaskUnit.status.in_(active_statuses), TaskUnit.leased_by == worker_id)
             )
-        ) or 0
+            or 0
+        )
         if worker_active >= worker_max_concurrency:
             return False
     if run.max_concurrency is not None:
-        run_active = session.scalar(
-            select(func.count()).select_from(TaskUnit).where(
-                TaskUnit.status.in_(active_statuses), TaskUnit.run_id == run.id
+        run_active = (
+            session.scalar(
+                select(func.count())
+                .select_from(TaskUnit)
+                .where(TaskUnit.status.in_(active_statuses), TaskUnit.run_id == run.id)
             )
-        ) or 0
+            or 0
+        )
         if run_active >= run.max_concurrency:
             return False
     if endpoint.api_key_max_concurrency is not None and endpoint.api_key_fingerprint:
-        credential_active = session.scalar(
-            select(func.count())
-            .select_from(TaskUnit)
-            .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
-            .join(ModelEndpoint, ModelEndpoint.id == EvaluationRun.model_endpoint_id)
-            .where(
-                TaskUnit.status.in_(active_statuses),
-                ModelEndpoint.api_key_fingerprint == endpoint.api_key_fingerprint,
+        credential_active = (
+            session.scalar(
+                select(func.count())
+                .select_from(TaskUnit)
+                .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
+                .join(ModelEndpoint, ModelEndpoint.id == EvaluationRun.model_endpoint_id)
+                .where(
+                    TaskUnit.status.in_(active_statuses),
+                    ModelEndpoint.api_key_fingerprint == endpoint.api_key_fingerprint,
+                )
             )
-        ) or 0
+            or 0
+        )
         if credential_active >= endpoint.api_key_max_concurrency:
             return False
     benchmark = session.scalar(
@@ -290,27 +297,33 @@ def _has_execution_capacity(
     )
     benchmark_limit = _positive_limit((benchmark.manifest if benchmark is not None else {}).get("max_concurrency"))
     if benchmark_limit is not None:
-        benchmark_active = session.scalar(
+        benchmark_active = (
+            session.scalar(
+                select(func.count())
+                .select_from(TaskUnit)
+                .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
+                .where(
+                    TaskUnit.status.in_(active_statuses),
+                    EvaluationRun.benchmark_id == run.benchmark_id,
+                    EvaluationRun.benchmark_version == run.benchmark_version,
+                )
+            )
+            or 0
+        )
+        if benchmark_active >= benchmark_limit:
+            return False
+    active_tasks = (
+        session.scalar(
             select(func.count())
             .select_from(TaskUnit)
             .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
             .where(
+                EvaluationRun.model_endpoint_id == endpoint.id,
                 TaskUnit.status.in_(active_statuses),
-                EvaluationRun.benchmark_id == run.benchmark_id,
-                EvaluationRun.benchmark_version == run.benchmark_version,
             )
-        ) or 0
-        if benchmark_active >= benchmark_limit:
-            return False
-    active_tasks = session.scalar(
-        select(func.count())
-        .select_from(TaskUnit)
-        .join(EvaluationRun, EvaluationRun.id == TaskUnit.run_id)
-        .where(
-            EvaluationRun.model_endpoint_id == endpoint.id,
-            TaskUnit.status.in_(active_statuses),
         )
-    ) or 0
+        or 0
+    )
     return active_tasks < endpoint.max_concurrency
 
 
@@ -363,21 +376,24 @@ def _reserve_endpoint_budget(
     existing_tokens = usage.estimated_token_count if usage else 0
     existing_input_tokens = usage.estimated_input_token_count if usage else 0
     existing_output_tokens = usage.estimated_output_token_count if usage else 0
-    if endpoint.requests_per_second is not None and (second_usage.request_count if second_usage else 0) + request_count > endpoint.requests_per_second:
+    if (
+        endpoint.requests_per_second is not None
+        and (second_usage.request_count if second_usage else 0) + request_count > endpoint.requests_per_second
+    ):
+        return False
+    if endpoint.requests_per_minute is not None and existing_requests + request_count > endpoint.requests_per_minute:
+        return False
+    if endpoint.tokens_per_minute is not None and existing_tokens + estimated_tokens > endpoint.tokens_per_minute:
         return False
     if (
-        endpoint.requests_per_minute is not None
-        and existing_requests + request_count > endpoint.requests_per_minute
+        endpoint.input_tokens_per_minute is not None
+        and existing_input_tokens + estimated_input_tokens > endpoint.input_tokens_per_minute
     ):
         return False
     if (
-        endpoint.tokens_per_minute is not None
-        and existing_tokens + estimated_tokens > endpoint.tokens_per_minute
+        endpoint.output_tokens_per_minute is not None
+        and existing_output_tokens + estimated_output_tokens > endpoint.output_tokens_per_minute
     ):
-        return False
-    if endpoint.input_tokens_per_minute is not None and existing_input_tokens + estimated_input_tokens > endpoint.input_tokens_per_minute:
-        return False
-    if endpoint.output_tokens_per_minute is not None and existing_output_tokens + estimated_output_tokens > endpoint.output_tokens_per_minute:
         return False
     if second_usage is None:
         session.add(
@@ -426,7 +442,9 @@ def _task_budget(task: TaskUnit) -> tuple[int, int, int, int]:
         if isinstance(per_sample, dict):
             selected = [sample_id for sample_id in sample_ids if isinstance(sample_id, str)]
             selected_estimates = [per_sample.get(sample_id) for sample_id in selected]
-            if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates):
+            if all(
+                isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in selected_estimates
+            ):
                 estimated_tokens = sum(int(value) for value in selected_estimates)
             else:
                 estimated_tokens = max(1, estimated_tokens // max(1, request_count)) * fallback_requests

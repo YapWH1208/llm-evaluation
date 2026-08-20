@@ -116,7 +116,11 @@ def create_custom_multimodal_run(
             run_id=run.id,
             task_id=task.id,
             sample_id=sample_id.strip(),
-            input_snapshot={"messages": normalized_messages, "modality": _sample_modality(normalized_messages), "request_body_evidence": request_body_evidence},
+            input_snapshot={
+                "messages": normalized_messages,
+                "modality": _sample_modality(normalized_messages),
+                "request_body_evidence": request_body_evidence,
+            },
             reference_snapshot={"type": "exact_match", "answer": reference_answer},
         )
     )
@@ -193,9 +197,5 @@ def _sample_modality(messages: list[dict[str, object]]) -> str:
 
 
 def _estimate_message_tokens(messages: list[dict[str, object]]) -> int:
-    text_length = sum(
-        len(content)
-        for message in messages
-        if isinstance((content := message.get("content")), str)
-    )
+    text_length = sum(len(content) for message in messages if isinstance((content := message.get("content")), str))
     return max(32, (text_length + 3) // 4 + 32)

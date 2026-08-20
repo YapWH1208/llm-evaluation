@@ -106,21 +106,52 @@ def preflight_mongo_benchmark_run(
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
     issues: list[str] = []
     if endpoint is None:
-        return {"can_queue": False, "issues": ["Model endpoint not found."], "sample_count": 0, "estimated_requests": 0, "estimated_input_tokens": 0, "estimated_output_tokens": 0, "estimated_cost": None, "currency": None, "compatibility": {"required": [], "unsupported": [], "unverified": []}, "datasets": [], "request_body_evidence": None}
+        return {
+            "can_queue": False,
+            "issues": ["Model endpoint not found."],
+            "sample_count": 0,
+            "estimated_requests": 0,
+            "estimated_input_tokens": 0,
+            "estimated_output_tokens": 0,
+            "estimated_cost": None,
+            "currency": None,
+            "compatibility": {"required": [], "unsupported": [], "unverified": []},
+            "datasets": [],
+            "request_body_evidence": None,
+        }
     if endpoint.get("status") != "available":
         issues.append("Model endpoint must pass a connection test before scheduling a run.")
-    definitions = store.list_documents("benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version})
+    definitions = store.list_documents(
+        "benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version}
+    )
     if definitions and definitions[0].get("status") in {"disabled", "deprecated", "broken"}:
-        issues.append(f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled.")
+        issues.append(
+            f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled."
+        )
     plugin = get_installed_plugin(benchmark_id, benchmark_version)
     if plugin is None:
-        return {"can_queue": False, "issues": [*issues, "Benchmark plugin is not installed for the requested version."], "sample_count": 0, "estimated_requests": 0, "estimated_input_tokens": 0, "estimated_output_tokens": 0, "estimated_cost": None, "currency": endpoint.get("currency"), "compatibility": {"required": [], "unsupported": [], "unverified": []}, "datasets": [], "request_body_evidence": None}
+        return {
+            "can_queue": False,
+            "issues": [*issues, "Benchmark plugin is not installed for the requested version."],
+            "sample_count": 0,
+            "estimated_requests": 0,
+            "estimated_input_tokens": 0,
+            "estimated_output_tokens": 0,
+            "estimated_cost": None,
+            "currency": endpoint.get("currency"),
+            "compatibility": {"required": [], "unsupported": [], "unverified": []},
+            "datasets": [],
+            "request_body_evidence": None,
+        }
     samples = plugin.samples(sample_limit)
     if not samples:
         issues.append("At least one benchmark sample is required.")
     compatibility = _capability_compatibility(store, model_endpoint_id, plugin.manifest)
     if compatibility["unsupported"]:
-        issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
+        issues.append(
+            "Model endpoint is incompatible with required benchmark capabilities: "
+            + ", ".join(compatibility["unsupported"])
+        )
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
@@ -133,23 +164,46 @@ def preflight_mongo_benchmark_run(
         if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
             continue
         query: dict[str, Any] = {"dataset_id": descriptor["dataset_id"]}
-        if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
-        if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+        if isinstance(descriptor.get("version"), str):
+            query["version"] = descriptor["version"]
+        if isinstance(descriptor.get("revision"), str):
+            query["revision"] = descriptor["revision"]
         matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
         if not matches:
             if isinstance(descriptor.get("source_url"), str) and descriptor["source_url"].strip():
-                datasets.append({"dataset_id": descriptor["dataset_id"], "version": descriptor.get("version", "default"), "revision": descriptor.get("revision", "default"), "status": "will_register", "will_prepare": True})
+                datasets.append(
+                    {
+                        "dataset_id": descriptor["dataset_id"],
+                        "version": descriptor.get("version", "default"),
+                        "revision": descriptor.get("revision", "default"),
+                        "status": "will_register",
+                        "will_prepare": True,
+                    }
+                )
             else:
                 issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
                 datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
         else:
             dataset = matches[0]
-            datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "status": dataset["status"], "will_prepare": dataset["status"] != "ready"})
+            datasets.append(
+                {
+                    "id": dataset["id"],
+                    "dataset_id": dataset["dataset_id"],
+                    "version": dataset["version"],
+                    "revision": dataset["revision"],
+                    "status": dataset["status"],
+                    "will_prepare": dataset["status"] != "ready",
+                }
+            )
     estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     input_cost = endpoint.get("input_cost_per_million")
     output_cost = endpoint.get("output_cost_per_million")
-    estimated_cost = ((estimated_input_tokens * float(input_cost) + estimated_output_tokens * float(output_cost)) / 1_000_000) if input_cost is not None and output_cost is not None else None
+    estimated_cost = (
+        ((estimated_input_tokens * float(input_cost) + estimated_output_tokens * float(output_cost)) / 1_000_000)
+        if input_cost is not None and output_cost is not None
+        else None
+    )
     return {
         "can_queue": not issues,
         "issues": issues,
@@ -161,7 +215,13 @@ def preflight_mongo_benchmark_run(
         "currency": endpoint.get("currency"),
         "compatibility": compatibility,
         "datasets": datasets,
-        "request_body_evidence": resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None, run_override=request_body_override),
+        "request_body_evidence": resolve_request_body(
+            protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")),
+            model_defaults=endpoint.get("default_request_body")
+            if isinstance(endpoint.get("default_request_body"), dict)
+            else None,
+            run_override=request_body_override,
+        ),
     }
 
 
@@ -185,9 +245,13 @@ def create_mongo_benchmark_run(
         raise MongoRunExecutionError("Model endpoint not found.")
     if endpoint.get("status") != "available":
         raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
-    definitions = store.list_documents("benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version})
+    definitions = store.list_documents(
+        "benchmark_definitions", query={"benchmark_id": benchmark_id, "version": benchmark_version}
+    )
     if definitions and definitions[0].get("status") in {"disabled", "deprecated", "broken"}:
-        raise MongoRunExecutionError(f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled.")
+        raise MongoRunExecutionError(
+            f"Benchmark {benchmark_id}@{benchmark_version} is {definitions[0]['status']} and cannot be scheduled."
+        )
     plugin = get_installed_plugin(benchmark_id, benchmark_version)
     if plugin is None:
         raise MongoRunExecutionError("Benchmark plugin is not installed for the requested version.")
@@ -252,8 +316,12 @@ def create_mongo_benchmark_run(
             else None
         ),
         "prompt_standardization": (
-            {"is_standard": not standardization_flags(_proxy(prompt_package)), "flags": standardization_flags(_proxy(prompt_package))}
-            if prompt_package else {"is_standard": True, "flags": []}
+            {
+                "is_standard": not standardization_flags(_proxy(prompt_package)),
+                "flags": standardization_flags(_proxy(prompt_package)),
+            }
+            if prompt_package
+            else {"is_standard": True, "flags": []}
         ),
         "evaluation_suite": suite_snapshot,
         "request_body_evidence": request_body_evidence,
@@ -305,7 +373,11 @@ def create_mongo_benchmark_run(
             "run_id": run["id"],
             "parent_task_id": dataset_task["id"],
             "task_type": "benchmark",
-            "payload": {"benchmark_id": benchmark_id, "benchmark_version": benchmark_version, "planned_samples": len(samples)},
+            "payload": {
+                "benchmark_id": benchmark_id,
+                "benchmark_version": benchmark_version,
+                "planned_samples": len(samples),
+            },
             "status": "pending" if frozen_datasets else "succeeded",
             "priority": 0,
             "attempt_count": 0,
@@ -360,8 +432,17 @@ def create_mongo_benchmark_run(
                     "task_id": task["id"],
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
-                    "input_snapshot": {"messages": _build_sample_messages(sample, prompt_proxy), "modality": _benchmark_sample_modality(sample), "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
-                    "reference_snapshot": {"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    "input_snapshot": {
+                        "messages": _build_sample_messages(sample, prompt_proxy),
+                        "modality": _benchmark_sample_modality(sample),
+                        "metadata": dict(sample.metadata),
+                        "request_body_evidence": request_body_evidence,
+                    },
+                    "reference_snapshot": {
+                        "type": str(scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": scoring_rule,
+                    },
                     "request_snapshot": None,
                     "raw_response": None,
                     "parsed_prediction": None,
@@ -405,7 +486,9 @@ def create_mongo_dataset_run(
     if dataset is None:
         raise MongoRunExecutionError("Dataset version not found.")
     if dataset.get("status") != "ready" or not dataset.get("prepared_path"):
-        raise MongoRunExecutionError(f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it before running.")
+        raise MongoRunExecutionError(
+            f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it before running."
+        )
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         raise MongoRunExecutionError("Prompt package not found.")
@@ -413,7 +496,11 @@ def create_mongo_dataset_run(
     if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         raise MongoRunExecutionError("A reference field is required.")
     stored_input_field = dataset.get("input_field")
-    resolved_input_field = input_field if input_field is not None else (stored_input_field if isinstance(stored_input_field, str) else None)
+    resolved_input_field = (
+        input_field
+        if input_field is not None
+        else (stored_input_field if isinstance(stored_input_field, str) else None)
+    )
     selected_input_field = _effective_dataset_input_field(resolved_input_field, prompt_package)
     normalized_reference_field = _validate_distinct_dataset_fields(selected_input_field, resolved_reference_field)
     dataset_profile = _dataset_profile(
@@ -438,11 +525,13 @@ def create_mongo_dataset_run(
     except (DatasetRecordError, DatasetRunError) as error:
         raise MongoRunExecutionError(str(error)) from error
     if not samples:
-        raise MongoRunExecutionError(_empty_dataset_samples_message(
-            sample_limit=sample_limit,
-            input_field=selected_input_field,
-            reference_field=normalized_reference_field,
-        ))
+        raise MongoRunExecutionError(
+            _empty_dataset_samples_message(
+                sample_limit=sample_limit,
+                input_field=selected_input_field,
+                reference_field=normalized_reference_field,
+            )
+        )
     compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
     if compatibility["unsupported"]:
         raise MongoRunExecutionError(
@@ -475,15 +564,22 @@ def create_mongo_dataset_run(
         suite_snapshot=None,
         request_body_override=request_body_override,
     )
-    frozen_datasets = [{
-        "dataset_id": dataset["dataset_id"],
-        "version": dataset["version"],
-        "revision": dataset.get("revision", "default"),
-        "dataset_version_id": dataset["id"],
-    }]
+    frozen_datasets = [
+        {
+            "dataset_id": dataset["dataset_id"],
+            "version": dataset["version"],
+            "revision": dataset.get("revision", "default"),
+            "dataset_version_id": dataset["id"],
+        }
+    ]
     now = _utc_now()
     snapshot = {
-        "benchmark": {"id": DATASET_RUN_BENCHMARK_ID, "version": DATASET_RUN_BENCHMARK_VERSION, "source": "user", "manifest": _dataset_run_manifest()},
+        "benchmark": {
+            "id": DATASET_RUN_BENCHMARK_ID,
+            "version": DATASET_RUN_BENCHMARK_VERSION,
+            "source": "user",
+            "manifest": _dataset_run_manifest(),
+        },
         "endpoint": {
             "id": endpoint["id"],
             "base_url": endpoint["base_url"],
@@ -496,7 +592,12 @@ def create_mongo_dataset_run(
             "output_cost_per_million": endpoint.get("output_cost_per_million"),
         },
         "datasets": frozen_datasets,
-        "dataset_version": {"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default")},
+        "dataset_version": {
+            "id": dataset["id"],
+            "dataset_id": dataset["dataset_id"],
+            "version": dataset["version"],
+            "revision": dataset.get("revision", "default"),
+        },
         "input_field": selected_input_field,
         "reference_field": normalized_reference_field,
         "dataset_profile": dataset_profile,
@@ -506,10 +607,17 @@ def create_mongo_dataset_run(
         "scoring_rule": effective_scoring_rule,
         "capability_compatibility": compatibility,
         "prompt_package": (
-            {"id": prompt_package["id"], "name": prompt_package["name"], "version": prompt_package["version"],
-             "system_message": prompt_package.get("system_message"), "user_template": prompt_package["user_template"],
-             "few_shot_examples": prompt_package.get("few_shot_examples", []), "scoring_rule": prompt_package.get("scoring_rule")}
-            if prompt_package else None
+            {
+                "id": prompt_package["id"],
+                "name": prompt_package["name"],
+                "version": prompt_package["version"],
+                "system_message": prompt_package.get("system_message"),
+                "user_template": prompt_package["user_template"],
+                "few_shot_examples": prompt_package.get("few_shot_examples", []),
+                "scoring_rule": prompt_package.get("scoring_rule"),
+            }
+            if prompt_package
+            else None
         ),
         "request_body_evidence": request_body_evidence,
     }
@@ -563,7 +671,11 @@ def create_mongo_dataset_run(
             "run_id": run["id"],
             "parent_task_id": dataset_task["id"],
             "task_type": "benchmark",
-            "payload": {"benchmark_id": DATASET_RUN_BENCHMARK_ID, "benchmark_version": DATASET_RUN_BENCHMARK_VERSION, "planned_samples": len(samples)},
+            "payload": {
+                "benchmark_id": DATASET_RUN_BENCHMARK_ID,
+                "benchmark_version": DATASET_RUN_BENCHMARK_VERSION,
+                "planned_samples": len(samples),
+            },
             "status": "pending",
             "priority": 0,
             "attempt_count": 0,
@@ -591,7 +703,9 @@ def create_mongo_dataset_run(
                     "sample_ids": [sample.sample_id for sample in shard_samples],
                     "estimated_request_count": len(shard_samples),
                     "estimated_token_count": sum(_estimate_sample_tokens(sample) for sample in shard_samples),
-                    "sample_token_estimates": {sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples},
+                    "sample_token_estimates": {
+                        sample.sample_id: _estimate_sample_tokens(sample) for sample in shard_samples
+                    },
                     "shard_index": shard_index,
                     "shard_count": len(shards),
                     "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
@@ -616,7 +730,12 @@ def create_mongo_dataset_run(
                     "task_id": task["id"],
                     "sample_id": sample.sample_id,
                     "attempt_number": 1,
-                    "input_snapshot": {"messages": _build_sample_messages(sample, None), "modality": "text", "metadata": dict(sample.metadata), "request_body_evidence": request_body_evidence},
+                    "input_snapshot": {
+                        "messages": _build_sample_messages(sample, None),
+                        "modality": "text",
+                        "metadata": dict(sample.metadata),
+                        "request_body_evidence": request_body_evidence,
+                    },
                     "reference_snapshot": {
                         "type": str(effective_scoring_rule.get("type", "exact_match")),
                         "answer": sample.reference_answer,
@@ -666,7 +785,9 @@ def preflight_mongo_dataset_run(
     if dataset is None:
         issues.append("Dataset version not found.")
     elif dataset.get("status") != "ready" or not dataset.get("prepared_path"):
-        issues.append(f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it first.")
+        issues.append(
+            f"Dataset {dataset['dataset_id']} v{dataset['version']} is not ready; download and verify it first."
+        )
     prompt_package = store.get_document("prompt_packages", prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
@@ -674,7 +795,11 @@ def preflight_mongo_dataset_run(
     if not isinstance(resolved_reference_field, str) or not resolved_reference_field.strip():
         issues.append("A reference field is required.")
     stored_input_field = dataset.get("input_field") if dataset is not None else None
-    resolved_input_field = input_field if input_field is not None else (stored_input_field if isinstance(stored_input_field, str) else None)
+    resolved_input_field = (
+        input_field
+        if input_field is not None
+        else (stored_input_field if isinstance(stored_input_field, str) else None)
+    )
     selected_input_field = _effective_dataset_input_field(
         resolved_input_field,
         _proxy(prompt_package) if prompt_package else None,
@@ -700,7 +825,16 @@ def preflight_mongo_dataset_run(
     samples: list[BenchmarkSample] = []
     datasets: list[dict[str, object]] = []
     if dataset is not None and dataset.get("status") == "ready" and dataset.get("prepared_path"):
-        datasets.append({"id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset.get("revision", "default"), "status": dataset["status"], "will_prepare": False})
+        datasets.append(
+            {
+                "id": dataset["id"],
+                "dataset_id": dataset["dataset_id"],
+                "version": dataset["version"],
+                "revision": dataset.get("revision", "default"),
+                "status": dataset["status"],
+                "will_prepare": False,
+            }
+        )
         try:
             normalized_reference_field = _validate_distinct_dataset_fields(
                 selected_input_field,
@@ -725,24 +859,34 @@ def preflight_mongo_dataset_run(
                 dataset_profile=dataset_profile,
             )
             if not samples:
-                issues.append(_empty_dataset_samples_message(
-                    sample_limit=sample_limit,
-                    input_field=selected_input_field,
-                    reference_field=normalized_reference_field,
-                ))
+                issues.append(
+                    _empty_dataset_samples_message(
+                        sample_limit=sample_limit,
+                        input_field=selected_input_field,
+                        reference_field=normalized_reference_field,
+                    )
+                )
         except (DatasetRecordError, DatasetRunError) as error:
             issues.append(str(error))
     if endpoint is not None and endpoint.get("status") == "available":
         compatibility = _capability_compatibility(store, model_endpoint_id, _dataset_run_manifest())
         if compatibility["unsupported"]:
-            issues.append("Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"]))
+            issues.append(
+                "Model endpoint is incompatible with dataset evaluation: " + ", ".join(compatibility["unsupported"])
+            )
     else:
         compatibility = {"required": ["text_input"], "unsupported": [], "unverified": []}
     estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     estimated_cost = (
-        ((estimated_input_tokens * endpoint.get("input_cost_per_million")) + (estimated_output_tokens * endpoint.get("output_cost_per_million"))) / 1_000_000
-        if endpoint is not None and endpoint.get("input_cost_per_million") is not None and endpoint.get("output_cost_per_million") is not None
+        (
+            (estimated_input_tokens * endpoint.get("input_cost_per_million"))
+            + (estimated_output_tokens * endpoint.get("output_cost_per_million"))
+        )
+        / 1_000_000
+        if endpoint is not None
+        and endpoint.get("input_cost_per_million") is not None
+        and endpoint.get("output_cost_per_million") is not None
         else None
     )
     judge_estimate = (
@@ -767,8 +911,14 @@ def preflight_mongo_dataset_run(
         "compatibility": compatibility,
         "datasets": datasets,
         "request_body_evidence": (
-            _mongo_request_body_evidence(endpoint=endpoint, benchmark_manifest=_dataset_run_manifest(), suite_snapshot=None, request_body_override=request_body_override)
-            if endpoint is not None else None
+            _mongo_request_body_evidence(
+                endpoint=endpoint,
+                benchmark_manifest=_dataset_run_manifest(),
+                suite_snapshot=None,
+                request_body_override=request_body_override,
+            )
+            if endpoint is not None
+            else None
         ),
     }
 
@@ -796,14 +946,25 @@ def _freeze_mongo_declared_datasets(
                 raise MongoRunExecutionError(f"Declared dataset revision {existing_id} is not registered.")
         else:
             query: dict[str, Any] = {"dataset_id": descriptor["dataset_id"]}
-            if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
-            if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+            if isinstance(descriptor.get("version"), str):
+                query["version"] = descriptor["version"]
+            if isinstance(descriptor.get("revision"), str):
+                query["revision"] = descriptor["revision"]
             matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
             if not matches:
                 dataset = _register_mongo_declared_dataset(store, descriptor)
             else:
                 dataset = matches[0]
-        frozen.append({**descriptor, "dataset_version_id": dataset["id"], "dataset_id": dataset["dataset_id"], "version": dataset["version"], "revision": dataset["revision"], "checksum": dataset.get("checksum")})
+        frozen.append(
+            {
+                **descriptor,
+                "dataset_version_id": dataset["id"],
+                "dataset_id": dataset["dataset_id"],
+                "version": dataset["version"],
+                "revision": dataset["revision"],
+                "checksum": dataset.get("checksum"),
+            }
+        )
     return frozen
 
 
@@ -830,21 +991,27 @@ def _register_mongo_declared_dataset(
             "source_url": source_url.strip(),
             "checksum": checksum.strip() if isinstance(checksum, str) and checksum.strip() else None,
             "license_text": license_text.strip() if isinstance(license_text, str) and license_text.strip() else None,
-            "credential_binding_id": credential_binding_id.strip() if isinstance(credential_binding_id, str) and credential_binding_id.strip() else None,
+            "credential_binding_id": credential_binding_id.strip()
+            if isinstance(credential_binding_id, str) and credential_binding_id.strip()
+            else None,
             "local_path": None,
             "prepared_path": None,
             "size_bytes": None,
             "license_accepted_at": None,
             "input_field": None,
             "reference_field": None,
-            "status": "license_required" if isinstance(license_text, str) and license_text.strip() else "not_downloaded",
+            "status": "license_required"
+            if isinstance(license_text, str) and license_text.strip()
+            else "not_downloaded",
             "error_message": None,
             "created_at": _utc_now(),
         },
     )
 
 
-def _mongo_effective_scoring_rule(manifest: dict[str, object], prompt_package: dict[str, Any] | None) -> dict[str, object]:
+def _mongo_effective_scoring_rule(
+    manifest: dict[str, object], prompt_package: dict[str, Any] | None
+) -> dict[str, object]:
     prompt_rule = prompt_package.get("scoring_rule") if prompt_package else None
     if isinstance(prompt_rule, dict) and prompt_rule:
         return dict(prompt_rule)
@@ -866,7 +1033,9 @@ def _mongo_request_body_evidence(
         benchmark_forced = benchmark_manifest.get("required_request_body")
     return resolve_request_body(
         protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")),
-        model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None,
+        model_defaults=endpoint.get("default_request_body")
+        if isinstance(endpoint.get("default_request_body"), dict)
+        else None,
         suite_defaults=suite_defaults if isinstance(suite_defaults, dict) else None,
         benchmark_defaults=benchmark_defaults if isinstance(benchmark_defaults, dict) else None,
         run_override=request_body_override,
@@ -886,17 +1055,149 @@ def create_mongo_custom_multimodal_run(
     max_concurrency: int | None = None,
 ) -> dict[str, Any]:
     endpoint = store.get_document("model_endpoints", model_endpoint_id)
-    if endpoint is None: raise MongoRunExecutionError("Model endpoint not found.")
-    if endpoint.get("status") != "available": raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
-    if not sample_id.strip() or not reference_answer.strip(): raise MongoRunExecutionError("Custom samples require a sample ID and reference answer.")
+    if endpoint is None:
+        raise MongoRunExecutionError("Model endpoint not found.")
+    if endpoint.get("status") != "available":
+        raise MongoRunExecutionError("Model endpoint must pass a connection test before scheduling a run.")
+    if not sample_id.strip() or not reference_answer.strip():
+        raise MongoRunExecutionError("Custom samples require a sample ID and reference answer.")
     normalized = _normalize_mongo_messages(store, data_root, messages)
-    request_body_evidence = resolve_request_body(protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")), model_defaults=endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None)
+    request_body_evidence = resolve_request_body(
+        protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")),
+        model_defaults=endpoint.get("default_request_body")
+        if isinstance(endpoint.get("default_request_body"), dict)
+        else None,
+    )
     now = _utc_now()
-    run = store.insert_document("evaluation_runs", {"model_endpoint_id":model_endpoint_id,"prompt_package_id":None,"suite_id":None,"created_by":created_by,"max_concurrency":max_concurrency,"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","display_name":format_run_display_name(str(endpoint["model_name"]),"custom-multimodal",now),"configuration_snapshot":{"benchmark":{"id":"custom-multimodal","version":"1.0.0","source":"user"},"endpoint":{"id":endpoint["id"],"base_url":endpoint["base_url"],"model_name":endpoint["model_name"],"protocol_profile":endpoint.get("protocol_profile","openai_chat_completions"),"default_request_body":endpoint.get("default_request_body", {}),"timeout_seconds":endpoint.get("timeout_seconds", 60),"custom_headers":endpoint.get("custom_headers", {}),"input_cost_per_million":endpoint.get("input_cost_per_million"),"output_cost_per_million":endpoint.get("output_cost_per_million")},"sample_ids":[sample_id],"request_body_evidence":request_body_evidence},"status":"queued","total_samples":1,"completed_samples":0,"successful_samples":0,"failed_samples":0,"created_at":now,"started_at":None,"completed_at":None})
-    dataset_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":None,"task_type":"dataset_preparation","payload":{"source":"user","prepared_inline":True},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
-    benchmark_task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":dataset_task["id"],"task_type":"benchmark","payload":{"benchmark_id":"custom-multimodal","benchmark_version":"1.0.0","planned_samples":1},"status":"succeeded","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
-    task = store.insert_document("task_units", {"run_id":run["id"],"parent_task_id":benchmark_task["id"],"task_type":"evaluation_shard","payload":{"sample_ids":[sample_id],"estimated_request_count":1,"estimated_token_count":_estimate_message_tokens(normalized),"retry_policy":{"max_attempts":3,"base_delay_seconds":2,"max_delay_seconds":60}},"status":"pending","priority":0,"attempt_count":0,"leased_by":None,"lease_token":None,"lease_expires_at":None,"next_retry_at":None,"heartbeat_at":None,"created_at":now,"updated_at":now})
-    store.insert_document("sample_attempts", {"run_id":run["id"],"task_id":task["id"],"sample_id":sample_id.strip(),"attempt_number":1,"input_snapshot":{"messages":normalized,"modality":_sample_modality(normalized),"metadata":{"capability":"custom","language":"unknown","difficulty":"custom"},"request_body_evidence":request_body_evidence},"reference_snapshot":{"type":"exact_match","answer":reference_answer},"request_snapshot":None,"raw_response":None,"parsed_prediction":None,"score":None,"latency_ms":None,"input_tokens":None,"output_tokens":None,"estimated_cost":None,"error_type":None,"error_message":None,"status":"pending","created_at":now,"started_at":None,"completed_at":None})
+    run = store.insert_document(
+        "evaluation_runs",
+        {
+            "model_endpoint_id": model_endpoint_id,
+            "prompt_package_id": None,
+            "suite_id": None,
+            "created_by": created_by,
+            "max_concurrency": max_concurrency,
+            "benchmark_id": "custom-multimodal",
+            "benchmark_version": "1.0.0",
+            "display_name": format_run_display_name(str(endpoint["model_name"]), "custom-multimodal", now),
+            "configuration_snapshot": {
+                "benchmark": {"id": "custom-multimodal", "version": "1.0.0", "source": "user"},
+                "endpoint": {
+                    "id": endpoint["id"],
+                    "base_url": endpoint["base_url"],
+                    "model_name": endpoint["model_name"],
+                    "protocol_profile": endpoint.get("protocol_profile", "openai_chat_completions"),
+                    "default_request_body": endpoint.get("default_request_body", {}),
+                    "timeout_seconds": endpoint.get("timeout_seconds", 60),
+                    "custom_headers": endpoint.get("custom_headers", {}),
+                    "input_cost_per_million": endpoint.get("input_cost_per_million"),
+                    "output_cost_per_million": endpoint.get("output_cost_per_million"),
+                },
+                "sample_ids": [sample_id],
+                "request_body_evidence": request_body_evidence,
+            },
+            "status": "queued",
+            "total_samples": 1,
+            "completed_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "created_at": now,
+            "started_at": None,
+            "completed_at": None,
+        },
+    )
+    dataset_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": None,
+            "task_type": "dataset_preparation",
+            "payload": {"source": "user", "prepared_inline": True},
+            "status": "succeeded",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    benchmark_task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": dataset_task["id"],
+            "task_type": "benchmark",
+            "payload": {"benchmark_id": "custom-multimodal", "benchmark_version": "1.0.0", "planned_samples": 1},
+            "status": "succeeded",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    task = store.insert_document(
+        "task_units",
+        {
+            "run_id": run["id"],
+            "parent_task_id": benchmark_task["id"],
+            "task_type": "evaluation_shard",
+            "payload": {
+                "sample_ids": [sample_id],
+                "estimated_request_count": 1,
+                "estimated_token_count": _estimate_message_tokens(normalized),
+                "retry_policy": {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60},
+            },
+            "status": "pending",
+            "priority": 0,
+            "attempt_count": 0,
+            "leased_by": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "next_retry_at": None,
+            "heartbeat_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    store.insert_document(
+        "sample_attempts",
+        {
+            "run_id": run["id"],
+            "task_id": task["id"],
+            "sample_id": sample_id.strip(),
+            "attempt_number": 1,
+            "input_snapshot": {
+                "messages": normalized,
+                "modality": _sample_modality(normalized),
+                "metadata": {"capability": "custom", "language": "unknown", "difficulty": "custom"},
+                "request_body_evidence": request_body_evidence,
+            },
+            "reference_snapshot": {"type": "exact_match", "answer": reference_answer},
+            "request_snapshot": None,
+            "raw_response": None,
+            "parsed_prediction": None,
+            "score": None,
+            "latency_ms": None,
+            "input_tokens": None,
+            "output_tokens": None,
+            "estimated_cost": None,
+            "error_type": None,
+            "error_message": None,
+            "status": "pending",
+            "created_at": now,
+            "started_at": None,
+            "completed_at": None,
+        },
+    )
     return run
 
 
@@ -918,7 +1219,12 @@ def execute_mongo_queued_run(
         task = store.claim_task(worker_id="interactive-api", lease_seconds=600, run_id=run_id)
         if task is None or not task.get("lease_token"):
             current = store.get_document("evaluation_runs", run_id)
-            if current is not None and current.get("status") in {"queued", "running", "completed", "completed_with_errors"}:
+            if current is not None and current.get("status") in {
+                "queued",
+                "running",
+                "completed",
+                "completed_with_errors",
+            }:
                 return current
             raise MongoRunExecutionError("No due task is available for this evaluation run.")
         run, _ = execute_mongo_leased_task(
@@ -995,7 +1301,11 @@ def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[s
         if task.get("task_type") == "evaluation_shard"
     ]
     source_payload = _task_payload(source_tasks[0]) if source_tasks else {}
-    retry_policy = source_payload.get("retry_policy") if isinstance(source_payload.get("retry_policy"), dict) else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    retry_policy = (
+        source_payload.get("retry_policy")
+        if isinstance(source_payload.get("retry_policy"), dict)
+        else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    )
     benchmark_tasks = [
         task
         for task in store.list_documents("task_units", query={"run_id": run_id}, sort=[("created_at", -1)])
@@ -1009,7 +1319,9 @@ def retry_failed_mongo_samples(store: MongoDocumentStore, run_id: str) -> dict[s
     except RunCreationError as error:
         raise MongoRunExecutionError(str(error)) from error
     for group in retry_groups:
-        token_estimates = {str(attempt["sample_id"]): _estimate_mongo_retry_attempt_tokens(attempt) for attempt in group}
+        token_estimates = {
+            str(attempt["sample_id"]): _estimate_mongo_retry_attempt_tokens(attempt) for attempt in group
+        }
         task = store.insert_document(
             "task_units",
             {
@@ -1183,7 +1495,9 @@ def execute_mongo_leased_task(
                 if str(attempt["sample_id"]) in retry_sample_ids and attempt.get("status") == "failed":
                     store.update_document("sample_attempts", str(attempt["id"]), {"status": "retry_scheduled"})
             run = _update_run_progress(store, run["id"])
-            run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "queued"})
+            run = store.update_document_if(
+                "evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "queued"}
+            )
             if run is None:
                 raise MongoRunExecutionError("Evaluation run is no longer executable.")
             return run, task
@@ -1203,15 +1517,27 @@ def execute_mongo_leased_task(
         raise MongoRunExecutionError("Task lease was lost before finalization.")
     incomplete_shards = [
         candidate
-        for candidate in store.list_documents("task_units", query={"run_id": run["id"], "task_type": "evaluation_shard"})
+        for candidate in store.list_documents(
+            "task_units", query={"run_id": run["id"], "task_type": "evaluation_shard"}
+        )
         if candidate["id"] != task_id and candidate.get("status") in {"pending", "leased", "running", "retry_scheduled"}
     ]
     if incomplete_shards:
-        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "running", "completed_at": None})
+        run = store.update_document_if(
+            "evaluation_runs",
+            str(run["id"]),
+            {"status": {"$in": ["queued", "running"]}},
+            {"status": "running", "completed_at": None},
+        )
         if run is None:
             raise MongoRunExecutionError("Evaluation run is no longer executable.")
         return run, task
-    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["queued", "running"]}}, {"status": "scoring", "completed_at": None})
+    run = store.update_document_if(
+        "evaluation_runs",
+        str(run["id"]),
+        {"status": {"$in": ["queued", "running"]}},
+        {"status": "scoring", "completed_at": None},
+    )
     if run is None:
         raise MongoRunExecutionError("Evaluation run is no longer executable.")
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="scoring")
@@ -1240,18 +1566,23 @@ def _execute_mongo_stage_task(
     if task["task_type"] == "dataset_preparation":
         try:
             for descriptor in payload.get("datasets", []):
-                if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str): continue
+                if not isinstance(descriptor, dict) or not isinstance(descriptor.get("dataset_id"), str):
+                    continue
                 frozen_id = descriptor.get("dataset_version_id")
                 if isinstance(frozen_id, str):
                     dataset = store.get_document("dataset_versions", frozen_id)
                 else:
                     query = {"dataset_id": descriptor["dataset_id"]}
-                    if isinstance(descriptor.get("version"), str): query["version"] = descriptor["version"]
-                    if isinstance(descriptor.get("revision"), str): query["revision"] = descriptor["revision"]
+                    if isinstance(descriptor.get("version"), str):
+                        query["version"] = descriptor["version"]
+                    if isinstance(descriptor.get("revision"), str):
+                        query["revision"] = descriptor["revision"]
                     matches = store.list_documents("dataset_versions", query=query, sort=[("created_at", -1)])
                     dataset = matches[0] if matches else None
-                if dataset is None: raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.get("status") != "ready": DatasetService(MongoDatasetRepository(store)).download(str(dataset["id"]), data_root, settings)
+                if dataset is None:
+                    raise MongoRunExecutionError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                if dataset.get("status") != "ready":
+                    DatasetService(MongoDatasetRepository(store)).download(str(dataset["id"]), data_root, settings)
         except Exception as error:
             failed = store.update_task_if_current_lease(
                 task,
@@ -1264,12 +1595,18 @@ def _execute_mongo_stage_task(
     updated_task = store.update_task_if_current_lease(
         task,
         lease_token,
-        {"status": "succeeded", "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()}, **_lease_values()},
+        {
+            "status": "succeeded",
+            "payload": {**payload, "worker_interface": task["task_type"], "stage_completed_at": now.isoformat()},
+            **_lease_values(),
+        },
     )
     if updated_task is None:
         raise MongoRunExecutionError("Task lease was lost before finalization.")
     if task["task_type"] == "dataset_preparation" and run.get("status") == "waiting_for_dataset":
-        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "waiting_for_dataset"}, {"status": "queued"})
+        run = store.update_document_if(
+            "evaluation_runs", str(run["id"]), {"status": "waiting_for_dataset"}, {"status": "queued"}
+        )
         if run is None:
             raise MongoRunExecutionError("Evaluation run is no longer executable.")
     return run, updated_task
@@ -1286,10 +1623,14 @@ def _execute_mongo_scoring_task(
     if run.get("status") not in {"scoring", "running"}:
         raise MongoRunExecutionError("Evaluation run is not ready for scoring.")
     task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
-    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    task = store.update_task_if_current_lease(
+        task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1}
+    )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before execution started.")
-    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["scoring", "running"]}}, {"status": "scoring"})
+    run = store.update_document_if(
+        "evaluation_runs", str(run["id"]), {"status": {"$in": ["scoring", "running"]}}, {"status": "scoring"}
+    )
     if run is None:
         raise MongoRunExecutionError("Evaluation run is no longer executable.")
     attempts = _latest_run_attempts(store, str(run["id"]))
@@ -1327,21 +1668,38 @@ def _execute_mongo_aggregation_task(
     if run.get("status") not in {"aggregating", "scoring"}:
         raise MongoRunExecutionError("Evaluation run is not ready for aggregation.")
     task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
-    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    task = store.update_task_if_current_lease(
+        task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1}
+    )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before execution started.")
-    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": {"$in": ["aggregating", "scoring"]}}, {"status": "aggregating"})
+    run = store.update_document_if(
+        "evaluation_runs", str(run["id"]), {"status": {"$in": ["aggregating", "scoring"]}}, {"status": "aggregating"}
+    )
     if run is None:
         raise MongoRunExecutionError("Evaluation run is no longer executable.")
     metrics = recompute_mongo_aggregate_metrics(store, str(run["id"]))
     task = store.update_task_if_current_lease(
         task,
         lease_token,
-        {"payload": {**_task_payload(task), "metric_count": len(metrics), "aggregation_version": AGGREGATION_VERSION}, "status": "succeeded", **_lease_values()},
+        {
+            "payload": {
+                **_task_payload(task),
+                "metric_count": len(metrics),
+                "aggregation_version": AGGREGATION_VERSION,
+            },
+            "status": "succeeded",
+            **_lease_values(),
+        },
     )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before finalization.")
-    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "aggregating"}, {"status": "generating_report", "completed_at": None})
+    run = store.update_document_if(
+        "evaluation_runs",
+        str(run["id"]),
+        {"status": "aggregating"},
+        {"status": "generating_report", "completed_at": None},
+    )
     if run is None:
         raise MongoRunExecutionError("Evaluation run is no longer executable.")
     _enqueue_mongo_stage_task(store, run, parent_task=task, task_type="report_generation")
@@ -1361,7 +1719,9 @@ def _execute_mongo_report_task(
     if run.get("status") != "generating_report":
         raise MongoRunExecutionError("Evaluation run is not ready for report generation.")
     task = _require_current_mongo_lease(store, str(task["id"]), lease_token)
-    task = store.update_task_if_current_lease(task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1})
+    task = store.update_task_if_current_lease(
+        task, lease_token, {"status": "running", "attempt_count": int(task.get("attempt_count", 0)) + 1}
+    )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before execution started.")
     payload = _task_payload(task)
@@ -1376,18 +1736,47 @@ def _execute_mongo_report_task(
             report_type=str(payload.get("report_type", "single_model")),
         )
     except ReportError as error:
-        task = store.update_task_if_current_lease(task, lease_token, {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()})
+        task = store.update_task_if_current_lease(
+            task,
+            lease_token,
+            {"status": "failed", "payload": {**payload, "report_error": str(error)}, **_lease_values()},
+        )
         if task is None:
             raise MongoRunExecutionError("Task lease was lost before finalization.") from error
-        run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "generating_report"}, {"status": str(payload.get("terminal_status", "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed")), "completed_at": _utc_now()})
+        run = store.update_document_if(
+            "evaluation_runs",
+            str(run["id"]),
+            {"status": "generating_report"},
+            {
+                "status": str(
+                    payload.get(
+                        "terminal_status", "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"
+                    )
+                ),
+                "completed_at": _utc_now(),
+            },
+        )
         if run is None:
             raise MongoRunExecutionError("Evaluation run is no longer executable.") from error
         raise MongoRunExecutionError(str(error)) from error
-    task = store.update_task_if_current_lease(task, lease_token, {"status": "succeeded", "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]}, **_lease_values()})
+    task = store.update_task_if_current_lease(
+        task,
+        lease_token,
+        {
+            "status": "succeeded",
+            "payload": {**payload, "report_id": report["id"], "artifact_path": report["artifact_path"]},
+            **_lease_values(),
+        },
+    )
     if task is None:
         raise MongoRunExecutionError("Task lease was lost before finalization.")
     final_status = "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"
-    run = store.update_document_if("evaluation_runs", str(run["id"]), {"status": "generating_report"}, {"status": final_status, "completed_at": _utc_now()})
+    run = store.update_document_if(
+        "evaluation_runs",
+        str(run["id"]),
+        {"status": "generating_report"},
+        {"status": final_status, "completed_at": _utc_now()},
+    )
     if run is None:
         raise MongoRunExecutionError("Evaluation run is no longer executable.")
     return run, task
@@ -1414,7 +1803,20 @@ def _enqueue_mongo_stage_task(
             "run_id": run["id"],
             "parent_task_id": parent_task["id"],
             "task_type": task_type,
-            "payload": {"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model", "terminal_status": "completed_with_errors" if int(run.get("failed_samples", 0)) else "completed"} if task_type == "report_generation" else {})},
+            "payload": {
+                "pipeline_stage": task_type,
+                **(
+                    {
+                        "format": "html",
+                        "report_type": "single_model",
+                        "terminal_status": "completed_with_errors"
+                        if int(run.get("failed_samples", 0))
+                        else "completed",
+                    }
+                    if task_type == "report_generation"
+                    else {}
+                ),
+            },
             "status": "pending",
             "priority": int(parent_task.get("priority", 0)),
             "attempt_count": 0,
@@ -1441,16 +1843,21 @@ def build_mongo_run_summary(store: MongoDocumentStore, run_id: str) -> dict[str,
     for attempt in attempts:
         latest.setdefault(str(attempt["sample_id"]), attempt)
     attempts = [_proxy(attempt) for attempt in latest.values()]
-    return add_summary_insights(summarize_attempts(
+    return add_summary_insights(
+        summarize_attempts(
+            attempts,
+            total_samples=int(run["total_samples"]),
+            currency=str(endpoint["currency"]) if endpoint else None,
+        ),
         attempts,
-        total_samples=int(run["total_samples"]),
-        currency=str(endpoint["currency"]) if endpoint else None,
-    ), attempts)
+    )
 
 
 def _prepare_attempts(store: MongoDocumentStore, task: dict[str, Any]) -> list[dict[str, Any]]:
     payload = _task_payload(task)
-    sample_ids = [value for value in payload.get("retry_sample_ids") or payload.get("sample_ids") or [] if isinstance(value, str)]
+    sample_ids = [
+        value for value in payload.get("retry_sample_ids") or payload.get("sample_ids") or [] if isinstance(value, str)
+    ]
     latest = _latest_attempts(store, str(task["id"]))
     if int(task["attempt_count"]) > 1:
         for sample_id in sample_ids:
@@ -1569,9 +1976,18 @@ def _record_result(
                 raise MongoRunExecutionError("Task lease was lost before judge evidence persistence.")
             return completed
         try:
-            values.update({"score": score_prediction(result.prediction, attempt["reference_snapshot"]), "status": "succeeded", "error_type": None, "error_message": None})
+            values.update(
+                {
+                    "score": score_prediction(result.prediction, attempt["reference_snapshot"]),
+                    "status": "succeeded",
+                    "error_type": None,
+                    "error_message": None,
+                }
+            )
         except ScoringError as error:
-            values.update({"score": None, "status": "failed", "error_type": "scoring_error", "error_message": str(error)})
+            values.update(
+                {"score": None, "status": "failed", "error_type": "scoring_error", "error_message": str(error)}
+            )
     else:
         values.update(
             {
@@ -1672,39 +2088,66 @@ def _capability_compatibility(
     return {"required": required, "unsupported": unsupported, "unverified": unverified}
 
 
-def _normalize_mongo_messages(store: MongoDocumentStore, data_root: str, messages: list[dict[str, Any]]) -> list[dict[str, object]]:
-    if not messages: raise MongoRunExecutionError("Custom samples require at least one message.")
+def _normalize_mongo_messages(
+    store: MongoDocumentStore, data_root: str, messages: list[dict[str, Any]]
+) -> list[dict[str, object]]:
+    if not messages:
+        raise MongoRunExecutionError("Custom samples require at least one message.")
     normalized: list[dict[str, object]] = []
     for message in messages:
         role, content = message.get("role"), message.get("content")
-        if not isinstance(role, str) or not role: raise MongoRunExecutionError("Each message requires a role.")
+        if not isinstance(role, str) or not role:
+            raise MongoRunExecutionError("Each message requires a role.")
         if isinstance(content, str) and content:
-            normalized.append({"role":role,"content":content}); continue
-        if not isinstance(content, list): raise MongoRunExecutionError("Message content must be text or a content-part list.")
-        try: parts = normalize_content_parts(content)
-        except ContentValidationError as error: raise MongoRunExecutionError(str(error)) from error
-        normalized.append({"role":role,"content":[_resolve_mongo_asset(store,data_root,part) for part in parts]})
+            normalized.append({"role": role, "content": content})
+            continue
+        if not isinstance(content, list):
+            raise MongoRunExecutionError("Message content must be text or a content-part list.")
+        try:
+            parts = normalize_content_parts(content)
+        except ContentValidationError as error:
+            raise MongoRunExecutionError(str(error)) from error
+        normalized.append({"role": role, "content": [_resolve_mongo_asset(store, data_root, part) for part in parts]})
     return normalized
 
 
 def _resolve_mongo_asset(store: MongoDocumentStore, data_root: str, part: dict[str, Any]) -> dict[str, object]:
-    if part["type"] in {"text", "tool_result"} or not isinstance(part.get("source"),dict) or not part["source"].get("asset_id"): return part
+    if (
+        part["type"] in {"text", "tool_result"}
+        or not isinstance(part.get("source"), dict)
+        or not part["source"].get("asset_id")
+    ):
+        return part
     asset_id = part["source"]["asset_id"]
-    if not isinstance(asset_id,str): raise MongoRunExecutionError("Media asset ID must be a string.")
-    asset = store.get_document("media_assets",asset_id)
-    if asset is None: raise MongoRunExecutionError("Referenced media asset was not found.")
-    try: encoded = base64.b64encode(safe_asset_path(data_root,str(asset["storage_path"])).read_bytes()).decode("ascii")
-    except MediaAssetError as error: raise MongoRunExecutionError(str(error)) from error
-    return {"type":part["type"],"source":{"asset_id":asset_id,"base64_data":encoded},"mime_type":str(asset["mime_type"])}
+    if not isinstance(asset_id, str):
+        raise MongoRunExecutionError("Media asset ID must be a string.")
+    asset = store.get_document("media_assets", asset_id)
+    if asset is None:
+        raise MongoRunExecutionError("Referenced media asset was not found.")
+    try:
+        encoded = base64.b64encode(safe_asset_path(data_root, str(asset["storage_path"])).read_bytes()).decode("ascii")
+    except MediaAssetError as error:
+        raise MongoRunExecutionError(str(error)) from error
+    return {
+        "type": part["type"],
+        "source": {"asset_id": asset_id, "base64_data": encoded},
+        "mime_type": str(asset["mime_type"]),
+    }
 
 
 def _sample_modality(messages: list[dict[str, object]]) -> str:
-    kinds = {part["type"] for message in messages if isinstance(message.get("content"),list) for part in message["content"] if isinstance(part,dict) and part.get("type") != "text"}
+    kinds = {
+        part["type"]
+        for message in messages
+        if isinstance(message.get("content"), list)
+        for part in message["content"]
+        if isinstance(part, dict) and part.get("type") != "text"
+    }
     return "+".join(sorted(kinds | {"text"}))
 
 
 def _estimate_message_tokens(messages: list[dict[str, object]]) -> int:
-    text_length = sum(len(content) for message in messages if isinstance((content := message.get("content")),str))
+    text_length = sum(len(content) for message in messages if isinstance((content := message.get("content")), str))
     return max(32, (text_length + 3) // 4 + 32)
 
 

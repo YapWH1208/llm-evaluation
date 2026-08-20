@@ -74,7 +74,12 @@ def execute_queued_text_run(
         task = claim_task(session, "interactive-api", lease_seconds=600, run_id=run_id)
         if task is None or task.lease_token is None:
             session.refresh(run)
-            if run.status in {RunStatus.QUEUED.value, RunStatus.RUNNING.value, RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value}:
+            if run.status in {
+                RunStatus.QUEUED.value,
+                RunStatus.RUNNING.value,
+                RunStatus.COMPLETED.value,
+                RunStatus.COMPLETED_WITH_ERRORS.value,
+            }:
                 return run
             raise RunExecutionError("No due task is available for this evaluation run.")
         run, _ = execute_leased_text_task(
@@ -112,7 +117,12 @@ def execute_leased_text_task(
         return _execute_leased_aggregation_task(session, task, lease_token)
     if task.task_type == TaskType.REPORT_GENERATION.value:
         return _execute_leased_report_task(session, task, lease_token, data_root=data_root)
-    if task.task_type in {TaskType.DATASET_PREPARATION.value, TaskType.BENCHMARK.value, TaskType.JUDGE.value, TaskType.CLEANUP.value}:
+    if task.task_type in {
+        TaskType.DATASET_PREPARATION.value,
+        TaskType.BENCHMARK.value,
+        TaskType.JUDGE.value,
+        TaskType.CLEANUP.value,
+    }:
         return _execute_leased_stage_task(session, task, lease_token, data_root=data_root, settings=settings)
     if task.task_type != TaskType.EVALUATION_SHARD.value:
         raise RunExecutionError("Unsupported task type.")
@@ -216,16 +226,28 @@ def _execute_leased_stage_task(
                     dataset = session.get(DatasetVersion, frozen_id)
                 else:
                     query = select(DatasetVersion).where(DatasetVersion.dataset_id == descriptor["dataset_id"])
-                    if isinstance(descriptor.get("version"), str): query = query.where(DatasetVersion.version == descriptor["version"])
-                    if isinstance(descriptor.get("revision"), str): query = query.where(DatasetVersion.revision == descriptor["revision"])
+                    if isinstance(descriptor.get("version"), str):
+                        query = query.where(DatasetVersion.version == descriptor["version"])
+                    if isinstance(descriptor.get("revision"), str):
+                        query = query.where(DatasetVersion.revision == descriptor["revision"])
                     dataset = session.scalar(query.order_by(DatasetVersion.created_at.desc()))
-                if dataset is None: raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
-                if dataset.status != "ready": DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
+                if dataset is None:
+                    raise DatasetError(f"Required dataset {descriptor['dataset_id']} is not registered.")
+                if dataset.status != "ready":
+                    DatasetService(SqliteSessionDatasetRepository(session)).download(dataset.id, data_root, settings)
         except DatasetError as error:
             _require_current_lease(session, task, lease_token)
-            task.status = TaskStatus.RETRY_SCHEDULED.value; task.payload = {**payload, "dataset_error": str(error)}; clear_lease(task); session.commit(); raise RunExecutionError(str(error)) from error
+            task.status = TaskStatus.RETRY_SCHEDULED.value
+            task.payload = {**payload, "dataset_error": str(error)}
+            clear_lease(task)
+            session.commit()
+            raise RunExecutionError(str(error)) from error
     _require_current_lease(session, task, lease_token)
-    task.payload = {**payload, "worker_interface": task.task_type, "stage_completed_at": datetime.now(timezone.utc).isoformat()}
+    task.payload = {
+        **payload,
+        "worker_interface": task.task_type,
+        "stage_completed_at": datetime.now(timezone.utc).isoformat(),
+    }
     task.status = TaskStatus.SUCCEEDED.value
     clear_lease(task)
     if task.task_type == TaskType.DATASET_PREPARATION.value and run.status == RunStatus.WAITING_FOR_DATASET.value:
@@ -330,7 +352,12 @@ def _execute_leased_report_task(
         task.status = TaskStatus.FAILED.value
         task.payload = {**payload, "report_error": str(error)}
         clear_lease(task)
-        run.status = str(payload.get("terminal_status", RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value))
+        run.status = str(
+            payload.get(
+                "terminal_status",
+                RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value,
+            )
+        )
         run.completed_at = datetime.now(timezone.utc)
         session.commit()
         raise RunExecutionError(str(error)) from error
@@ -366,7 +393,20 @@ def _enqueue_stage_task(
         run_id=run.id,
         parent_task_id=parent_task.id,
         task_type=task_type,
-        payload={"pipeline_stage": task_type, **({"format": "html", "report_type": "single_model", "terminal_status": RunStatus.COMPLETED_WITH_ERRORS.value if run.failed_samples else RunStatus.COMPLETED.value} if task_type == TaskType.REPORT_GENERATION.value else {})},
+        payload={
+            "pipeline_stage": task_type,
+            **(
+                {
+                    "format": "html",
+                    "report_type": "single_model",
+                    "terminal_status": RunStatus.COMPLETED_WITH_ERRORS.value
+                    if run.failed_samples
+                    else RunStatus.COMPLETED.value,
+                }
+                if task_type == TaskType.REPORT_GENERATION.value
+                else {}
+            ),
+        },
         status=TaskStatus.PENDING.value,
         priority=parent_task.priority,
     )
@@ -383,7 +423,10 @@ def _prepare_attempts_for_execution(session: Session, task: TaskUnit) -> list[Sa
     if task.attempt_count > 1:
         for sample_id in sample_ids:
             previous = latest.get(sample_id)
-            if previous is None or previous.status not in {SampleAttemptStatus.FAILED.value, SampleAttemptStatus.RETRY_SCHEDULED.value}:
+            if previous is None or previous.status not in {
+                SampleAttemptStatus.FAILED.value,
+                SampleAttemptStatus.RETRY_SCHEDULED.value,
+            }:
                 continue
             replacement = SampleAttempt(
                 run_id=previous.run_id,
@@ -431,9 +474,7 @@ def _latest_run_attempts(session: Session, run_id: str) -> dict[str, SampleAttem
     return latest
 
 
-def _mark_attempt_running(
-    session: Session, task: TaskUnit, lease_token: str, attempt: SampleAttempt
-) -> None:
+def _mark_attempt_running(session: Session, task: TaskUnit, lease_token: str, attempt: SampleAttempt) -> None:
     """Persist the running transition only while this worker still owns the task."""
 
     _require_current_lease(session, task, lease_token)
@@ -441,6 +482,7 @@ def _mark_attempt_running(
     attempt.started_at = datetime.now(timezone.utc)
     attempt.completed_at = None
     session.commit()
+
 
 def _record_result(
     session: Session,
@@ -618,13 +660,21 @@ def _retry_policy(payload: dict[str, Any]) -> dict[str, Any]:
         strategy = DEFAULT_RETRY_POLICY["strategy"]
     return {
         "max_attempts": max(1, int(configured.get("max_attempts", DEFAULT_RETRY_POLICY["max_attempts"]))),
-        "base_delay_seconds": max(0, int(configured.get("base_delay_seconds", DEFAULT_RETRY_POLICY["base_delay_seconds"]))),
-        "max_delay_seconds": max(0, int(configured.get("max_delay_seconds", DEFAULT_RETRY_POLICY["max_delay_seconds"]))),
+        "base_delay_seconds": max(
+            0, int(configured.get("base_delay_seconds", DEFAULT_RETRY_POLICY["base_delay_seconds"]))
+        ),
+        "max_delay_seconds": max(
+            0, int(configured.get("max_delay_seconds", DEFAULT_RETRY_POLICY["max_delay_seconds"]))
+        ),
         "strategy": strategy,
         "jitter_ratio": min(1.0, max(0.0, float(configured.get("jitter_ratio", DEFAULT_RETRY_POLICY["jitter_ratio"])))),
-        "max_total_wait_seconds": max(0, int(configured.get("max_total_wait_seconds", DEFAULT_RETRY_POLICY["max_total_wait_seconds"]))),
+        "max_total_wait_seconds": max(
+            0, int(configured.get("max_total_wait_seconds", DEFAULT_RETRY_POLICY["max_total_wait_seconds"]))
+        ),
         "respect_retry_after": bool(configured.get("respect_retry_after", DEFAULT_RETRY_POLICY["respect_retry_after"])),
-        "retry_response_parse_errors": bool(configured.get("retry_response_parse_errors", DEFAULT_RETRY_POLICY["retry_response_parse_errors"])),
+        "retry_response_parse_errors": bool(
+            configured.get("retry_response_parse_errors", DEFAULT_RETRY_POLICY["retry_response_parse_errors"])
+        ),
     }
 
 

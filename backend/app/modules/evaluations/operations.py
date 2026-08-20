@@ -5,7 +5,16 @@ import json
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import EvaluationRun, ModelEndpoint, RunStatus, SampleAttempt, SampleAttemptStatus, TaskStatus, TaskType, TaskUnit
+from app.db.models import (
+    EvaluationRun,
+    ModelEndpoint,
+    RunStatus,
+    SampleAttempt,
+    SampleAttemptStatus,
+    TaskStatus,
+    TaskType,
+    TaskUnit,
+)
 from app.modules.evaluations.service import RunCreationError, _split_items_for_endpoint_budget, create_benchmark_run
 from app.modules.evaluations.analysis import latest_attempts
 
@@ -18,7 +27,9 @@ def clone_run(session: Session, run_id: str) -> EvaluationRun:
     source = session.get(EvaluationRun, run_id)
     if source is None:
         raise RunOperationError("Evaluation run not found.")
-    snapshot_datasets = source.configuration_snapshot.get("datasets") if isinstance(source.configuration_snapshot, dict) else None
+    snapshot_datasets = (
+        source.configuration_snapshot.get("datasets") if isinstance(source.configuration_snapshot, dict) else None
+    )
     try:
         return create_benchmark_run(
             session,
@@ -58,9 +69,7 @@ def retry_failed_samples(session: Session, run_id: str) -> EvaluationRun:
         raise RunOperationError("Only completed evaluation runs can retry failed samples.")
 
     failed_attempts = [
-        attempt
-        for attempt in latest_attempts(session, run.id)
-        if attempt.status == SampleAttemptStatus.FAILED.value
+        attempt for attempt in latest_attempts(session, run.id) if attempt.status == SampleAttemptStatus.FAILED.value
     ]
     if not failed_attempts:
         raise RunOperationError("This run has no failed samples to retry.")
@@ -74,8 +83,14 @@ def retry_failed_samples(session: Session, run_id: str) -> EvaluationRun:
         .order_by(TaskUnit.created_at.desc())
         .limit(1)
     )
-    source_policy = latest_task.payload.get("retry_policy") if latest_task and isinstance(latest_task.payload, dict) else None
-    retry_policy = source_policy if isinstance(source_policy, dict) else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    source_policy = (
+        latest_task.payload.get("retry_policy") if latest_task and isinstance(latest_task.payload, dict) else None
+    )
+    retry_policy = (
+        source_policy
+        if isinstance(source_policy, dict)
+        else {"max_attempts": 3, "base_delay_seconds": 2, "max_delay_seconds": 60}
+    )
     benchmark_task = session.scalar(
         select(TaskUnit)
         .where(TaskUnit.run_id == run.id, TaskUnit.task_type == TaskType.BENCHMARK.value)
