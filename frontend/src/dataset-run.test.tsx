@@ -210,7 +210,7 @@ describe("evaluation run launch workspace", () => {
     await waitFor(() => expect(listRunsSpy.mock.calls.length).toBeGreaterThan(1));
     expect(window.location.search).not.toContain("tab=run-details");
     releaseRefresh?.();
-    await waitFor(() => expect(window.location.search).toBe("?tab=run-details"));
+    await waitFor(() => expect(window.location.search).toBe("?tab=run-details&run=run-1"));
   }, 10_000);
 
   it("supports quick-start and dataset preflight from the shared endpoint context", async () => {

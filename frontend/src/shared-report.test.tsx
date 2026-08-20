@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reportsApi, type Report } from "./features/reports/api";
-import { ReportsTable } from "./App";
 import { openSharedReport, SharedReportPage } from "./components/pages/SystemPages";
+import { ReportsTable } from "./features/reports/ReportsTable";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {

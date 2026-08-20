@@ -77,6 +77,12 @@ describe("workspace routing", () => {
     expect(workspaceRoute("/leaderboard", "?run=run-1").search).toBe("");
   });
 
+  it("preserves a bounded dataset handoff only on dataset evaluation links", () => {
+    expect(workspacePath("runs", "dataset-evaluation", { datasetId: "dataset-1" })).toBe("/runs?tab=dataset-evaluation&dataset=dataset-1");
+    expect(workspaceRoute("/runs", "?tab=dataset-evaluation&dataset=dataset-1").search).toBe("?tab=dataset-evaluation&dataset=dataset-1");
+    expect(workspaceRoute("/runs", "?tab=quick-start&dataset=dataset-1").search).toBe("?tab=quick-start");
+  });
+
   it("falls back to the page default and canonicalizes unsupported tab text", () => {
     expect(workspaceRoute("/runs", "?tab=unknown&token=secret")).toEqual({
       view: "runs",

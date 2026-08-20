@@ -1,8 +1,6 @@
-import ApplicationWorkspace from "./components/ApplicationWorkspace";
+import { WorkspaceApp } from "./app/WorkspaceApp";
 
-/** Application entrypoint: the feature workspace owns feature state and effects. */
+/** Application entrypoint: providers, routing, and the application shell. */
 export default function App() {
-  return <ApplicationWorkspace />;
+  return <WorkspaceApp />;
 }
-
-export { ReportsTable, SharedReportPage } from "./components/ApplicationWorkspace";

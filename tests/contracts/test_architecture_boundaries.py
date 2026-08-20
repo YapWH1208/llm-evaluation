@@ -27,7 +27,7 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
 }
 KNOWN_STRING_ERROR_ROUTING: set[str] = set()
 KNOWN_SHARED_TO_FEATURE_IMPORTS: set[str] = set()
-KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT = {"components/ApplicationWorkspace.tsx"}
+KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT: set[str] = set()
 
 
 def _python_files(root: Path):
@@ -74,6 +74,16 @@ def test_string_based_error_routing_debt_does_not_grow() -> None:
     assert offenders == KNOWN_STRING_ERROR_ROUTING
 
 
+def test_evaluation_application_does_not_select_persistence_backend() -> None:
+    forbidden = ("database_kind", "app.db.mongo", "app.infrastructure.persistence", "if store is not None")
+    offenders = {
+        _relative(path, BACKEND)
+        for path in _python_files(BACKEND / "modules" / "evaluations")
+        if any(token in path.read_text(encoding="utf-8") for token in forbidden)
+    }
+    assert offenders == set()
+
+
 def test_shared_frontend_never_adds_more_feature_imports() -> None:
     offenders: set[str] = set()
     for path in sorted((FRONTEND / "shared").rglob("*.ts*")):
@@ -90,12 +100,9 @@ def test_app_shell_does_not_own_feature_state() -> None:
     assert "/features/" not in source
 
 
-def test_frontend_workspace_ownership_debt_is_explicit() -> None:
+def test_superseded_frontend_owners_are_deleted() -> None:
     workspace = FRONTEND / "components" / "ApplicationWorkspace.tsx"
-    offenders = {
-        _relative(workspace, FRONTEND)
-        for _ in [None]
-        if workspace.exists()
-        and ("useState(" in workspace.read_text(encoding="utf-8") or "api." in workspace.read_text(encoding="utf-8"))
-    }
-    assert offenders == KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT
+    assert not workspace.exists()
+    assert not (FRONTEND / "shared" / "api" / "index.ts").exists()
+    assert KNOWN_FRONTEND_WORKSPACE_OWNERSHIP_DEBT == set()
+    assert len((FRONTEND / "App.tsx").read_text(encoding="utf-8").splitlines()) <= 25
