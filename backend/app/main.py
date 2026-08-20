@@ -29,14 +29,16 @@ from app.api.benchmarks import router as benchmarks_router
 from app.api.judge_assessments import router as judge_assessments_router
 from app.api.tasks import router as tasks_router
 from app.api.analytics import router as analytics_router
+from app.api.errors import register_application_error_handlers
 from app.api.suites import router as suites_router
 from app.api.leaderboard import router as leaderboard_router
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.mongo import MongoDocumentStore
-from app.services.connection_tester import ConnectionTester, OpenAIChatCompletionsConnectionTester
-from app.services.capability_detector import CapabilityDetector, OpenAIChatCompletionsCapabilityDetector
-from app.services.model_executor import ModelExecutor, OpenAIChatCompletionsExecutor
+from app.infrastructure.providers.capabilities import CapabilityDetector, ProviderCapabilityDetector
+from app.infrastructure.providers.connection import ProviderConnectionTester
+from app.infrastructure.providers.contracts import ModelExecutor
+from app.infrastructure.providers.executor import ProviderExecutor
 from app.services.benchmark_registry import ensure_builtin_benchmark_definitions
 from sqlalchemy import select, text
 
@@ -93,10 +95,11 @@ def create_app(
         version=settings.application_version,
         lifespan=lifespan,
     )
+    register_application_error_handlers(app)
     app.state.settings = settings
-    app.state.connection_tester = connection_tester or OpenAIChatCompletionsConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
-    app.state.model_executor = model_executor or OpenAIChatCompletionsExecutor(max_response_bytes=settings.provider_response_max_bytes)
-    app.state.capability_detector = capability_detector or OpenAIChatCompletionsCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.connection_tester = connection_tester or ProviderConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.model_executor = model_executor or ProviderExecutor(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.capability_detector = capability_detector or ProviderCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)
     app.include_router(model_endpoints_router)
     app.include_router(capabilities_router)
     app.include_router(datasets_router)

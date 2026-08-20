@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
-from app.services.connection_tester import ConnectionTestResult
+from app.infrastructure.providers.contracts import ConnectionTestResult
 from app.services.prompt_templates import PromptTemplateError, render_template
 from tests.test_mongo_document_store import FakeClient
 

@@ -17,7 +17,7 @@ from app.services.judge_scoring import (
     build_single_judge_input,
     parse_judge_response,
 )
-from app.services.model_executor import ModelExecutor
+from app.infrastructure.providers.contracts import ModelExecutor
 
 _FROZEN_JUDGE_FIELDS = (
     "base_url",

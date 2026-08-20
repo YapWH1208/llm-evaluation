@@ -17,9 +17,7 @@ from app.db.mongo import MongoDocumentStore, MongoValidation, MongoValidationErr
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
 from app.db.models import CapabilityDetection
-from app.services.capability_detector import CapabilityDetectionResult
-from app.services.connection_tester import ConnectionTestResult
-from app.services.model_executor import SampleExecutionResult
+from app.infrastructure.providers.contracts import CapabilityDetectionResult, ConnectionTestResult, SampleExecutionResult
 from app.services.run_names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.services.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
@@ -42,7 +40,7 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
         def iter_bytes(self):
             yield content
 
-    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 

@@ -19,7 +19,7 @@ from app.db.mongo import MongoDocumentStore
 from app.services.evaluation_runs import RunCreationError, create_benchmark_run, preflight_benchmark_run
 from app.services.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.services.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
-from app.services.model_executor import ModelExecutor
+from app.infrastructure.providers.contracts import ModelExecutor
 from app.services.run_analysis import build_run_summary
 from app.services.run_executor import RunExecutionError, execute_queued_text_run
 from app.services.run_operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples

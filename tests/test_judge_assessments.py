@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db.models import ModelEndpoint
 from app.main import create_app
-from app.services.model_executor import SampleExecutionResult
+from app.infrastructure.providers.contracts import SampleExecutionResult
 
 
 class JsonJudgeExecutor:

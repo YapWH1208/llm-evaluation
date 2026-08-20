@@ -4,14 +4,16 @@ import httpx
 import pytest
 
 from app.db.models import ModelEndpoint
-from app.services.model_executor import OpenAIChatCompletionsExecutor
-from app.services.request_body import resolve_request_body
+from app.infrastructure.providers.common import allowed_defaults, resolve_request_body
+from app.infrastructure.providers.executor import ProviderExecutor
+
+OpenAIChatCompletionsExecutor = ProviderExecutor
 
 
 @pytest.fixture(autouse=True)
 def public_provider_dns(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
     )
 
@@ -26,7 +28,7 @@ def test_executor_rejects_restricted_dns_redirects_and_oversized_responses(monke
     )
     snapshot = {"messages": [{"role": "user", "content": "hello"}]}
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("169.254.1.2", 0))],
     )
     unsafe = OpenAIChatCompletionsExecutor(httpx.MockTransport(lambda _request: pytest.fail("unsafe request was sent"))).execute(endpoint, "secret", snapshot)
@@ -34,7 +36,7 @@ def test_executor_rejects_restricted_dns_redirects_and_oversized_responses(monke
     assert unsafe.raw_response is None
 
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
     )
     redirected = OpenAIChatCompletionsExecutor(httpx.MockTransport(lambda _request: httpx.Response(302, headers={"location": "https://elsewhere.example.test"}))).execute(endpoint, "secret", snapshot)
@@ -333,9 +335,7 @@ def test_executor_posts_generic_chat_json_to_custom_http_endpoint() -> None:
 
 
 def test_request_body_resolution_filters_sensitive_default_keys() -> None:
-    from app.services.model_executor import _allowed_defaults
-
-    allowed = _allowed_defaults({"api_key": "stashed", "secret_token": "stashed-token", "temperature": 0.5})
+    allowed = allowed_defaults({"api_key": "stashed", "secret_token": "stashed-token", "temperature": 0.5})
     assert "api_key" not in allowed
     assert "secret_token" not in allowed
     assert allowed["temperature"] == 0.5

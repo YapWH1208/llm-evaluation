@@ -20,7 +20,7 @@ from app.db import (
 )
 from app.db.models import DatasetVersion, ModelCapability
 from app.db.models import BenchmarkDefinition
-from app.services.request_body import resolve_request_body
+from app.infrastructure.providers.common import resolve_request_body
 from app.services.prompt_templates import PromptTemplateError, render_template, standardization_flags
 from app.services.scoring import ScoringError, validate_scoring_rule
 from app.services.run_names import format_run_display_name

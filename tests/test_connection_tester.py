@@ -10,16 +10,14 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import ModelEndpoint
 from app.main import create_app
-from app.services.connection_tester import (
-    ConnectionTestResult,
-    OpenAIChatCompletionsConnectionTester,
-)
+from app.infrastructure.providers.connection import ProviderConnectionTester
+from app.infrastructure.providers.contracts import ConnectionTestResult
 
 
 @pytest.fixture(autouse=True)
 def public_provider_dns(monkeypatch):
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
     )
 
@@ -41,7 +39,7 @@ def test_openai_connection_probe_uses_a_small_protected_request() -> None:
         default_request_body={"temperature": 0.8, "model": "must-not-be-used"},
     )
 
-    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(
+    result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(
         endpoint,
         "test-secret-key",
     )
@@ -72,7 +70,7 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
         return httpx.Response(200, json={"output_text": "OK"})
 
     endpoint = ModelEndpoint(display_name="Responses", base_url="https://models.example.test/v1", model_name="responses-model", protocol_profile="openai_responses", encrypted_api_key="not-used", api_key_mask="****test")
-    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
@@ -85,7 +83,7 @@ def test_connection_probe_accepts_a_successful_provider_response_without_evaluat
         api_key_mask="****test",
     )
 
-    result = OpenAIChatCompletionsConnectionTester(
+    result = ProviderConnectionTester(
         httpx.MockTransport(lambda _request: httpx.Response(200, json={"status": "ok", "request_id": "provider-123"}))
     ).test(endpoint, "secret")
 
@@ -105,7 +103,7 @@ def test_connection_probe_adapts_anthropic_messages_shape() -> None:
         return httpx.Response(200, json={"content": [{"type": "text", "text": "OK"}]})
 
     endpoint = ModelEndpoint(display_name="Anthropic", base_url="https://models.example.test", model_name="claude-test", protocol_profile="anthropic_messages", encrypted_api_key="not-used", api_key_mask="****test")
-    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
@@ -119,19 +117,19 @@ def test_connection_probe_rejects_restricted_dns_and_oversized_responses(monkeyp
 
     endpoint = ModelEndpoint(display_name="Restricted", base_url="https://models.example.test/v1", model_name="model", encrypted_api_key="unused", api_key_mask="****")
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("127.0.0.1", 0))],
     )
-    restricted = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    restricted = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert restricted.success is False
     assert "restricted network" in restricted.message
     assert called is False
 
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
     )
-    oversized = OpenAIChatCompletionsConnectionTester(
+    oversized = ProviderConnectionTester(
         httpx.MockTransport(lambda _request: httpx.Response(200, content=b"x" * 32)),
         max_response_bytes=16,
     ).test(endpoint, "secret")
@@ -202,7 +200,7 @@ def test_connection_probe_rejects_non_json_successful_response() -> None:
         encrypted_api_key="not-used",
         api_key_mask="****test",
     )
-    result = OpenAIChatCompletionsConnectionTester(
+    result = ProviderConnectionTester(
         httpx.MockTransport(lambda _request: httpx.Response(200, content=b"<html><body>ok</body></html>"))
     ).test(endpoint, "secret")
     assert result.success is False
@@ -217,7 +215,7 @@ def test_connection_probe_accepts_an_empty_successful_response() -> None:
         encrypted_api_key="not-used",
         api_key_mask="****test",
     )
-    result = OpenAIChatCompletionsConnectionTester(
+    result = ProviderConnectionTester(
         httpx.MockTransport(lambda _request: httpx.Response(200, content=b""))
     ).test(endpoint, "secret")
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
@@ -239,7 +237,7 @@ def test_connection_probe_omits_sensitive_default_body_keys() -> None:
         api_key_mask="****test",
         default_request_body={"api_key": "stashed-secret", "secret_token": "stashed-token", "temperature": 0.5},
     )
-    result = OpenAIChatCompletionsConnectionTester(httpx.MockTransport(handler)).test(endpoint, "secret")
+    result = ProviderConnectionTester(transport=httpx.MockTransport(handler)).test(endpoint, "secret")
     assert result.success is True
     assert observed_body is not None
     assert "api_key" not in observed_body

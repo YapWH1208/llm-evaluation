@@ -59,7 +59,7 @@ def test_dataset_license_gate_and_acknowledgement(tmp_path: Path) -> None:
 
 
 def test_dataset_rejects_local_sources_and_uses_administrator_credential_bindings(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     settings = Settings.local_development(
         database_url=f"sqlite:///{tmp_path/'db.sqlite'}",
         data_root=str(tmp_path / "data"),
@@ -131,7 +131,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
         resolve_dataset_source("file:///private.jsonl", "main", None)
     with pytest.raises(DatasetError, match="HTTPS URL"):
         resolve_dataset_source(str(tmp_path / "private.jsonl"), "main", None)
-    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     settings = Settings.local_development(
         database_url="sqlite:///./ignored.db",
         dataset_credential_bindings={
@@ -188,7 +188,7 @@ def test_dataset_source_blocks_unsafe_schemes_private_networks_and_unapproved_bi
 
 
 def test_dataset_download_enforces_streamed_byte_limit(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr(
         "app.services.datasets.pinned_outbound_transport",
         lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=b"12345678")),
@@ -208,7 +208,7 @@ def test_dataset_preparation_rejects_archive_path_traversal(tmp_path: Path) -> N
 def _redirect_transport(monkeypatch: pytest.MonkeyPatch, handler, *, extra_public_hosts: tuple[str, ...] = ()) -> None:
     public = ("datasets.example.test",) + extra_public_hosts
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda host, *_args, **_kwargs: [(None, None, None, None, (("93.184.216.34", 0) if host in public else ("127.0.0.1", 0)))],
     )
     monkeypatch.setattr(

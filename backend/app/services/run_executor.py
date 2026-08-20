@@ -20,7 +20,7 @@ from app.db import (
     TaskType,
     TaskUnit,
 )
-from app.services.model_executor import ModelExecutor, SampleExecutionResult
+from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
 from app.services.judge_assessments import JudgeAssessmentError, assess_sample_attempt
 from app.services.judge_scoring import (

@@ -182,7 +182,7 @@ def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) ->
 
 
 def test_endpoint_patch_with_unchanged_connection_fields_keeps_status(tmp_path: Path) -> None:
-    from app.services.connection_tester import ConnectionTestResult
+    from app.infrastructure.providers.contracts import ConnectionTestResult
 
     class SuccessfulTester:
         def test(self, endpoint, api_key: str) -> ConnectionTestResult:

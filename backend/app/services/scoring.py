@@ -10,12 +10,15 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 import regex as safe_regex
 
-from app.services.model_executor import normalize_exact_match
 from app.services.judge_scoring import LLM_JUDGE_RULE_TYPE, JudgeScoringError, normalize_judge_rule
 
 
 class ScoringError(ValueError):
     """Raised when a deterministic scoring rule cannot be applied safely."""
+
+
+def normalize_exact_match(value: str) -> str:
+    return " ".join(value.strip().split())
 
 
 _JSON_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"

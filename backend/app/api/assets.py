@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import MediaAsset
 from app.db.mongo import MongoDocumentStore
-from app.services.content_ir import asset_content_part
+from app.core.content import asset_content_part
 from app.services.media_assets import (
     MediaAssetError,
     decode_and_validate_asset,

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.db.models import CapabilityDeclaration, CapabilityDetection, ModelCapability, ModelEndpoint
 from app.db.mongo import MongoDocumentStore
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.services.capability_detector import CapabilityDetector, CapabilityDetectionResult, DEFAULT_CAPABILITY_KEYS
+from app.infrastructure.providers.capabilities import CapabilityDetector, DEFAULT_CAPABILITY_KEYS
+from app.infrastructure.providers.contracts import CapabilityDetectionResult
 
 router = APIRouter(prefix="/api/v1/model-endpoints/{endpoint_id}/capabilities", tags=["capabilities"])
 

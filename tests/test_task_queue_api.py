@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import TaskUnit
 from app.main import create_app
-from app.services.connection_tester import ConnectionTestResult
+from app.infrastructure.providers.contracts import ConnectionTestResult
 
 
 class SuccessfulTester:

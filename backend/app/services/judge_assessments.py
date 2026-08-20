@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher
 from app.db.models import EndpointStatus, EvaluationRun, JudgeAssessment, ModelEndpoint, SampleAttempt
-from app.services.model_executor import ModelExecutor
+from app.infrastructure.providers.contracts import ModelExecutor
 from app.services.judge_scoring import (
     DEFAULT_PAIRWISE_JUDGE_SYSTEM_MESSAGE,
     DEFAULT_SINGLE_JUDGE_SYSTEM_MESSAGE,

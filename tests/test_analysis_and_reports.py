@@ -6,8 +6,7 @@ from urllib.parse import urlsplit
 
 from app.core.config import Settings
 from app.main import create_app
-from app.services.connection_tester import ConnectionTestResult
-from app.services.model_executor import SampleExecutionResult
+from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
 
 
 class SuccessfulTester:

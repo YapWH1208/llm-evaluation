@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.db.models import DatasetStatus, DatasetVersion, EvaluationRun
 from app.services.dataset_records import iter_dataset_records, iter_delimited_rows
-from app.services.outbound_network import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
+from app.infrastructure.network.outbound import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url
 
 
 class DatasetError(ValueError):

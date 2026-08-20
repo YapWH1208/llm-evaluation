@@ -8,14 +8,14 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.main import create_app
 from app.db.models import CapabilityDetection
-from app.services.capability_detector import CapabilityDetectionResult
-from app.services.capability_detector import DEFAULT_CAPABILITY_KEYS, OpenAIChatCompletionsCapabilityDetector
+from app.infrastructure.providers.capabilities import DEFAULT_CAPABILITY_KEYS, ProviderCapabilityDetector
+from app.infrastructure.providers.contracts import CapabilityDetectionResult
 from app.db.models import ModelEndpoint
 
 @pytest.fixture(autouse=True)
 def public_provider_dns(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.services.outbound_network.getaddrinfo",
+        "app.infrastructure.network.outbound.getaddrinfo",
         lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
     )
 
@@ -82,7 +82,7 @@ def test_openai_detector_probes_image_and_audio_and_marks_video_adapter_unsuppor
         return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
 
     endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
-    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["image_input", "audio_input", "video_input"])
+    results = ProviderCapabilityDetector(transport=httpx.MockTransport(handler)).detect(endpoint, "secret", ["image_input", "audio_input", "video_input"])
     by_key = {result.capability_key: result for result in results}
     assert by_key["image_input"].status == CapabilityDetection.PASSED
     assert by_key["audio_input"].status == CapabilityDetection.PASSED
@@ -110,7 +110,7 @@ def test_openai_detector_uses_minimal_multi_image_probe_and_accepts_sse_streamin
         return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
 
     endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
-    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["multiple_images", "streaming"])
+    results = ProviderCapabilityDetector(transport=httpx.MockTransport(handler)).detect(endpoint, "secret", ["multiple_images", "streaming"])
     assert {item.capability_key for item in results if item.status == CapabilityDetection.PASSED} == {"multiple_images", "streaming"}
     assert [part["type"] for part in observed[0]["messages"][0]["content"]] == ["text", "image_url", "image_url"]
     evidence = {item.capability_key: item.evidence for item in results}
@@ -127,7 +127,7 @@ def test_openai_detector_uses_platform_owned_advanced_capability_probes() -> Non
 
     endpoint = ModelEndpoint(display_name="test", base_url="https://models.example.test/v1", model_name="m", encrypted_api_key="unused", api_key_mask="****test")
     keys = ["tool_calling", "parallel_tool_calling", "structured_output", "json_mode", "multi_turn_conversation", "streaming", "seed", "logprobs"]
-    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", keys)
+    results = ProviderCapabilityDetector(transport=httpx.MockTransport(handler)).detect(endpoint, "secret", keys)
     assert {result.capability_key for result in results if result.status == CapabilityDetection.PASSED} == set(keys)
     assert observed[0]["tools"][0]["function"]["name"] == "probe"
     assert observed[1]["parallel_tool_calls"] is True
@@ -149,7 +149,7 @@ def test_gemini_detector_uses_native_probe_and_usage_shape() -> None:
         return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "OK"}]}}], "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}})
 
     endpoint = ModelEndpoint(display_name="Gemini", base_url="https://models.example.test/v1beta", model_name="gemini-test", protocol_profile="gemini_generate_content", encrypted_api_key="unused", api_key_mask="****test")
-    results = OpenAIChatCompletionsCapabilityDetector(httpx.MockTransport(handler)).detect(endpoint, "secret", ["text_input", "usage_reporting", "audio_input"])
+    results = ProviderCapabilityDetector(transport=httpx.MockTransport(handler)).detect(endpoint, "secret", ["text_input", "usage_reporting", "audio_input"])
     by_key = {result.capability_key: result for result in results}
     assert by_key["text_input"].status == CapabilityDetection.PASSED
     assert by_key["usage_reporting"].status == CapabilityDetection.PASSED

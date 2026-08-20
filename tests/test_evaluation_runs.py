@@ -13,8 +13,7 @@ from app.db import ModelEndpoint
 from app.db.models import BenchmarkDefinition, EndpointRateWindow, EndpointSecondRateWindow
 from app.main import create_app
 from app.benchmarks.text_quick_check import TextSample
-from app.services.connection_tester import ConnectionTestResult
-from app.services.model_executor import SampleExecutionResult
+from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
 from app.services.run_names import format_run_display_name
 from app.services.run_executor import _retry_delay_seconds
 from app.services.task_queue import claim_task, reclaim_expired_leases
@@ -36,7 +35,7 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
         def iter_bytes(self):
             yield content
 
-    monkeypatch.setattr("app.services.outbound_network.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr("app.services.datasets.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
 
 

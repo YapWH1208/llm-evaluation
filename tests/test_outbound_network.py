@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpcore
 import httpx
 
-from app.services.outbound_network import _PinnedNetworkBackend, pinned_outbound_transport
+from app.infrastructure.network.outbound import _PinnedNetworkBackend, pinned_outbound_transport
 
 
 def test_pinned_backend_connects_only_to_validated_addresses(monkeypatch) -> None:

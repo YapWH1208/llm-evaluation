@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.db.models import TaskUnit
 from app.db.mongo import MongoDocumentStore
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.services.model_executor import ModelExecutor
+from app.infrastructure.providers.contracts import ModelExecutor
 from app.services.run_executor import RunExecutionError, execute_leased_text_task
 from app.services.mongo_run_executor import MongoRunExecutionError, execute_mongo_leased_task
 from app.services.task_queue import claim_task, heartbeat_task, reclaim_expired_leases
