@@ -15,9 +15,9 @@ from app.db.models import (
     SampleAttempt,
     SampleAttemptStatus,
     TaskStatus,
-    TaskType,
     TaskUnit,
 )
+from app.modules.evaluations.models import TaskType
 
 
 def reclaim_expired_leases(session: Session, *, commit: bool = True) -> int:

@@ -62,11 +62,6 @@ def allowed_defaults(defaults: Mapping[str, object]) -> dict[str, Any]:
     }
 
 
-def url_without_fragment(value: str) -> str:
-    parsed = urlparse(value)
-    return parsed._replace(fragment="").geturl()
-
-
 def source_as_data_or_remote_url(part: dict[str, Any]) -> str:
     source = part["source"]
     if not isinstance(source, dict):

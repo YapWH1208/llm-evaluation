@@ -12,9 +12,9 @@ from app.db.models import (
     SampleAttemptStatus,
     SchemaVersion,
     TaskStatus,
-    TaskType,
     TaskUnit,
 )
+from app.modules.evaluations.models import TaskType
 
 __all__ = [
     "Base",

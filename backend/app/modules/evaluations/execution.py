@@ -7,7 +7,7 @@ from typing import Any
 from app.core.config import Settings
 from app.core.errors import ConflictError, NotFoundError
 from app.core.secrets import SecretCipher
-from app.db.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
+from app.modules.evaluations.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
 from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.evaluations.attempts import AttemptProcessor, latest_attempts, task_payload
 from app.modules.evaluations.ports import ExecutionRepository

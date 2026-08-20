@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.errors import ApplicationError, ConflictError
 from app.core.secrets import SecretCipher
-from app.db.models import SampleAttemptStatus
+from app.modules.evaluations.models import SampleAttemptStatus
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.modules.benchmarks.metrics import build_execution_metric_evidence
 from app.modules.benchmarks.scoring import ScoringError, score_prediction

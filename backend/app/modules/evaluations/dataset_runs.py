@@ -4,14 +4,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.benchmarks.registry import BenchmarkSample
-from app.db.models import (
-    DatasetStatus,
-    EndpointStatus,
-    RunStatus,
-    TaskStatus,
-    TaskType,
-)
 from app.core.errors import ApplicationError, ConflictError, NotFoundError, ValidationError
+from app.modules.datasets.models import DatasetStatus
+from app.modules.endpoints.models import EndpointStatus
+from app.modules.evaluations.models import RunStatus, TaskStatus, TaskType
 from app.modules.datasets.records import DatasetRecordError, iter_dataset_records
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository

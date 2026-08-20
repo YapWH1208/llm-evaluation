@@ -29,11 +29,6 @@ class ValidationError(ApplicationError):
     http_status = 422
 
 
-class ExternalServiceError(ApplicationError):
-    code = "external_service_error"
-    http_status = 502
-
-
 class ConfigurationError(ApplicationError):
     code = "configuration_error"
     http_status = 503

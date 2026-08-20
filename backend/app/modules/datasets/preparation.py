@@ -14,7 +14,7 @@ from uuid import uuid4
 import httpx
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.core.errors import ConflictError
-from app.db.models import DatasetStatus
+from app.modules.datasets.models import DatasetStatus
 from app.modules.datasets.records import iter_dataset_records, iter_delimited_rows
 from app.modules.datasets.records import DatasetRecordError
 from app.infrastructure.network.outbound import OutboundNetworkError, pinned_outbound_transport, validate_outbound_url

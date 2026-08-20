@@ -3,7 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.benchmarks import register_manifest_plugin, unregister_manifest_plugin, validate_manifest_plugin
+from app.benchmarks import (
+    BUILTIN_PLUGINS,
+    register_manifest_plugin,
+    unregister_manifest_plugin,
+    validate_manifest_plugin,
+)
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.benchmarks.ports import BenchmarkRepository
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
@@ -17,6 +22,32 @@ class BenchmarkService:
 
     def list(self) -> list[Any]:
         return self._repository.list_definitions()
+
+    def ensure_builtins(self) -> None:
+        """Persist and register built-ins through the configured repository."""
+
+        for plugin in BUILTIN_PLUGINS:
+            manifest = plugin.manifest
+            benchmark_id = str(manifest["benchmark_id"])
+            version = str(manifest["version"])
+            if self._repository.find_definition(benchmark_id, version) is None:
+                self._repository.create_definitions(
+                    [
+                        {
+                            "benchmark_id": benchmark_id,
+                            "version": version,
+                            "display_name": str(manifest["display_name"]),
+                            "status": "available",
+                            "manifest": manifest,
+                            "source": "builtin",
+                            "created_at": datetime.now(timezone.utc),
+                        }
+                    ]
+                )
+        for definition in self._repository.list_definitions():
+            manifest = _value(definition, "manifest")
+            if isinstance(manifest, dict):
+                register_manifest_plugin(manifest)
 
     def register(self, payload: Any, *, source: str = "user") -> Any:
         manifest = _canonical_manifest(payload.benchmark_id, payload.version, payload.display_name, payload.manifest)

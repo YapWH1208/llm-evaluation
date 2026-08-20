@@ -85,6 +85,20 @@ def test_feature_application_code_does_not_select_persistence_backend() -> None:
     assert offenders == set()
 
 
+def test_feature_application_code_does_not_import_persistence() -> None:
+    offenders: set[str] = set()
+    for path in _python_files(BACKEND / "modules"):
+        if path.name == "repositories.py" or path.name.endswith("api.py"):
+            continue
+        imports = _import_names(ast.parse(path.read_text(encoding="utf-8")))
+        if any(
+            name == "sqlalchemy" or name.startswith("sqlalchemy.") or name == "app.db" or name.startswith("app.db.")
+            for name in imports
+        ):
+            offenders.add(_relative(path, BACKEND))
+    assert offenders == set()
+
+
 def test_persistence_adapters_do_not_invoke_application_services() -> None:
     offenders: set[str] = set()
     for path in _python_files(BACKEND / "infrastructure" / "persistence"):

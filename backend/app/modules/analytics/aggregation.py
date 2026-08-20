@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.core.errors import NotFoundError
-from app.db.models import SampleAttemptStatus
+from app.modules.evaluations.models import SampleAttemptStatus
 from app.modules.benchmarks.metrics import (
     MetricResult,
     compute_profile_metrics,

@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import DEFAULT_DATASET_DOWNLOAD_MAX_BYTES, Settings
 from app.core.errors import ConflictError, NotFoundError
-from app.db.models import DatasetStatus
+from app.modules.datasets.models import DatasetStatus
 from app.modules.datasets.ports import DatasetRepository
 from app.modules.datasets.preparation import (
     DatasetDownloadPaused,

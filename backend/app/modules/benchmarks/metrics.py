@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import math
 from typing import Any, Iterable
 
-from app.db.models import SampleAttemptStatus
+from app.modules.evaluations.models import SampleAttemptStatus
 from app.modules.reviews.scoring import is_valid_judge_score
 from app.modules.benchmarks.scoring import score_prediction
 

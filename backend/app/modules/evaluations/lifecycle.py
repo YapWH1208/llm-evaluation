@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.db.models import RunStatus
+from app.modules.evaluations.models import RunStatus
 
 
 class RunLifecycle:

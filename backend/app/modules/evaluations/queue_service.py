@@ -4,7 +4,7 @@ from typing import Any
 
 from app.core.config import Settings
 from app.core.errors import ConflictError, NotFoundError
-from app.db.models import TaskStatus
+from app.modules.evaluations.models import TaskStatus
 from app.modules.evaluations.ports import ExecutionRepository
 
 

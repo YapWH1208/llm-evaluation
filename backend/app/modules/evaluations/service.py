@@ -5,13 +5,8 @@ from typing import Any
 
 from app.benchmarks import get_installed_plugin
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.db import (
-    EndpointStatus,
-    RunStatus,
-    SampleAttemptStatus,
-    TaskStatus,
-    TaskType,
-)
+from app.modules.endpoints.models import EndpointStatus
+from app.modules.evaluations.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
 from app.modules.benchmarks.prompts import standardization_flags
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.names import format_run_display_name

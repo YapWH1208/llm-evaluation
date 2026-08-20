@@ -8,9 +8,9 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.core.errors import ValidationError
-from app.db.models import ModelEndpoint, PromptPackage, SampleAttemptStatus
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template
+from app.modules.evaluations.models import SampleAttemptStatus
 
 
 def empty_preflight(issue: str) -> dict[str, object]:
@@ -138,7 +138,7 @@ def capability_compatibility(capabilities: list[dict[str, Any]], manifest: dict[
     return {"required": required, "unsupported": unsupported, "unverified": unverified}
 
 
-def effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPackage | None) -> dict[str, object]:
+def effective_scoring_rule(manifest: dict[str, object], prompt_package: Any | None) -> dict[str, object]:
     if prompt_package is not None and isinstance(prompt_package.scoring_rule, dict) and prompt_package.scoring_rule:
         return dict(prompt_package.scoring_rule)
     benchmark_rule = manifest.get("scoring")
@@ -149,7 +149,7 @@ def effective_scoring_rule(manifest: dict[str, object], prompt_package: PromptPa
 
 def request_body_evidence(
     *,
-    endpoint: ModelEndpoint,
+    endpoint: Any,
     benchmark_manifest: dict[str, object],
     suite_snapshot: dict[str, object] | None,
     request_body_override: dict[str, object] | None,
@@ -171,7 +171,7 @@ def request_body_evidence(
     )
 
 
-def _build_messages(question: str, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
+def _build_messages(question: str, prompt_package: Any | None) -> list[dict[str, object]]:
     if prompt_package is None:
         return [{"role": "user", "content": question}]
     template = prompt_package.user_template
@@ -205,7 +205,7 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
     return messages
 
 
-def build_sample_messages(sample: object, prompt_package: PromptPackage | None) -> list[dict[str, object]]:
+def build_sample_messages(sample: object, prompt_package: Any | None) -> list[dict[str, object]]:
     """Preserve unified multimodal sample content while applying prompt packages to text samples."""
 
     raw_messages = getattr(sample, "messages", ())

@@ -3,68 +3,9 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Iterable
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from app.core.errors import NotFoundError
-from app.db.models import EvaluationRun, ModelEndpoint, SampleAttempt, SampleAttemptStatus
+from app.modules.evaluations.models import SampleAttemptStatus
 from app.modules.evaluations.ports import EvaluationRepository
-
-
-def latest_attempts(session: Session, run_id: str) -> list[SampleAttempt]:
-    """Return the current outcome for each sample while retaining retries elsewhere."""
-
-    attempts = session.scalars(
-        select(SampleAttempt)
-        .where(SampleAttempt.run_id == run_id)
-        .order_by(SampleAttempt.sample_id, SampleAttempt.attempt_number.desc())
-    )
-    latest_by_sample: dict[str, SampleAttempt] = {}
-    for attempt in attempts:
-        latest_by_sample.setdefault(attempt.sample_id, attempt)
-    return [latest_by_sample[sample_id] for sample_id in sorted(latest_by_sample)]
-
-
-def all_attempts(session: Session, run_id: str) -> list[SampleAttempt]:
-    return list(
-        session.scalars(
-            select(SampleAttempt)
-            .where(SampleAttempt.run_id == run_id)
-            .order_by(SampleAttempt.sample_id, SampleAttempt.attempt_number)
-        )
-    )
-
-
-def build_run_summary(session: Session, run: EvaluationRun) -> dict[str, Any]:
-    endpoint = session.get(ModelEndpoint, run.model_endpoint_id)
-    current_attempts = latest_attempts(session, run.id)
-    summary = summarize_attempts(
-        current_attempts,
-        total_samples=run.total_samples,
-        currency=endpoint.currency if endpoint is not None else None,
-    )
-    previous = session.scalar(
-        select(EvaluationRun)
-        .where(
-            EvaluationRun.model_endpoint_id == run.model_endpoint_id,
-            EvaluationRun.benchmark_id == run.benchmark_id,
-            EvaluationRun.benchmark_version == run.benchmark_version,
-            EvaluationRun.id != run.id,
-            EvaluationRun.status.in_(["completed", "completed_with_errors"]),
-            EvaluationRun.created_at < run.created_at,
-        )
-        .order_by(EvaluationRun.created_at.desc())
-    )
-    previous_summary = (
-        summarize_attempts(
-            latest_attempts(session, previous.id),
-            total_samples=previous.total_samples,
-            currency=endpoint.currency if endpoint is not None else None,
-        )
-        if previous is not None
-        else None
-    )
-    return add_summary_insights(summary, current_attempts, previous_summary)
 
 
 def build_repository_run_summary(repository: EvaluationRepository, run_id: str) -> dict[str, Any]:
@@ -105,7 +46,7 @@ def _latest_record_attempts(attempts: list[dict[str, Any]]) -> list[dict[str, An
 
 
 def summarize_attempts(
-    attempts: Iterable[SampleAttempt | dict[str, Any]],
+    attempts: Iterable[Any],
     *,
     total_samples: int | None = None,
     currency: str | None = None,

@@ -64,7 +64,6 @@ from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRe
 from app.modules.evaluations.execution import ExecutionService
 from app.modules.evaluations.queue_service import QueueService
 from app.modules.evaluations.service import EvaluationService
-from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions
 from app.modules.benchmarks.repositories import MongoBenchmarkRepository, SqliteBenchmarkRepository
 from app.modules.benchmarks.service import BenchmarkService, PromptPackageService
 from app.modules.analytics.aggregation import AggregationService
@@ -103,14 +102,11 @@ def create_app(
     async def lifespan(app: FastAPI):
         if document_store is not None:
             document_store.initialize()
-            _ensure_mongo_builtin_benchmarks(document_store)
         else:
             assert database is not None
             database.initialize()
-        if document_store is None and settings.database_init_mode.lower().strip() == "auto_migrate":
-            assert database is not None
-            with database.get_session() as session:
-                ensure_builtin_benchmark_definitions(session)
+        if document_store is not None or settings.database_init_mode.lower().strip() == "auto_migrate":
+            app.state.benchmark_service.ensure_builtins()
         app.state.database = database
         app.state.document_store = document_store
         yield
@@ -288,36 +284,3 @@ def create_app(
 
 
 app = create_app()
-
-
-def _ensure_mongo_builtin_benchmarks(document_store: MongoDocumentStore) -> None:
-    """Register the same built-in benchmark manifests in document storage."""
-
-    from app.benchmarks import BUILTIN_PLUGINS
-
-    for plugin in BUILTIN_PLUGINS:
-        manifest = plugin.manifest
-        existing = document_store.list_documents(
-            "benchmark_definitions",
-            query={"benchmark_id": manifest["benchmark_id"], "version": manifest["version"]},
-        )
-        if existing:
-            continue
-        document_store.insert_document(
-            "benchmark_definitions",
-            {
-                "benchmark_id": manifest["benchmark_id"],
-                "version": manifest["version"],
-                "display_name": manifest["display_name"],
-                "status": "available",
-                "manifest": manifest,
-                "source": "builtin",
-                "created_at": datetime.now(timezone.utc),
-            },
-        )
-    from app.benchmarks import register_manifest_plugin
-
-    for definition in document_store.list_documents("benchmark_definitions"):
-        manifest = definition.get("manifest")
-        if isinstance(manifest, dict):
-            register_manifest_plugin(manifest)

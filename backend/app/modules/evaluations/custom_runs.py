@@ -6,7 +6,8 @@ from typing import Any
 
 from app.core.content import ContentValidationError, normalize_content_parts
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.db.models import EndpointStatus, RunStatus, TaskStatus, TaskType
+from app.modules.endpoints.models import EndpointStatus
+from app.modules.evaluations.models import RunStatus, TaskStatus, TaskType
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository

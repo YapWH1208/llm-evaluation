@@ -122,18 +122,6 @@ def _optional_positive_int(value: str | None) -> int | None:
     return parsed
 
 
-def _environment_bool(name: str) -> bool:
-    value = getenv(name)
-    if value is None or not value.strip():
-        return False
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes"}:
-        return True
-    if normalized in {"0", "false", "no"}:
-        return False
-    raise ValueError(f"{name} must be a boolean value.")
-
-
 def _positive_environment_int(name: str, default: int) -> int:
     value = getenv(name)
     if value is None or not value.strip():

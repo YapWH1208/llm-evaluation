@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from app.modules.datasets.models import DatasetStatus
+from app.modules.endpoints.models import CapabilityDeclaration, CapabilityDetection, EndpointStatus
+from app.modules.evaluations.models import RunStatus, SampleAttemptStatus, TaskStatus
 
 
 class Base(DeclarativeBase):
@@ -41,12 +44,6 @@ class SchemaMigration(Base):
         nullable=False,
         server_default=func.now(),
     )
-
-
-class EndpointStatus(StrEnum):
-    UNVERIFIED = "unverified"
-    AVAILABLE = "available"
-    UNAVAILABLE = "unavailable"
 
 
 class ModelEndpoint(Base):
@@ -107,20 +104,6 @@ class ModelEndpoint(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-
-
-class CapabilityDeclaration(StrEnum):
-    SUPPORTED = "supported"
-    UNSUPPORTED = "unsupported"
-    UNKNOWN = "unknown"
-
-
-class CapabilityDetection(StrEnum):
-    PASSED = "passed"
-    FAILED = "failed"
-    INCONCLUSIVE = "inconclusive"
-    NOT_TESTED = "not_tested"
-    UNSUPPORTED_BY_ADAPTER = "unsupported_by_adapter"
 
 
 class ModelCapability(Base):
@@ -233,21 +216,6 @@ class PromptPackage(Base):
     scoring_rule: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     change_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-
-class DatasetStatus(StrEnum):
-    NOT_DOWNLOADED = "not_downloaded"
-    WAITING = "waiting"
-    DOWNLOADING = "downloading"
-    VERIFYING = "verifying"
-    PREPARING = "preparing"
-    READY = "ready"
-    UPDATE_AVAILABLE = "update_available"
-    LICENSE_REQUIRED = "license_required"
-    CREDENTIAL_REQUIRED = "credential_required"
-    CORRUPTED = "corrupted"
-    FAILED = "failed"
-    REMOVING = "removing"
 
 
 class DatasetVersion(Base):
@@ -384,56 +352,6 @@ class JudgeAssessment(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-
-class RunStatus(StrEnum):
-    DRAFT = "draft"
-    VALIDATING = "validating"
-    WAITING_FOR_DATASET = "waiting_for_dataset"
-    QUEUED = "queued"
-    RUNNING = "running"
-    PAUSING = "pausing"
-    PAUSED = "paused"
-    CANCELLING = "cancelling"
-    COMPLETED = "completed"
-    COMPLETED_WITH_ERRORS = "completed_with_errors"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    SCORING = "scoring"
-    AGGREGATING = "aggregating"
-    GENERATING_REPORT = "generating_report"
-
-
-class TaskStatus(StrEnum):
-    PENDING = "pending"
-    LEASED = "leased"
-    RUNNING = "running"
-    RETRY_SCHEDULED = "retry_scheduled"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-class TaskType(StrEnum):
-    DATASET_PREPARATION = "dataset_preparation"
-    BENCHMARK = "benchmark"
-    EVALUATION_SHARD = "evaluation_shard"
-    SCORING = "scoring"
-    JUDGE = "judge"
-    AGGREGATION = "aggregation"
-    REPORT_GENERATION = "report_generation"
-    CLEANUP = "cleanup"
-
-
-class SampleAttemptStatus(StrEnum):
-    PENDING = "pending"
-    LEASED = "leased"
-    RUNNING = "running"
-    RETRY_SCHEDULED = "retry_scheduled"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    CANCELLED = "cancelled"
 
 
 class EvaluationRun(Base):

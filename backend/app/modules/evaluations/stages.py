@@ -4,7 +4,7 @@ from typing import Any
 
 from app.core.config import Settings
 from app.core.errors import ApplicationError, ConflictError, NotFoundError
-from app.db.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
+from app.modules.evaluations.models import RunStatus, SampleAttemptStatus, TaskStatus, TaskType
 from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
 from app.modules.datasets.service import DatasetService
 from app.modules.evaluations.attempts import latest_attempts, task_payload, utc_now
