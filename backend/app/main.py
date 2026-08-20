@@ -43,6 +43,11 @@ from app.modules.endpoints.repositories import MongoEndpointRepository, SqliteEn
 from app.modules.endpoints.service import EndpointService
 from app.modules.datasets.repositories import MongoDatasetRepository, SqliteDatasetRepository
 from app.modules.datasets.service import DatasetService
+from app.modules.evaluations.repositories import (
+    MongoEvaluationRepository,
+    SqliteEvaluationRepository,
+)
+from app.modules.evaluations.service import EvaluationService
 from app.modules.benchmarks.registry import ensure_builtin_benchmark_definitions
 from sqlalchemy import select, text
 
@@ -68,11 +73,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings.from_environment()
     database = Database(settings) if settings.database_kind != "mongodb" else None
-    document_store = (
-        document_store or MongoDocumentStore(settings)
-        if settings.database_kind == "mongodb"
-        else None
-    )
+    document_store = document_store or MongoDocumentStore(settings) if settings.database_kind == "mongodb" else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -107,9 +108,21 @@ def create_app(
     app.state.dataset_service = DatasetService(
         MongoDatasetRepository(document_store) if document_store is not None else SqliteDatasetRepository(database)  # type: ignore[arg-type]
     )
-    app.state.connection_tester = connection_tester or ProviderConnectionTester(max_response_bytes=settings.provider_response_max_bytes)
-    app.state.model_executor = model_executor or ProviderExecutor(max_response_bytes=settings.provider_response_max_bytes)
-    app.state.capability_detector = capability_detector or ProviderCapabilityDetector(max_response_bytes=settings.provider_response_max_bytes)
+    app.state.evaluation_service = EvaluationService(
+        MongoEvaluationRepository(document_store)
+        if document_store is not None
+        else SqliteEvaluationRepository(database),  # type: ignore[arg-type]
+        data_root=settings.data_root,
+    )
+    app.state.connection_tester = connection_tester or ProviderConnectionTester(
+        max_response_bytes=settings.provider_response_max_bytes
+    )
+    app.state.model_executor = model_executor or ProviderExecutor(
+        max_response_bytes=settings.provider_response_max_bytes
+    )
+    app.state.capability_detector = capability_detector or ProviderCapabilityDetector(
+        max_response_bytes=settings.provider_response_max_bytes
+    )
     app.include_router(model_endpoints_router)
     app.include_router(capabilities_router)
     app.include_router(datasets_router)
@@ -135,7 +148,19 @@ def create_app(
         started_at = datetime.now(timezone.utc)
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
-        request_logger.info(json.dumps({"event": "http_request", "request_id": request.state.request_id, "method": request.method, "path": request.url.path, "status_code": response.status_code, "duration_ms": round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 3)}, separators=(",", ":")))
+        request_logger.info(
+            json.dumps(
+                {
+                    "event": "http_request",
+                    "request_id": request.state.request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 3),
+                },
+                separators=(",", ":"),
+            )
+        )
         return response
 
     app.add_middleware(
@@ -154,7 +179,9 @@ def create_app(
         try:
             if document_store is not None:
                 queue = {
-                    "pending": document_store.count_documents("task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}),
+                    "pending": document_store.count_documents(
+                        "task_units", {"status": {"$in": ["pending", "retry_scheduled"]}}
+                    ),
                     "active": document_store.count_documents("task_units", {"status": {"$in": ["leased", "running"]}}),
                 }
             else:
@@ -166,8 +193,16 @@ def create_app(
                     from sqlalchemy import func
 
                     queue = {
-                        "pending": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["pending", "retry_scheduled"]))) or 0,
-                        "active": session.scalar(select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["leased", "running"]))) or 0,
+                        "pending": session.scalar(
+                            select(func.count())
+                            .select_from(TaskUnit)
+                            .where(TaskUnit.status.in_(["pending", "retry_scheduled"]))
+                        )
+                        or 0,
+                        "active": session.scalar(
+                            select(func.count()).select_from(TaskUnit).where(TaskUnit.status.in_(["leased", "running"]))
+                        )
+                        or 0,
                     }
         except Exception:
             database_connected = False

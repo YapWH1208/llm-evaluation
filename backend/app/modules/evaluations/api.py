@@ -3,33 +3,32 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.db import EvaluationRun, SampleAttempt, RunStatus, SampleAttemptStatus, TaskStatus, TaskUnit
-from app.db.models import HumanReview, JudgeAssessment, Report
+from app.db import EvaluationRun, RunStatus
 from app.db.mongo import MongoDocumentStore
-from app.modules.evaluations.service import RunCreationError, create_benchmark_run, preflight_benchmark_run
+from app.modules.evaluations.service import (
+    EvaluationService,
+    RunCreationError,
+    create_benchmark_run,
+    preflight_benchmark_run,
+)
 from app.modules.evaluations.custom_runs import CustomRunError, create_custom_multimodal_run
 from app.modules.evaluations.dataset_runs import DatasetRunError, create_dataset_run, preflight_dataset_run
 from app.infrastructure.providers.contracts import ModelExecutor
-from app.modules.evaluations.analysis import build_run_summary
 from app.modules.evaluations.executor import RunExecutionError, execute_queued_text_run
 from app.modules.evaluations.operations import RunOperationError, clone_run, rerun_benchmark, retry_failed_samples
 from app.modules.evaluations.names import resolve_run_display_name
-from app.modules.reports.service import delete_report_artifact
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
-from app.modules.evaluations.lifecycle import RunLifecycle
 from app.modules.evaluations.mongo_executor import (
     MongoRunExecutionError,
-    build_mongo_run_summary,
     clone_mongo_run,
     create_mongo_custom_multimodal_run,
     create_mongo_dataset_run,
@@ -42,18 +41,6 @@ from app.modules.evaluations.mongo_executor import (
 )
 
 router = APIRouter(prefix="/api/v1/evaluation-runs", tags=["evaluation runs"])
-_ACTIVE_TASK_STATUSES = (
-    TaskStatus.PENDING.value,
-    TaskStatus.RETRY_SCHEDULED.value,
-    TaskStatus.LEASED.value,
-    TaskStatus.RUNNING.value,
-)
-_ACTIVE_ATTEMPT_STATUSES = (
-    SampleAttemptStatus.PENDING.value,
-    SampleAttemptStatus.LEASED.value,
-    SampleAttemptStatus.RUNNING.value,
-    SampleAttemptStatus.RETRY_SCHEDULED.value,
-)
 
 
 class EvaluationRunCreate(BaseModel):
@@ -227,9 +214,14 @@ def get_model_executor(request: Request) -> ModelExecutor:
     return request.app.state.model_executor
 
 
+def get_evaluation_service(request: Request) -> EvaluationService:
+    return request.app.state.evaluation_service
+
+
 SessionDependency = Annotated[Session | None, Depends(get_session)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
+EvaluationServiceDependency = Annotated[EvaluationService, Depends(get_evaluation_service)]
 
 
 def get_document_store(request: Request) -> MongoDocumentStore | None:
@@ -270,9 +262,7 @@ def create_evaluation_run(
         )
     except (RunCreationError, MongoRunExecutionError) as error:
         status_code = (
-            status.HTTP_404_NOT_FOUND
-            if str(error) == "Model endpoint not found."
-            else status.HTTP_409_CONFLICT
+            status.HTTP_404_NOT_FOUND if str(error) == "Model endpoint not found." else status.HTTP_409_CONFLICT
         )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
@@ -317,9 +307,22 @@ def create_custom_run(
     store = get_document_store(request)
     if store is not None:
         try:
-            return create_mongo_custom_multimodal_run(store, data_root=request.app.state.settings.data_root, model_endpoint_id=payload.model_endpoint_id, sample_id=payload.sample_id, messages=payload.messages, reference_answer=payload.reference_answer, created_by=getattr(request.state, "actor_id", None), max_concurrency=payload.max_concurrency)
+            return create_mongo_custom_multimodal_run(
+                store,
+                data_root=request.app.state.settings.data_root,
+                model_endpoint_id=payload.model_endpoint_id,
+                sample_id=payload.sample_id,
+                messages=payload.messages,
+                reference_answer=payload.reference_answer,
+                created_by=getattr(request.state, "actor_id", None),
+                max_concurrency=payload.max_concurrency,
+            )
         except MongoRunExecutionError as error:
-            status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
+            status_code = (
+                status.HTTP_404_NOT_FOUND
+                if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."}
+                else status.HTTP_409_CONFLICT
+            )
             raise HTTPException(status_code, str(error)) from error
     assert session is not None
     try:
@@ -334,7 +337,11 @@ def create_custom_run(
             max_concurrency=payload.max_concurrency,
         )
     except CustomRunError as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."} else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if str(error) in {"Model endpoint not found.", "Referenced media asset was not found."}
+            else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
@@ -362,7 +369,12 @@ def create_dataset_evaluation_run(
                 max_concurrency=payload.max_concurrency,
             )
         except MongoRunExecutionError as error:
-            status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."} else status.HTTP_409_CONFLICT
+            status_code = (
+                status.HTTP_404_NOT_FOUND
+                if str(error)
+                in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."}
+                else status.HTTP_409_CONFLICT
+            )
             raise HTTPException(status_code=status_code, detail=str(error)) from error
     assert session is not None
     try:
@@ -381,7 +393,11 @@ def create_dataset_evaluation_run(
             max_concurrency=payload.max_concurrency,
         )
     except DatasetRunError as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error) in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."} else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if str(error) in {"Model endpoint not found.", "Dataset version not found.", "Prompt package not found."}
+            else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
@@ -422,185 +438,39 @@ def preflight_dataset_evaluation_run(
 
 @router.get("", response_model=list[EvaluationRunResponse])
 def list_evaluation_runs(
-    request: Request,
-    session: SessionDependency,
+    service: EvaluationServiceDependency,
     include_archived: bool = False,
-) -> list[EvaluationRun | dict[str, Any]]:
-    store = get_document_store(request)
-    if store is not None:
-        runs = store.list_documents("evaluation_runs", sort=[("created_at", -1)])
-        return runs if include_archived else [run for run in runs if run.get("archived_at") is None]
-    assert session is not None
-    query = select(EvaluationRun).order_by(EvaluationRun.created_at.desc())
-    if not include_archived:
-        query = query.where(EvaluationRun.archived_at.is_(None))
-    return list(session.scalars(query))
+) -> list[dict[str, Any]]:
+    return service.list(include_archived=include_archived)
+
 
 @router.post("/{run_id}/pause", response_model=EvaluationRunResponse)
-def pause_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None: raise HTTPException(404, "Evaluation run not found")
-        if not RunLifecycle.can_pause(run["status"]): raise HTTPException(409, "Run cannot be paused in its current state")
-        store.invalidate_run_tasks(run_id)
-        for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
-            store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.PENDING.value, "completed_at": None, "worker_lease_token": None})
-        updated = store.update_document("evaluation_runs", run_id, {"status": RunStatus.PAUSED.value})
-        assert updated is not None
-        return updated
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None: raise HTTPException(404, "Evaluation run not found")
-    if not RunLifecycle.can_pause(run.status): raise HTTPException(409, "Run cannot be paused in its current state")
-    run.status = RunStatus.PAUSED.value
-    session.execute(
-        update(TaskUnit)
-        .where(TaskUnit.run_id == run.id, TaskUnit.status.in_(_ACTIVE_TASK_STATUSES))
-        .values(
-            status=TaskStatus.CANCELLED.value,
-            leased_by=None,
-            lease_token=None,
-            lease_expires_at=None,
-            heartbeat_at=None,
-            lease_version=TaskUnit.lease_version + 1,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    session.execute(
-        update(SampleAttempt)
-        .where(SampleAttempt.run_id == run.id, SampleAttempt.status.in_(_ACTIVE_ATTEMPT_STATUSES))
-        .values(status=SampleAttemptStatus.PENDING.value, completed_at=None)
-        .execution_options(synchronize_session=False)
-    )
-    session.commit(); session.refresh(run); return run
+def pause_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.pause(run_id)
+
 
 @router.post("/{run_id}/resume", response_model=EvaluationRunResponse)
-def resume_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None: raise HTTPException(404, "Evaluation run not found")
-        if not RunLifecycle.can_resume(run["status"]): raise HTTPException(409, "Only paused runs can be resumed")
-        for task in store.list_documents("task_units", query={"run_id": run_id}):
-            if task["status"] == TaskStatus.CANCELLED.value:
-                store.update_document("task_units", str(task["id"]), {"status": TaskStatus.PENDING.value})
-        updated = store.update_document("evaluation_runs", run_id, {"status": RunStatus.QUEUED.value})
-        assert updated is not None
-        return updated
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None: raise HTTPException(404, "Evaluation run not found")
-    if not RunLifecycle.can_resume(run.status): raise HTTPException(409, "Only paused runs can be resumed")
-    run.status = RunStatus.QUEUED.value
-    for task in session.scalars(select(TaskUnit).where(TaskUnit.run_id == run.id)):
-        if task.status == TaskStatus.CANCELLED.value: task.status = TaskStatus.PENDING.value
-    session.commit(); session.refresh(run); return run
+def resume_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.resume(run_id)
+
 
 @router.post("/{run_id}/cancel", response_model=EvaluationRunResponse)
-def cancel_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None: raise HTTPException(404, "Evaluation run not found")
-        if not RunLifecycle.can_cancel(run["status"]): raise HTTPException(409, "Run cannot be cancelled in its current state")
-        store.invalidate_run_tasks(run_id)
-        for attempt in store.list_documents("sample_attempts", query={"run_id": run_id, "status": {"$in": list(_ACTIVE_ATTEMPT_STATUSES)}}):
-            store.update_document("sample_attempts", str(attempt["id"]), {"status": SampleAttemptStatus.CANCELLED.value, "worker_lease_token": None})
-        updated = store.update_document("evaluation_runs", run_id, {"status": RunStatus.CANCELLED.value})
-        assert updated is not None
-        return updated
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None: raise HTTPException(404, "Evaluation run not found")
-    if not RunLifecycle.can_cancel(run.status): raise HTTPException(409, "Run cannot be cancelled in its current state")
-    run.status = RunStatus.CANCELLED.value
-    session.execute(
-        update(TaskUnit)
-        .where(TaskUnit.run_id == run.id, TaskUnit.status.in_(_ACTIVE_TASK_STATUSES))
-        .values(
-            status=TaskStatus.CANCELLED.value,
-            leased_by=None,
-            lease_token=None,
-            lease_expires_at=None,
-            heartbeat_at=None,
-            lease_version=TaskUnit.lease_version + 1,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    session.execute(
-        update(SampleAttempt)
-        .where(SampleAttempt.run_id == run.id, SampleAttempt.status.in_(_ACTIVE_ATTEMPT_STATUSES))
-        .values(status=SampleAttemptStatus.CANCELLED.value)
-        .execution_options(synchronize_session=False)
-    )
-    session.commit(); session.refresh(run); return run
+def cancel_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.cancel(run_id)
 
 
 @router.post("/{run_id}/archive", response_model=EvaluationRunResponse)
-def archive_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
+def archive_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
     """Hide a terminal run while retaining its complete immutable evidence."""
 
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None:
-            raise HTTPException(404, "Evaluation run not found")
-        if not RunLifecycle.can_archive(run["status"]):
-            raise HTTPException(409, "Only terminal evaluation runs can be archived")
-        updated = store.update_document("evaluation_runs", run_id, {"archived_at": run.get("archived_at") or datetime.now(timezone.utc)})
-        assert updated is not None
-        return updated
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(404, "Evaluation run not found")
-    if not RunLifecycle.can_archive(run.status):
-        raise HTTPException(409, "Only terminal evaluation runs can be archived")
-    run.archived_at = run.archived_at or datetime.now(timezone.utc)
-    session.commit()
-    session.refresh(run)
-    return run
+    return service.archive(run_id)
 
 
 @router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_evaluation_run(run_id: str, request: Request, session: SessionDependency) -> Response:
+def delete_evaluation_run(run_id: str, service: EvaluationServiceDependency) -> Response:
     """Permanently delete a run only after it has been explicitly archived."""
 
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None:
-            raise HTTPException(404, "Evaluation run not found")
-        if not RunLifecycle.can_delete(run.get("archived_at")):
-            raise HTTPException(409, "Archive the evaluation run before deleting it")
-        attempt_ids = [str(item["id"]) for item in store.list_documents("sample_attempts", query={"run_id": run_id})]
-        reports = store.list_documents("reports", query={"run_id": run_id})
-        report_ids = [str(item["id"]) for item in reports]
-        if attempt_ids:
-            store.delete_documents("human_reviews", {"sample_attempt_id": {"$in": attempt_ids}})
-            store.delete_documents("judge_assessments", {"sample_attempt_id": {"$in": attempt_ids}})
-            store.delete_documents("judge_assessments", {"comparison_sample_attempt_id": {"$in": attempt_ids}})
-        if report_ids:
-            store.delete_documents("report_shares", {"report_id": {"$in": report_ids}})
-        for report in reports:
-            if isinstance(report.get("artifact_path"), str):
-                delete_report_artifact(request.app.state.settings.data_root, report["artifact_path"])
-        store.delete_documents("task_units", {"run_id": run_id})
-        store.delete_documents("sample_attempts", {"run_id": run_id})
-        store.delete_documents("reports", {"run_id": run_id})
-        store.delete_document("evaluation_runs", run_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(404, "Evaluation run not found")
-    if not RunLifecycle.can_delete(run.archived_at):
-        raise HTTPException(409, "Archive the evaluation run before deleting it")
-    for report in session.scalars(select(Report).where(Report.run_id == run.id)):
-        delete_report_artifact(request.app.state.settings.data_root, report.artifact_path)
-    session.delete(run)
-    session.commit()
+    service.delete(run_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -613,12 +483,16 @@ def clone_evaluation_run(run_id: str, request: Request, session: SessionDependen
         assert session is not None
         return clone_run(session, run_id)
     except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code, str(error)) from error
 
 
 @router.post("/{run_id}/rerun-benchmark", response_model=EvaluationRunResponse, status_code=status.HTTP_201_CREATED)
-def rerun_evaluation_benchmark(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
+def rerun_evaluation_benchmark(
+    run_id: str, request: Request, session: SessionDependency
+) -> EvaluationRun | dict[str, Any]:
     """Create a new benchmark pass without mutating completed or historical evidence."""
 
     store = get_document_store(request)
@@ -628,7 +502,9 @@ def rerun_evaluation_benchmark(run_id: str, request: Request, session: SessionDe
         assert session is not None
         return rerun_benchmark(session, run_id)
     except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code, str(error)) from error
 
 
@@ -636,39 +512,18 @@ def rerun_evaluation_benchmark(run_id: str, request: Request, session: SessionDe
 def update_run_scheduling(
     run_id: str,
     payload: RunSchedulingUpdate,
-    request: Request,
-    session: SessionDependency,
-) -> EvaluationRun | dict[str, Any]:
+    service: EvaluationServiceDependency,
+) -> dict[str, Any]:
     """Update the live concurrency ceiling while retaining the immutable run snapshot."""
 
     values = payload.model_dump(exclude_unset=True)
-    if not values:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Specify a scheduling value to update")
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-        if not RunLifecycle.can_change_scheduling(run.get("status", "")):
-            raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
-        updated = store.update_document("evaluation_runs", run_id, values)
-        assert updated is not None
-        return updated
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-    if not RunLifecycle.can_change_scheduling(run.status):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Terminal evaluation runs cannot change scheduling controls")
-    for field, value in values.items():
-        setattr(run, field, value)
-    session.commit()
-    session.refresh(run)
-    return run
+    return service.update_scheduling(run_id, values)
 
 
 @router.post("/{run_id}/retry-failed", response_model=EvaluationRunResponse)
-def retry_failed_evaluation_samples(run_id: str, request: Request, session: SessionDependency) -> EvaluationRun | dict[str, Any]:
+def retry_failed_evaluation_samples(
+    run_id: str, request: Request, session: SessionDependency
+) -> EvaluationRun | dict[str, Any]:
     store = get_document_store(request)
     try:
         if store is not None:
@@ -676,7 +531,9 @@ def retry_failed_evaluation_samples(run_id: str, request: Request, session: Sess
         assert session is not None
         return retry_failed_samples(session, run_id)
     except (RunOperationError, MongoRunExecutionError) as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code, str(error)) from error
 
 
@@ -710,9 +567,7 @@ def execute_evaluation_run(
         )
     except (RunExecutionError, MongoRunExecutionError) as error:
         status_code = (
-            status.HTTP_404_NOT_FOUND
-            if str(error) == "Evaluation run not found."
-            else status.HTTP_409_CONFLICT
+            status.HTTP_404_NOT_FOUND if str(error) == "Evaluation run not found." else status.HTTP_409_CONFLICT
         )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
     except SecretConfigurationError as error:
@@ -722,8 +577,7 @@ def execute_evaluation_run(
 @router.get("/{run_id}/attempts", response_model=list[SampleAttemptResponse])
 def list_sample_attempts(
     run_id: str,
-    request: Request,
-    session: SessionDependency,
+    service: EvaluationServiceDependency,
     attempt_status: Annotated[str | None, Query(alias="status")] = None,
     error_type: str | None = None,
     correct: bool | None = None,
@@ -740,350 +594,64 @@ def list_sample_attempts(
     human_review_status: str | None = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
-) -> list[SampleAttempt | dict[str, Any]]:
-    needs_post_filter = any(
-        value is not None
-        for value in (
-            attempt_status,
-            error_type,
-            correct,
-            min_latency_ms,
-            min_tokens,
-            min_cost,
-            capability,
-            modality,
-            language,
-            difficulty,
-            api_error,
-            parser_error,
-            judge_disagreement,
-            human_review_status,
-        )
-    )
-    store = get_document_store(request)
-    if store is not None:
-        if store.get_document("evaluation_runs", run_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-        attempts = store.list_documents(
-            "sample_attempts",
-            query={"run_id": run_id},
-            sort=[("created_at", 1)],
-            offset=offset if not needs_post_filter else None,
-            limit=limit if not needs_post_filter else None,
-        )
-        if attempt_status:
-            attempts = [item for item in attempts if item.get("status") == attempt_status]
-        if error_type:
-            attempts = [item for item in attempts if item.get("error_type") == error_type]
-        if correct is True:
-            attempts = [item for item in attempts if item.get("score") == 1]
-        if correct is False:
-            attempts = [item for item in attempts if item.get("score") != 1]
-        if min_latency_ms is not None:
-            attempts = [item for item in attempts if (item.get("latency_ms") or 0) >= min_latency_ms]
-        decorated = _decorate_attempts(
-            attempts,
-            store.list_documents("human_reviews"),
-            store.list_documents("judge_assessments"),
-        )
-        filtered = _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)
-        return filtered[offset : offset + limit] if needs_post_filter else filtered
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-    query = select(SampleAttempt).where(SampleAttempt.run_id == run.id)
-    if attempt_status:
-        query = query.where(SampleAttempt.status == attempt_status)
-    if error_type:
-        query = query.where(SampleAttempt.error_type == error_type)
-    if correct is True:
-        query = query.where(SampleAttempt.score == 1)
-    if correct is False:
-        query = query.where(SampleAttempt.score != 1)
-    if min_latency_ms is not None:
-        query = query.where(SampleAttempt.latency_ms >= min_latency_ms)
-    if not needs_post_filter:
-        query = query.offset(offset).limit(limit)
-    attempts = list(session.scalars(query.order_by(SampleAttempt.created_at)))
-    attempt_ids = [attempt.id for attempt in attempts]
-    reviews = list(session.scalars(select(HumanReview).where(HumanReview.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
-    assessments = list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id.in_(attempt_ids)))) if attempt_ids else []
-    decorated = _decorate_attempts(attempts, reviews, assessments)
-    filtered = _filter_evidence(decorated, capability=capability, modality=modality, language=language, difficulty=difficulty, api_error=api_error, parser_error=parser_error, judge_disagreement=judge_disagreement, human_review_status=human_review_status, min_tokens=min_tokens, min_cost=min_cost)
-    return filtered[offset : offset + limit] if needs_post_filter else filtered
-
-
-def _decorate_attempts(attempts: list[Any], reviews: list[Any], assessments: list[Any]) -> list[dict[str, Any]]:
-    reviews_by_attempt: dict[str, list[Any]] = {}
-    judges_by_attempt: dict[str, list[Any]] = {}
-    for review in reviews:
-        reviews_by_attempt.setdefault(str(_attempt_value(review, "sample_attempt_id")), []).append(review)
-    for assessment in assessments:
-        judges_by_attempt.setdefault(str(_attempt_value(assessment, "sample_attempt_id")), []).append(assessment)
-    items: list[dict[str, Any]] = []
-    for attempt in attempts:
-        payload = dict(attempt) if isinstance(attempt, dict) else SampleAttemptResponse.model_validate(attempt).model_dump()
-        attempt_id = str(payload["id"])
-        snapshot = payload.get("input_snapshot") if isinstance(payload.get("input_snapshot"), dict) else {}
-        metadata = snapshot.get("metadata") if isinstance(snapshot.get("metadata"), dict) else {}
-        attempt_reviews = reviews_by_attempt.get(attempt_id, [])
-        attempt_judges = [item for item in judges_by_attempt.get(attempt_id, []) if _attempt_value(item, "status") == "succeeded"]
-        labels = {str(_attempt_value(item, "label")) for item in attempt_judges if _attempt_value(item, "label")}
-        scores = [float(value) for item in attempt_judges if (value := _attempt_value(item, "score")) is not None]
-        payload["input_snapshot"] = _safe_evidence_snapshot(snapshot)
-        payload["sample_metadata"] = {str(key): str(value) for key, value in metadata.items() if isinstance(value, (str, int, float, bool))}
-        payload["human_review_status"] = "adjudicated" if any(_attempt_value(item, "review_stage") == "adjudication" for item in attempt_reviews) else "reviewed" if attempt_reviews else "unreviewed"
-        payload["judge_disagreement"] = len(labels) > 1 or (len(scores) > 1 and max(scores) - min(scores) > 0.1)
-        items.append(payload)
-    return items
-
-
-def _safe_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Exclude embedded media bytes from list responses while retaining asset references.
-
-    Workers retain their immutable base64 request snapshot for reliable retries. The
-    evidence API instead returns the content shape, MIME type, and stored asset ID,
-    so the browser can fetch only the one media item a reviewer chooses to preview.
-    """
-
-    visible = dict(snapshot)
-    messages = snapshot.get("messages")
-    if not isinstance(messages, list):
-        return visible
-    visible_messages: list[Any] = []
-    for message in messages:
-        if not isinstance(message, dict) or not isinstance(message.get("content"), list):
-            visible_messages.append(message)
-            continue
-        visible_parts: list[Any] = []
-        for part in message["content"]:
-            if not isinstance(part, dict) or not isinstance(part.get("source"), dict):
-                visible_parts.append(part)
-                continue
-            copy_part = dict(part)
-            source = dict(part["source"])
-            embedded = source.pop("base64_data", None)
-            if isinstance(embedded, str):
-                source["embedded_media"] = {"redacted": True, "approximate_bytes": (len(embedded) * 3) // 4}
-            copy_part["source"] = source
-            visible_parts.append(copy_part)
-        copy_message = dict(message)
-        copy_message["content"] = visible_parts
-        visible_messages.append(copy_message)
-    visible["messages"] = visible_messages
-    return visible
-
-
-def _filter_evidence(
-    attempts: list[dict[str, Any]],
-    *,
-    capability: str | None, modality: str | None, language: str | None, difficulty: str | None,
-    api_error: bool | None, parser_error: bool | None, judge_disagreement: bool | None,
-    human_review_status: str | None, min_tokens: int | None, min_cost: float | None,
 ) -> list[dict[str, Any]]:
-    def matches(item: dict[str, Any]) -> bool:
-        metadata = item.get("sample_metadata") if isinstance(item.get("sample_metadata"), dict) else {}
-        error_type = str(item.get("error_type") or "")
-        api = error_type.startswith("http_") or error_type in {"timeout", "connection_error"}
-        tokens = int(item.get("input_tokens") or 0) + int(item.get("output_tokens") or 0)
-        return (
-            (capability is None or metadata.get("capability") == capability)
-            and (modality is None or (item.get("input_snapshot") or {}).get("modality") == modality)
-            and (language is None or metadata.get("language") == language)
-            and (difficulty is None or metadata.get("difficulty") == difficulty)
-            and (api_error is None or api == api_error)
-            and (parser_error is None or (error_type == "response_parse_error") == parser_error)
-            and (judge_disagreement is None or bool(item.get("judge_disagreement")) == judge_disagreement)
-            and (human_review_status is None or item.get("human_review_status") == human_review_status)
-            and (min_tokens is None or tokens >= min_tokens)
-            and (min_cost is None or float(item.get("estimated_cost") or 0) >= min_cost)
-        )
-    return [item for item in attempts if matches(item)]
-
-
-def _attempt_value(item: Any, field: str) -> Any:
-    return item.get(field) if isinstance(item, dict) else getattr(item, field, None)
+    return service.list_attempts(
+        run_id,
+        offset=offset,
+        limit=limit,
+        attempt_status=attempt_status,
+        error_type=error_type,
+        correct=correct,
+        min_latency_ms=min_latency_ms,
+        min_tokens=min_tokens,
+        min_cost=min_cost,
+        capability=capability,
+        modality=modality,
+        language=language,
+        difficulty=difficulty,
+        api_error=api_error,
+        parser_error=parser_error,
+        judge_disagreement=judge_disagreement,
+        human_review_status=human_review_status,
+    )
 
 
 @router.get("/{run_id}/summary")
-def get_run_summary(run_id: str, request: Request, session: SessionDependency) -> dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        try:
-            return build_mongo_run_summary(store, run_id)
-        except MongoRunExecutionError as error:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-    return build_run_summary(session, run)
+def get_run_summary(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.summary(run_id)
 
 
 @router.get("/{run_id}/progress", response_model=EvaluationRunProgress)
-def get_run_progress(run_id: str, request: Request, session: SessionDependency) -> dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-        return _run_progress_values(run)
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-    return _run_progress_values(run)
-
-
-def _run_progress_values(run: EvaluationRun | dict[str, Any]) -> dict[str, Any]:
-    value = lambda key: run.get(key) if isinstance(run, dict) else getattr(run, key)
-    total = int(value("total_samples") or 0)
-    completed = int(value("completed_samples") or 0)
-    return {
-        "run_id": str(value("id")), "status": str(value("status")), "total_samples": total,
-        "completed_samples": completed, "successful_samples": int(value("successful_samples") or 0),
-        "failed_samples": int(value("failed_samples") or 0), "completion_rate": completed / total if total else None,
-    }
+def get_run_progress(run_id: str, service: EvaluationServiceDependency) -> dict[str, Any]:
+    return service.progress(run_id)
 
 
 @router.get("/{run_id}/logs", response_model=list[RunLogEntry])
 def get_run_logs(
     run_id: str,
-    request: Request,
-    session: SessionDependency,
+    service: EvaluationServiceDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1_000)] = 200,
 ) -> list[dict[str, Any]]:
     """Return durable, secret-safe task and sample lifecycle log entries."""
 
-    store = get_document_store(request)
-    if store is not None:
-        if store.get_document("evaluation_runs", run_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-        tasks: list[Any] = store.list_documents("task_units", query={"run_id": run_id})
-        attempts: list[Any] = store.list_documents("sample_attempts", query={"run_id": run_id})
-    else:
-        assert session is not None
-        if session.get(EvaluationRun, run_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation run not found")
-        tasks = list(session.scalars(select(TaskUnit).where(TaskUnit.run_id == run_id)))
-        attempts = list(session.scalars(select(SampleAttempt).where(SampleAttempt.run_id == run_id)))
-    entries = [*_task_log_entries(tasks), *_attempt_log_entries(attempts)]
-    entries.sort(key=lambda entry: _as_log_timestamp(entry["timestamp"]))
-    return entries[offset : offset + limit]
-
-
-def _task_log_entries(tasks: list[Any]) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for task in tasks:
-        payload = _attempt_value(task, "payload")
-        safe_payload = payload if isinstance(payload, dict) else {}
-        status_value = str(_attempt_value(task, "status") or "unknown")
-        task_type = str(_attempt_value(task, "task_type") or "task")
-        error = safe_payload.get("dataset_error") or safe_payload.get("report_error")
-        entries.append(
-            {
-                "timestamp": _attempt_value(task, "updated_at") or _attempt_value(task, "created_at"),
-                "level": "error" if status_value == TaskStatus.FAILED.value or error else "info",
-                "event": "task.lifecycle",
-                "message": str(error) if error else f"{task_type} task is {status_value}.",
-                "task_id": str(_attempt_value(task, "id")),
-                "sample_attempt_id": None,
-                "details": {
-                    "task_type": task_type,
-                    "status": status_value,
-                    "attempt_count": int(_attempt_value(task, "attempt_count") or 0),
-                    "worker_id": _attempt_value(task, "leased_by"),
-                },
-            }
-        )
-    return entries
-
-
-def _attempt_log_entries(attempts: list[Any]) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for attempt in attempts:
-        status_value = str(_attempt_value(attempt, "status") or "unknown")
-        error_type = _attempt_value(attempt, "error_type")
-        error_message = _attempt_value(attempt, "error_message")
-        entries.append(
-            {
-                "timestamp": _attempt_value(attempt, "completed_at") or _attempt_value(attempt, "started_at") or _attempt_value(attempt, "created_at"),
-                "level": "error" if status_value == SampleAttemptStatus.FAILED.value else "info",
-                "event": "sample.lifecycle",
-                "message": f"{error_type}: {error_message}" if error_type else f"Sample {_attempt_value(attempt, 'sample_id')} is {status_value}.",
-                "task_id": str(_attempt_value(attempt, "task_id")) if _attempt_value(attempt, "task_id") else None,
-                "sample_attempt_id": str(_attempt_value(attempt, "id")),
-                "details": {
-                    "sample_id": _attempt_value(attempt, "sample_id"),
-                    "attempt_number": int(_attempt_value(attempt, "attempt_number") or 1),
-                    "status": status_value,
-                },
-            }
-        )
-    return entries
-
-
-def _as_log_timestamp(value: object) -> datetime:
-    if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return datetime.min.replace(tzinfo=timezone.utc)
+    return service.logs(run_id, offset=offset, limit=limit)
 
 
 @router.get("/{run_id}/events")
-async def stream_run_events(run_id: str, request: Request, session: SessionDependency) -> StreamingResponse:
-    store = get_document_store(request)
-    if store is not None:
-        if store.get_document("evaluation_runs", run_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-
-        async def mongo_event_stream():
-            previous: str | None = None
-            terminal_statuses = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
-            while True:
-                run = store.get_document("evaluation_runs", run_id)
-                if run is None:
-                    return
-                payload = {
-                    "run_id": run["id"],
-                    "status": run["status"],
-                    "total_samples": run["total_samples"],
-                    "completed_samples": run["completed_samples"],
-                    "successful_samples": run["successful_samples"],
-                    "failed_samples": run["failed_samples"],
-                    "summary": build_mongo_run_summary(store, run_id),
-                }
-                serialized = json.dumps(payload, separators=(",", ":"))
-                if serialized != previous:
-                    yield f"event: run\ndata: {serialized}\n\n"
-                    previous = serialized
-                if payload["status"] in terminal_statuses or await request.is_disconnected():
-                    return
-                await asyncio.sleep(1)
-
-        return StreamingResponse(mongo_event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
-    assert session is not None
-    if session.get(EvaluationRun, run_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+async def stream_run_events(run_id: str, request: Request, service: EvaluationServiceDependency) -> StreamingResponse:
+    service.get(run_id)
 
     async def event_stream():
         previous: str | None = None
-        terminal_statuses = {RunStatus.COMPLETED.value, RunStatus.COMPLETED_WITH_ERRORS.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value}
+        terminal_statuses = {
+            RunStatus.COMPLETED.value,
+            RunStatus.COMPLETED_WITH_ERRORS.value,
+            RunStatus.FAILED.value,
+            RunStatus.CANCELLED.value,
+        }
         while True:
-            with request.app.state.database.get_session() as event_session:
-                run = event_session.get(EvaluationRun, run_id)
-                if run is None:
-                    return
-                payload = {
-                    "run_id": run.id,
-                    "status": run.status,
-                    "total_samples": run.total_samples,
-                    "completed_samples": run.completed_samples,
-                    "successful_samples": run.successful_samples,
-                    "failed_samples": run.failed_samples,
-                    "summary": build_run_summary(event_session, run),
-                }
+            payload = service.event_payload(run_id)
             serialized = json.dumps(payload, separators=(",", ":"))
             if serialized != previous:
                 yield f"event: run\ndata: {serialized}\n\n"
@@ -1100,17 +668,6 @@ async def stream_run_events(run_id: str, request: Request, session: SessionDepen
 @router.get("/{run_id}", response_model=EvaluationRunResponse)
 def get_evaluation_run(
     run_id: str,
-    request: Request,
-    session: SessionDependency,
-) -> EvaluationRun | dict[str, Any]:
-    store = get_document_store(request)
-    if store is not None:
-        run = store.get_document("evaluation_runs", run_id)
-        if run is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-        return run
-    assert session is not None
-    run = session.get(EvaluationRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
-    return run
+    service: EvaluationServiceDependency,
+) -> dict[str, Any]:
+    return service.get(run_id)

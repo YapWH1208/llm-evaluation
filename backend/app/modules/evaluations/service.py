@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.benchmarks import get_installed_plugin
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db import (
     EndpointStatus,
     EvaluationRun,
@@ -14,6 +17,7 @@ from app.db import (
     PromptPackage,
     RunStatus,
     SampleAttempt,
+    SampleAttemptStatus,
     TaskStatus,
     TaskType,
     TaskUnit,
@@ -24,6 +28,194 @@ from app.infrastructure.providers.common import resolve_request_body
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template, standardization_flags
 from app.modules.benchmarks.scoring import ScoringError, validate_scoring_rule
 from app.modules.evaluations.names import format_run_display_name
+from app.modules.evaluations.analysis import add_summary_insights, summarize_attempts
+from app.modules.evaluations.evidence import (
+    decorate_attempts,
+    filter_attempts,
+    run_logs,
+    run_progress,
+)
+from app.modules.evaluations.lifecycle import RunLifecycle
+from app.modules.evaluations.ports import EvaluationRepository
+from app.modules.reports.service import delete_report_artifact
+
+
+_ACTIVE_TASK_STATUSES = (
+    TaskStatus.PENDING.value,
+    TaskStatus.RETRY_SCHEDULED.value,
+    TaskStatus.LEASED.value,
+    TaskStatus.RUNNING.value,
+)
+_ACTIVE_ATTEMPT_STATUSES = (
+    SampleAttemptStatus.PENDING.value,
+    SampleAttemptStatus.LEASED.value,
+    SampleAttemptStatus.RUNNING.value,
+    SampleAttemptStatus.RETRY_SCHEDULED.value,
+)
+
+
+class EvaluationService:
+    """Store-neutral evaluation lifecycle, querying, and evidence behavior."""
+
+    def __init__(self, repository: EvaluationRepository, *, data_root: str) -> None:
+        self._repository = repository
+        self._data_root = data_root
+
+    def get(self, run_id: str) -> dict[str, Any]:
+        run = self._repository.get_run(run_id)
+        if run is None:
+            raise NotFoundError("Evaluation run not found", context={"run_id": run_id})
+        return run
+
+    def list(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+        return self._repository.list_runs(include_archived=include_archived)
+
+    def pause(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if not RunLifecycle.can_pause(str(run["status"])):
+            raise ConflictError("Run cannot be paused in its current state")
+        self._repository.update_tasks(
+            run_id,
+            statuses=_ACTIVE_TASK_STATUSES,
+            values={
+                "status": TaskStatus.CANCELLED.value,
+                "leased_by": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "heartbeat_at": None,
+            },
+            increment_lease_version=True,
+        )
+        self._repository.update_attempts(
+            run_id,
+            statuses=_ACTIVE_ATTEMPT_STATUSES,
+            values={"status": SampleAttemptStatus.PENDING.value, "completed_at": None},
+        )
+        return self._updated_run(run_id, {"status": RunStatus.PAUSED.value})
+
+    def resume(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if not RunLifecycle.can_resume(str(run["status"])):
+            raise ConflictError("Only paused runs can be resumed")
+        self._repository.update_tasks(
+            run_id,
+            statuses=(TaskStatus.CANCELLED.value,),
+            values={"status": TaskStatus.PENDING.value},
+        )
+        return self._updated_run(run_id, {"status": RunStatus.QUEUED.value})
+
+    def cancel(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if not RunLifecycle.can_cancel(str(run["status"])):
+            raise ConflictError("Run cannot be cancelled in its current state")
+        self._repository.update_tasks(
+            run_id,
+            statuses=_ACTIVE_TASK_STATUSES,
+            values={
+                "status": TaskStatus.CANCELLED.value,
+                "leased_by": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "heartbeat_at": None,
+            },
+            increment_lease_version=True,
+        )
+        self._repository.update_attempts(
+            run_id,
+            statuses=_ACTIVE_ATTEMPT_STATUSES,
+            values={"status": SampleAttemptStatus.CANCELLED.value},
+        )
+        return self._updated_run(run_id, {"status": RunStatus.CANCELLED.value})
+
+    def archive(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        if not RunLifecycle.can_archive(str(run["status"])):
+            raise ConflictError("Only terminal evaluation runs can be archived")
+        return self._updated_run(
+            run_id,
+            {"archived_at": run.get("archived_at") or datetime.now(timezone.utc)},
+        )
+
+    def delete(self, run_id: str) -> None:
+        run = self.get(run_id)
+        if not RunLifecycle.can_delete(run.get("archived_at")):
+            raise ConflictError("Archive the evaluation run before deleting it")
+        for artifact_path in self._repository.delete_run(run_id):
+            delete_report_artifact(self._data_root, artifact_path)
+
+    def update_scheduling(self, run_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        if not values:
+            raise ValidationError("Specify a scheduling value to update")
+        run = self.get(run_id)
+        if not RunLifecycle.can_change_scheduling(str(run["status"])):
+            raise ConflictError("Terminal evaluation runs cannot change scheduling controls")
+        return self._updated_run(run_id, values)
+
+    def list_attempts(
+        self,
+        run_id: str,
+        *,
+        offset: int = 0,
+        limit: int = 200,
+        **filters: Any,
+    ) -> list[dict[str, Any]]:
+        self.get(run_id)
+        attempts = self._repository.list_attempts(run_id)
+        attempt_ids = [str(attempt["id"]) for attempt in attempts]
+        decorated = decorate_attempts(
+            attempts,
+            self._repository.list_reviews(attempt_ids),
+            self._repository.list_judge_assessments(attempt_ids),
+        )
+        return filter_attempts(decorated, **filters)[offset : offset + limit]
+
+    def progress(self, run_id: str) -> dict[str, Any]:
+        return run_progress(self.get(run_id))
+
+    def logs(self, run_id: str, *, offset: int = 0, limit: int = 200) -> list[dict[str, Any]]:
+        self.get(run_id)
+        return run_logs(self._repository.list_tasks(run_id), self._repository.list_attempts(run_id))[
+            offset : offset + limit
+        ]
+
+    def summary(self, run_id: str) -> dict[str, Any]:
+        run = self.get(run_id)
+        endpoint = self._repository.get_endpoint(str(run["model_endpoint_id"]))
+        current_attempts = _latest_attempt_values(self._repository.list_attempts(run_id))
+        summary = summarize_attempts(
+            current_attempts,
+            total_samples=int(run["total_samples"]),
+            currency=str(endpoint["currency"]) if endpoint and endpoint.get("currency") else None,
+        )
+        previous = self._repository.find_previous_completed_run(run)
+        previous_summary = None
+        if previous is not None:
+            previous_summary = summarize_attempts(
+                _latest_attempt_values(self._repository.list_attempts(str(previous["id"]))),
+                total_samples=int(previous["total_samples"]),
+                currency=(str(endpoint["currency"]) if endpoint and endpoint.get("currency") else None),
+            )
+        return add_summary_insights(summary, current_attempts, previous_summary)
+
+    def event_payload(self, run_id: str) -> dict[str, Any]:
+        progress = self.progress(run_id)
+        return {**progress, "summary": self.summary(run_id)}
+
+    def _updated_run(self, run_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        run = self._repository.update_run(run_id, values)
+        if run is None:
+            raise NotFoundError("Evaluation run not found", context={"run_id": run_id})
+        return run
+
+
+def _latest_attempt_values(attempts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for attempt in sorted(
+        attempts,
+        key=lambda item: (str(item["sample_id"]), -int(item.get("attempt_number") or 1)),
+    ):
+        latest.setdefault(str(attempt["sample_id"]), attempt)
+    return [latest[sample_id] for sample_id in sorted(latest)]
 
 
 class RunCreationError(ValueError):
@@ -110,7 +302,10 @@ def preflight_benchmark_run(
             issues.append(str(error))
     compatibility = _capability_compatibility(session, endpoint.id, plugin.manifest)
     if compatibility["unsupported"]:
-        issues.append("Model endpoint is incompatible with required benchmark capabilities: " + ", ".join(compatibility["unsupported"]))
+        issues.append(
+            "Model endpoint is incompatible with required benchmark capabilities: "
+            + ", ".join(compatibility["unsupported"])
+        )
     prompt_package = session.get(PromptPackage, prompt_package_id) if prompt_package_id else None
     if prompt_package_id and prompt_package is None:
         issues.append("Prompt package not found.")
@@ -143,11 +338,24 @@ def preflight_benchmark_run(
                 issues.append(f"Required dataset {descriptor['dataset_id']} is not registered.")
                 datasets.append({"dataset_id": descriptor["dataset_id"], "status": "missing", "will_prepare": False})
         else:
-            datasets.append({"id": dataset.id, "dataset_id": dataset.dataset_id, "version": dataset.version, "revision": dataset.revision, "status": dataset.status, "will_prepare": dataset.status != "ready"})
+            datasets.append(
+                {
+                    "id": dataset.id,
+                    "dataset_id": dataset.dataset_id,
+                    "version": dataset.version,
+                    "revision": dataset.revision,
+                    "status": dataset.status,
+                    "will_prepare": dataset.status != "ready",
+                }
+            )
     estimated_input_tokens = sum(_estimate_sample_tokens(sample) for sample in samples)
     estimated_output_tokens = len(samples) * 64
     estimated_cost = (
-        ((estimated_input_tokens * endpoint.input_cost_per_million) + (estimated_output_tokens * endpoint.output_cost_per_million)) / 1_000_000
+        (
+            (estimated_input_tokens * endpoint.input_cost_per_million)
+            + (estimated_output_tokens * endpoint.output_cost_per_million)
+        )
+        / 1_000_000
         if endpoint.input_cost_per_million is not None and endpoint.output_cost_per_million is not None
         else None
     )
@@ -199,7 +407,9 @@ def create_benchmark_run(
         )
     )
     if definition is not None and definition.status in {"disabled", "deprecated", "broken"}:
-        raise RunCreationError(f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled.")
+        raise RunCreationError(
+            f"Benchmark {benchmark_id}@{benchmark_version} is {definition.status} and cannot be scheduled."
+        )
 
     plugin = get_installed_plugin(benchmark_id, benchmark_version)
     if plugin is None:
@@ -254,14 +464,22 @@ def create_benchmark_run(
         "datasets": frozen_datasets,
         "capability_compatibility": compatibility,
         "prompt_package": (
-            {"id": prompt_package.id, "name": prompt_package.name, "version": prompt_package.version,
-             "system_message": prompt_package.system_message, "user_template": prompt_package.user_template,
-             "few_shot_examples": prompt_package.few_shot_examples, "scoring_rule": prompt_package.scoring_rule}
-            if prompt_package else None
+            {
+                "id": prompt_package.id,
+                "name": prompt_package.name,
+                "version": prompt_package.version,
+                "system_message": prompt_package.system_message,
+                "user_template": prompt_package.user_template,
+                "few_shot_examples": prompt_package.few_shot_examples,
+                "scoring_rule": prompt_package.scoring_rule,
+            }
+            if prompt_package
+            else None
         ),
         "prompt_standardization": (
             {"is_standard": not standardization_flags(prompt_package), "flags": standardization_flags(prompt_package)}
-            if prompt_package else {"is_standard": True, "flags": []}
+            if prompt_package
+            else {"is_standard": True, "flags": []}
         ),
         "evaluation_suite": suite_snapshot,
         "request_body_evidence": request_body_evidence,
@@ -337,7 +555,11 @@ def create_benchmark_run(
                         "metadata": dict(sample.metadata),
                         "request_body_evidence": request_body_evidence,
                     },
-                    reference_snapshot={"type": str(scoring_rule.get("type", "exact_match")), "answer": sample.reference_answer, "scoring": scoring_rule},
+                    reference_snapshot={
+                        "type": str(scoring_rule.get("type", "exact_match")),
+                        "answer": sample.reference_answer,
+                        "scoring": scoring_rule,
+                    },
                 )
                 for sample in shard_samples
             ]
@@ -440,11 +662,7 @@ def _request_body_evidence(
 ) -> dict[str, object]:
     """Build the frozen Request Body evidence attached to every sample attempt."""
 
-    suite_defaults = (
-        suite_snapshot.get("default_request_body")
-        if isinstance(suite_snapshot, dict)
-        else None
-    )
+    suite_defaults = suite_snapshot.get("default_request_body") if isinstance(suite_snapshot, dict) else None
     benchmark_defaults = benchmark_manifest.get("default_request_body")
     benchmark_forced = benchmark_manifest.get("forced_request_body")
     if not isinstance(benchmark_forced, dict):
@@ -467,7 +685,11 @@ def _build_messages(question: str, prompt_package: PromptPackage | None) -> list
     if prompt_package.system_message:
         messages.append({"role": "system", "content": prompt_package.system_message})
     for example in prompt_package.few_shot_examples:
-        if isinstance(example, dict) and isinstance(example.get("role"), str) and isinstance(example.get("content"), str):
+        if (
+            isinstance(example, dict)
+            and isinstance(example.get("role"), str)
+            and isinstance(example.get("content"), str)
+        ):
             messages.append({"role": example["role"], "content": example["content"]})
     try:
         rendered = render_template(
@@ -554,7 +776,9 @@ def _split_samples_into_shards(
         shard_size = min(requested_size, 1_000)
     else:
         modalities = {str(item) for item in manifest.get("modalities", []) if isinstance(item, str)}
-        shard_size = 5 if "video" in modalities else 20 if "audio" in modalities else 25 if "image" in modalities else 50
+        shard_size = (
+            5 if "video" in modalities else 20 if "audio" in modalities else 25 if "image" in modalities else 50
+        )
     return tuple(tuple(samples[index : index + shard_size]) for index in range(0, len(samples), shard_size))
 
 
@@ -641,16 +865,10 @@ def _capability_compatibility(
     endpoint_id: str,
     manifest: dict[str, object],
 ) -> dict[str, list[str]]:
-    required = [
-        capability
-        for capability in manifest.get("required_capabilities", [])
-        if isinstance(capability, str)
-    ]
+    required = [capability for capability in manifest.get("required_capabilities", []) if isinstance(capability, str)]
     records = {
         record.capability_key: record
-        for record in session.scalars(
-            select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id)
-        )
+        for record in session.scalars(select(ModelCapability).where(ModelCapability.model_endpoint_id == endpoint_id))
     }
     unsupported = [
         capability

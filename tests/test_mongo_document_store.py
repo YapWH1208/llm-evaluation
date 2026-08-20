@@ -17,7 +17,11 @@ from app.db.mongo import MongoDocumentStore, MongoValidation, MongoValidationErr
 from app.db.migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.main import create_app
 from app.db.models import CapabilityDetection
-from app.infrastructure.providers.contracts import CapabilityDetectionResult, ConnectionTestResult, SampleExecutionResult
+from app.infrastructure.providers.contracts import (
+    CapabilityDetectionResult,
+    ConnectionTestResult,
+    SampleExecutionResult,
+)
 from app.modules.evaluations.names import format_run_display_name
 from app.benchmarks.text_quick_check import TextSample
 from app.modules.analytics.aggregation import AGGREGATION_VERSION, recompute_mongo_aggregate_metrics
@@ -40,8 +44,14 @@ def _configure_dataset_download(monkeypatch, content: bytes) -> None:
         def iter_bytes(self):
             yield content
 
-    monkeypatch.setattr("app.infrastructure.network.outbound.getaddrinfo", lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
-    monkeypatch.setattr("app.modules.datasets.preparation.pinned_outbound_transport", lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)))
+    monkeypatch.setattr(
+        "app.infrastructure.network.outbound.getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
+    monkeypatch.setattr(
+        "app.modules.datasets.preparation.pinned_outbound_transport",
+        lambda *_args, **_kwargs: httpx.MockTransport(lambda _request: httpx.Response(200, content=content)),
+    )
 
 
 class FakeAdmin:
@@ -65,7 +75,9 @@ class FakeCollection:
     def insert_one(self, document: dict[str, Any]) -> None:
         self.documents.append(dict(document))
 
-    def find_one(self, query: dict[str, Any] | None = None, *, sort: list[tuple[str, int]] | None = None) -> dict[str, Any] | None:
+    def find_one(
+        self, query: dict[str, Any] | None = None, *, sort: list[tuple[str, int]] | None = None
+    ) -> dict[str, Any] | None:
         matches = [document for document in self.documents if _matches(document, query or {})]
         if sort:
             for key, direction in reversed(sort):
@@ -79,12 +91,25 @@ class FakeCollection:
         return sum(_matches(document, query) for document in self.documents)
 
     def distinct(self, field: str, query: dict[str, Any]) -> list[Any]:
-        return list({document.get(field) for document in self.documents if _matches(document, query) and document.get(field) is not None})
+        return list(
+            {
+                document.get(field)
+                for document in self.documents
+                if _matches(document, query) and document.get(field) is not None
+            }
+        )
 
     def options(self) -> dict[str, Any]:
         return {"validator": self.validator} if self.validator is not None else {}
 
-    def find_one_and_update(self, query: dict[str, Any], update: dict[str, Any], *, sort: list[tuple[str, int]] | None = None, return_document: Any) -> dict[str, Any] | None:
+    def find_one_and_update(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        sort: list[tuple[str, int]] | None = None,
+        return_document: Any,
+    ) -> dict[str, Any] | None:
         matches = [document for document in self.documents if _matches(document, query)]
         if sort:
             for key, direction in reversed(sort):
@@ -225,7 +250,11 @@ def test_mongo_report_share_password_limiter_is_durable_and_expires() -> None:
         share_id="share-id", client_key="client-hash", now=now, window=timedelta(minutes=5), limit=5
     )
     assert store.record_report_share_password_failure(
-        share_id="share-id", client_key="client-hash", now=now + timedelta(minutes=6), window=timedelta(minutes=5), limit=5
+        share_id="share-id",
+        client_key="client-hash",
+        now=now + timedelta(minutes=6),
+        window=timedelta(minutes=5),
+        limit=5,
     )
 
 
@@ -259,7 +288,10 @@ def test_mongo_validation_detects_missing_collection_validator() -> None:
 
 def test_mongo_store_claims_by_priority_and_reclaims_expired_leases() -> None:
     client = FakeClient()
-    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform", mongodb_database="override"), client=client)
+    store = MongoDocumentStore(
+        Settings.local_development(database_url="mongodb://mongo.test/platform", mongodb_database="override"),
+        client=client,
+    )
     store.initialize()
     now = datetime.now(timezone.utc)
     tasks = client["override"]["task_units"]
@@ -294,12 +326,36 @@ def test_mongo_store_claim_honors_run_and_shared_credential_limits() -> None:
     store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=client)
     store.initialize()
     now = datetime.now(timezone.utc)
-    first_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
-    second_endpoint = store.insert_document("model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1})
-    first_run = store.insert_document("evaluation_runs", {"model_endpoint_id": first_endpoint["id"], "benchmark_id": "benchmark", "benchmark_version": "1", "max_concurrency": 1})
-    second_run = store.insert_document("evaluation_runs", {"model_endpoint_id": second_endpoint["id"], "benchmark_id": "benchmark", "benchmark_version": "1"})
+    first_endpoint = store.insert_document(
+        "model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1}
+    )
+    second_endpoint = store.insert_document(
+        "model_endpoints", {"max_concurrency": 3, "api_key_fingerprint": "shared", "api_key_max_concurrency": 1}
+    )
+    first_run = store.insert_document(
+        "evaluation_runs",
+        {
+            "model_endpoint_id": first_endpoint["id"],
+            "benchmark_id": "benchmark",
+            "benchmark_version": "1",
+            "max_concurrency": 1,
+        },
+    )
+    second_run = store.insert_document(
+        "evaluation_runs",
+        {"model_endpoint_id": second_endpoint["id"], "benchmark_id": "benchmark", "benchmark_version": "1"},
+    )
     for run in (first_run, first_run, second_run):
-        store.insert_document("task_units", {"run_id": run["id"], "status": "pending", "priority": 1, "payload": {"sample_ids": ["sample"], "estimated_request_count": 1}, "created_at": now})
+        store.insert_document(
+            "task_units",
+            {
+                "run_id": run["id"],
+                "status": "pending",
+                "priority": 1,
+                "payload": {"sample_ids": ["sample"], "estimated_request_count": 1},
+                "created_at": now,
+            },
+        )
 
     assert store.claim_task(worker_id="worker-a", run_id=first_run["id"]) is not None
     assert store.claim_task(worker_id="worker-b", run_id=first_run["id"]) is None
@@ -326,7 +382,11 @@ def test_database_cli_routes_mongodb_operations_to_document_store(monkeypatch, c
         def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(cli.Settings, "from_environment", lambda: Settings.local_development(database_url="mongodb://mongo.test/platform"))
+    monkeypatch.setattr(
+        cli.Settings,
+        "from_environment",
+        lambda: Settings.local_development(database_url="mongodb://mongo.test/platform"),
+    )
     monkeypatch.setattr(cli, "MongoDocumentStore", FakeMongoStore)
 
     assert cli.main(["database", "initialize"]) == 0
@@ -411,11 +471,16 @@ def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() 
         assert detected.status_code == 200
         assert detected.json()[0]["effective_status"] == "verified_by_both"
         assert detected.json()[0]["detection_evidence"]["adapter_version"] == "test/1"
-        assert api.put(
-            f"/api/v1/model-endpoints/{endpoint['id']}/capabilities",
-            json={"capability_key": "text_input", "user_declared_status": "unsupported"},
-        ).json()["effective_status"] == "detected_user_unsupported"
-        assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}/capabilities/conflicts").json()[0]["resolution_options"] == ["keep_disabled", "force_enable", "redetect"]
+        assert (
+            api.put(
+                f"/api/v1/model-endpoints/{endpoint['id']}/capabilities",
+                json={"capability_key": "text_input", "user_declared_status": "unsupported"},
+            ).json()["effective_status"]
+            == "detected_user_unsupported"
+        )
+        assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}/capabilities/conflicts").json()[0][
+            "resolution_options"
+        ] == ["keep_disabled", "force_enable", "redetect"]
 
 
 def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
@@ -423,7 +488,9 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
 
     class ExactExecutor:
         def execute(self, endpoint: Any, api_key: str, input_snapshot: dict[str, Any]) -> SampleExecutionResult:
-            captured.append((endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key))
+            captured.append(
+                (endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key)
+            )
             assert endpoint.model_name == "model"
             assert api_key == "rotated-secret"
             assert input_snapshot["messages"]
@@ -451,7 +518,13 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
     with TestClient(app) as api:
         endpoint = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model", "timeout_seconds": 42, "custom_headers": {"X-Run-Mode": "frozen"}},
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+                "timeout_seconds": 42,
+                "custom_headers": {"X-Run-Mode": "frozen"},
+            },
         ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
@@ -463,7 +536,13 @@ def test_mongodb_run_queue_executes_and_persists_sample_evidence() -> None:
         )
         changed = api.patch(
             f"/api/v1/model-endpoints/{endpoint['id']}",
-            json={"base_url": "https://changed.models.example.test/v1", "api_key": "rotated-secret", "model_name": "changed", "timeout_seconds": 5, "custom_headers": {"X-Run-Mode": "changed"}},
+            json={
+                "base_url": "https://changed.models.example.test/v1",
+                "api_key": "rotated-secret",
+                "model_name": "changed",
+                "timeout_seconds": 5,
+                "custom_headers": {"X-Run-Mode": "changed"},
+            },
         )
         assert changed.status_code == 200
         completed = api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute")
@@ -506,18 +585,36 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
             "version": "1.0.0",
             "required_capabilities": ["text_input"],
             "scoring": {"type": "exact_match"},
-            "datasets": [{"dataset_id": "manifest-mongo-samples", "version": "2026.07", "revision": "r1", "source_url": "https://datasets.example.test/manifest-samples.jsonl"}],
+            "datasets": [
+                {
+                    "dataset_id": "manifest-mongo-samples",
+                    "version": "2026.07",
+                    "revision": "r1",
+                    "source_url": "https://datasets.example.test/manifest-samples.jsonl",
+                }
+            ],
         },
         samples=lambda _limit: (TextSample("manifest-001", "Reply with only the number: what is 2 + 2?", "4"),),
     )
     monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
-    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(
+        settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client)
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        preflight = api.post("/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
+        preflight = api.post(
+            "/api/v1/evaluation-runs/validate", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}
+        )
         assert preflight.status_code == 200
         assert preflight.json()["can_queue"] is True
         assert preflight.json()["datasets"][0]["status"] == "will_register"
@@ -525,23 +622,44 @@ def test_mongodb_manifest_dataset_source_is_registered_and_prepared_automaticall
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1})
         assert run.status_code == 201
         dataset_id = run.json()["configuration_snapshot"]["datasets"][0]["dataset_version_id"]
-        assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id]["status"] == "not_downloaded"
+        assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id][
+            "status"
+        ] == "not_downloaded"
 
         preparation = api.post("/api/v1/workers/claim", json={"worker_id": "dataset-worker"}).json()
         assert preparation["task_type"] == "dataset_preparation"
-        assert api.post(f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]}).json()["status"] == "succeeded"
+        assert (
+            api.post(
+                f"/api/v1/workers/tasks/{preparation['id']}/execute", json={"lease_token": preparation["lease_token"]}
+            ).json()["status"]
+            == "succeeded"
+        )
         assert {item["id"]: item for item in api.get("/api/v1/datasets").json()}[dataset_id]["status"] == "ready"
 
 
 def test_mongodb_run_scheduling_and_benchmark_rerun_preserve_source_run() -> None:
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
-    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client))
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode()
+    )
+    app = create_app(
+        settings, connection_tester=SuccessfulTester(), document_store=MongoDocumentStore(settings, client=client)
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        source = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
-        assert api.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 2}).json()["max_concurrency"] == 2
+        source = api.post(
+            "/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}
+        ).json()
+        assert (
+            api.patch(f"/api/v1/evaluation-runs/{source['id']}/scheduling", json={"max_concurrency": 2}).json()[
+                "max_concurrency"
+            ]
+            == 2
+        )
         rerun = api.post(f"/api/v1/evaluation-runs/{source['id']}/rerun-benchmark")
         assert rerun.status_code == 201
         assert rerun.json()["display_name"] == format_run_display_name(
@@ -558,19 +676,46 @@ def test_mongodb_benchmark_samples_are_split_into_shards_before_scoring(monkeypa
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     plugin = SimpleNamespace(
-        manifest={"benchmark_id": "text-quick-check", "version": "1.0.0", "required_capabilities": ["text_input"], "scoring": {"type": "exact_match"}, "datasets": [], "shard_size": 2},
-        samples=lambda _limit: tuple(TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)),
+        manifest={
+            "benchmark_id": "text-quick-check",
+            "version": "1.0.0",
+            "required_capabilities": ["text_input"],
+            "scoring": {"type": "exact_match"},
+            "datasets": [],
+            "shard_size": 2,
+        },
+        samples=lambda _limit: tuple(
+            TextSample(f"shard-{index}", "Reply with only the number: what is 2 + 2?", "4") for index in range(5)
+        ),
     )
     monkeypatch.setattr("app.modules.evaluations.mongo_executor.get_installed_plugin", lambda *_args: plugin)
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode())
-    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform", secret_encryption_key=Fernet.generate_key().decode()
+    )
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactExecutor(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 5}).json()
-        tasks = [task for task in api.get("/api/v1/tasks", params={"run_id": run["id"]}).json() if task["task_type"] == "evaluation_shard"]
-        assert [task["payload"]["sample_ids"] for task in tasks] == [["shard-0", "shard-1"], ["shard-2", "shard-3"], ["shard-4"]]
+        tasks = [
+            task
+            for task in api.get("/api/v1/tasks", params={"run_id": run["id"]}).json()
+            if task["task_type"] == "evaluation_shard"
+        ]
+        assert [task["payload"]["sample_ids"] for task in tasks] == [
+            ["shard-0", "shard-1"],
+            ["shard-2", "shard-3"],
+            ["shard-4"],
+        ]
         completed = api.post(f"/api/v1/evaluation-runs/{run['id']}/execute")
         assert completed.status_code == 200
         assert completed.json()["status"] == "completed"
@@ -583,7 +728,11 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "4")
 
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
     app = create_app(
         settings,
         connection_tester=SuccessfulTester(),
@@ -591,7 +740,10 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         document_store=MongoDocumentStore(settings, client=client),
     )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         task = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
@@ -602,13 +754,28 @@ def test_mongodb_worker_claim_heartbeat_and_execute_are_lease_safe(tmp_path: Pat
         assert execution.json()["status"] == "succeeded"
         scoring = api.post("/api/v1/workers/claim", json={"worker_id": "worker-b"}).json()
         assert scoring["task_type"] == "scoring"
-        assert api.post(f"/api/v1/workers/tasks/{scoring['id']}/execute", json={"lease_token": scoring["lease_token"]}).json()["status"] == "succeeded"
+        assert (
+            api.post(
+                f"/api/v1/workers/tasks/{scoring['id']}/execute", json={"lease_token": scoring["lease_token"]}
+            ).json()["status"]
+            == "succeeded"
+        )
         aggregation = api.post("/api/v1/workers/claim", json={"worker_id": "worker-c"}).json()
         assert aggregation["task_type"] == "aggregation"
-        assert api.post(f"/api/v1/workers/tasks/{aggregation['id']}/execute", json={"lease_token": aggregation["lease_token"]}).json()["status"] == "succeeded"
+        assert (
+            api.post(
+                f"/api/v1/workers/tasks/{aggregation['id']}/execute", json={"lease_token": aggregation["lease_token"]}
+            ).json()["status"]
+            == "succeeded"
+        )
         report = api.post("/api/v1/workers/claim", json={"worker_id": "worker-d"}).json()
         assert report["task_type"] == "report_generation"
-        assert api.post(f"/api/v1/workers/tasks/{report['id']}/execute", json={"lease_token": report["lease_token"]}).json()["status"] == "succeeded"
+        assert (
+            api.post(
+                f"/api/v1/workers/tasks/{report['id']}/execute", json={"lease_token": report["lease_token"]}
+            ).json()["status"]
+            == "succeeded"
+        )
         assert api.get(f"/api/v1/evaluation-runs/{run['id']}").json()["status"] == "completed"
         assert len(api.get(f"/api/v1/reports/run/{run['id']}").json()) == 1
 
@@ -628,9 +795,41 @@ def test_mongodb_report_delete_removes_shares_password_attempts_and_artifact(tmp
         artifact = tmp_path / "reports" / "run-id" / "report.json"
         artifact.parent.mkdir(parents=True)
         artifact.write_text("{}", encoding="utf-8")
-        store.insert_document("reports", {"id": "report-id", "run_id": "run-id", "report_type": "single_model", "format": "json", "artifact_path": str(artifact), "generator_version": "1.4.0", "generated_at": now})
-        store.insert_document("report_shares", {"id": "share-id", "report_id": "report-id", "token_hash": "hash", "expires_at": now + timedelta(days=1), "allow_download": False, "revoked_at": None, "created_at": now})
-        store.insert_document("report_share_password_attempts", {"id": "attempt-id", "share_id": "share-id", "client_key": "client-hash", "failure_count": 3, "expires_at": now + timedelta(minutes=5), "updated_at": now})
+        store.insert_document(
+            "reports",
+            {
+                "id": "report-id",
+                "run_id": "run-id",
+                "report_type": "single_model",
+                "format": "json",
+                "artifact_path": str(artifact),
+                "generator_version": "1.4.0",
+                "generated_at": now,
+            },
+        )
+        store.insert_document(
+            "report_shares",
+            {
+                "id": "share-id",
+                "report_id": "report-id",
+                "token_hash": "hash",
+                "expires_at": now + timedelta(days=1),
+                "allow_download": False,
+                "revoked_at": None,
+                "created_at": now,
+            },
+        )
+        store.insert_document(
+            "report_share_password_attempts",
+            {
+                "id": "attempt-id",
+                "share_id": "share-id",
+                "client_key": "client-hash",
+                "failure_count": 3,
+                "expires_at": now + timedelta(minutes=5),
+                "updated_at": now,
+            },
+        )
 
         assert api.delete("/api/v1/reports/report-id").status_code == 204
         assert api.delete("/api/v1/reports/report-id").status_code == 404
@@ -654,13 +853,20 @@ def test_mongodb_reclaimed_worker_cannot_persist_a_late_model_result(tmp_path: P
         def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
             running = store.list_documents("task_units", query={"task_type": "evaluation_shard", "status": "running"})
             assert len(running) == 1
-            assert store.update_document("task_units", running[0]["id"], {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)})
+            assert store.update_document(
+                "task_units", running[0]["id"], {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}
+            )
             assert store.reclaim_expired_leases() == 1
             return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
 
-    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=LeaseLosingExecutor(), document_store=store)
+    app = create_app(
+        settings, connection_tester=SuccessfulTester(), model_executor=LeaseLosingExecutor(), document_store=store
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a"}).json()
@@ -682,15 +888,18 @@ def test_mongodb_pause_invalidates_a_running_lease_before_a_late_result_can_comm
 
     class PausingExecutor:
         def execute(self, _endpoint: Any, _api_key: str, _input_snapshot: dict[str, Any]) -> SampleExecutionResult:
-            from app.modules.evaluations.api import pause_evaluation_run
-
             run = store.list_documents("evaluation_runs", query={"status": "running"})[0]
-            pause_evaluation_run(str(run["id"]), SimpleNamespace(app=app), None)
+            app.state.evaluation_service.pause(str(run["id"]))
             return SampleExecutionResult(True, {"model": "late"}, '{"choices":[{"message":{"content":"4"}}]}', "4")
 
-    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=PausingExecutor(), document_store=store)
+    app = create_app(
+        settings, connection_tester=SuccessfulTester(), model_executor=PausingExecutor(), document_store=store
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         run = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint["id"], "sample_limit": 1}).json()
         claim = api.post("/api/v1/workers/claim", json={"worker_id": "worker-a", "run_id": run["id"]}).json()
@@ -704,13 +913,19 @@ def test_mongodb_pause_invalidates_a_running_lease_before_a_late_result_can_comm
 
 def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_licenses(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         benchmarks = api.get("/api/v1/benchmarks")
         assert benchmarks.status_code == 200
         assert any(item["benchmark_id"] == "text-quick-check" for item in benchmarks.json())
-        prompt = api.post("/api/v1/prompt-packages", json={"name": "qa", "version": "1", "user_template": "{{ question }}"})
+        prompt = api.post(
+            "/api/v1/prompt-packages", json={"name": "qa", "version": "1", "user_template": "{{ question }}"}
+        )
         assert prompt.status_code == 201
         assert api.get("/api/v1/prompt-packages").json()[0]["id"] == prompt.json()["id"]
         dataset = api.post("/api/v1/datasets", json={"dataset_id": "demo", "version": "1", "license_text": "accept me"})
@@ -719,12 +934,23 @@ def test_mongodb_workspace_catalogs_store_prompts_benchmarks_and_dataset_license
         accepted = api.post(f"/api/v1/datasets/{dataset.json()['id']}/accept-license")
         assert accepted.status_code == 200
         assert accepted.json()["status"] == "not_downloaded"
-        uploaded = api.post(f"/api/v1/datasets/{dataset.json()['id']}/upload", json={"filename": "examples.jsonl", "base64_data": base64.b64encode(b'{"question":"2 + 2"}\n').decode("ascii")})
+        uploaded = api.post(
+            f"/api/v1/datasets/{dataset.json()['id']}/upload",
+            json={
+                "filename": "examples.jsonl",
+                "base64_data": base64.b64encode(b'{"question":"2 + 2"}\n').decode("ascii"),
+            },
+        )
         assert uploaded.status_code == 200
         assert uploaded.json()["status"] == "ready"
         assert uploaded.json()["size_bytes"] == len(b'{"question":"2 + 2"}\n')
         assert api.post(f"/api/v1/datasets/{dataset.json()['id']}/validate").json()["status"] == "ready"
-        assert api.put(f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_binding_id": None}).json()["credential_binding_id"] is None
+        assert (
+            api.put(
+                f"/api/v1/datasets/{dataset.json()['id']}/credential-reference", json={"credential_binding_id": None}
+            ).json()["credential_binding_id"]
+            is None
+        )
         assert api.get("/api/v1/datasets/disk-usage").json()["cache_bytes"] >= len(b'{"question":"2 + 2"}\n')
 
 
@@ -735,14 +961,44 @@ def test_mongodb_assets_support_custom_multimodal_runs(tmp_path) -> None:
             return SampleExecutionResult(True, {"model": endpoint.model_name}, "{}", "ok")
 
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path), secret_encryption_key=Fernet.generate_key().decode())
-    app = create_app(settings, connection_tester=SuccessfulTester(), model_executor=ExactExecutor(), document_store=MongoDocumentStore(settings, client=client))
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(
+        settings,
+        connection_tester=SuccessfulTester(),
+        model_executor=ExactExecutor(),
+        document_store=MongoDocumentStore(settings, client=client),
+    )
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={"base_url":"https://models.example.test/v1","api_key":"secret","model_name":"model"}).json()
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
-        asset = api.post("/api/v1/assets", json={"filename":"dot.png","mime_type":"image/png","base64_data":"iVBORw0KGgo="})
+        asset = api.post(
+            "/api/v1/assets", json={"filename": "dot.png", "mime_type": "image/png", "base64_data": "iVBORw0KGgo="}
+        )
         assert asset.status_code == 201
-        run = api.post("/api/v1/evaluation-runs/custom-multimodal", json={"model_endpoint_id":endpoint["id"],"sample_id":"image-1","reference_answer":"ok","messages":[{"role":"user","content":[{"type":"text","text":"Describe"},{"type":"image","source":{"asset_id":asset.json()["id"]},"mime_type":"image/png"}]}]})
+        run = api.post(
+            "/api/v1/evaluation-runs/custom-multimodal",
+            json={
+                "model_endpoint_id": endpoint["id"],
+                "sample_id": "image-1",
+                "reference_answer": "ok",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Describe"},
+                            {"type": "image", "source": {"asset_id": asset.json()["id"]}, "mime_type": "image/png"},
+                        ],
+                    }
+                ],
+            },
+        )
         assert run.status_code == 201
         assert api.post(f"/api/v1/evaluation-runs/{run.json()['id']}/execute").json()["status"] == "completed"
 
@@ -781,8 +1037,12 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
             endpoint_ids.append(endpoint["id"])
             assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
 
-        first = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[0], "sample_limit": 1}).json()
-        second = api.post("/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[1], "sample_limit": 1}).json()
+        first = api.post(
+            "/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[0], "sample_limit": 1}
+        ).json()
+        second = api.post(
+            "/api/v1/evaluation-runs", json={"model_endpoint_id": endpoint_ids[1], "sample_limit": 1}
+        ).json()
         assert api.post(f"/api/v1/evaluation-runs/{first['id']}/execute").status_code == 200
         assert api.post(f"/api/v1/evaluation-runs/{second['id']}/execute").status_code == 200
         metrics = api.get(f"/api/v1/analytics/runs/{first['id']}/metrics")
@@ -793,10 +1053,7 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         assert comparison.json()["shared_samples"] == 1
         assert comparison.json()["runs"]["a"]["display_name"] == first["display_name"]
         assert comparison.json()["runs"]["b"]["display_name"] == second["display_name"]
-        comparison_metrics = {
-            metric["metric_name"]: metric
-            for metric in comparison.json()["named_metrics"]
-        }
+        comparison_metrics = {metric["metric_name"]: metric for metric in comparison.json()["named_metrics"]}
         assert comparison_metrics["score"]["run_a"]["value"] == 1.0
         assert comparison_metrics["score"]["run_b"]["value"] == 1.0
         assert comparison_metrics["score"]["delta"] == 0.0
@@ -805,18 +1062,34 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
         attempt = api.get(f"/api/v1/evaluation-runs/{first['id']}/attempts").json()[0]
         assessment = api.post(
             "/api/v1/judge-assessments",
-            json={"sample_attempt_id": attempt["id"], "judge_endpoint_id": endpoint_ids[2], "rubric": {"quality": "high"}},
+            json={
+                "sample_attempt_id": attempt["id"],
+                "judge_endpoint_id": endpoint_ids[2],
+                "rubric": {"quality": "high"},
+            },
         )
         assert assessment.status_code == 201
         assert assessment.json()["score"] == 0.75
         assert api.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0]["label"] == "good"
         primary_review = api.post(
             "/api/v1/reviews",
-            json={"sample_attempt_id": attempt["id"], "reviewer_id": "reviewer-a", "score": 0.9, "labels": ["correct"], "review_stage": "primary"},
+            json={
+                "sample_attempt_id": attempt["id"],
+                "reviewer_id": "reviewer-a",
+                "score": 0.9,
+                "labels": ["correct"],
+                "review_stage": "primary",
+            },
         )
         secondary_review = api.post(
             "/api/v1/reviews",
-            json={"sample_attempt_id": attempt["id"], "reviewer_id": "reviewer-b", "score": 0.1, "labels": ["incorrect"], "review_stage": "secondary"},
+            json={
+                "sample_attempt_id": attempt["id"],
+                "reviewer_id": "reviewer-b",
+                "score": 0.1,
+                "labels": ["incorrect"],
+                "review_stage": "secondary",
+            },
         )
         assert primary_review.status_code == 201
         assert secondary_review.status_code == 201
@@ -826,15 +1099,23 @@ def test_mongodb_admin_judge_and_comparison_routes_use_document_store(tmp_path) 
 
 def test_mongo_dataset_update_and_delete(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
-        created = api.post("/api/v1/datasets", json={"dataset_id": "m", "version": "1", "input_field": "q", "reference_field": "a"})
+        created = api.post(
+            "/api/v1/datasets", json={"dataset_id": "m", "version": "1", "input_field": "q", "reference_field": "a"}
+        )
         assert created.status_code == 201
         body = created.json()
         assert body["input_field"] == "q"
         assert body["revision"] == "main"
-        updated = api.put(f"/api/v1/datasets/{body['id']}", json={"dataset_id": "m2", "version": "2", "revision": "default"})
+        updated = api.put(
+            f"/api/v1/datasets/{body['id']}", json={"dataset_id": "m2", "version": "2", "revision": "default"}
+        )
         assert updated.status_code == 200
         assert updated.json()["dataset_id"] == "m2"
         assert updated.json()["revision"] == "default"
@@ -855,21 +1136,31 @@ def test_mongo_failed_dataset_source_correction_resets_stale_failure(tmp_path: P
     original_source = "https://datasets.example.test/broken.jsonl"
     corrected_source = "https://datasets.example.test/corrected.jsonl"
     with TestClient(app) as api:
-        created = api.post("/api/v1/datasets", json={
-            "dataset_id": "repairable-mongo",
-            "version": "1",
-            "source_url": original_source,
-        }).json()
-        store.update_document("dataset_versions", created["id"], {
-            "status": "failed",
-            "error_message": "old download failure",
-        })
+        created = api.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "repairable-mongo",
+                "version": "1",
+                "source_url": original_source,
+            },
+        ).json()
+        store.update_document(
+            "dataset_versions",
+            created["id"],
+            {
+                "status": "failed",
+                "error_message": "old download failure",
+            },
+        )
 
-        corrected = api.put(f"/api/v1/datasets/{created['id']}", json={
-            "dataset_id": "repairable-mongo",
-            "version": "1",
-            "source_url": corrected_source,
-        })
+        corrected = api.put(
+            f"/api/v1/datasets/{created['id']}",
+            json={
+                "dataset_id": "repairable-mongo",
+                "version": "1",
+                "source_url": corrected_source,
+            },
+        )
 
         assert corrected.status_code == 200
         assert corrected.json()["status"] == "not_downloaded"
@@ -891,31 +1182,41 @@ def test_mongo_dataset_run_uses_and_freezes_selected_input_field(tmp_path: Path)
     )
     content = b'{"distractor":"wrong","question":"chosen","answer":"1"}\n'
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={
-            "base_url": "https://models.example.test/v1",
-            "api_key": "secret",
-            "model_name": "model",
-        }).json()
-        assert api.post(
-            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
-        ).status_code == 200
-        dataset = api.post("/api/v1/datasets", json={
-            "dataset_id": "mongo-input-selection",
-            "version": "1",
-        }).json()
-        uploaded = api.post(f"/api/v1/datasets/{dataset['id']}/upload", json={
-            "filename": "samples.jsonl",
-            "base64_data": base64.b64encode(content).decode("ascii"),
-        })
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+            },
+        ).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        dataset = api.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "mongo-input-selection",
+                "version": "1",
+            },
+        ).json()
+        uploaded = api.post(
+            f"/api/v1/datasets/{dataset['id']}/upload",
+            json={
+                "filename": "samples.jsonl",
+                "base64_data": base64.b64encode(content).decode("ascii"),
+            },
+        )
         assert uploaded.status_code == 200
 
-        created = api.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint["id"],
-            "dataset_version_id": dataset["id"],
-            "input_field": "question",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        created = api.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint["id"],
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
 
         assert created.status_code == 201
         run = created.json()
@@ -953,9 +1254,7 @@ def test_mongo_dataset_run_inherits_profile_defaults_with_record_precedence(
                 "model_name": "model",
             },
         ).json()
-        assert api.post(
-            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
-        ).status_code == 200
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
         dataset = api.post(
             "/api/v1/datasets",
             json={
@@ -990,13 +1289,8 @@ def test_mongo_dataset_run_inherits_profile_defaults_with_record_precedence(
         assert snapshot["input_field"] == "question"
         assert snapshot["reference_field"] == "answer"
         assert snapshot["dataset_profile"]["evaluation_type"] == "classification"
-        attempts = store.list_documents(
-            "sample_attempts", query={"run_id": created.json()["id"]}
-        )
-        by_prompt = {
-            attempt["input_snapshot"]["messages"][-1]["content"]: attempt
-            for attempt in attempts
-        }
+        attempts = store.list_documents("sample_attempts", query={"run_id": created.json()["id"]})
+        by_prompt = {attempt["input_snapshot"]["messages"][-1]["content"]: attempt for attempt in attempts}
         assert by_prompt["first"]["input_snapshot"]["metadata"]["languages"] == ["fr"]
         assert by_prompt["first"]["input_snapshot"]["metadata"]["capabilities"] == ["classification"]
         assert by_prompt["first"]["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "generation"
@@ -1019,29 +1313,42 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
     )
     content = b'{"question":"blue sky","answer":"BLUE"}\n'
     with TestClient(app) as api:
-        endpoint = api.post("/api/v1/model-endpoints", json={
-            "base_url": "https://models.example.test/v1",
-            "api_key": "secret",
-            "model_name": "model",
-        }).json()
-        assert api.post(
-            f"/api/v1/model-endpoints/{endpoint['id']}/connection-test"
-        ).status_code == 200
-        dataset = api.post("/api/v1/datasets", json={
-            "dataset_id": "mongo-scoring",
-            "version": "1",
-        }).json()
-        assert api.post(f"/api/v1/datasets/{dataset['id']}/upload", json={
-            "filename": "samples.jsonl",
-            "base64_data": base64.b64encode(content).decode("ascii"),
-        }).status_code == 200
+        endpoint = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+            },
+        ).json()
+        assert api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
+        dataset = api.post(
+            "/api/v1/datasets",
+            json={
+                "dataset_id": "mongo-scoring",
+                "version": "1",
+            },
+        ).json()
+        assert (
+            api.post(
+                f"/api/v1/datasets/{dataset['id']}/upload",
+                json={
+                    "filename": "samples.jsonl",
+                    "base64_data": base64.b64encode(content).decode("ascii"),
+                },
+            ).status_code
+            == 200
+        )
         package_rule = {"type": "regex_match", "pattern": "BLUE"}
-        package = api.post("/api/v1/prompt-packages", json={
-            "name": "mongo-scoring-template",
-            "version": "1.0.0",
-            "user_template": "Q: {{question}}",
-            "scoring_rule": package_rule,
-        })
+        package = api.post(
+            "/api/v1/prompt-packages",
+            json={
+                "name": "mongo-scoring-template",
+                "version": "1.0.0",
+                "user_template": "Q: {{question}}",
+                "scoring_rule": package_rule,
+            },
+        )
         assert package.status_code == 201
         base_payload = {
             "model_endpoint_id": endpoint["id"],
@@ -1054,11 +1361,14 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
         expected_rules = [
             (base_payload, {"type": "exact_match"}),
             ({**base_payload, "prompt_package_id": package.json()["id"]}, package_rule),
-            ({
-                **base_payload,
-                "prompt_package_id": package.json()["id"],
-                "scoring_rule": {"type": "token_f1"},
-            }, {"type": "token_f1"}),
+            (
+                {
+                    **base_payload,
+                    "prompt_package_id": package.json()["id"],
+                    "scoring_rule": {"type": "token_f1"},
+                },
+                {"type": "token_f1"},
+            ),
         ]
         for payload, expected_rule in expected_rules:
             preflight = api.post("/api/v1/evaluation-runs/dataset/preflight", json=payload)
@@ -1072,12 +1382,15 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             assert attempts
             assert all(attempt["reference_snapshot"]["scoring"] == expected_rule for attempt in attempts)
 
-        judge = api.post("/api/v1/model-endpoints", json={
-            "base_url": "https://judge.example.test/v1",
-            "api_key": "judge-secret",
-            "model_name": "judge-model",
-            "custom_headers": {"X-Judge-Secret": "must-not-appear"},
-        }).json()
+        judge = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://judge.example.test/v1",
+                "api_key": "judge-secret",
+                "model_name": "judge-model",
+                "custom_headers": {"X-Judge-Secret": "must-not-appear"},
+            },
+        ).json()
         assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
         judge_rule = {
             "type": "llm_judge",
@@ -1099,11 +1412,14 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
         attempts = store.list_documents("sample_attempts", query={"run_id": judge_run.json()["id"]})
         assert all(attempt["reference_snapshot"]["judge"] == snapshot["judge"] for attempt in attempts)
 
-        unavailable_judge = api.post("/api/v1/model-endpoints", json={
-            "base_url": "https://offline-judge.example.test/v1",
-            "api_key": "offline-judge-secret",
-            "model_name": "offline-judge",
-        }).json()
+        unavailable_judge = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://offline-judge.example.test/v1",
+                "api_key": "offline-judge-secret",
+                "model_name": "offline-judge",
+            },
+        ).json()
 
         for invalid_rule, message in (
             ({**judge_rule, "judge_endpoint_id": endpoint["id"]}, "cannot judge its own"),
@@ -1117,21 +1433,30 @@ def test_mongo_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_
             assert invalid_preflight.status_code == 200
             assert invalid_preflight.json()["can_queue"] is False
             assert any(message in issue for issue in invalid_preflight.json()["issues"])
-            assert api.post(
-                "/api/v1/evaluation-runs/dataset",
-                json={**base_payload, "scoring_rule": invalid_rule},
-            ).status_code == 409
+            assert (
+                api.post(
+                    "/api/v1/evaluation-runs/dataset",
+                    json={**base_payload, "scoring_rule": invalid_rule},
+                ).status_code
+                == 409
+            )
 
         run_count = len(store.list_documents("evaluation_runs"))
         invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
-        assert api.post(
-            "/api/v1/evaluation-runs/dataset/preflight",
-            json=invalid_rule,
-        ).status_code == 422
-        assert api.post(
-            "/api/v1/evaluation-runs/dataset",
-            json=invalid_rule,
-        ).status_code == 422
+        assert (
+            api.post(
+                "/api/v1/evaluation-runs/dataset/preflight",
+                json=invalid_rule,
+            ).status_code
+            == 422
+        )
+        assert (
+            api.post(
+                "/api/v1/evaluation-runs/dataset",
+                json=invalid_rule,
+            ).status_code
+            == 422
+        )
         assert len(store.list_documents("evaluation_runs")) == run_count
 
 
@@ -1176,18 +1501,27 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
         ).json()
         judge = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://judge.example.test/v1", "api_key": "judge-secret", "model_name": "judge-model", "input_cost_per_million": 2, "output_cost_per_million": 3},
+            json={
+                "base_url": "https://judge.example.test/v1",
+                "api_key": "judge-secret",
+                "model_name": "judge-model",
+                "input_cost_per_million": 2,
+                "output_cost_per_million": 3,
+            },
         ).json()
         assert api.post(f"/api/v1/model-endpoints/{target['id']}/connection-test").status_code == 200
         assert api.post(f"/api/v1/model-endpoints/{judge['id']}/connection-test").status_code == 200
         dataset = api.post("/api/v1/datasets", json={"dataset_id": "mongo-judge", "version": "1"}).json()
-        assert api.post(
-            f"/api/v1/datasets/{dataset['id']}/upload",
-            json={
-                "filename": "samples.jsonl",
-                "base64_data": base64.b64encode(b'{"question":"blue sky","answer":"BLUE"}\n').decode("ascii"),
-            },
-        ).status_code == 200
+        assert (
+            api.post(
+                f"/api/v1/datasets/{dataset['id']}/upload",
+                json={
+                    "filename": "samples.jsonl",
+                    "base64_data": base64.b64encode(b'{"question":"blue sky","answer":"BLUE"}\n').decode("ascii"),
+                },
+            ).status_code
+            == 200
+        )
         system_message = "Judge the target answer using the supplied reference."
         run = api.post(
             "/api/v1/evaluation-runs/dataset",
@@ -1227,8 +1561,7 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
         assert judge_evidence["score"] == 0.8
         assert judge_evidence["label"] == "pass"
         metrics = {
-            item["metric_name"]: item
-            for item in api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics").json()
+            item["metric_name"]: item for item in api.get(f"/api/v1/analytics/runs/{run.json()['id']}/metrics").json()
         }
         assert metrics["llm_judge"]["metric_value"] == 0.8
         assert metrics["llm_judge"]["sample_count"] == 1
@@ -1252,18 +1585,25 @@ def test_mongo_dataset_run_automatically_records_llm_judge_evidence(tmp_path: Pa
 
 def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp_path: Path) -> None:
     client = FakeClient()
-    settings = Settings.local_development(database_url="mongodb://mongo.test/platform", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode())
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        data_root=str(tmp_path / "data"),
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
     app = create_app(settings, document_store=MongoDocumentStore(settings, client=client))
     with TestClient(app) as api:
         created = api.post("/api/v1/datasets", json={"dataset_id": "guarded", "version": "1"}).json()
-        app.state.document_store.insert_document("evaluation_runs", {
-            "model_endpoint_id": "endpoint-x",
-            "benchmark_id": "dataset-evaluation",
-            "benchmark_version": "1",
-            "configuration_snapshot": {"datasets": [{"dataset_version_id": created["id"]}]},
-            "status": "completed",
-            "total_samples": 1,
-        })
+        app.state.document_store.insert_document(
+            "evaluation_runs",
+            {
+                "model_endpoint_id": "endpoint-x",
+                "benchmark_id": "dataset-evaluation",
+                "benchmark_version": "1",
+                "configuration_snapshot": {"datasets": [{"dataset_version_id": created["id"]}]},
+                "status": "completed",
+                "total_samples": 1,
+            },
+        )
         blocked = api.delete(f"/api/v1/datasets/{created['id']}")
         assert blocked.status_code == 409
         assert "references this revision" in blocked.json()["detail"]
@@ -1272,29 +1612,37 @@ def test_mongo_dataset_delete_is_blocked_while_a_run_references_the_revision(tmp
 
 
 def test_mongo_recompute_replaces_legacy_aggregation_rows_for_the_run() -> None:
-    store = MongoDocumentStore(Settings.local_development(database_url="mongodb://mongo.test/platform"), client=FakeClient())
-    run = store.insert_document("evaluation_runs", {
-        "model_endpoint_id": "endpoint-1",
-        "benchmark_id": "benchmark-a",
-        "benchmark_version": "1.0.0",
-        "configuration_snapshot": {"dataset_profile": {"evaluation_type": "custom"}},
-        "status": "completed",
-        "total_samples": 1,
-        "completed_samples": 1,
-        "successful_samples": 1,
-        "failed_samples": 0,
-        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
-    })
-    store.insert_document("aggregate_metrics", {
-        "run_id": run["id"],
-        "benchmark_id": "benchmark-a",
-        "model_endpoint_id": "endpoint-1",
-        "metric_name": "score",
-        "metric_value": 0.5,
-        "availability_reason": None,
-        "sample_count": 1,
-        "aggregation_version": "1.0.0",
-    })
+    store = MongoDocumentStore(
+        Settings.local_development(database_url="mongodb://mongo.test/platform"), client=FakeClient()
+    )
+    run = store.insert_document(
+        "evaluation_runs",
+        {
+            "model_endpoint_id": "endpoint-1",
+            "benchmark_id": "benchmark-a",
+            "benchmark_version": "1.0.0",
+            "configuration_snapshot": {"dataset_profile": {"evaluation_type": "custom"}},
+            "status": "completed",
+            "total_samples": 1,
+            "completed_samples": 1,
+            "successful_samples": 1,
+            "failed_samples": 0,
+            "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        },
+    )
+    store.insert_document(
+        "aggregate_metrics",
+        {
+            "run_id": run["id"],
+            "benchmark_id": "benchmark-a",
+            "model_endpoint_id": "endpoint-1",
+            "metric_name": "score",
+            "metric_value": 0.5,
+            "availability_reason": None,
+            "sample_count": 1,
+            "aggregation_version": "1.0.0",
+        },
+    )
     rows = recompute_mongo_aggregate_metrics(store, run["id"])
     remaining = store.list_documents("aggregate_metrics", query={"run_id": run["id"]})
     assert rows
