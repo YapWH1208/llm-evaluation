@@ -11,6 +11,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- Chat-style provider adapters now preserve normalized tool-result messages instead of rejecting valid tool responses.
+- MongoDB dataset revision conflicts now return HTTP 409 during both normal updates and concurrent duplicate-key races.
+
 ### Added
 
 - Added a top-level `DEVELOPER.md` developer guide with local setup, common
