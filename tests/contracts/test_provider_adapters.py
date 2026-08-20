@@ -48,6 +48,82 @@ def test_registry_profiles_are_explicit_and_complete() -> None:
     assert ProviderRegistry().profiles == frozenset(PROFILES)
 
 
+@pytest.mark.parametrize(
+    "profile",
+    ("openai_chat_completions", "azure_openai_chat_completions", "custom_http_json"),
+)
+def test_chat_style_adapters_preserve_tool_result_messages(profile: str) -> None:
+    endpoint = _endpoint(profile)
+    request = (
+        ProviderRegistry()
+        .for_endpoint(endpoint)
+        .build_request_with_options(
+            endpoint,
+            [
+                {
+                    "role": "tool",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_1",
+                            "content": "tool evidence",
+                        }
+                    ],
+                }
+            ],
+            {},
+        )
+    )
+
+    assert request.body["messages"] == [{"role": "tool", "tool_call_id": "call_1", "content": "tool evidence"}]
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_call_id": "call_1", "content": "tool evidence"}],
+        },
+        {
+            "role": "tool",
+            "content": [
+                {"type": "text", "text": "mixed"},
+                {"type": "tool_result", "tool_call_id": "call_1", "content": "tool evidence"},
+            ],
+        },
+    ),
+    ids=("non-tool-role", "mixed-content"),
+)
+def test_chat_style_adapter_rejects_non_standalone_tool_results(message: dict[str, object]) -> None:
+    endpoint = _endpoint("openai_chat_completions")
+
+    with pytest.raises(ValueError, match="standalone message with role tool"):
+        ProviderRegistry().for_endpoint(endpoint).build_request_with_options(endpoint, [message], {})
+
+
+def test_gemini_adapter_rejects_tool_result_messages_explicitly() -> None:
+    endpoint = _endpoint("gemini_generate_content")
+
+    with pytest.raises(ValueError, match="does not support tool_result"):
+        ProviderRegistry().for_endpoint(endpoint).build_request_with_options(
+            endpoint,
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_1",
+                            "content": "tool evidence",
+                        }
+                    ],
+                }
+            ],
+            {},
+        )
+
+
 def _response_for(profile: str) -> dict[str, object]:
     if profile in {"openai_chat_completions", "azure_openai_chat_completions"}:
         return {"choices": [{"message": {"content": "OK"}}]}

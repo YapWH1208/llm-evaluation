@@ -78,8 +78,6 @@ def normalise_content_parts(content: object) -> list[dict[str, Any]]:
         parts = normalize_content_parts(content)
     except ContentValidationError as error:
         raise ValueError(str(error)) from error
-    if any(part["type"] == "tool_result" for part in parts):
-        raise ValueError("This protocol adapter does not support tool results.")
     return parts
 
 
@@ -258,6 +256,8 @@ def translate_gemini_content(content: object) -> list[dict[str, object]]:
         if part["type"] == "text":
             translated.append({"text": part["text"]})
             continue
+        if part["type"] == "tool_result":
+            raise ValueError("Gemini GenerateContent does not support tool_result content through this adapter.")
         source = part["source"]
         encoded = source.get("base64_data") if isinstance(source, dict) else None
         if not isinstance(encoded, str):
