@@ -11,12 +11,11 @@ from app.db.models import (
     TaskStatus,
     TaskType,
 )
-from app.core.errors import ApplicationError, ConflictError, NotFoundError
+from app.core.errors import ApplicationError, ConflictError, NotFoundError, ValidationError
 from app.modules.datasets.records import DatasetRecordError, iter_dataset_records
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository
-from app.modules.evaluations.service import (
-    RunCreationError,
+from app.modules.evaluations.planning import (
     _attempt_values,
     _build_sample_messages,
     _capability_compatibility_records,
@@ -321,7 +320,7 @@ def create_dataset_run(
     now = datetime.now(timezone.utc)
     try:
         shards = _split_samples_for_endpoint_budget(tuple(samples), _DATASET_RUN_MANIFEST, endpoint_proxy)
-    except RunCreationError as error:
+    except ValidationError as error:
         raise ConflictError(str(error)) from error
     tasks = [
         _task_values(

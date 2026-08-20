@@ -10,7 +10,7 @@ from app.db.models import EndpointStatus, RunStatus, TaskStatus, TaskType
 from app.infrastructure.providers.common import resolve_request_body
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository
-from app.modules.evaluations.service import _attempt_values, _endpoint_snapshot, _task_values
+from app.modules.evaluations.planning import _attempt_values, _endpoint_snapshot, _task_values
 from app.modules.reports.assets import MediaAssetError, safe_asset_path
 
 
