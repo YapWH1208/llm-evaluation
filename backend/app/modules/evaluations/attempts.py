@@ -3,22 +3,23 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.core.errors import ConflictError
+from app.core.errors import ApplicationError, ConflictError
 from app.core.secrets import SecretCipher
 from app.db.models import SampleAttemptStatus
 from app.infrastructure.providers.contracts import ModelExecutor, SampleExecutionResult
 from app.modules.benchmarks.metrics import build_execution_metric_evidence
 from app.modules.benchmarks.scoring import ScoringError, score_prediction
 from app.modules.evaluations.ports import ExecutionRepository
-from app.modules.reviews.judges import JudgeAssessmentError
+from app.modules.reviews.judges import JudgeService
 from app.modules.reviews.scoring import is_llm_judge_rule, judge_assessment_evidence, judge_failure_evidence
 
 
 class AttemptProcessor:
     """Create retry attempts and persist per-sample execution/scoring evidence."""
 
-    def __init__(self, repository: ExecutionRepository) -> None:
+    def __init__(self, repository: ExecutionRepository, judges: JudgeService) -> None:
         self._repository = repository
+        self._judges = judges
 
     def prepare(self, task: dict[str, Any]) -> list[dict[str, Any]]:
         payload = task_payload(task)
@@ -182,7 +183,7 @@ class AttemptProcessor:
         if not isinstance(system_message, str) or not system_message:
             return judge_failure_evidence("Frozen judge system message is missing.")
         try:
-            assessment = self._repository.assess_judge(
+            assessment = self._judges.assess(
                 sample_attempt_id=str(attempt["id"]),
                 judge_endpoint_id=endpoint_id,
                 rubric={"source": "llm_judge_metric", "reference_field": judge.get("reference_field")},
@@ -191,7 +192,7 @@ class AttemptProcessor:
                 model_executor=model_executor,
                 endpoint_override=endpoint,
             )
-        except JudgeAssessmentError as error:
+        except ApplicationError as error:
             return judge_failure_evidence(str(error))
         return judge_assessment_evidence(assessment)
 

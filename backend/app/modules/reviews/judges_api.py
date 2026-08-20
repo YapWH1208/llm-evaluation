@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
+from app.core.errors import ConfigurationError
 from app.core.secrets import SecretCipher, SecretConfigurationError
-from app.db.models import JudgeAssessment, SampleAttempt
-from app.db.mongo import MongoDocumentStore
-from app.modules.reviews.judges import (
-    JudgeAssessmentError,
-    assess_pairwise_sample_attempt,
-    assess_sample_attempt,
-    build_judge_agreement,
-)
-from app.modules.reviews.mongo_judges import assess_mongo_pairwise_sample_attempt, assess_mongo_sample_attempt
 from app.infrastructure.providers.contracts import ModelExecutor
+from app.modules.reviews.judges import JudgeService
 
 
 router = APIRouter(prefix="/api/v1/judge-assessments", tags=["LLM-as-judge"])
@@ -59,29 +49,22 @@ class JudgeAssessmentResponse(BaseModel):
     created_at: datetime
 
 
-def get_session(request: Request) -> Generator[Session | None, None, None]:
-    if getattr(request.app.state, "document_store", None) is not None:
-        yield None
-        return
-    session = request.app.state.database.get_session()
-    try:
-        yield session
-    finally:
-        session.close()
+def get_judge_service(request: Request) -> JudgeService:
+    return request.app.state.judge_service
 
 
 def get_cipher(request: Request) -> SecretCipher:
     try:
         return SecretCipher(request.app.state.settings.secret_encryption_key)
     except SecretConfigurationError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+        raise ConfigurationError(str(error)) from error
 
 
 def get_model_executor(request: Request) -> ModelExecutor:
     return request.app.state.model_executor
 
 
-SessionDependency = Annotated[Session | None, Depends(get_session)]
+JudgeServiceDependency = Annotated[JudgeService, Depends(get_judge_service)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 
@@ -89,106 +72,42 @@ ModelExecutorDependency = Annotated[ModelExecutor, Depends(get_model_executor)]
 @router.post("", response_model=JudgeAssessmentResponse, status_code=status.HTTP_201_CREATED)
 def create_judge_assessment(
     payload: JudgeAssessmentCreate,
-    request: Request,
-    session: SessionDependency,
+    service: JudgeServiceDependency,
     cipher: CipherDependency,
     model_executor: ModelExecutorDependency,
-) -> JudgeAssessment | dict[str, Any]:
-    try:
-        store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
-        if store is not None:
-            return assess_mongo_sample_attempt(
-                store,
-                sample_attempt_id=payload.sample_attempt_id,
-                judge_endpoint_id=payload.judge_endpoint_id,
-                rubric=payload.rubric,
-                cipher=cipher,
-                model_executor=model_executor,
-            )
-        assert session is not None
-        return assess_sample_attempt(
-            session,
-            sample_attempt_id=payload.sample_attempt_id,
-            judge_endpoint_id=payload.judge_endpoint_id,
-            rubric=payload.rubric,
-            cipher=cipher,
-            model_executor=model_executor,
-        )
-    except JudgeAssessmentError as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error).endswith("not found.") else status.HTTP_409_CONFLICT
-        raise HTTPException(status_code, str(error)) from error
+) -> Any:
+    return service.assess(
+        sample_attempt_id=payload.sample_attempt_id,
+        judge_endpoint_id=payload.judge_endpoint_id,
+        rubric=payload.rubric,
+        cipher=cipher,
+        model_executor=model_executor,
+    )
 
 
 @router.post("/compare", response_model=list[JudgeAssessmentResponse], status_code=status.HTTP_201_CREATED)
 def create_judge_comparison(
     payload: JudgeComparisonCreate,
-    request: Request,
-    session: SessionDependency,
+    service: JudgeServiceDependency,
     cipher: CipherDependency,
     model_executor: ModelExecutorDependency,
-) -> list[JudgeAssessment] | list[dict[str, Any]]:
-    try:
-        store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
-        if store is not None:
-            return assess_mongo_pairwise_sample_attempt(
-                store,
-                sample_attempt_id=payload.sample_attempt_id,
-                comparison_sample_attempt_id=payload.comparison_sample_attempt_id,
-                judge_endpoint_id=payload.judge_endpoint_id,
-                rubric=payload.rubric,
-                swap_test=payload.swap_test,
-                cipher=cipher,
-                model_executor=model_executor,
-            )
-        assert session is not None
-        return assess_pairwise_sample_attempt(
-            session,
-            sample_attempt_id=payload.sample_attempt_id,
-            comparison_sample_attempt_id=payload.comparison_sample_attempt_id,
-            judge_endpoint_id=payload.judge_endpoint_id,
-            rubric=payload.rubric,
-            swap_test=payload.swap_test,
-            cipher=cipher,
-            model_executor=model_executor,
-        )
-    except JudgeAssessmentError as error:
-        status_code = status.HTTP_404_NOT_FOUND if str(error).endswith("not found.") else status.HTTP_409_CONFLICT
-        raise HTTPException(status_code, str(error)) from error
+) -> list[Any]:
+    return service.assess_pairwise(
+        sample_attempt_id=payload.sample_attempt_id,
+        comparison_sample_attempt_id=payload.comparison_sample_attempt_id,
+        judge_endpoint_id=payload.judge_endpoint_id,
+        rubric=payload.rubric,
+        swap_test=payload.swap_test,
+        cipher=cipher,
+        model_executor=model_executor,
+    )
 
 
 @router.get("/sample/{sample_attempt_id}", response_model=list[JudgeAssessmentResponse])
-def list_judge_assessments(
-    sample_attempt_id: str, request: Request, session: SessionDependency
-) -> list[JudgeAssessment | dict[str, Any]]:
-    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
-    if store is not None:
-        return store.list_documents(
-            "judge_assessments",
-            query={"sample_attempt_id": sample_attempt_id},
-            sort=[("created_at", -1)],
-        )
-    assert session is not None
-    return list(
-        session.scalars(
-            select(JudgeAssessment)
-            .where(JudgeAssessment.sample_attempt_id == sample_attempt_id)
-            .order_by(JudgeAssessment.created_at.desc())
-        )
-    )
+def list_judge_assessments(sample_attempt_id: str, service: JudgeServiceDependency) -> list[Any]:
+    return service.list_for_sample(sample_attempt_id)
 
 
 @router.get("/sample/{sample_attempt_id}/agreement")
-def get_judge_agreement(sample_attempt_id: str, request: Request, session: SessionDependency) -> dict[str, object]:
-    store: MongoDocumentStore | None = getattr(request.app.state, "document_store", None)
-    if store is not None:
-        if store.get_document("sample_attempts", sample_attempt_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Sample attempt not found.")
-        return build_judge_agreement(
-            store.list_documents("judge_assessments", query={"sample_attempt_id": sample_attempt_id})
-        )
-    assert session is not None
-    if session.get(SampleAttempt, sample_attempt_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sample attempt not found.")
-    return build_judge_agreement(
-        list(session.scalars(select(JudgeAssessment).where(JudgeAssessment.sample_attempt_id == sample_attempt_id)))
-    )
+def get_judge_agreement(sample_attempt_id: str, service: JudgeServiceDependency) -> dict[str, object]:
+    return service.agreement(sample_attempt_id)

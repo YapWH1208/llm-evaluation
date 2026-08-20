@@ -4,9 +4,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.core.config import Settings
-from app.core.secrets import SecretCipher
 from app.db.mongo import MongoDocumentStore
-from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.datasets.preparation import DatasetError
 
 
@@ -309,30 +307,6 @@ class MongoEvaluationRepository:
         from app.modules.reports.mongo import generate_mongo_report
 
         return generate_mongo_report(self._store, run_id, format, data_root, report_type=report_type)
-
-    def assess_judge(
-        self,
-        *,
-        sample_attempt_id: str,
-        judge_endpoint_id: str,
-        rubric: dict[str, Any],
-        system_message: str,
-        cipher: SecretCipher,
-        model_executor: ModelExecutor,
-        endpoint_override: dict[str, Any],
-    ) -> dict[str, Any]:
-        from app.modules.reviews.mongo_judges import assess_mongo_sample_attempt
-
-        return assess_mongo_sample_attempt(
-            self._store,
-            sample_attempt_id=sample_attempt_id,
-            judge_endpoint_id=judge_endpoint_id,
-            rubric=rubric,
-            system_message=system_message,
-            cipher=cipher,
-            model_executor=model_executor,
-            endpoint_override=endpoint_override,
-        )
 
     def query_tasks(
         self,

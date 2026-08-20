@@ -4,8 +4,6 @@ from collections.abc import Iterable
 from typing import Any, Protocol
 
 from app.core.config import Settings
-from app.core.secrets import SecretCipher
-from app.infrastructure.providers.contracts import ModelExecutor
 
 
 class EvaluationRepository(Protocol):
@@ -155,18 +153,6 @@ class ExecutionRepository(Protocol):
         data_root: str,
         *,
         report_type: str,
-    ) -> dict[str, Any]: ...
-
-    def assess_judge(
-        self,
-        *,
-        sample_attempt_id: str,
-        judge_endpoint_id: str,
-        rubric: dict[str, Any],
-        system_message: str,
-        cipher: SecretCipher,
-        model_executor: ModelExecutor,
-        endpoint_override: dict[str, Any],
     ) -> dict[str, Any]: ...
 
     def query_tasks(

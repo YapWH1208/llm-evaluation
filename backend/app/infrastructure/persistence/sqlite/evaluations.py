@@ -8,7 +8,6 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
-from app.core.secrets import SecretCipher
 from app.db.database import Database
 from app.db.models import (
     BenchmarkDefinition,
@@ -25,7 +24,6 @@ from app.db.models import (
     SampleAttempt,
     TaskUnit,
 )
-from app.infrastructure.providers.contracts import ModelExecutor
 from app.modules.datasets.preparation import DatasetError
 
 
@@ -495,33 +493,6 @@ class SqliteEvaluationRepository:
         with self._database.get_session() as session:
             report = generate_report(session, run_id, format, data_root, report_type=report_type)
             return _model_values(report)
-
-    def assess_judge(
-        self,
-        *,
-        sample_attempt_id: str,
-        judge_endpoint_id: str,
-        rubric: dict[str, Any],
-        system_message: str,
-        cipher: SecretCipher,
-        model_executor: ModelExecutor,
-        endpoint_override: dict[str, Any],
-    ) -> dict[str, Any]:
-        from app.modules.reviews.judges import assess_sample_attempt
-
-        with self._database.get_session() as session:
-            assessment = assess_sample_attempt(
-                session,
-                sample_attempt_id=sample_attempt_id,
-                judge_endpoint_id=judge_endpoint_id,
-                rubric=rubric,
-                system_message=system_message,
-                persist=True,
-                cipher=cipher,
-                model_executor=model_executor,
-                endpoint_override=endpoint_override,
-            )
-            return _model_values(assessment)
 
     def query_tasks(
         self,

@@ -43,7 +43,13 @@ from app.modules.endpoints.repositories import MongoEndpointRepository, SqliteEn
 from app.modules.endpoints.service import EndpointService
 from app.modules.datasets.repositories import MongoDatasetRepository, SqliteDatasetRepository
 from app.modules.datasets.service import DatasetService
-from app.modules.reviews.repositories import MongoReviewRepository, SqliteReviewRepository
+from app.modules.reviews.judges import JudgeService
+from app.modules.reviews.repositories import (
+    MongoJudgeRepository,
+    MongoReviewRepository,
+    SqliteJudgeRepository,
+    SqliteReviewRepository,
+)
 from app.modules.reviews.service import ReviewService
 from app.infrastructure.persistence.mongo.evaluations import MongoEvaluationRepository
 from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
@@ -113,6 +119,9 @@ def create_app(
     app.state.review_service = ReviewService(
         MongoReviewRepository(document_store) if document_store is not None else SqliteReviewRepository(database)  # type: ignore[arg-type]
     )
+    app.state.judge_service = JudgeService(
+        MongoJudgeRepository(document_store) if document_store is not None else SqliteJudgeRepository(database)  # type: ignore[arg-type]
+    )
     evaluation_repository = (
         MongoEvaluationRepository(document_store)
         if document_store is not None
@@ -120,7 +129,9 @@ def create_app(
     )
     app.state.evaluation_service = EvaluationService(evaluation_repository, data_root=settings.data_root)
     app.state.queue_service = QueueService(evaluation_repository, settings)
-    app.state.execution_service = ExecutionService(evaluation_repository, settings, app.state.queue_service)
+    app.state.execution_service = ExecutionService(
+        evaluation_repository, settings, app.state.queue_service, app.state.judge_service
+    )
     app.state.connection_tester = connection_tester or ProviderConnectionTester(
         max_response_bytes=settings.provider_response_max_bytes
     )

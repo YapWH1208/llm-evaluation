@@ -19,6 +19,7 @@ from app.modules.evaluations.retry import (
     retry_policy,
 )
 from app.modules.evaluations.stages import PipelineStages
+from app.modules.reviews.judges import JudgeService
 
 
 _RUNNABLE_RUN_STATUSES = (RunStatus.QUEUED.value, RunStatus.RUNNING.value)
@@ -38,11 +39,12 @@ class ExecutionService:
         repository: ExecutionRepository,
         settings: Settings,
         queue: QueueService,
+        judges: JudgeService,
     ) -> None:
         self._repository = repository
         self._settings = settings
         self._queue = queue
-        self._attempts = AttemptProcessor(repository)
+        self._attempts = AttemptProcessor(repository, judges)
         self._stages = PipelineStages(repository, settings)
 
     def execute_run(
