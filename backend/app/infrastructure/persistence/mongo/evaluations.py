@@ -112,6 +112,23 @@ class MongoEvaluationRepository:
     def create_dataset(self, values: dict[str, Any]) -> dict[str, Any]:
         return self._store.insert_document("dataset_versions", values)
 
+    def get_suite(self, suite_id: str) -> dict[str, Any] | None:
+        return self._store.get_document("evaluation_suites", suite_id)
+
+    def list_suites(self) -> list[dict[str, Any]]:
+        return self._store.list_documents("evaluation_suites", sort=[("created_at", -1)])
+
+    def create_suite(self, values: dict[str, Any]) -> dict[str, Any]:
+        if self._store.list_documents(
+            "evaluation_suites",
+            query={"name": values["name"], "version": values["version"]},
+        ):
+            raise ValueError("Suite name and version already exist")
+        return self._store.insert_document("evaluation_suites", values)
+
+    def update_suite(self, suite_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        return self._store.update_document("evaluation_suites", suite_id, values)
+
     def create_run_graph(
         self,
         run_values: dict[str, Any],

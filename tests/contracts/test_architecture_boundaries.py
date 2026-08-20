@@ -20,7 +20,6 @@ KNOWN_PERSISTENCE_AWARE_APIS = {
     "modules/benchmarks/api.py",
     "modules/benchmarks/prompts_api.py",
     "modules/endpoints/capabilities_api.py",
-    "modules/evaluations/suites_api.py",
     "modules/reports/api.py",
     "modules/reports/assets_api.py",
     "modules/reviews/api.py",

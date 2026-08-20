@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.core.secrets import SecretCipher
@@ -13,6 +14,7 @@ from app.db.models import (
     BenchmarkDefinition,
     DatasetVersion,
     EvaluationRun,
+    EvaluationSuite,
     HumanReview,
     JudgeAssessment,
     MediaAsset,
@@ -194,6 +196,41 @@ class SqliteEvaluationRepository:
             session.commit()
             session.refresh(dataset)
             return _model_values(dataset)
+
+    def get_suite(self, suite_id: str) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            suite = session.get(EvaluationSuite, suite_id)
+            return _model_values(suite) if suite is not None else None
+
+    def list_suites(self) -> list[dict[str, Any]]:
+        with self._database.get_session() as session:
+            return [
+                _model_values(suite)
+                for suite in session.scalars(select(EvaluationSuite).order_by(EvaluationSuite.created_at.desc()))
+            ]
+
+    def create_suite(self, values: dict[str, Any]) -> dict[str, Any]:
+        with self._database.get_session() as session:
+            suite = EvaluationSuite(**values)
+            session.add(suite)
+            try:
+                session.commit()
+            except IntegrityError as error:
+                session.rollback()
+                raise ValueError("Suite name and version already exist") from error
+            session.refresh(suite)
+            return _model_values(suite)
+
+    def update_suite(self, suite_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        with self._database.get_session() as session:
+            suite = session.get(EvaluationSuite, suite_id)
+            if suite is None:
+                return None
+            for name, value in values.items():
+                setattr(suite, name, value)
+            session.commit()
+            session.refresh(suite)
+            return _model_values(suite)
 
     def create_run_graph(
         self,

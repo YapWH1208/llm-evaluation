@@ -442,6 +442,83 @@ class EvaluationService:
             },
         )
 
+    def create_suite(self, values: dict[str, Any], *, created_by: str | None) -> dict[str, Any]:
+        try:
+            return self._repository.create_suite(
+                {**values, "created_by": created_by, "created_at": datetime.now(timezone.utc)}
+            )
+        except ValueError as error:
+            raise ConflictError(str(error)) from error
+
+    def list_suites(self) -> list[dict[str, Any]]:
+        return self._repository.list_suites()
+
+    def get_suite(self, suite_id: str) -> dict[str, Any]:
+        suite = self._repository.get_suite(suite_id)
+        if suite is None:
+            raise NotFoundError("Evaluation suite not found", context={"suite_id": suite_id})
+        return suite
+
+    def update_suite(self, suite_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        self.get_suite(suite_id)
+        suite = self._repository.update_suite(suite_id, values)
+        if suite is None:
+            raise NotFoundError("Evaluation suite not found", context={"suite_id": suite_id})
+        return suite
+
+    def create_suite_runs(
+        self,
+        suite_id: str,
+        *,
+        model_endpoint_id: str,
+        sample_limit: int | None,
+        request_body_override: dict[str, Any],
+        max_concurrency: int | None,
+        created_by: str | None,
+    ) -> list[dict[str, Any]]:
+        suite = self.get_suite(suite_id)
+        results: list[dict[str, Any]] = []
+        for selection in suite["benchmark_list"]:
+            if not isinstance(selection, dict) or not isinstance(selection.get("benchmark_id"), str):
+                raise ConflictError("Suite benchmarks require benchmark_id entries.")
+            benchmark_id = selection["benchmark_id"]
+            benchmark_version = str(selection.get("version", "1.0.0"))
+            prompt_package_id = selection.get("prompt_package_id")
+            if prompt_package_id is None:
+                overrides = suite.get("default_prompt_overrides")
+                if isinstance(overrides, dict):
+                    prompt_package_id = overrides.get(
+                        f"{benchmark_id}@{benchmark_version}",
+                        overrides.get(benchmark_id),
+                    )
+            if prompt_package_id is not None and not isinstance(prompt_package_id, str):
+                raise ConflictError("Suite prompt_package_id must be a string.")
+            snapshot = {
+                "id": suite["id"],
+                "name": suite["name"],
+                "version": suite["version"],
+                "default_prompt_overrides": suite.get("default_prompt_overrides", {}),
+                "default_request_body": suite["default_request_body"],
+                "weight_configuration": suite["weight_configuration"],
+                "selection": selection,
+                "effective_prompt_package_id": prompt_package_id,
+            }
+            results.append(
+                self.create_benchmark(
+                    model_endpoint_id=model_endpoint_id,
+                    sample_limit=sample_limit,
+                    prompt_package_id=prompt_package_id,
+                    benchmark_id=benchmark_id,
+                    benchmark_version=benchmark_version,
+                    suite_id=str(suite["id"]),
+                    suite_snapshot=snapshot,
+                    request_body_override=request_body_override,
+                    created_by=created_by,
+                    max_concurrency=max_concurrency,
+                )
+            )
+        return results
+
     def _preflight_declared_datasets(self, descriptors: object, issues: list[str]) -> list[dict[str, object]]:
         if not isinstance(descriptors, list):
             return []
