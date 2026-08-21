@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AnalyticsMatrix, Endpoint, EvaluationRun } from "../api";
+import type { AnalyticsMatrix } from "../features/analytics/api";
+import type { Endpoint } from "../features/endpoints/api";
+import type { EvaluationRun } from "../features/runs/api";
 import { buildDashboardAnalytics, buildRecentRunRows, chartCoordinates, groupCostsByCurrency } from "./analytics";
 
 const emptyHeatmaps: AnalyticsMatrix["heatmaps"] = {

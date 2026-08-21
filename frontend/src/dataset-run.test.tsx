@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, Benchmark, Dataset, Endpoint, EvaluationRun, PromptPackage } from "./api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi, type Benchmark, type PromptPackage } from "./features/benchmarks/api";
+import { datasetsApi, type Dataset } from "./features/datasets/api";
+import { endpointsApi, type Endpoint } from "./features/endpoints/api";
+import { reportsApi } from "./features/reports/api";
+import { runsApi, type EvaluationRun } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -60,15 +65,15 @@ function mockWorkspace({
   prompts?: PromptPackage[];
   runs?: EvaluationRun[];
 } = {}) {
-  vi.spyOn(api, "listEndpoints").mockResolvedValue(endpoints);
-  vi.spyOn(api, "listRuns").mockResolvedValue(runs);
-  vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-  vi.spyOn(api, "listPromptPackages").mockResolvedValue(prompts);
-  vi.spyOn(api, "listDatasets").mockResolvedValue(datasets);
-  vi.spyOn(api, "listBenchmarks").mockResolvedValue(benchmarks);
-  vi.spyOn(api, "listTasks").mockResolvedValue([]);
-  vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
+  vi.spyOn(endpointsApi, "list").mockResolvedValue(endpoints);
+  vi.spyOn(runsApi, "list").mockResolvedValue(runs);
+  vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+  vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue(prompts);
+  vi.spyOn(datasetsApi, "list").mockResolvedValue(datasets);
+  vi.spyOn(benchmarksApi, "list").mockResolvedValue(benchmarks);
+  vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+  vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
 }
 
 async function openRuns() {
@@ -82,11 +87,11 @@ async function openRuns() {
 describe("evaluation run launch workspace", () => {
   it("queues a dataset run with schema-selected input and reference fields", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({
+    const createDatasetRun = vi.spyOn(runsApi, "createDataset").mockResolvedValue({
       id: "run-1",
       benchmark_id: "dataset-evaluation",
       total_samples: 1,
@@ -114,7 +119,7 @@ describe("evaluation run launch workspace", () => {
     mockWorkspace({
       datasets: [{ ...readyDataset, input_field: "prompt", reference_field: "expected" }],
     });
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["metadata", "prompt", "expected"],
       rows: [{ metadata: "m", prompt: "q", expected: "a" }],
     });
@@ -129,7 +134,7 @@ describe("evaluation run launch workspace", () => {
   it("replaces stale mappings with selections from the newly loaded schema", async () => {
     const second = { ...readyDataset, id: "ds-2", dataset_id: "other", input_field: null, reference_field: null };
     mockWorkspace({ datasets: [readyDataset, second] });
-    vi.spyOn(api, "previewDataset").mockImplementation(async (datasetId) => datasetId === readyDataset.id
+    vi.spyOn(datasetsApi, "preview").mockImplementation(async (datasetId) => datasetId === readyDataset.id
       ? { fields: ["question", "answer"], rows: [] }
       : { fields: ["prompt", "target"], rows: [] });
     const user = await openRuns();
@@ -144,7 +149,7 @@ describe("evaluation run launch workspace", () => {
 
   it("blocks dataset queueing and reports a schema-loading failure", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockRejectedValue(new Error("Prepared schema is unavailable."));
+    vi.spyOn(datasetsApi, "preview").mockRejectedValue(new Error("Prepared schema is unavailable."));
     const user = await openRuns();
 
     await user.selectOptions(screen.getByLabelText("Dataset"), readyDataset.id);
@@ -156,12 +161,12 @@ describe("evaluation run launch workspace", () => {
   it("queues an available built-in quick-start benchmark with its sample limit", async () => {
     const external = { ...quickStartBenchmark, id: "benchmark-2", benchmark_id: "external-pack", display_name: "External Pack", source: "pack:external" };
     mockWorkspace({ benchmarks: [quickStartBenchmark, external] });
-    const createRun = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run-1" } as never);
-    vi.spyOn(api, "listAttempts").mockResolvedValue([]);
-    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
-    vi.spyOn(api, "listReports").mockResolvedValue([]);
-    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
-    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
+    const createRun = vi.spyOn(runsApi, "create").mockResolvedValue({ id: "run-1" } as never);
+    vi.spyOn(runsApi, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(runsApi, "summary").mockResolvedValue(null as never);
+    vi.spyOn(reportsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "logs").mockResolvedValue([]);
+    vi.spyOn(runsApi, "metrics").mockResolvedValue([]);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Quick start" }));
@@ -183,16 +188,16 @@ describe("evaluation run launch workspace", () => {
 
   it("refreshes run inventory before navigating away from a queued quick start", async () => {
     mockWorkspace();
-    const createRunSpy = vi.spyOn(api, "createRun").mockResolvedValue({ id: "run-1" } as never);
-    vi.spyOn(api, "listAttempts").mockResolvedValue([]);
-    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
-    vi.spyOn(api, "listReports").mockResolvedValue([]);
-    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
-    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
+    const createRunSpy = vi.spyOn(runsApi, "create").mockResolvedValue({ id: "run-1" } as never);
+    vi.spyOn(runsApi, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(runsApi, "summary").mockResolvedValue(null as never);
+    vi.spyOn(reportsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "logs").mockResolvedValue([]);
+    vi.spyOn(runsApi, "metrics").mockResolvedValue([]);
     let releaseRefresh: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
     let listRunsCalls = 0;
-    const listRunsSpy = vi.spyOn(api, "listRuns").mockImplementation(() => {
+    const listRunsSpy = vi.spyOn(runsApi, "list").mockImplementation(() => {
       listRunsCalls += 1;
       return listRunsCalls === 1 ? Promise.resolve([]) : gate.then(() => []);
     });
@@ -205,14 +210,14 @@ describe("evaluation run launch workspace", () => {
     await waitFor(() => expect(listRunsSpy.mock.calls.length).toBeGreaterThan(1));
     expect(window.location.search).not.toContain("tab=run-details");
     releaseRefresh?.();
-    await waitFor(() => expect(window.location.search).toBe("?tab=run-details"));
+    await waitFor(() => expect(window.location.search).toBe("?tab=run-details&run=run-1"));
   }, 10_000);
 
   it("supports quick-start and dataset preflight from the shared endpoint context", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
-    const validateRun = vi.spyOn(api, "validateRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 3 } as never);
-    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({ fields: ["question", "answer"], rows: [] });
+    const validateRun = vi.spyOn(runsApi, "validate").mockResolvedValue({ can_queue: true, issues: [], sample_count: 3 } as never);
+    const validateDatasetRun = vi.spyOn(runsApi, "validateDataset").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Quick start" }));
@@ -237,12 +242,12 @@ describe("evaluation run launch workspace", () => {
 
   it("submits the selected metric to dataset preflight and creation", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
-    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({ id: "run-1" } as never);
+    const validateDatasetRun = vi.spyOn(runsApi, "validateDataset").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const createDatasetRun = vi.spyOn(runsApi, "createDataset").mockResolvedValue({ id: "run-1" } as never);
     const user = await openRuns();
 
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
@@ -279,11 +284,11 @@ describe("evaluation run launch workspace", () => {
 
   it("requires a separate judge endpoint and system message for LLM-as-judge", async () => {
     mockWorkspace({ endpoints: [endpoint, judgeEndpoint] });
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const validateDatasetRun = vi.spyOn(runsApi, "validateDataset").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
     const user = await openRuns();
 
     await user.selectOptions(screen.getByLabelText("Endpoint"), endpoint.id);
@@ -315,11 +320,11 @@ describe("evaluation run launch workspace", () => {
 
   it("reports a separate judge estimate when an LLM judge is configured", async () => {
     mockWorkspace({ endpoints: [endpoint, judgeEndpoint] });
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    vi.spyOn(api, "validateDatasetRun").mockResolvedValue({
+    vi.spyOn(runsApi, "validateDataset").mockResolvedValue({
       can_queue: true,
       issues: [],
       sample_count: 1,
@@ -368,11 +373,11 @@ describe("evaluation run launch workspace", () => {
       archived_at: null,
     } as EvaluationRun;
     mockWorkspace({ runs: [run] });
-    vi.spyOn(api, "listAttempts").mockResolvedValue([]);
-    vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
-    vi.spyOn(api, "listReports").mockResolvedValue([]);
-    vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
-    vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
+    vi.spyOn(runsApi, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(runsApi, "summary").mockResolvedValue(null as never);
+    vi.spyOn(reportsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "logs").mockResolvedValue([]);
+    vi.spyOn(runsApi, "metrics").mockResolvedValue([]);
     const user = await openRuns();
 
     await user.click(screen.getByRole("tab", { name: "Run inventory" }));
@@ -385,12 +390,12 @@ describe("evaluation run launch workspace", () => {
 
   it("queues a prompt-package dataset run without an input field and clears stale preflight state", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    const validateDatasetRun = vi.spyOn(api, "validateDatasetRun").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
-    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({
+    const validateDatasetRun = vi.spyOn(runsApi, "validateDataset").mockResolvedValue({ can_queue: true, issues: [], sample_count: 1 } as never);
+    const createDatasetRun = vi.spyOn(runsApi, "createDataset").mockResolvedValue({
       id: "run-1",
       benchmark_id: "dataset-evaluation",
       total_samples: 1,
@@ -420,7 +425,7 @@ describe("evaluation run launch workspace", () => {
 
   it("warns that a chosen metric overrides the prompt package scoring rule", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
@@ -437,7 +442,7 @@ describe("evaluation run launch workspace", () => {
 
   it("blocks queueing a single-field dataset and explains the missing reference field", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["only"],
       rows: [{ only: "value" }],
     });
@@ -452,11 +457,11 @@ describe("evaluation run launch workspace", () => {
 
   it("blocks queueing when input and reference fields are the same", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset").mockResolvedValue({
+    vi.spyOn(datasetsApi, "preview").mockResolvedValue({
       fields: ["question", "answer"],
       rows: [{ question: "2 + 2?", answer: "4" }],
     });
-    const createDatasetRun = vi.spyOn(api, "createDatasetRun").mockResolvedValue({
+    const createDatasetRun = vi.spyOn(runsApi, "createDataset").mockResolvedValue({
       id: "run-1",
       benchmark_id: "dataset-evaluation",
       total_samples: 1,
@@ -476,7 +481,7 @@ describe("evaluation run launch workspace", () => {
 
   it("retries the schema fetch after a transient preview failure", async () => {
     mockWorkspace();
-    vi.spyOn(api, "previewDataset")
+    vi.spyOn(datasetsApi, "preview")
       .mockRejectedValueOnce(new Error("Prepared schema is unavailable."))
       .mockResolvedValueOnce({
         fields: ["question", "answer"],

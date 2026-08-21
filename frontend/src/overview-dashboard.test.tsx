@@ -2,7 +2,9 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AnalyticsMatrix, Dashboard, Endpoint, EvaluationRun, SystemHealth, Task } from "./api";
+import type { AnalyticsMatrix, Dashboard, SystemHealth, Task } from "./features/analytics/api";
+import type { Endpoint } from "./features/endpoints/api";
+import type { EvaluationRun } from "./features/runs/api";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

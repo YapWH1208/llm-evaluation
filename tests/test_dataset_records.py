@@ -3,16 +3,30 @@ from pathlib import Path
 
 import pytest
 
-from app.services.dataset_records import DatasetRecordError, count_dataset_records, iter_dataset_records
+from app.modules.datasets.records import DatasetRecordError, count_dataset_records, iter_dataset_records
 
 
-def _write_prepared(tmp_path: Path, source_name: str, source_bytes: bytes, index_entries: list[dict[str, object]]) -> str:
+def _write_prepared(
+    tmp_path: Path, source_name: str, source_bytes: bytes, index_entries: list[dict[str, object]]
+) -> str:
     prepared = tmp_path / "data" / "datasets" / "demo" / "1" / "main" / "prepared"
     source_root = prepared / "source"
     source_root.mkdir(parents=True, exist_ok=True)
     (source_root / source_name).write_bytes(source_bytes)
-    (prepared / "manifest.json").write_text(json.dumps({"format": "lle.sample-index/v1", "source_files": [source_name], "record_count": len(index_entries), "index_path": "sample-index.jsonl"}), encoding="utf-8")
-    (prepared / "sample-index.jsonl").write_text("\n".join(json.dumps(entry) for entry in index_entries) + "\n", encoding="utf-8")
+    (prepared / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": "lle.sample-index/v1",
+                "source_files": [source_name],
+                "record_count": len(index_entries),
+                "index_path": "sample-index.jsonl",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (prepared / "sample-index.jsonl").write_text(
+        "\n".join(json.dumps(entry) for entry in index_entries) + "\n", encoding="utf-8"
+    )
     return str(prepared / "manifest.json")
 
 
@@ -80,7 +94,7 @@ def test_dataset_records_rejects_unsafe_prepared_path_and_unsupported_format(tmp
 
 
 def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) -> None:
-    from app.services.datasets import prepare_dataset_cache
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
@@ -97,7 +111,7 @@ def test_dataset_records_json_array_and_csv_through_preparation(tmp_path: Path) 
 
 
 def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tmp_path: Path) -> None:
-    from app.services.datasets import prepare_dataset_cache
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
@@ -112,13 +126,14 @@ def test_dataset_records_csv_multiline_quoted_field_yields_one_record_per_row(tm
 
 
 def test_dataset_preparation_rejects_malformed_json(tmp_path: Path) -> None:
-    from app.services.datasets import DatasetError, prepare_dataset_cache
+    from app.core.errors import ConflictError
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
     bad = root / "broken.json"
     bad.write_text('{"question": "q1"', encoding="utf-8")
-    with pytest.raises(DatasetError, match="could not be parsed"):
+    with pytest.raises(ConflictError, match="could not be parsed"):
         prepare_dataset_cache(bad)
 
 
@@ -134,13 +149,14 @@ def test_dataset_records_rejects_malformed_jsonl(tmp_path: Path) -> None:
 
 
 def test_dataset_preparation_rejects_malformed_csv(tmp_path: Path) -> None:
-    from app.services.datasets import DatasetError, prepare_dataset_cache
+    from app.core.errors import ConflictError
+    from app.modules.datasets.preparation import prepare_dataset_cache
 
     root = tmp_path / "datasets" / "demo" / "1" / "main"
     root.mkdir(parents=True)
     bad = root / "broken.csv"
-    bad.write_text("question,answer\nq1,\"unclosed\n", encoding="utf-8")
-    with pytest.raises(DatasetError, match="could not be parsed"):
+    bad.write_text('question,answer\nq1,"unclosed\n', encoding="utf-8")
+    with pytest.raises(ConflictError, match="could not be parsed"):
         prepare_dataset_cache(bad)
 
 
@@ -150,6 +166,15 @@ def test_dataset_records_rejects_escaping_index_path(tmp_path: Path) -> None:
     source_root.mkdir(parents=True)
     (source_root / "dataset.jsonl").write_bytes(b'{"question":"q1","answer":"a1"}\n')
     (prepared / "manifest.json").write_text(
-        json.dumps({"format": "lle.sample-index/v1", "source_files": ["dataset.jsonl"], "record_count": 1, "index_path": "../../../outside-index"}), encoding="utf-8")
+        json.dumps(
+            {
+                "format": "lle.sample-index/v1",
+                "source_files": ["dataset.jsonl"],
+                "record_count": 1,
+                "index_path": "../../../outside-index",
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(DatasetRecordError, match="escapes"):
         list(iter_dataset_records(str(prepared / "manifest.json"), str(tmp_path / "data")))

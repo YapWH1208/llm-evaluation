@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { api, SystemHealth } from "../../api";
+import { reportsApi } from "../../features/reports/api";
+import type { SystemHealth } from "../../features/analytics/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { localeIds, localeNames, reportCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
@@ -44,7 +45,7 @@ export function SettingsPage({ activeTab, locale, onLocaleChange, onTabChange, o
 }
 
 export function openSharedReport(token: string, password: string) {
-  return api.openSharedReport(token, password);
+  return reportsApi.openShared(token, password);
 }
 
 export function SharedReportPage({ token }: { token: string }) {

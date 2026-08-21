@@ -4,7 +4,7 @@ import { localeIds, localeNames, navigationCopy, shellCopy, type Locale } from "
 import { navigationGroupFor, navigationGroups, navigationItem, View } from "../dashboard/navigation";
 import { workspacePath } from "../dashboard/routing";
 import { useTranslation } from "../i18n/LocaleProvider";
-import { SystemHealth } from "../api";
+import type { SystemHealth } from "../features/analytics/api";
 import { MenuIcon, NavigationIcon } from "./NavigationIcon";
 import "../dashboard.css";
 

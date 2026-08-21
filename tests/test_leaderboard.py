@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.leaderboard import (
+from app.modules.analytics.leaderboard import (
     LeaderboardFilters,
     LeaderboardQuery,
     LeaderboardQueryError,
@@ -117,7 +117,11 @@ def test_default_order_prioritizes_scored_completed_runs_with_stable_tiebreakers
     result = _build(runs, metrics)
 
     assert [item["run_id"] for item in result["items"]] == [
-        "high-fast", "high-slow", "low", "unscored", "queued",
+        "high-fast",
+        "high-slow",
+        "low",
+        "unscored",
+        "queued",
     ]
     assert result["total"] == 5
     assert result["page"] == 1
@@ -210,7 +214,9 @@ def test_explicit_sorts_support_both_directions(
     metrics = {
         "alpha": _metrics(score=0.1, average_latency_ms=10, p95_latency_ms=20, estimated_cost=0.001, sample_count=5),
         "zulu": _metrics(score=0.9, average_latency_ms=90, p95_latency_ms=100, estimated_cost=0.009, sample_count=10),
-        "missing": _metrics(score=None, average_latency_ms=None, p95_latency_ms=None, estimated_cost=None, sample_count=0),
+        "missing": _metrics(
+            score=None, average_latency_ms=None, p95_latency_ms=None, estimated_cost=None, sample_count=0
+        ),
     }
 
     asc = _build(runs, metrics, LeaderboardQuery(sort=sort, direction="asc"))

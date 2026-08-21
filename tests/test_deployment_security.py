@@ -30,7 +30,10 @@ def _run_entrypoint(data_root: Path, extra_env: dict[str, str] | None = None) ->
     env = {**os.environ, "LLE_DATA_ROOT": str(data_root), **(extra_env or {})}
     return subprocess.run(
         ["bash", str(script), "sh", "-c", 'printf %s "$LLE_SECRET_ENCRYPTION_KEY"'],
-        capture_output=True, text=True, env=env, check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
     )
 
 

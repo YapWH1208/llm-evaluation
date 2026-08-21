@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.judge_scoring import (
+from app.modules.reviews.scoring import (
     JudgeScoringError,
     build_pairwise_judge_input,
     build_single_judge_input,
@@ -98,6 +98,13 @@ def test_parses_valid_and_rejects_invalid_judge_responses() -> None:
     parsed = parse_judge_response('```json\n{"score": 0.75, "label": "good", "rationale": "Matches."}\n```')
     assert parsed == {"score": 0.75, "label": "good", "rationale": "Matches."}
 
-    for payload in ("not json", "[]", '{"score": "NaN"}', '{"score": 1.1}', '{"score": -0.1}', '{"score": 0.5, "label": 3}'):
+    for payload in (
+        "not json",
+        "[]",
+        '{"score": "NaN"}',
+        '{"score": 1.1}',
+        '{"score": -0.1}',
+        '{"score": 0.5, "label": 3}',
+    ):
         with pytest.raises(JudgeScoringError):
             parse_judge_response(payload)

@@ -8,7 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.db.mongo import MongoDocumentStore
 from app.main import create_app
-from app.services.dataset_metadata import (
+from app.modules.datasets.metadata import (
     DatasetMetadataError,
     normalize_capabilities,
     normalize_languages,
@@ -17,12 +17,12 @@ from tests.test_mongo_document_store import FakeClient
 
 
 def test_dataset_metadata_normalization_is_deduplicated_and_stable() -> None:
-    assert normalize_capabilities(
-        [" Reasoning ", "text input", "reasoning", "tool-use"]
-    ) == ["reasoning", "text_input", "tool_use"]
-    assert normalize_languages(
-        ["ZH-hans-cn", "en-us", "en-US"]
-    ) == ["en-US", "zh-Hans-CN"]
+    assert normalize_capabilities([" Reasoning ", "text input", "reasoning", "tool-use"]) == [
+        "reasoning",
+        "text_input",
+        "tool_use",
+    ]
+    assert normalize_languages(["ZH-hans-cn", "en-us", "en-US"]) == ["en-US", "zh-Hans-CN"]
 
 
 @pytest.mark.parametrize(
@@ -40,9 +40,7 @@ def test_dataset_metadata_rejects_unsafe_or_invalid_values(normalizer, value) ->
 
 
 def test_relational_dataset_metadata_create_edit_and_legacy_defaults(tmp_path: Path) -> None:
-    app = create_app(
-        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}")
-    )
+    app = create_app(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}"))
     with TestClient(app) as client:
         created = client.post(
             "/api/v1/datasets",
@@ -158,9 +156,7 @@ def test_mongo_ready_dataset_field_defaults_are_schema_validated(tmp_path: Path)
             f"/api/v1/datasets/{created.json()['id']}/upload",
             json={
                 "filename": "records.jsonl",
-                "base64_data": base64.b64encode(
-                    b'{"question":"2 + 2","answer":"4"}\n'
-                ).decode("ascii"),
+                "base64_data": base64.b64encode(b'{"question":"2 + 2","answer":"4"}\n').decode("ascii"),
             },
         )
         assert uploaded.status_code == 200
@@ -213,9 +209,7 @@ def test_dataset_field_defaults_are_distinct_and_revalidated_against_ready_schem
             f"/api/v1/datasets/{created.json()['id']}/upload",
             json={
                 "filename": "records.jsonl",
-                "base64_data": base64.b64encode(
-                    b'{"question":"2 + 2","answer":"4"}\n'
-                ).decode("ascii"),
+                "base64_data": base64.b64encode(b'{"question":"2 + 2","answer":"4"}\n').decode("ascii"),
             },
         )
         assert uploaded.status_code == 200

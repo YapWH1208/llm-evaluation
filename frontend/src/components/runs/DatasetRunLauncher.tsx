@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import type { Dataset, Endpoint, PromptPackage } from "../../api";
+import type { PromptPackage } from "../../features/benchmarks/api";
+import type { Dataset } from "../../features/datasets/api";
+import type { Endpoint } from "../../features/endpoints/api";
 import { datasetMetricIds, type DatasetMetricId } from "../../evaluations/scoringMetrics";
 import type { TranslationKey } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";

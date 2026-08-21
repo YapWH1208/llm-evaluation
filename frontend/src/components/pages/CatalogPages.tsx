@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import { api, Dataset } from "../../api";
+import { datasetsApi, type Dataset } from "../../features/datasets/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
 import { workspacePageTabCopy } from "../../i18n/catalog";
 import { useTranslation } from "../../i18n/LocaleProvider";
@@ -72,7 +72,7 @@ export function datasetPrepareLabel(dataset: Dataset) {
 }
 
 export async function loadDatasetPreview(dataset: Dataset) {
-  return api.previewDataset(dataset.id, 5);
+  return datasetsApi.preview(dataset.id, 5);
 }
 
 export function DatasetsPage({ activeTab, busy, datasets, onClear, onDelete, onPause, onPrepare, onStartEvaluation, onTabChange, onUpdate, onUpload, onValidate, registration }: DatasetsPageProps) {
@@ -88,7 +88,7 @@ export function DatasetsPage({ activeTab, busy, datasets, onClear, onDelete, onP
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedDataset = datasets.find((dataset) => dataset.id === selectedId) ?? datasets[0] ?? null;
 
-  useEffect(() => { void api.datasetDiskUsage().then(setUsage).catch(() => setUsage(null)); }, [usageKey]);
+  useEffect(() => { void datasetsApi.diskUsage().then(setUsage).catch(() => setUsage(null)); }, [usageKey]);
 
   function requestPreview(dataset: Dataset) {
     setPreviewingId(dataset.id);

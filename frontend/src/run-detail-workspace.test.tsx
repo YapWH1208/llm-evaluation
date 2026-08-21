@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { AggregateMetric, EvaluationRun, RunSummary } from "./api";
+import type { AggregateMetric, EvaluationRun, RunSummary } from "./features/runs/api";
 import { RunDetailWorkspace } from "./components/runs/RunDetailWorkspace";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 

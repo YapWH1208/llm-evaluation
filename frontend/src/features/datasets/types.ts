@@ -1,0 +1,20 @@
+export type Dataset = {
+  id: string;
+  dataset_id: string;
+  version: string;
+  revision: string;
+  source_url: string | null;
+  credential_binding_id: string | null;
+  checksum: string | null;
+  local_path: string | null;
+  size_bytes: number | null;
+  license_text: string | null;
+  license_accepted_at: string | null;
+  status: string;
+  error_message: string | null;
+  input_field: string | null;
+  reference_field: string | null;
+  capabilities: string[];
+  languages: string[];
+  evaluation_type: "classification" | "generation" | "code" | "language_modeling" | "custom";
+};

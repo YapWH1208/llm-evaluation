@@ -1,4 +1,6 @@
-import type { AnalyticsMatrix, Dashboard, Endpoint, EvaluationRun, SystemHealth, Task } from "../api";
+import type { AnalyticsMatrix, Dashboard, SystemHealth, Task } from "../features/analytics/api";
+import type { Endpoint } from "../features/endpoints/api";
+import type { EvaluationRun } from "../features/runs/api";
 import { buildDashboardAnalytics, buildRecentRunRows, type DashboardAnalyticsPoint, type RecentRunRow } from "../dashboard/analytics";
 import type { View } from "../dashboard/navigation";
 import type { WorkspaceTabFor } from "../dashboard/routing";

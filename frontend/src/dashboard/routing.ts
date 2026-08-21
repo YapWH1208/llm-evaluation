@@ -28,7 +28,7 @@ export type WorkspaceTabFor<V extends WorkspaceView> = (typeof workspaceTabIds)[
 export type WorkspaceTab = { [V in WorkspaceView]: WorkspaceTabFor<V> }[WorkspaceView];
 export type WorkspaceNavigate = <V extends WorkspaceView>(
   view: V,
-  options?: { replace?: boolean; runId?: string; tab?: WorkspaceTabFor<V> },
+  options?: { datasetId?: string; replace?: boolean; runId?: string; tab?: WorkspaceTabFor<V> },
 ) => void;
 
 export type WorkspaceRoute = {
@@ -50,11 +50,12 @@ function isWorkspaceTab<V extends WorkspaceView>(view: V, value: string | null):
 export function workspacePath<V extends WorkspaceView>(
   view: V,
   tab: WorkspaceTabFor<V> = defaultWorkspaceTab(view),
-  options: { runId?: string } = {},
+  options: { datasetId?: string; runId?: string } = {},
 ): string {
   const pathname = workspacePaths[view];
   const params = new URLSearchParams();
   if (tab !== defaultWorkspaceTab(view)) params.set("tab", tab);
+  if (view === "runs" && tab === "dataset-evaluation" && validResourceId(options.datasetId)) params.set("dataset", options.datasetId);
   if (view === "runs" && tab === "run-details" && validRunId(options.runId)) params.set("run", options.runId);
   return params.size ? `${pathname}?${params.toString()}` : pathname;
 }
@@ -63,9 +64,13 @@ function validRunId(value: string | null | undefined): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }
 
+function validResourceId(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(value);
+}
+
 export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
   const normalized = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
-  let view: WorkspaceView = "dashboard";
+  const view: WorkspaceView = "dashboard";
   for (const [view, path] of Object.entries(workspacePaths) as Array<[WorkspaceView, `/${string}`]>) {
     if (normalized === path) {
       const normalizedSearch = search && !search.startsWith("?") ? `?${search}` : search;
@@ -75,7 +80,9 @@ export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
         : rawRequestedTab;
       const tab = isWorkspaceTab(view, requestedTab) ? requestedTab : defaultWorkspaceTab(view);
       const requestedRunId = new URLSearchParams(normalizedSearch).get("run");
+      const requestedDatasetId = new URLSearchParams(normalizedSearch).get("dataset");
       const canonicalSearch = workspacePath(view, tab, {
+        datasetId: view === "runs" && tab === "dataset-evaluation" && validResourceId(requestedDatasetId) ? requestedDatasetId : undefined,
         runId: view === "runs" && tab === "run-details" && validRunId(requestedRunId) ? requestedRunId : undefined,
       }).slice(path.length);
       return {

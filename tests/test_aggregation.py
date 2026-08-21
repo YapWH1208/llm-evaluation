@@ -5,7 +5,8 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db.database import Database
 from app.db.models import AggregateMetric, EvaluationRun, ModelEndpoint, RunStatus
-from app.services.aggregation import AGGREGATION_VERSION, recompute_aggregate_metrics
+from app.infrastructure.persistence.sqlite.evaluations import SqliteEvaluationRepository
+from app.modules.analytics.aggregation import AGGREGATION_VERSION, AggregationService
 
 
 def _endpoint() -> ModelEndpoint:
@@ -57,8 +58,7 @@ def test_recompute_replaces_legacy_aggregation_rows_for_the_run(tmp_path: Path) 
             )
             session.commit()
             run_id = run.id
-        with database.get_session() as session:
-            recompute_aggregate_metrics(session, run_id)
+        AggregationService(SqliteEvaluationRepository(database)).recompute(run_id)
         with database.get_session() as session:
             rows = list(session.scalars(select(AggregateMetric).where(AggregateMetric.run_id == run_id)))
         assert rows

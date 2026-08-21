@@ -4,7 +4,30 @@ All notable changes to the LLM/SLM Evaluation Platform are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0 — 2026-08-20
+
+- Consolidated evaluation creation, lifecycle, queue execution, aggregation,
+  analytics, judging, reviews, reports, and dataset preparation into one
+  backend-neutral application path over SQLite and Mongo repository contracts.
+- Deleted the superseded service layer, parallel Mongo evaluation executor,
+  persistence-aware route implementations, and internal compatibility wrappers.
+- Split Mongo queue admission, leases, fencing, and rate-window persistence out
+  of the generic document store into its dedicated infrastructure adapter.
+- Consolidated provider request construction, parsing, connection probes, and
+  capability evidence into one authoritative adapter per protocol.
+- Moved frontend state, effects, commands, APIs, and DTOs into feature ownership;
+  deleted the workspace god component and monolithic API/type façades.
+- Added typed application errors, behavioral adapter/provider contracts, import
+  boundary tests, Ruff/ESLint gates, and consistent `1.0.0` release metadata.
+- Preserved SQLite/Mongo data, public API routes, workspace URLs, encrypted
+  credentials, evaluation evidence, report artifacts, and security controls.
+
 ## Unreleased
+
+### Fixed
+
+- Chat-style provider adapters now preserve normalized tool-result messages instead of rejecting valid tool responses.
+- MongoDB dataset revision conflicts now return HTTP 409 during both normal updates and concurrent duplicate-key races.
 
 ### Added
 

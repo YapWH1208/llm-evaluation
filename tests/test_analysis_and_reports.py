@@ -6,8 +6,7 @@ from urllib.parse import urlsplit
 
 from app.core.config import Settings
 from app.main import create_app
-from app.services.connection_tester import ConnectionTestResult
-from app.services.model_executor import SampleExecutionResult
+from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
 
 
 class SuccessfulTester:
@@ -86,13 +85,29 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert body["cost"]["currency"] == "USD"
         assert body["insights"]["strongest_capability"]["score"] == 1.0
         assert body["insights"]["weakest_capability"]["score"] == 1.0
-        assert {item["capability"] for item in body["insights"]["capabilities"]} == {"reasoning", "instruction_following"}
+        assert {item["capability"] for item in body["insights"]["capabilities"]} == {
+            "reasoning",
+            "instruction_following",
+        }
         assert body["insights"]["significant_anomalies"] == []
 
-        evidence = client.get(f"/api/v1/evaluation-runs/{run_a}/attempts", params={"capability": "reasoning", "language": "en", "difficulty": "basic", "modality": "text", "correct": True})
+        evidence = client.get(
+            f"/api/v1/evaluation-runs/{run_a}/attempts",
+            params={
+                "capability": "reasoning",
+                "language": "en",
+                "difficulty": "basic",
+                "modality": "text",
+                "correct": True,
+            },
+        )
         assert evidence.status_code == 200
         assert len(evidence.json()) == 1
-        assert evidence.json()[0]["sample_metadata"] == {"capability": "reasoning", "language": "en", "difficulty": "basic"}
+        assert evidence.json()[0]["sample_metadata"] == {
+            "capability": "reasoning",
+            "language": "en",
+            "difficulty": "basic",
+        }
         assert evidence.json()[0]["human_review_status"] == "unreviewed"
         assert evidence.json()[0]["judge_disagreement"] is False
         assert evidence.json()[0]["metric_evidence"] == {"profile_version": "1.1.0"}
@@ -126,8 +141,19 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         detailed_matrix = client.get("/api/v1/analytics/matrix", params={"baseline_run_id": run_a})
         assert detailed_matrix.status_code == 200
         heatmaps = detailed_matrix.json()["heatmaps"]
-        assert set(heatmaps) == {"model_benchmark", "model_capability", "model_language", "model_difficulty", "prompt_benchmark", "model_modality"}
-        reasoning_cell = next(cell for cell in heatmaps["model_capability"] if cell["x_label"] == "model-a" and cell["y_key"] == "reasoning")
+        assert set(heatmaps) == {
+            "model_benchmark",
+            "model_capability",
+            "model_language",
+            "model_difficulty",
+            "prompt_benchmark",
+            "model_modality",
+        }
+        reasoning_cell = next(
+            cell
+            for cell in heatmaps["model_capability"]
+            if cell["x_label"] == "model-a" and cell["y_key"] == "reasoning"
+        )
         assert reasoning_cell["sample_count"] == 1
         assert reasoning_cell["confidence_interval"]["method"] == "normal_95"
         assert reasoning_cell["baseline_score"] == 1.0
@@ -157,9 +183,7 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert {item["run_id"] for item in leaderboard.json()["items"]} == {run_a, run_b}
         assert all(item["display_name"] for item in leaderboard.json()["items"])
         model_a_endpoint = next(
-            item["model_endpoint_id"]
-            for item in leaderboard.json()["items"]
-            if item["model_name"] == "model-a"
+            item["model_endpoint_id"] for item in leaderboard.json()["items"] if item["model_name"] == "model-a"
         )
         filtered_leaderboard = client.get(
             "/api/v1/leaderboard",
@@ -193,7 +217,10 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
         assert named_metrics["f1_macro"]["run_a"]["availability_reason"]
         assert any(group["unit"] == "milliseconds" for group in compared["metric_groups"])
         assert {item["outcome"] for item in compared["outcome_distribution"]} == {
-            "both_correct", "run_a_only_correct", "run_b_only_correct", "both_incorrect",
+            "both_correct",
+            "run_a_only_correct",
+            "run_b_only_correct",
+            "both_incorrect",
         }
         assert sum(item["count"] for item in compared["outcome_distribution"]) == 2
         same_run = client.get("/api/v1/comparisons", params={"run_a": run_a, "run_b": run_a})
@@ -206,9 +233,7 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
                 "model_name": "model-c",
             },
         ).json()
-        assert client.post(
-            f"/api/v1/model-endpoints/{other_endpoint['id']}/connection-test"
-        ).status_code == 200
+        assert client.post(f"/api/v1/model-endpoints/{other_endpoint['id']}/connection-test").status_code == 200
         incompatible_run = client.post(
             "/api/v1/evaluation-runs",
             json={
@@ -227,14 +252,24 @@ def test_run_summary_comparison_and_report_exports(tmp_path: Path) -> None:
 
         multi_report = client.post(
             "/api/v1/reports",
-            json={"run_id": run_a, "format": "json", "report_type": "multi_model_comparison", "related_run_ids": [run_b]},
+            json={
+                "run_id": run_a,
+                "format": "json",
+                "report_type": "multi_model_comparison",
+                "related_run_ids": [run_b],
+            },
         )
         assert multi_report.status_code == 200
         assert multi_report.json()["report_type"] == "multi_model_comparison"
         multi_payload = client.get(f"/api/v1/reports/{multi_report.json()['id']}/download").json()
         assert multi_payload["related_runs"][0]["run_id"] == run_b
         assert multi_payload["related_runs"][0]["summary"]["samples"]["accuracy"] == 0.0
-        assert client.post("/api/v1/reports", json={"run_id": run_a, "format": "json", "report_type": "regression"}).status_code == 409
+        assert (
+            client.post(
+                "/api/v1/reports", json={"run_id": run_a, "format": "json", "report_type": "regression"}
+            ).status_code
+            == 409
+        )
 
         cost_report = client.post("/api/v1/reports", json={"run_id": run_a, "format": "json", "report_type": "cost"})
         assert cost_report.status_code == 200

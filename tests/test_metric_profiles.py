@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.metric_profiles import (
+from app.modules.benchmarks.metrics import (
     METRIC_PROFILE_VERSION,
     build_execution_metric_evidence,
     compute_profile_metrics,
@@ -45,7 +45,9 @@ def test_metric_registry_is_versioned_and_declares_evidence_and_units() -> None:
 def test_llm_judge_metric_uses_only_successful_judge_evidence() -> None:
     attempts = [
         _attempt("first", "reference", metric_evidence={"llm_judge": {"status": "succeeded", "score": 0.75}}),
-        _attempt("second", "reference", metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}}),
+        _attempt(
+            "second", "reference", metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}}
+        ),
         _attempt("third", "reference", metric_evidence={"llm_judge": {"status": "succeeded", "score": 0.25}}),
     ]
 
@@ -53,7 +55,13 @@ def test_llm_judge_metric_uses_only_successful_judge_evidence() -> None:
     disabled = _by_name(compute_profile_metrics(attempts, evaluation_type="generation"))
     unavailable = _by_name(
         compute_profile_metrics(
-            [_attempt("only", "reference", metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}})],
+            [
+                _attempt(
+                    "only",
+                    "reference",
+                    metric_evidence={"llm_judge": {"status": "failed", "error_message": "bad JSON"}},
+                )
+            ],
             evaluation_type="generation",
             include_llm_judge=True,
         )
@@ -109,8 +117,14 @@ def test_pass_at_one_requires_recorded_trusted_outcomes() -> None:
     available = _by_name(
         compute_profile_metrics(
             [
-                _attempt("code-a", "", metric_evidence={"trusted_test_result": {"passed": True, "source": "trusted:sandbox"}}),
-                _attempt("code-b", "", metric_evidence={"trusted_test_result": {"passed": False, "source": "trusted:sandbox"}}),
+                _attempt(
+                    "code-a", "", metric_evidence={"trusted_test_result": {"passed": True, "source": "trusted:sandbox"}}
+                ),
+                _attempt(
+                    "code-b",
+                    "",
+                    metric_evidence={"trusted_test_result": {"passed": False, "source": "trusted:sandbox"}},
+                ),
             ],
             evaluation_type="code",
         )
@@ -132,7 +146,9 @@ def test_perplexity_requires_complete_finite_token_log_probabilities() -> None:
     available = _by_name(
         compute_profile_metrics(
             [
-                _attempt("a", "", metric_evidence={"token_logprobs": [-log(2), -log(2)], "token_logprobs_complete": True}),
+                _attempt(
+                    "a", "", metric_evidence={"token_logprobs": [-log(2), -log(2)], "token_logprobs_complete": True}
+                ),
                 _attempt("b", "", metric_evidence={"token_logprobs": [-log(2)], "token_logprobs_complete": True}),
             ],
             evaluation_type="language_modeling",

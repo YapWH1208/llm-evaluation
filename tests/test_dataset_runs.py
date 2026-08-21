@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
+from app.core.errors import ConflictError
 from app.main import create_app
-from app.services.connection_tester import ConnectionTestResult
-from app.services.model_executor import SampleExecutionResult
-from app.services.run_names import format_run_display_name
+from app.infrastructure.providers.contracts import ConnectionTestResult, SampleExecutionResult
+from app.modules.evaluations.names import format_run_display_name
 from cryptography.fernet import Fernet
 
 
@@ -83,7 +83,11 @@ class _FrozenJudgeExecutor(_DatasetAnswerExecutor):
 def _create_available_endpoint(client: TestClient) -> str:
     created = client.post(
         "/api/v1/model-endpoints",
-        json={"base_url": "https://models.example.test/v1", "api_key": "test-secret-key", "model_name": "example-model"},
+        json={
+            "base_url": "https://models.example.test/v1",
+            "api_key": "test-secret-key",
+            "model_name": "example-model",
+        },
     )
     assert created.status_code == 201
     endpoint_id = created.json()["id"]
@@ -118,14 +122,22 @@ def _prompt_package(
 ) -> str:
     created = client.post(
         "/api/v1/prompt-packages",
-        json={"name": "record-template", "version": "1.0.0", "prompt_type": "user_custom", "user_template": "Q: {{question}}\nA:", "system_message": "Answer only the number.", "few_shot_examples": [{"role": "assistant", "content": "4"}], "scoring_rule": scoring_rule or {"type": "exact_match"}},
+        json={
+            "name": "record-template",
+            "version": "1.0.0",
+            "prompt_type": "user_custom",
+            "user_template": "Q: {{question}}\nA:",
+            "system_message": "Answer only the number.",
+            "few_shot_examples": [{"role": "assistant", "content": "4"}],
+            "scoring_rule": scoring_rule or {"type": "exact_match"},
+        },
     )
     assert created.status_code == 201
     return created.json()["id"]
 
 
 def test_dataset_run_service_manifest_identity() -> None:
-    from app.services.dataset_runs import (
+    from app.modules.evaluations.dataset_runs import (
         DATASET_RUN_BENCHMARK_ID,
         DATASET_RUN_BENCHMARK_VERSION,
         DATASET_RUN_DEFAULT_SAMPLE_LIMIT,
@@ -142,16 +154,19 @@ def test_dataset_run_service_manifest_identity() -> None:
 def test_effective_dataset_scoring_rule_uses_requested_package_default_precedence() -> None:
     from types import SimpleNamespace
 
-    from app.services import dataset_runs
+    from app.modules.evaluations import dataset_runs
 
     package_rule = {"type": "regex_match", "pattern": "BLUE"}
     requested_rule = {"type": "token_f1"}
 
     assert dataset_runs.effective_dataset_scoring_rule(None, None) == {"type": "exact_match"}
-    assert dataset_runs.effective_dataset_scoring_rule(
-        None,
-        SimpleNamespace(scoring_rule=package_rule),
-    ) == package_rule
+    assert (
+        dataset_runs.effective_dataset_scoring_rule(
+            None,
+            SimpleNamespace(scoring_rule=package_rule),
+        )
+        == package_rule
+    )
     effective = dataset_runs.effective_dataset_scoring_rule(
         requested_rule,
         SimpleNamespace(scoring_rule=package_rule),
@@ -159,7 +174,7 @@ def test_effective_dataset_scoring_rule_uses_requested_package_default_precedenc
     requested_rule["type"] = "bleu"
     assert effective == {"type": "token_f1"}
 
-    with pytest.raises(dataset_runs.DatasetRunError, match="Scoring rule is invalid:"):
+    with pytest.raises(ConflictError, match="Scoring rule is invalid:"):
         dataset_runs.effective_dataset_scoring_rule({"type": "unsupported"}, None)
 
 
@@ -306,20 +321,30 @@ def test_dataset_run_scoring_rule_precedence_validation_and_snapshots(tmp_path: 
 
         run_count = len(client.get("/api/v1/evaluation-runs").json())
         invalid_rule = {**base_payload, "scoring_rule": {"type": "regex_match"}}
-        assert client.post(
-            "/api/v1/evaluation-runs/dataset/preflight",
-            json=invalid_rule,
-        ).status_code == 422
-        assert client.post(
-            "/api/v1/evaluation-runs/dataset",
-            json=invalid_rule,
-        ).status_code == 422
+        assert (
+            client.post(
+                "/api/v1/evaluation-runs/dataset/preflight",
+                json=invalid_rule,
+            ).status_code
+            == 422
+        )
+        assert (
+            client.post(
+                "/api/v1/evaluation-runs/dataset",
+                json=invalid_rule,
+            ).status_code
+            == 422
+        )
         assert len(client.get("/api/v1/evaluation-runs").json()) == run_count
 
 
 def test_dataset_run_end_to_end(tmp_path: Path) -> None:
     app = create_app(
-        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
         connection_tester=_SuccessfulTester(),
         model_executor=_DatasetAnswerExecutor(),
     )
@@ -368,7 +393,9 @@ def test_dataset_run_end_to_end(tmp_path: Path) -> None:
         attempts = client.get(f"/api/v1/evaluation-runs/{run['id']}/attempts").json()
         assert len(attempts) == 2
         message_lists = [attempt["input_snapshot"]["messages"] for attempt in attempts]
-        assert all(messages[0] == {"role": "system", "content": "Answer only the number."} for messages in message_lists)
+        assert all(
+            messages[0] == {"role": "system", "content": "Answer only the number."} for messages in message_lists
+        )
         assert all(messages[1] == {"role": "assistant", "content": "4"} for messages in message_lists)
         contents = {messages[2]["content"] for messages in message_lists}
         assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
@@ -400,18 +427,21 @@ def test_dataset_run_automatically_records_llm_judge_evidence(
     )
     with TestClient(app) as client:
         dataset = _register_ready_dataset(client)
-        assert client.put(
-            f"/api/v1/datasets/{dataset['id']}",
-            json={
-                "dataset_id": "demo",
-                "version": "1",
-                "input_field": "question",
-                "reference_field": "answer",
-                "capabilities": ["classification"],
-                "languages": ["en"],
-                "evaluation_type": "classification",
-            },
-        ).status_code == 200
+        assert (
+            client.put(
+                f"/api/v1/datasets/{dataset['id']}",
+                json={
+                    "dataset_id": "demo",
+                    "version": "1",
+                    "input_field": "question",
+                    "reference_field": "answer",
+                    "capabilities": ["classification"],
+                    "languages": ["en"],
+                    "evaluation_type": "classification",
+                },
+            ).status_code
+            == 200
+        )
         target_id = _create_available_endpoint(client)
         judge = client.post(
             "/api/v1/model-endpoints",
@@ -467,9 +497,7 @@ def test_dataset_run_automatically_records_llm_judge_evidence(
         assert judge_metric["metric_value"] == (0.75 if judge_succeeds else None)
         assert judge_metric["sample_count"] == (2 if judge_succeeds else 0)
         assert judge_metric["confidence_interval"] == (
-            {"method": "normal_95", "lower": 0.75, "upper": 0.75}
-            if judge_succeeds
-            else None
+            {"method": "normal_95", "lower": 0.75, "upper": 0.75} if judge_succeeds else None
         )
         if not judge_succeeds:
             assert "No successful" in judge_metric["availability_reason"]
@@ -477,16 +505,19 @@ def test_dataset_run_automatically_records_llm_judge_evidence(
         assert leaderboard.status_code == 200
         assert leaderboard.json()["total"] == (1 if judge_succeeds else 0)
 
-        assessments = [
-            client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()
-            for attempt in attempts
-        ]
+        assessments = [client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json() for attempt in attempts]
         assert all(len(items) == 1 for items in assessments)
         assert {items[0]["status"] for items in assessments} == {expected_status}
         if judge_succeeds:
-            assert all(items[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"} for items in assessments)
+            assert all(
+                items[0]["rubric"] == {"source": "llm_judge_metric", "reference_field": "answer"}
+                for items in assessments
+            )
             assert {items[0]["score"] for items in assessments} == {0.75}
-            assert [item["messages"][0]["content"] for item in executor.judge_inputs] == [system_message, system_message]
+            assert [item["messages"][0]["content"] for item in executor.judge_inputs] == [
+                system_message,
+                system_message,
+            ]
             judge_payloads = [json.loads(item["messages"][1]["content"]) for item in executor.judge_inputs]
             assert {payload["reference"]["answer"] for payload in judge_payloads} == {"4", "6"}
 
@@ -504,18 +535,21 @@ def test_dataset_run_judges_with_the_frozen_endpoint_configuration_and_records_j
     )
     with TestClient(app) as client:
         dataset = _register_ready_dataset(client)
-        assert client.put(
-            f"/api/v1/datasets/{dataset['id']}",
-            json={
-                "dataset_id": "demo",
-                "version": "1",
-                "input_field": "question",
-                "reference_field": "answer",
-                "capabilities": ["classification"],
-                "languages": ["en"],
-                "evaluation_type": "classification",
-            },
-        ).status_code == 200
+        assert (
+            client.put(
+                f"/api/v1/datasets/{dataset['id']}",
+                json={
+                    "dataset_id": "demo",
+                    "version": "1",
+                    "input_field": "question",
+                    "reference_field": "answer",
+                    "capabilities": ["classification"],
+                    "languages": ["en"],
+                    "evaluation_type": "classification",
+                },
+            ).status_code
+            == 200
+        )
         target_id = _create_available_endpoint(client)
         judge = client.post(
             "/api/v1/model-endpoints",
@@ -565,8 +599,7 @@ def test_dataset_run_judges_with_the_frozen_endpoint_configuration_and_records_j
         assert executor.judge_calls == [("https://judge.example.test/v1", "judge-model", 60, "judge-secret")] * 2
         attempts = client.get(f"/api/v1/evaluation-runs/{run.json()['id']}/attempts").json()
         assessments = [
-            client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0]
-            for attempt in attempts
+            client.get(f"/api/v1/judge-assessments/sample/{attempt['id']}").json()[0] for attempt in attempts
         ]
         assert len(assessments) == 2
         assert {item["status"] for item in assessments} == {"succeeded"}
@@ -576,9 +609,9 @@ def test_dataset_run_judges_with_the_frozen_endpoint_configuration_and_records_j
 
 
 def test_effective_dataset_scoring_rule_rejects_overlong_judge_system_messages() -> None:
-    from app.services import dataset_runs
+    from app.modules.evaluations import dataset_runs
 
-    with pytest.raises(dataset_runs.DatasetRunError, match="Scoring rule is invalid:"):
+    with pytest.raises(ConflictError, match="Scoring rule is invalid:"):
         dataset_runs.effective_dataset_scoring_rule(
             {"type": "llm_judge", "judge_endpoint_id": "endpoint-x", "system_message": "a" * 12_000},
             None,
@@ -587,7 +620,11 @@ def test_effective_dataset_scoring_rule_rejects_overlong_judge_system_messages()
 
 def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:
     app = create_app(
-        Settings.local_development(database_url=f"sqlite:///{tmp_path / 'db.sqlite'}", data_root=str(tmp_path / "data"), secret_encryption_key=Fernet.generate_key().decode("utf-8")),
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+            data_root=str(tmp_path / "data"),
+            secret_encryption_key=Fernet.generate_key().decode("utf-8"),
+        ),
         connection_tester=_SuccessfulTester(),
         model_executor=_DatasetAnswerExecutor(),
     )
@@ -596,25 +633,45 @@ def test_dataset_run_preflight_and_validation_errors(tmp_path: Path) -> None:
         endpoint_id = _create_available_endpoint(client)
         preflight = client.post(
             "/api/v1/evaluation-runs/dataset/preflight",
-            json={"model_endpoint_id": endpoint_id, "dataset_version_id": dataset["id"], "reference_field": "answer", "sample_limit": 10},
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
         )
         assert preflight.status_code == 200
         assert preflight.json()["can_queue"] is True
         assert preflight.json()["sample_count"] == 2
         bad_field = client.post(
             "/api/v1/evaluation-runs/dataset",
-            json={"model_endpoint_id": endpoint_id, "dataset_version_id": dataset["id"], "reference_field": "nope", "sample_limit": 10},
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "reference_field": "nope",
+                "sample_limit": 10,
+            },
         )
         assert bad_field.status_code == 409
         assert "reference field" in bad_field.json()["detail"]
         not_ready = client.post(
             "/api/v1/evaluation-runs/dataset",
-            json={"model_endpoint_id": endpoint_id, "dataset_version_id": "missing", "reference_field": "answer", "sample_limit": 10},
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": "missing",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
         )
         assert not_ready.status_code == 404
         missing_field = client.post(
             "/api/v1/evaluation-runs/dataset",
-            json={"model_endpoint_id": endpoint_id, "dataset_version_id": dataset["id"], "reference_field": "", "sample_limit": 10},
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "reference_field": "",
+                "sample_limit": 10,
+            },
         )
         assert missing_field.status_code == 422
 
@@ -636,59 +693,67 @@ def test_dataset_run_uses_selected_input_field_and_preserves_legacy_fallback(tmp
         dataset = _register_ready_dataset(client, content=content)
         endpoint_id = _create_available_endpoint(client)
 
-        selected = client.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "input_field": "question",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        selected = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert selected.status_code == 201
         selected_run = selected.json()
         assert selected_run["configuration_snapshot"]["input_field"] == "question"
         assert selected_run["configuration_snapshot"]["reference_field"] == "answer"
-        selected_attempts = client.get(
-            f"/api/v1/evaluation-runs/{selected_run['id']}/attempts"
-        ).json()
-        assert {
-            attempt["input_snapshot"]["messages"][-1]["content"]
-            for attempt in selected_attempts
-        } == {"chosen-one", "chosen-two"}
+        selected_attempts = client.get(f"/api/v1/evaluation-runs/{selected_run['id']}/attempts").json()
+        assert {attempt["input_snapshot"]["messages"][-1]["content"] for attempt in selected_attempts} == {
+            "chosen-one",
+            "chosen-two",
+        }
 
-        legacy = client.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        legacy = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert legacy.status_code == 201
         assert legacy.json()["configuration_snapshot"]["input_field"] is None
-        legacy_attempts = client.get(
-            f"/api/v1/evaluation-runs/{legacy.json()['id']}/attempts"
-        ).json()
-        assert {
-            attempt["input_snapshot"]["messages"][-1]["content"]
-            for attempt in legacy_attempts
-        } == {"wrong-one", "wrong-two"}
+        legacy_attempts = client.get(f"/api/v1/evaluation-runs/{legacy.json()['id']}/attempts").json()
+        assert {attempt["input_snapshot"]["messages"][-1]["content"] for attempt in legacy_attempts} == {
+            "wrong-one",
+            "wrong-two",
+        }
 
-        bad_input = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "input_field": "missing",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        bad_input = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "input_field": "missing",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert bad_input.status_code == 200
         assert bad_input.json()["can_queue"] is False
         assert any("input field 'missing'" in issue for issue in bad_input.json()["issues"])
 
-        blank_input = client.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "input_field": "",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        blank_input = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "input_field": "",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert blank_input.status_code == 422
 
 
@@ -707,14 +772,17 @@ def test_dataset_run_with_prompt_package_ignores_input_field(tmp_path: Path) -> 
         endpoint_id = _create_available_endpoint(client)
         package_id = _prompt_package(client)
 
-        created = client.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "prompt_package_id": package_id,
-            "input_field": "missing-field",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        created = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "prompt_package_id": package_id,
+                "input_field": "missing-field",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert created.status_code == 201
         snapshot = created.json()["configuration_snapshot"]
         assert snapshot["input_field"] is None
@@ -723,14 +791,17 @@ def test_dataset_run_with_prompt_package_ignores_input_field(tmp_path: Path) -> 
         contents = {attempt["input_snapshot"]["messages"][-1]["content"] for attempt in attempts}
         assert contents == {"Q: what is 2+2?\nA:", "Q: what is 3+3?\nA:"}
 
-        preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "prompt_package_id": package_id,
-            "input_field": "missing-field",
-            "reference_field": "answer",
-            "sample_limit": 10,
-        })
+        preflight = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "prompt_package_id": package_id,
+                "input_field": "missing-field",
+                "reference_field": "answer",
+                "sample_limit": 10,
+            },
+        )
         assert preflight.status_code == 200
         assert preflight.json()["can_queue"] is True
         assert not any("input field" in issue for issue in preflight.json()["issues"])
@@ -749,24 +820,30 @@ def test_dataset_run_rejects_identical_input_and_reference_fields(tmp_path: Path
         dataset = _register_ready_dataset(client)
         endpoint_id = _create_available_endpoint(client)
 
-        preflight = client.post("/api/v1/evaluation-runs/dataset/preflight", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "input_field": "question",
-            "reference_field": "question",
-            "sample_limit": 10,
-        })
+        preflight = client.post(
+            "/api/v1/evaluation-runs/dataset/preflight",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "question",
+                "sample_limit": 10,
+            },
+        )
         assert preflight.status_code == 200
         assert preflight.json()["can_queue"] is False
         assert any("different" in issue for issue in preflight.json()["issues"])
 
-        created = client.post("/api/v1/evaluation-runs/dataset", json={
-            "model_endpoint_id": endpoint_id,
-            "dataset_version_id": dataset["id"],
-            "input_field": "question",
-            "reference_field": "question",
-            "sample_limit": 10,
-        })
+        created = client.post(
+            "/api/v1/evaluation-runs/dataset",
+            json={
+                "model_endpoint_id": endpoint_id,
+                "dataset_version_id": dataset["id"],
+                "input_field": "question",
+                "reference_field": "question",
+                "sample_limit": 10,
+            },
+        )
         assert created.status_code == 409
         assert "different" in created.json()["detail"]
 
@@ -830,13 +907,8 @@ def test_dataset_run_inherits_dataset_defaults_without_overwriting_record_metada
             "reference_field": "answer",
         }
 
-        attempts = client.get(
-            f"/api/v1/evaluation-runs/{created.json()['id']}/attempts"
-        ).json()
-        by_prompt = {
-            attempt["input_snapshot"]["messages"][-1]["content"]: attempt
-            for attempt in attempts
-        }
+        attempts = client.get(f"/api/v1/evaluation-runs/{created.json()['id']}/attempts").json()
+        by_prompt = {attempt["input_snapshot"]["messages"][-1]["content"]: attempt for attempt in attempts}
         explicit = by_prompt["first"]
         inherited = by_prompt["second"]
         explicit_empty = by_prompt["third"]
@@ -854,7 +926,4 @@ def test_dataset_run_inherits_dataset_defaults_without_overwriting_record_metada
         assert explicit["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "generation"
         assert inherited["reference_snapshot"]["dataset_profile"]["evaluation_type"] == "classification"
         assert explicit_empty["reference_snapshot"]["dataset_profile"]["capabilities"] == []
-        assert all(
-            attempt["reference_snapshot"]["scoring"] == {"type": "exact_match"}
-            for attempt in attempts
-        )
+        assert all(attempt["reference_snapshot"]["scoring"] == {"type": "exact_match"} for attempt in attempts)

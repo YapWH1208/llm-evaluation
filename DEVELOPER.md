@@ -9,7 +9,7 @@ conventions. For product usage and evaluation workflows, see
 
 | Path | Purpose |
 | --- | --- |
-| `backend/` | FastAPI application, SQLAlchemy models, migrations, services, and benchmark plugins. |
+| `backend/` | FastAPI modular monolith, feature services/ports, persistence adapters, migrations, and benchmark plugins. |
 | `frontend/` | React 19 + TypeScript + Vite web application. |
 | `tests/` | Backend pytest suite. |
 | `docs/` | Deployment, evaluation workflow, and project planning documents. |
@@ -55,6 +55,7 @@ key at `data/.lle-secret-key` when `LLE_SECRET_ENCRYPTION_KEY` is not set.
 | Install backend dependencies | `python -m pip install -e ".[dev]"` |
 | Install backend + MongoDB support | `python -m pip install -e ".[dev,mongodb]"` |
 | Run backend tests | `python -m pytest -q` |
+| Lint and format-check backend | `python -m ruff check backend tests && python -m ruff format --check backend tests` |
 | Run one backend test file | `python -m pytest tests/test_datasets.py -q` |
 | Run the API locally | `uvicorn app.main:app --app-dir backend --reload` |
 | Inspect database migrations | `python -m app.cli database preview` |
@@ -63,6 +64,7 @@ key at `data/.lle-secret-key` when `LLE_SECRET_ENCRYPTION_KEY` is not set.
 | Install frontend dependencies | `cd frontend && npm ci` |
 | Start the frontend dev server | `cd frontend && npm run dev` |
 | Run frontend tests once | `cd frontend && npm test -- --run` |
+| Lint frontend | `cd frontend && npm run lint` |
 | Type-check and build the frontend | `cd frontend && npm run build` |
 | Start the full local stack with Docker | `docker compose up --build` |
 
@@ -82,17 +84,30 @@ provider limits.
 
 ## Architecture
 
-- The FastAPI app is created by `create_app()` in `backend/app/main.py`.
-- API routes live in `backend/app/api/*.py`.
-- Business logic lives in `backend/app/services/*.py`.
-- SQLAlchemy models live in `backend/app/db/models.py`; forward-only migrations
-  live in `backend/app/db/migrations.py`.
-- SQLite is the primary relational store. MongoDB is an optional document store
-  with parallel service modules prefixed `mongo_` (for example,
-  `mongo_datasets.py`). Feature changes usually need to keep both persistence
-  paths in sync.
-- Built-in benchmark plugins live in `backend/app/benchmarks/` and are registered
-  through `backend/app/services/benchmark_registry.py`.
+- The FastAPI app is composed by `create_app()` in `backend/app/main.py`. Bootstrap
+  selects SQLite or MongoDB once; feature code does not branch on the selected
+  backend.
+- Product capabilities are feature-oriented under `backend/app/modules/`:
+  `endpoints`, `datasets`, `benchmarks`, `evaluations`, `reports`, and `reviews`.
+  Each feature owns its API schemas, application service, lifecycle/policy code,
+  and repository ports. HTTP routers are thin adapters over those services.
+- Feature repository adapters implement the same SQLite/Mongo contracts. The
+  evaluation adapters live under `infrastructure/persistence/`; the smaller
+  feature adapters stay beside their owning modules. Repositories expose storage
+  operations only—lifecycle, preparation, judging, reporting, and analytics rules
+  remain in application services.
+- Mongo connection, schema, and generic document primitives remain in
+  `backend/app/db/mongo.py`; atomic queue admission, leases, fencing, and rate
+  windows live in `backend/app/infrastructure/persistence/mongo/queue.py`.
+- Provider protocol behavior has one registry and one adapter per protocol under
+  `backend/app/infrastructure/providers/`; shared outbound network safeguards are
+  in `backend/app/infrastructure/network/`.
+- The frontend keeps only HTTP transport and generic errors in
+  `frontend/src/shared/api/`. Each `frontend/src/features/*` module owns its API
+  operations, DTOs, state, effects, actions, and route composition. `App.tsx`
+  remains the shell entrypoint.
+- Built-in benchmark plugins live under `backend/app/benchmarks/`; benchmark and
+  prompt-package application behavior lives under `backend/app/modules/benchmarks/`.
 
 ## Backend conventions
 
@@ -117,14 +132,9 @@ provider limits.
 
 ## Testing and CI
 
-CI runs exactly:
-
-1. `python -m pytest -q` from the repository root.
-2. `npm ci`
-3. `npm test -- --run`
-4. `npm run build`
-
-from `frontend/`.
+CI runs Ruff lint, Ruff format-check, and `python -m pytest -q` from the
+repository root. From `frontend/` it runs `npm ci`, `npm run lint`,
+`npm test -- --run`, and `npm run build`.
 
 The pytest configuration sets `pythonpath=["backend"]` and
 `testpaths=["tests"]`, so backend tests can be run without setting

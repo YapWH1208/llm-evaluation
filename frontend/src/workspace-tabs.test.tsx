@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api, type Endpoint, type EvaluationRun } from "./api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi, type Endpoint } from "./features/endpoints/api";
+import { reportsApi } from "./features/reports/api";
+import { runsApi, type EvaluationRun } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 const endpoint: Endpoint = {
@@ -52,15 +57,15 @@ const run: EvaluationRun = {
 };
 
 function mockWorkspace({ runs = [] }: { runs?: EvaluationRun[] } = {}) {
-  vi.spyOn(api, "listEndpoints").mockResolvedValue([endpoint]);
-  vi.spyOn(api, "listRuns").mockResolvedValue(runs);
-  vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-  vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-  vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-  vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-  vi.spyOn(api, "listTasks").mockResolvedValue([]);
-  vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-  vi.spyOn(api, "leaderboard").mockResolvedValue({
+  vi.spyOn(endpointsApi, "list").mockResolvedValue([endpoint]);
+  vi.spyOn(runsApi, "list").mockResolvedValue(runs);
+  vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+  vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+  vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+  vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+  vi.spyOn(analyticsApi, "leaderboard").mockResolvedValue({
     items: runs.map((item) => ({
       run_id: item.id,
       display_name: item.display_name,
@@ -94,13 +99,13 @@ function mockWorkspace({ runs = [] }: { runs?: EvaluationRun[] } = {}) {
     sort: "default",
     direction: "desc",
   });
-  vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-  vi.spyOn(api, "datasetDiskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 0, root: "/data", total_bytes: 2000 });
-  vi.spyOn(api, "listAttempts").mockResolvedValue([]);
-  vi.spyOn(api, "getRunSummary").mockResolvedValue(null as never);
-  vi.spyOn(api, "listReports").mockResolvedValue([]);
-  vi.spyOn(api, "listRunLogs").mockResolvedValue([]);
-  vi.spyOn(api, "listRunMetrics").mockResolvedValue([]);
+  vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+  vi.spyOn(datasetsApi, "diskUsage").mockResolvedValue({ available_bytes: 1000, cache_bytes: 0, root: "/data", total_bytes: 2000 });
+  vi.spyOn(runsApi, "listAttempts").mockResolvedValue([]);
+  vi.spyOn(runsApi, "summary").mockResolvedValue(null as never);
+  vi.spyOn(reportsApi, "list").mockResolvedValue([]);
+  vi.spyOn(runsApi, "logs").mockResolvedValue([]);
+  vi.spyOn(runsApi, "metrics").mockResolvedValue([]);
 }
 
 afterEach(() => {
@@ -156,7 +161,7 @@ describe("workspace tab routing", () => {
     expect(within(inspector).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(within(inspector).getByRole("button", { name: "Clone" })).toBeVisible();
     expect(within(inspector).getByRole("button", { name: "Rerun benchmark" })).toBeVisible();
-    expect(api.listRunMetrics).toHaveBeenCalledWith(run.id);
+    expect(runsApi.metrics).toHaveBeenCalledWith(run.id);
   });
 
   it("opens a leaderboard row at a restorable run-detail URL", async () => {

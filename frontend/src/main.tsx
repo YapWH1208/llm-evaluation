@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App, { SharedReportPage } from "./App";
+import App from "./App";
+import { SharedReportPage } from "./components/pages/SystemPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 import "./styles.css";
 import "./workspace-theme.css";

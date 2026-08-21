@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { api } from "./api";
+import { analyticsApi } from "./features/analytics/api";
+import { benchmarksApi } from "./features/benchmarks/api";
+import { datasetsApi } from "./features/datasets/api";
+import { endpointsApi } from "./features/endpoints/api";
+import { runsApi } from "./features/runs/api";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(() => {
@@ -15,16 +19,16 @@ afterEach(() => {
 describe("dataset registration", () => {
   it("submits the administrator-configured credential binding with the dataset source", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    const createDataset = vi.spyOn(datasetsApi, "create").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Datasets" }));
@@ -54,16 +58,16 @@ describe("dataset registration", () => {
 
   it("submits capability, language, and evaluation metadata from multi-select controls", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    const createDataset = vi.spyOn(datasetsApi, "create").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Datasets" }));
@@ -90,16 +94,16 @@ describe("dataset registration", () => {
 
   it("submits optional input and reference field defaults", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "listEndpoints").mockResolvedValue([]);
-    vi.spyOn(api, "listRuns").mockResolvedValue([]);
-    vi.spyOn(api, "dashboard").mockResolvedValue(null as never);
-    vi.spyOn(api, "listPromptPackages").mockResolvedValue([]);
-    vi.spyOn(api, "listDatasets").mockResolvedValue([]);
-    vi.spyOn(api, "listBenchmarks").mockResolvedValue([]);
-    vi.spyOn(api, "listTasks").mockResolvedValue([]);
-    vi.spyOn(api, "analyticsMatrix").mockResolvedValue(null as never);
-    vi.spyOn(api, "systemHealth").mockResolvedValue(null as never);
-    const createDataset = vi.spyOn(api, "createDataset").mockResolvedValue({} as never);
+    vi.spyOn(endpointsApi, "list").mockResolvedValue([]);
+    vi.spyOn(runsApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "dashboard").mockResolvedValue(null as never);
+    vi.spyOn(benchmarksApi, "listPrompts").mockResolvedValue([]);
+    vi.spyOn(datasetsApi, "list").mockResolvedValue([]);
+    vi.spyOn(benchmarksApi, "list").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "listTasks").mockResolvedValue([]);
+    vi.spyOn(analyticsApi, "matrix").mockResolvedValue(null as never);
+    vi.spyOn(analyticsApi, "systemHealth").mockResolvedValue(null as never);
+    const createDataset = vi.spyOn(datasetsApi, "create").mockResolvedValue({} as never);
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(screen.getByRole("link", { name: "Datasets" }));
