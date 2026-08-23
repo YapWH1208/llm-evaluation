@@ -9,6 +9,17 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.db.models import ModelEndpoint
 from app.infrastructure.providers.common import allowed_defaults, nonnegative_int
+from app.infrastructure.providers.contracts import SandboxToolCall
+
+
+SANDBOX_ECHO_TOOL_NAME = "sandbox_echo"
+SANDBOX_ECHO_TOOL_DESCRIPTION = "Return the supplied message without executing any external action."
+SANDBOX_ECHO_TOOL_PARAMETERS: dict[str, object] = {
+    "type": "object",
+    "properties": {"message": {"type": "string"}},
+    "required": ["message"],
+    "additionalProperties": False,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +42,7 @@ class ProviderAdapter(ABC):
     max_output_token_aliases: tuple[tuple[str, ...], ...] = ()
     reasoning_effort_path: tuple[str, ...] | None = None
     reasoning_effort_aliases: tuple[tuple[str, ...], ...] = ()
+    sandbox_tool_calling_supported = False
 
     def endpoint_url(self, endpoint: ModelEndpoint) -> str:
         suffix = self.path_suffix(endpoint)
@@ -65,6 +77,21 @@ class ProviderAdapter(ABC):
         self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
     ) -> ProviderRequest:
         return ProviderRequest("POST", self.endpoint_url(endpoint), self.build_request(endpoint, messages, options))
+
+    def build_sandbox_tool_request_with_options(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> ProviderRequest:
+        return ProviderRequest(
+            "POST", self.endpoint_url(endpoint), self.build_sandbox_tool_request(endpoint, messages, options)
+        )
+
+    def build_sandbox_tool_request(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> dict[str, Any]:
+        raise ValueError(f"Tool-calling sandbox tests are not supported for {self.profile}.")
+
+    def extract_sandbox_tool_calls(self, payload: dict[str, Any]) -> tuple[SandboxToolCall, ...]:
+        raise ValueError(f"Tool-calling sandbox tests are not supported for {self.profile}.")
 
     def supports(self, capability_key: str) -> bool:
         return capability_key in self.capabilities

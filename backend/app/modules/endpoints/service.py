@@ -10,7 +10,7 @@ from app.core.errors import NotFoundError, ValidationError
 from app.core.secrets import SecretCipher, mask_secret
 from app.modules.endpoints.models import CapabilityDeclaration, CapabilityDetection, EndpointStatus
 from app.infrastructure.providers.capabilities import CapabilityDetector
-from app.infrastructure.providers.contracts import CapabilityDetectionResult
+from app.infrastructure.providers.contracts import CapabilityDetectionResult, ModelSandboxRunner, SandboxExecutionResult
 from app.infrastructure.providers.connection import build_connection_test_request
 from app.infrastructure.providers.common import effective_request_options
 from app.infrastructure.providers.registry import ProviderRegistry
@@ -154,6 +154,28 @@ class EndpointService:
         except ValueError as error:
             raise ValidationError(str(error)) from error
         return adapter.profile, request.body
+
+    def sandbox(
+        self,
+        endpoint_id: str,
+        cipher: SecretCipher,
+        runner: ModelSandboxRunner,
+        *,
+        mode: str,
+        user_prompt: str,
+        system_prompt: str | None,
+    ) -> SandboxExecutionResult:
+        """Run one provider request without storing its result or changing endpoint state."""
+
+        endpoint = self.get(endpoint_id)
+        api_key = cipher.decrypt(str(_value(endpoint, "encrypted_api_key")))
+        return runner.execute(
+            _endpoint_proxy(endpoint),
+            api_key,
+            mode=mode,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+        )
 
     def list_capabilities(self, endpoint_id: str) -> list[Any]:
         self.get(endpoint_id)

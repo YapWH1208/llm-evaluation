@@ -31,6 +31,43 @@ class ModelExecutor(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class SandboxToolCall:
+    """A parsed, non-executed function call emitted by a provider."""
+
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxExecutionResult:
+    """Secret-safe evidence from one ephemeral model sandbox request."""
+
+    success: bool
+    protocol_profile: str
+    request_snapshot: dict[str, Any]
+    final_text: str | None
+    tool_calls: tuple[SandboxToolCall, ...]
+    error_type: str | None = None
+    error_message: str | None = None
+    latency_ms: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    provider_status_code: int | None = None
+
+
+class ModelSandboxRunner(Protocol):
+    def execute(
+        self,
+        endpoint: ModelEndpoint,
+        api_key: str,
+        *,
+        mode: str,
+        user_prompt: str,
+        system_prompt: str | None,
+    ) -> SandboxExecutionResult: ...
+
+
+@dataclass(frozen=True, slots=True)
 class ConnectionTestResult:
     success: bool
     message: str

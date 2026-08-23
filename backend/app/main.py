@@ -37,8 +37,9 @@ from app.db.database import Database
 from app.db.mongo import MongoDocumentStore
 from app.infrastructure.providers.capabilities import CapabilityDetector, ProviderCapabilityDetector
 from app.infrastructure.providers.connection import ProviderConnectionTester
-from app.infrastructure.providers.contracts import ModelExecutor
+from app.infrastructure.providers.contracts import ModelExecutor, ModelSandboxRunner
 from app.infrastructure.providers.executor import ProviderExecutor
+from app.infrastructure.providers.sandbox import ProviderSandboxRunner
 from app.modules.endpoints.repositories import MongoEndpointRepository, SqliteEndpointRepository
 from app.modules.endpoints.service import EndpointService
 from app.modules.datasets.repositories import MongoDatasetRepository, SqliteDatasetRepository
@@ -91,6 +92,7 @@ def create_app(
     settings: Settings | None = None,
     connection_tester: ProviderConnectionTester | None = None,
     model_executor: ModelExecutor | None = None,
+    sandbox_runner: ModelSandboxRunner | None = None,
     capability_detector: CapabilityDetector | None = None,
     document_store: MongoDocumentStore | None = None,
 ) -> FastAPI:
@@ -179,6 +181,9 @@ def create_app(
         max_response_bytes=settings.provider_response_max_bytes
     )
     app.state.model_executor = model_executor or ProviderExecutor(
+        max_response_bytes=settings.provider_response_max_bytes
+    )
+    app.state.sandbox_runner = sandbox_runner or ProviderSandboxRunner(
         max_response_bytes=settings.provider_response_max_bytes
     )
     app.state.capability_detector = capability_detector or ProviderCapabilityDetector(

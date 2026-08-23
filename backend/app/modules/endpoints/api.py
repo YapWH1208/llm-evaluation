@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 from app.core.secrets import SecretCipher, SecretConfigurationError
 from app.infrastructure.providers.common import PROTECTED_REQUEST_FIELDS, validate_custom_headers
 from app.infrastructure.providers.connection import ProviderConnectionTester
-from app.infrastructure.providers.contracts import ConnectionTestResult
+from app.infrastructure.providers.contracts import ConnectionTestResult, ModelSandboxRunner
 from app.infrastructure.network.outbound import OutboundNetworkError, validate_outbound_url
 from app.modules.endpoints.service import EndpointService
 
@@ -201,6 +201,10 @@ def get_connection_tester(request: Request) -> ProviderConnectionTester:
     return request.app.state.connection_tester
 
 
+def get_sandbox_runner(request: Request) -> ModelSandboxRunner:
+    return request.app.state.sandbox_runner
+
+
 def get_endpoint_service(request: Request) -> EndpointService:
     return request.app.state.endpoint_service
 
@@ -208,6 +212,7 @@ def get_endpoint_service(request: Request) -> EndpointService:
 EndpointServiceDependency = Annotated[EndpointService, Depends(get_endpoint_service)]
 CipherDependency = Annotated[SecretCipher, Depends(get_cipher)]
 ConnectionTesterDependency = Annotated[ProviderConnectionTester, Depends(get_connection_tester)]
+SandboxRunnerDependency = Annotated[ModelSandboxRunner, Depends(get_sandbox_runner)]
 
 
 @router.post("", response_model=ModelEndpointResponse, status_code=status.HTTP_201_CREATED)
@@ -259,6 +264,42 @@ class RequestPreviewResponse(BaseModel):
     protected_fields: list[str]
 
 
+class SandboxRequest(BaseModel):
+    mode: Literal["text", "tool"]
+    user_prompt: Annotated[str, Field(default="", max_length=12_000)] = ""
+    system_prompt: Annotated[str | None, Field(default=None, max_length=12_000)] = None
+
+    @model_validator(mode="after")
+    def validate_text_prompt(self) -> "SandboxRequest":
+        if self.mode == "text" and not self.user_prompt.strip():
+            raise ValueError("user_prompt is required for text sandbox tests")
+        return self
+
+
+class SandboxToolCallResponse(BaseModel):
+    name: str
+    arguments: dict[str, Any]
+
+
+class SandboxUsageResponse(BaseModel):
+    input_tokens: int | None
+    output_tokens: int | None
+
+
+class SandboxResponse(BaseModel):
+    success: bool
+    mode: Literal["text", "tool"]
+    protocol_profile: str
+    request: dict[str, Any]
+    final_text: str | None
+    tool_calls: list[SandboxToolCallResponse]
+    latency_ms: float | None
+    usage: SandboxUsageResponse
+    provider_status_code: int | None
+    error_type: str | None
+    error_message: str | None
+
+
 @router.post("/{endpoint_id}/connection-test", response_model=ConnectionTestResponse)
 def test_model_endpoint_connection(
     endpoint_id: str,
@@ -302,6 +343,37 @@ def preview_model_request(
     profile, request_body = service.preview_request(endpoint_id, payload.messages)
     return RequestPreviewResponse(
         protocol_profile=profile, request_body=request_body, protected_fields=sorted(PROTECTED_REQUEST_FIELDS)
+    )
+
+
+@router.post("/{endpoint_id}/sandbox", response_model=SandboxResponse)
+def sandbox_model_endpoint(
+    endpoint_id: str,
+    payload: SandboxRequest,
+    service: EndpointServiceDependency,
+    cipher: CipherDependency,
+    sandbox_runner: SandboxRunnerDependency,
+) -> SandboxResponse:
+    result = service.sandbox(
+        endpoint_id,
+        cipher,
+        sandbox_runner,
+        mode=payload.mode,
+        user_prompt=payload.user_prompt,
+        system_prompt=payload.system_prompt,
+    )
+    return SandboxResponse(
+        success=result.success,
+        mode=payload.mode,
+        protocol_profile=result.protocol_profile,
+        request=result.request_snapshot,
+        final_text=result.final_text,
+        tool_calls=[SandboxToolCallResponse(name=call.name, arguments=call.arguments) for call in result.tool_calls],
+        latency_ms=result.latency_ms,
+        usage=SandboxUsageResponse(input_tokens=result.input_tokens, output_tokens=result.output_tokens),
+        provider_status_code=result.provider_status_code,
+        error_type=result.error_type,
+        error_message=result.error_message,
     )
 
 

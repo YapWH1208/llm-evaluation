@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.core.content import ContentValidationError, normalize_content_parts
 from app.db.models import ModelEndpoint
-from app.infrastructure.providers.adapters.base import ProviderAdapter
+from app.infrastructure.providers.adapters.base import (
+    SANDBOX_ECHO_TOOL_DESCRIPTION,
+    SANDBOX_ECHO_TOOL_NAME,
+    SANDBOX_ECHO_TOOL_PARAMETERS,
+    ProviderAdapter,
+)
 from app.infrastructure.providers.common import (
     source_as_data_or_remote_url,
     validate_base64,
     validate_remote_media_url,
 )
+from app.infrastructure.providers.contracts import SandboxToolCall
 
 
 class OpenAIResponsesAdapter(ProviderAdapter):
@@ -19,6 +26,7 @@ class OpenAIResponsesAdapter(ProviderAdapter):
     max_output_token_aliases = (("max_output_tokens",), ("max_tokens",), ("max_completion_tokens",))
     reasoning_effort_path = ("reasoning", "effort")
     reasoning_effort_aliases = (("reasoning", "effort"), ("reasoning_effort",))
+    sandbox_tool_calling_supported = True
     capabilities = frozenset(
         {
             "text_input",
@@ -33,6 +41,7 @@ class OpenAIResponsesAdapter(ProviderAdapter):
             "multiple_audio_files",
             "multiple_videos",
             "mixed_media_input",
+            "tool_calling",
         }
     )
 
@@ -76,6 +85,46 @@ class OpenAIResponsesAdapter(ProviderAdapter):
         if fragments:
             return "".join(fragments)
         raise ValueError("Responses API response did not contain output text.")
+
+    def build_sandbox_tool_request(
+        self, endpoint: ModelEndpoint, messages: list[object], options: dict[str, object]
+    ) -> dict[str, Any]:
+        return {
+            **self.build_request(endpoint, messages, options),
+            "tools": [
+                {
+                    "type": "function",
+                    "name": SANDBOX_ECHO_TOOL_NAME,
+                    "description": SANDBOX_ECHO_TOOL_DESCRIPTION,
+                    "parameters": SANDBOX_ECHO_TOOL_PARAMETERS,
+                    "strict": True,
+                }
+            ],
+            "tool_choice": {"type": "function", "name": SANDBOX_ECHO_TOOL_NAME},
+        }
+
+    def extract_sandbox_tool_calls(self, payload: dict[str, Any]) -> tuple[SandboxToolCall, ...]:
+        raw_output = payload.get("output")
+        if raw_output is None:
+            return ()
+        if not isinstance(raw_output, list):
+            raise ValueError("Responses API tool output was not a list.")
+        calls: list[SandboxToolCall] = []
+        for item in raw_output:
+            if not isinstance(item, dict) or item.get("type") != "function_call":
+                continue
+            name = item.get("name")
+            raw_arguments = item.get("arguments")
+            if not isinstance(name, str) or not isinstance(raw_arguments, str):
+                raise ValueError("Responses API tool call was missing a function name or JSON arguments.")
+            try:
+                arguments = json.loads(raw_arguments)
+            except json.JSONDecodeError as error:
+                raise ValueError("Responses API tool call arguments were not valid JSON.") from error
+            if not isinstance(arguments, dict):
+                raise ValueError("Responses API tool call arguments must be a JSON object.")
+            calls.append(SandboxToolCall(name, arguments))
+        return tuple(calls)
 
     def request_defaults(self) -> dict[str, object]:
         return {"max_output_tokens": 32, "store": False}
