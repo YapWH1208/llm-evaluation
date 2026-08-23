@@ -219,6 +219,89 @@ def test_model_endpoint_persists_safe_custom_headers_and_metadata(tmp_path: Path
         assert rejected.status_code == 422
 
 
+def test_model_endpoint_persists_and_validates_reasoning_defaults(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()
+        )
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "reasoning-model",
+                "reasoning_effort": "medium",
+                "context_length": 128000,
+                "max_output_tokens": 4096,
+            },
+        )
+        assert created.status_code == 201
+        endpoint = created.json()
+        assert endpoint["reasoning_effort"] == "medium"
+        assert endpoint["context_length"] == 128000
+        assert endpoint["max_output_tokens"] == 4096
+        assert client.get(f"/api/v1/model-endpoints/{endpoint['id']}").json()["reasoning_effort"] == "medium"
+
+        updated = client.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"reasoning_effort": "high", "max_output_tokens": 8192},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["reasoning_effort"] == "high"
+        assert updated.json()["context_length"] == 128000
+        assert updated.json()["max_output_tokens"] == 8192
+
+        cleared = client.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"reasoning_effort": None, "context_length": None, "max_output_tokens": None},
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["reasoning_effort"] is None
+        assert cleared.json()["context_length"] is None
+        assert cleared.json()["max_output_tokens"] is None
+
+        invalid_effort = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "reasoning-model",
+                "reasoning_effort": "xhigh",
+            },
+        )
+        assert invalid_effort.status_code == 422
+
+        invalid_create = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "reasoning-model",
+                "context_length": 4096,
+                "max_output_tokens": 4097,
+            },
+        )
+        assert invalid_create.status_code == 422
+
+        valid = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "reasoning-model",
+                "context_length": 100,
+                "max_output_tokens": 50,
+            },
+        ).json()
+        invalid_maximum = client.patch(f"/api/v1/model-endpoints/{valid['id']}", json={"max_output_tokens": 101})
+        assert invalid_maximum.status_code == 422
+        invalid_context = client.patch(f"/api/v1/model-endpoints/{valid['id']}", json={"context_length": 49})
+        assert invalid_context.status_code == 422
+
+
 def test_model_endpoint_request_preview_excludes_secrets(tmp_path: Path) -> None:
     app = create_app(
         Settings.local_development(

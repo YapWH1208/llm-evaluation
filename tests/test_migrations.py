@@ -38,7 +38,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     legacy_engine.dispose()
 
     database = Database(Settings.local_development(database_url=f"sqlite:///{database_path}"))
-    assert [migration.version for migration in database.migration_preview()] == list(range(2, 28))
+    assert [migration.version for migration in database.migration_preview()] == list(range(2, 29))
     database.initialize()
     database.initialize()
 
@@ -70,7 +70,7 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
     report_columns = {column["name"] for column in inspect(database.engine).get_columns("reports")}
     assert "artifact_sha256" in report_columns
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 27
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 28
         applied = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 2))
         assert applied is not None
         assert applied.migration_id == "20260722_add_prompt_package_reference"
@@ -137,6 +137,9 @@ def test_initialize_upgrades_a_v1_sqlite_database_without_losing_its_run_table(t
         judge_usage_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 26))
         assert judge_usage_migration is not None
         assert judge_usage_migration.migration_id == "20260812_add_judge_usage_and_cost"
+        reasoning_defaults_migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 28))
+        assert reasoning_defaults_migration is not None
+        assert reasoning_defaults_migration.migration_id == "20260823_add_reasoning_endpoint_defaults"
     assert database.migration_preview() == ()
     database.dispose()
 
@@ -151,8 +154,30 @@ def test_initialize_backfills_a_missing_legacy_migration_ledger_before_upgrading
     validation = database.initialize()
     assert validation.is_valid
     with database.get_session() as session:
-        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 27
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 28
         applied_versions = list(session.scalars(select(SchemaMigration.version).order_by(SchemaMigration.version)))
     assert applied_versions == [migration.version for migration in MIGRATIONS]
     assert database.initialize("validate").is_valid
+    database.dispose()
+
+
+def test_initialize_upgrades_v27_endpoint_schema_with_reasoning_defaults(tmp_path: Path) -> None:
+    database = Database(Settings.local_development(database_url=f"sqlite:///{tmp_path / 'legacy-v27.db'}"))
+    database.initialize()
+    with database.engine.begin() as connection:
+        for column_name in ("reasoning_effort", "context_length", "max_output_tokens"):
+            connection.exec_driver_sql(f"ALTER TABLE model_endpoints DROP COLUMN {column_name}")
+        connection.exec_driver_sql("DELETE FROM schema_migrations WHERE version = 28")
+        connection.exec_driver_sql("DELETE FROM schema_versions WHERE version = 28")
+
+    assert [migration.version for migration in database.migration_preview()] == [28]
+    validation = database.initialize()
+    assert validation.is_valid
+    columns = {column["name"] for column in inspect(database.engine).get_columns("model_endpoints")}
+    assert {"reasoning_effort", "context_length", "max_output_tokens"} <= columns
+    with database.get_session() as session:
+        assert session.scalar(select(SchemaVersion.version).order_by(SchemaVersion.version.desc())) == 28
+        migration = session.scalar(select(SchemaMigration).where(SchemaMigration.version == 28))
+        assert migration is not None
+        assert migration.migration_id == "20260823_add_reasoning_endpoint_defaults"
     database.dispose()

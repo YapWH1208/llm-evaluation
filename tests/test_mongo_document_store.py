@@ -415,20 +415,36 @@ def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
     with TestClient(app) as api:
         created = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+                "reasoning_effort": "medium",
+                "context_length": 128000,
+                "max_output_tokens": 4096,
+            },
         )
         assert created.status_code == 201
         endpoint = created.json()
         assert endpoint["status"] == "unverified"
         assert "secret" not in str(endpoint)
+        assert endpoint["reasoning_effort"] == "medium"
+        assert endpoint["context_length"] == 128000
+        assert endpoint["max_output_tokens"] == 4096
 
         tested = api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test")
         assert tested.status_code == 200
         assert tested.json()["status"] == "available"
 
-        updated = api.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"max_concurrency": 3})
+        updated = api.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"max_concurrency": 3, "reasoning_effort": "low", "max_output_tokens": 2048},
+        )
         assert updated.status_code == 200
         assert updated.json()["max_concurrency"] == 3
+        assert updated.json()["reasoning_effort"] == "low"
+        assert updated.json()["context_length"] == 128000
+        assert updated.json()["max_output_tokens"] == 2048
         assert api.get("/api/v1/model-endpoints").json()[0]["id"] == endpoint["id"]
         assert api.delete(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 204
         assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 404

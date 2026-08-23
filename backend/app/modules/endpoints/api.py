@@ -24,6 +24,7 @@ ProtocolProfile = Literal[
     "ollama_chat",
     "custom_http_json",
 ]
+ReasoningEffort = Literal["low", "medium", "high"]
 
 
 def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
@@ -38,6 +39,11 @@ def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:
         raise ValueError("Loopback model endpoints are allowed only for the local Ollama adapter.")
 
 
+def _validate_output_token_limit(context_length: int | None, max_output_tokens: int | None) -> None:
+    if context_length is not None and max_output_tokens is not None and max_output_tokens > context_length:
+        raise ValueError("Maximum output tokens must not exceed context length.")
+
+
 class EndpointBase(BaseModel):
     display_name: Annotated[str | None, Field(max_length=200)] = None
     base_url: Annotated[str, Field(min_length=1, max_length=2048)]
@@ -45,6 +51,9 @@ class EndpointBase(BaseModel):
     protocol_profile: ProtocolProfile = "openai_chat_completions"
     custom_headers: dict[str, str] = Field(default_factory=dict)
     default_request_body: dict[str, Any] = Field(default_factory=dict)
+    reasoning_effort: ReasoningEffort | None = None
+    context_length: Annotated[int | None, Field(ge=1)] = None
+    max_output_tokens: Annotated[int | None, Field(ge=1)] = None
     timeout_seconds: Annotated[int, Field(ge=1, le=600)] = 60
     max_concurrency: Annotated[int, Field(ge=1, le=1000)] = 1
     api_key_max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
@@ -89,6 +98,7 @@ class EndpointBase(BaseModel):
     @model_validator(mode="after")
     def restrict_loopback_to_local_ollama(self) -> "EndpointBase":
         _validate_loopback_profile(self.base_url, self.protocol_profile)
+        _validate_output_token_limit(self.context_length, self.max_output_tokens)
         return self
 
 
@@ -103,6 +113,9 @@ class ModelEndpointUpdate(BaseModel):
     protocol_profile: ProtocolProfile | None = None
     custom_headers: dict[str, str] | None = None
     default_request_body: dict[str, Any] | None = None
+    reasoning_effort: ReasoningEffort | None = None
+    context_length: Annotated[int | None, Field(ge=1)] = None
+    max_output_tokens: Annotated[int | None, Field(ge=1)] = None
     timeout_seconds: Annotated[int | None, Field(ge=1, le=600)] = None
     max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
     api_key_max_concurrency: Annotated[int | None, Field(ge=1, le=1000)] = None
@@ -137,6 +150,11 @@ class ModelEndpointUpdate(BaseModel):
     def validate_custom_headers(cls, value: dict[str, str] | None) -> dict[str, str] | None:
         return None if value is None else validate_custom_headers(value)
 
+    @model_validator(mode="after")
+    def validate_output_token_limit(self) -> "ModelEndpointUpdate":
+        _validate_output_token_limit(self.context_length, self.max_output_tokens)
+        return self
+
 
 class ModelEndpointResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -149,6 +167,9 @@ class ModelEndpointResponse(BaseModel):
     api_key_mask: str
     custom_headers: dict[str, str]
     default_request_body: dict[str, Any]
+    reasoning_effort: ReasoningEffort | None
+    context_length: int | None
+    max_output_tokens: int | None
     timeout_seconds: int
     max_concurrency: int
     api_key_max_concurrency: int | None
