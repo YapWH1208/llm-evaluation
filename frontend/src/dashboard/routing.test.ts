@@ -54,6 +54,21 @@ describe("workspace routing", () => {
     });
   });
 
+  it("keeps a validated selected endpoint only on the Models sandbox tab", () => {
+    expect(workspacePath("models", "sandbox", { endpointId: "endpoint-1" })).toBe(
+      "/models?tab=sandbox&endpoint=endpoint-1"
+    );
+    expect(workspaceRoute("/models", "?tab=sandbox&endpoint=endpoint-1")).toEqual({
+      view: "models",
+      tab: "sandbox",
+      pathname: "/models",
+      search: "?tab=sandbox&endpoint=endpoint-1",
+      replace: false,
+    });
+    expect(workspaceRoute("/models", "?tab=model-inventory&endpoint=endpoint-1").search).toBe("");
+    expect(workspaceRoute("/models", "?tab=sandbox&endpoint=not/an-id").search).toBe("?tab=sandbox");
+  });
+
   it("canonicalizes the legacy combined run launcher to quick start", () => {
     expect(workspaceRoute("/runs", "?tab=launch-evaluation")).toEqual({
       view: "runs",

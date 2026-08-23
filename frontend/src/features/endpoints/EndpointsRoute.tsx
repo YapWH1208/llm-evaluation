@@ -2,22 +2,25 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import type { FeatureRouteProps } from "../../app/types";
 import { ModelsPage, type EndpointForm } from "../../components/pages/EndpointPages";
+import { ModelSandbox, type SandboxSubmission } from "./ModelSandbox";
+import { endpointWorkspaceCopy } from "../../i18n/catalog";
 import { translateStaticTemplate } from "../../i18n/operationalCopy";
 import { useTranslation } from "../../i18n/LocaleProvider";
-import { endpointsApi, type Capability, type Endpoint } from "./api";
+import { endpointsApi, type Capability, type Endpoint, type SandboxResult } from "./api";
 
 const initialEndpoint: EndpointForm = {
   base_url: "", api_key: "", model_name: "", protocol_profile: "openai_chat_completions", custom_headers: "{}", display_name: "",
   input_cost_per_million: "", output_cost_per_million: "", currency: "USD", tags: "", notes: "", default_request_body: "{}",
   timeout_seconds: "60", max_concurrency: "1", api_key_max_concurrency: "", requests_per_second: "", requests_per_minute: "",
   tokens_per_minute: "", input_tokens_per_minute: "", output_tokens_per_minute: "",
+  reasoning_effort: "", context_length: "", max_output_tokens: "",
 };
 
 function optionalNumber(value: string) {
   return value.trim() === "" ? null : Number(value);
 }
 
-export function EndpointsRoute({ activeTab, navigate, reportError, showNotice }: FeatureRouteProps<"models">) {
+export function EndpointsRoute({ activeTab, navigate, reportError, routeSearch, showNotice }: FeatureRouteProps<"models"> & { routeSearch: string }) {
   const { locale } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, Capability[]>>({});
@@ -26,10 +29,20 @@ export function EndpointsRoute({ activeTab, navigate, reportError, showNotice }:
   const [form, setForm] = useState(initialEndpoint);
   const [preferredEndpointId, setPreferredEndpointId] = useState<string | null>(null);
   const [testRequests, setTestRequests] = useState<Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>>({});
+  const [sandboxEndpointId, setSandboxEndpointId] = useState<string | null>(() => new URLSearchParams(routeSearch).get("endpoint"));
+  const [sandboxResult, setSandboxResult] = useState<SandboxResult | null>(null);
   const consumePreferredEndpoint = useCallback(() => setPreferredEndpointId(null), []);
 
   const refresh = useCallback(async () => setEndpoints(await endpointsApi.list()), []);
   useEffect(() => { void refresh().catch(reportError); }, [refresh, reportError]);
+  useEffect(() => {
+    if (endpoints.length === 0) return;
+    const requestedEndpointId = new URLSearchParams(routeSearch).get("endpoint");
+    const selectedId = requestedEndpointId && endpoints.some((endpoint) => endpoint.id === requestedEndpointId)
+      ? requestedEndpointId
+      : endpoints[0]?.id ?? null;
+    setSandboxEndpointId(selectedId);
+  }, [endpoints, routeSearch]);
 
   function editEndpoint(endpoint: Endpoint) {
     setEditingEndpointId(endpoint.id);
@@ -45,6 +58,9 @@ export function EndpointsRoute({ activeTab, navigate, reportError, showNotice }:
       output_tokens_per_minute: endpoint.output_tokens_per_minute === null ? "" : String(endpoint.output_tokens_per_minute),
       input_cost_per_million: endpoint.input_cost_per_million === null ? "" : String(endpoint.input_cost_per_million),
       output_cost_per_million: endpoint.output_cost_per_million === null ? "" : String(endpoint.output_cost_per_million),
+      reasoning_effort: endpoint.reasoning_effort ?? "",
+      context_length: endpoint.context_length === null ? "" : String(endpoint.context_length),
+      max_output_tokens: endpoint.max_output_tokens === null ? "" : String(endpoint.max_output_tokens),
       currency: endpoint.currency, tags: endpoint.tags.join(", "), notes: endpoint.notes ?? "",
     });
   }
@@ -67,6 +83,8 @@ export function EndpointsRoute({ activeTab, navigate, reportError, showNotice }:
         tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean), notes: form.notes || null,
         timeout_seconds: Number(form.timeout_seconds), max_concurrency: Number(form.max_concurrency),
         input_cost_per_million: optionalNumber(form.input_cost_per_million), output_cost_per_million: optionalNumber(form.output_cost_per_million),
+        reasoning_effort: form.reasoning_effort || null,
+        context_length: optionalNumber(form.context_length), max_output_tokens: optionalNumber(form.max_output_tokens),
         api_key_max_concurrency: optionalNumber(form.api_key_max_concurrency), requests_per_second: optionalNumber(form.requests_per_second),
         requests_per_minute: optionalNumber(form.requests_per_minute), tokens_per_minute: optionalNumber(form.tokens_per_minute),
         input_tokens_per_minute: optionalNumber(form.input_tokens_per_minute), output_tokens_per_minute: optionalNumber(form.output_tokens_per_minute),
@@ -122,5 +140,29 @@ export function EndpointsRoute({ activeTab, navigate, reportError, showNotice }:
     } catch (error) { reportError(error); } finally { setBusy(null); }
   }
 
-  return <ModelsPage activeTab={activeTab} busy={busy} capabilities={capabilities} editingEndpointId={editingEndpointId} endpoints={endpoints} form={form} locale={locale} onCancelEdit={cancelEndpointEdit} onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)} onEdit={(endpoint) => { editEndpoint(endpoint); navigate("models", { tab: "add-endpoint" }); }} onFormChange={setForm} onPreferredEndpointConsumed={consumePreferredEndpoint} onProbe={(endpointId) => void probeCapabilities(endpointId)} onSubmit={saveEndpoint} onTabChange={(tab) => navigate("models", { tab })} onTest={(endpointId) => void testEndpoint(endpointId)} preferredEndpointId={preferredEndpointId} testRequests={testRequests} />;
+  function changeSandboxEndpoint(endpointId: string) {
+    setSandboxEndpointId(endpointId);
+    setSandboxResult(null);
+    navigate("models", { endpointId, tab: "sandbox" });
+  }
+
+  async function runSandbox(submission: SandboxSubmission) {
+    if (!window.confirm(endpointWorkspaceCopy[locale].costConfirmation)) return;
+    setBusy("sandbox");
+    setSandboxResult(null);
+    try {
+      const result = await endpointsApi.sandbox(submission.endpointId, {
+        mode: submission.mode,
+        user_prompt: submission.mode === "text" ? submission.userPrompt : undefined,
+        system_prompt: submission.mode === "text" && submission.systemPrompt.trim() ? submission.systemPrompt : undefined,
+      });
+      setSandboxResult(result);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return <ModelsPage activeTab={activeTab} busy={busy} capabilities={capabilities} editingEndpointId={editingEndpointId} endpoints={endpoints} form={form} locale={locale} onCancelEdit={cancelEndpointEdit} onDeclare={(endpointId, capability, status) => void declareCapability(endpointId, capability, status)} onEdit={(endpoint) => { editEndpoint(endpoint); navigate("models", { tab: "add-endpoint" }); }} onFormChange={setForm} onOpenSandbox={(endpointId) => changeSandboxEndpoint(endpointId)} onPreferredEndpointConsumed={consumePreferredEndpoint} onProbe={(endpointId) => void probeCapabilities(endpointId)} onSubmit={saveEndpoint} onTabChange={(tab) => navigate("models", { tab })} onTest={(endpointId) => void testEndpoint(endpointId)} preferredEndpointId={preferredEndpointId} sandbox={<ModelSandbox busy={busy === "sandbox"} endpoints={endpoints} locale={locale} onEndpointChange={changeSandboxEndpoint} onSubmit={(submission) => void runSandbox(submission)} result={sandboxResult} selectedEndpointId={sandboxEndpointId} />} testRequests={testRequests} />;
 }

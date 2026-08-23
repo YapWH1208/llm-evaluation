@@ -50,7 +50,7 @@ describe("workspace locale catalog", () => {
     const expectedKeys = {
       dashboard: ["summary", "evaluations", "readiness"],
       guide: ["gettingStarted", "prepareData", "runAndAnalyze"],
-      models: ["modelInventory", "addEndpoint", "inventoryDescription", "endpointDescription"],
+      models: ["modelInventory", "addEndpoint", "sandbox", "inventoryDescription", "endpointDescription", "sandboxDescription"],
       datasets: ["datasetInventory", "registerDataset"],
       prompts: ["promptInventory"],
       runs: ["runInventory", "quickStart", "datasetEvaluation", "runDetails"],
@@ -80,6 +80,15 @@ describe("workspace locale catalog", () => {
     for (const locale of localeIds) {
       expect(Object.keys(catalogs[locale]).sort()).toEqual(englishKeys);
       expect(Object.values(catalogs[locale]).every(Boolean)).toBe(true);
+    }
+  });
+
+  it("keeps Models sandbox and endpoint-operation copy complete in every locale", () => {
+    const endpointCopy = catalogModule.endpointWorkspaceCopy;
+    const englishKeys = Object.keys(endpointCopy.en).sort();
+    for (const locale of localeIds) {
+      expect(Object.keys(endpointCopy[locale]).sort()).toEqual(englishKeys);
+      expect(Object.values(endpointCopy[locale]).every((value) => value.trim().length > 0)).toBe(true);
     }
   });
 

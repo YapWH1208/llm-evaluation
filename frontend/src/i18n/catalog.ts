@@ -1056,7 +1056,7 @@ export const navigationCopy: Record<Locale, NavigationCopy> = {
 export type WorkspacePageTabCopy = {
   dashboard: { summary: string; evaluations: string; readiness: string };
   guide: { gettingStarted: string; prepareData: string; runAndAnalyze: string };
-  models: { modelInventory: string; addEndpoint: string; inventoryDescription: string; endpointDescription: string };
+  models: { modelInventory: string; addEndpoint: string; sandbox: string; inventoryDescription: string; endpointDescription: string; sandboxDescription: string };
   datasets: { datasetInventory: string; registerDataset: string };
   prompts: { promptInventory: string };
   runs: { runInventory: string; quickStart: string; datasetEvaluation: string; runDetails: string };
@@ -1068,7 +1068,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   en: {
     dashboard: { summary: "Summary", evaluations: "Evaluations", readiness: "Readiness" },
     guide: { gettingStarted: "Getting started", prepareData: "Prepare data", runAndAnalyze: "Run and analyze" },
-    models: { modelInventory: "Model inventory", addEndpoint: "Add endpoint", inventoryDescription: "Test and inspect configured endpoints", endpointDescription: "Connection, limits, costs, and credentials" },
+    models: { modelInventory: "Model inventory", addEndpoint: "Add endpoint", sandbox: "Sandbox", inventoryDescription: "Test and inspect configured endpoints", endpointDescription: "Connection, limits, costs, and credentials", sandboxDescription: "Run one safe provider diagnostic" },
     datasets: { datasetInventory: "Dataset inventory", registerDataset: "Register dataset" },
     prompts: { promptInventory: "Prompt packages" },
     runs: { runInventory: "Run inventory", quickStart: "Quick start", datasetEvaluation: "Dataset evaluation", runDetails: "Run details" },
@@ -1078,7 +1078,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   "zh-CN": {
     dashboard: { summary: "摘要", evaluations: "评测", readiness: "就绪情况" },
     guide: { gettingStarted: "开始使用", prepareData: "准备数据", runAndAnalyze: "运行与分析" },
-    models: { modelInventory: "模型清单", addEndpoint: "添加端点", inventoryDescription: "测试并检查已配置的端点", endpointDescription: "连接、限制、成本和凭据" },
+    models: { modelInventory: "模型清单", addEndpoint: "添加端点", sandbox: "沙盒", inventoryDescription: "测试并检查已配置的端点", endpointDescription: "连接、限制、成本和凭据", sandboxDescription: "运行一次安全的提供商诊断" },
     datasets: { datasetInventory: "数据集清单", registerDataset: "注册数据集" },
     prompts: { promptInventory: "提示词包" },
     runs: { runInventory: "运行清单", quickStart: "快速开始", datasetEvaluation: "数据集评测", runDetails: "运行详情" },
@@ -1088,7 +1088,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   fr: {
     dashboard: { summary: "Résumé", evaluations: "Évaluations", readiness: "Préparation" },
     guide: { gettingStarted: "Bien démarrer", prepareData: "Préparer les données", runAndAnalyze: "Exécuter et analyser" },
-    models: { modelInventory: "Inventaire des modèles", addEndpoint: "Ajouter un point de terminaison", inventoryDescription: "Tester et inspecter les points de terminaison configurés", endpointDescription: "Connexion, limites, coûts et identifiants" },
+    models: { modelInventory: "Inventaire des modèles", addEndpoint: "Ajouter un point de terminaison", sandbox: "Bac à sable", inventoryDescription: "Tester et inspecter les points de terminaison configurés", endpointDescription: "Connexion, limites, coûts et identifiants", sandboxDescription: "Exécuter un diagnostic fournisseur sécurisé" },
     datasets: { datasetInventory: "Inventaire des jeux de données", registerDataset: "Enregistrer un jeu de données" },
     prompts: { promptInventory: "Packages de prompts" },
     runs: { runInventory: "Inventaire des exécutions", quickStart: "Démarrage rapide", datasetEvaluation: "Évaluation du jeu de données", runDetails: "Détails de l’exécution" },
@@ -1098,7 +1098,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   de: {
     dashboard: { summary: "Zusammenfassung", evaluations: "Evaluierungen", readiness: "Bereitschaft" },
     guide: { gettingStarted: "Erste Schritte", prepareData: "Daten vorbereiten", runAndAnalyze: "Ausführen und analysieren" },
-    models: { modelInventory: "Modellübersicht", addEndpoint: "Endpunkt hinzufügen", inventoryDescription: "Konfigurierte Endpunkte testen und prüfen", endpointDescription: "Verbindung, Limits, Kosten und Zugangsdaten" },
+    models: { modelInventory: "Modellübersicht", addEndpoint: "Endpunkt hinzufügen", sandbox: "Sandbox", inventoryDescription: "Konfigurierte Endpunkte testen und prüfen", endpointDescription: "Verbindung, Limits, Kosten und Zugangsdaten", sandboxDescription: "Eine sichere Anbieterdiagnose ausführen" },
     datasets: { datasetInventory: "Datensatzübersicht", registerDataset: "Datensatz registrieren" },
     prompts: { promptInventory: "Prompt-Pakete" },
     runs: { runInventory: "Ausführungsübersicht", quickStart: "Schnellstart", datasetEvaluation: "Datensatz-Evaluierung", runDetails: "Ausführungsdetails" },
@@ -1108,7 +1108,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   ru: {
     dashboard: { summary: "Сводка", evaluations: "Оценки", readiness: "Готовность" },
     guide: { gettingStarted: "Начало работы", prepareData: "Подготовка данных", runAndAnalyze: "Запуск и анализ" },
-    models: { modelInventory: "Инвентарь моделей", addEndpoint: "Добавить конечную точку", inventoryDescription: "Тестирование и проверка настроенных конечных точек", endpointDescription: "Подключение, ограничения, стоимость и учётные данные" },
+    models: { modelInventory: "Инвентарь моделей", addEndpoint: "Добавить конечную точку", sandbox: "Песочница", inventoryDescription: "Тестирование и проверка настроенных конечных точек", endpointDescription: "Подключение, ограничения, стоимость и учётные данные", sandboxDescription: "Запустить безопасную диагностику провайдера" },
     datasets: { datasetInventory: "Инвентарь наборов данных", registerDataset: "Зарегистрировать набор данных" },
     prompts: { promptInventory: "Пакеты промптов" },
     runs: { runInventory: "Инвентарь запусков", quickStart: "Быстрый запуск", datasetEvaluation: "Оценка набора данных", runDetails: "Сведения о запуске" },
@@ -1118,7 +1118,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   ja: {
     dashboard: { summary: "概要", evaluations: "評価", readiness: "準備状況" },
     guide: { gettingStarted: "はじめに", prepareData: "データを準備", runAndAnalyze: "実行と分析" },
-    models: { modelInventory: "モデル一覧", addEndpoint: "エンドポイントを追加", inventoryDescription: "設定済みエンドポイントのテストと確認", endpointDescription: "接続、制限、コスト、認証情報" },
+    models: { modelInventory: "モデル一覧", addEndpoint: "エンドポイントを追加", sandbox: "サンドボックス", inventoryDescription: "設定済みエンドポイントのテストと確認", endpointDescription: "接続、制限、コスト、認証情報", sandboxDescription: "安全なプロバイダー診断を 1 回実行" },
     datasets: { datasetInventory: "データセット一覧", registerDataset: "データセットを登録" },
     prompts: { promptInventory: "プロンプトパッケージ" },
     runs: { runInventory: "実行一覧", quickStart: "クイックスタート", datasetEvaluation: "データセット評価", runDetails: "実行の詳細" },
@@ -1128,7 +1128,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   ko: {
     dashboard: { summary: "요약", evaluations: "평가", readiness: "준비 상태" },
     guide: { gettingStarted: "시작하기", prepareData: "데이터 준비", runAndAnalyze: "실행 및 분석" },
-    models: { modelInventory: "모델 인벤토리", addEndpoint: "엔드포인트 추가", inventoryDescription: "구성된 엔드포인트 테스트 및 검사", endpointDescription: "연결, 제한, 비용 및 자격 증명" },
+    models: { modelInventory: "모델 인벤토리", addEndpoint: "엔드포인트 추가", sandbox: "샌드박스", inventoryDescription: "구성된 엔드포인트 테스트 및 검사", endpointDescription: "연결, 제한, 비용 및 자격 증명", sandboxDescription: "안전한 공급자 진단 한 번 실행" },
     datasets: { datasetInventory: "데이터 세트 인벤토리", registerDataset: "데이터 세트 등록" },
     prompts: { promptInventory: "프롬프트 패키지" },
     runs: { runInventory: "실행 인벤토리", quickStart: "빠른 시작", datasetEvaluation: "데이터 세트 평가", runDetails: "실행 세부 정보" },
@@ -1138,7 +1138,7 @@ export const workspacePageTabCopy: Record<Locale, WorkspacePageTabCopy> = {
   ms: {
     dashboard: { summary: "Ringkasan", evaluations: "Penilaian", readiness: "Kesediaan" },
     guide: { gettingStarted: "Bermula", prepareData: "Sediakan data", runAndAnalyze: "Jalankan dan analisis" },
-    models: { modelInventory: "Inventori model", addEndpoint: "Tambah titik akhir", inventoryDescription: "Uji dan periksa titik akhir yang dikonfigurasi", endpointDescription: "Sambungan, had, kos dan kelayakan" },
+    models: { modelInventory: "Inventori model", addEndpoint: "Tambah titik akhir", sandbox: "Kotak pasir", inventoryDescription: "Uji dan periksa titik akhir yang dikonfigurasi", endpointDescription: "Sambungan, had, kos dan kelayakan", sandboxDescription: "Jalankan satu diagnostik penyedia yang selamat" },
     datasets: { datasetInventory: "Inventori set data", registerDataset: "Daftar set data" },
     prompts: { promptInventory: "Pakej gesaan" },
     runs: { runInventory: "Inventori larian", quickStart: "Mula pantas", datasetEvaluation: "Penilaian set data", runDetails: "Butiran larian" },
@@ -1318,6 +1318,73 @@ export const formCopy: Record<Locale, FormCopy> = {
   ja: { requirements: "必須フィールドには印があります。その他は任意です。", required: "必須", optional: "任意", advanced: "詳細設定（任意）" },
   ko: { requirements: "필수 필드는 표시되어 있으며 나머지는 선택 사항입니다.", required: "필수", optional: "선택", advanced: "고급 설정(선택 사항)" },
   ms: { requirements: "Medan wajib ditandakan; semua yang lain adalah pilihan.", required: "Wajib", optional: "Pilihan", advanced: "Tetapan lanjutan (pilihan)" },
+};
+
+export type EndpointWorkspaceCopy = {
+  reasoningEffort: string; providerDefault: string; low: string; medium: string; high: string; contextLength: string; maxOutputTokens: string; notSet: string;
+  operation: string; runOperation: string; editConfiguration: string; testConnection: string; probeCapabilities: string; openSandbox: string;
+  sandboxIntro: string; sandboxEndpoint: string; sandboxMode: string; textMode: string; toolMode: string; toolHelp: string;
+  userPrompt: string; systemPrompt: string; runSandbox: string; runningSandbox: string; costConfirmation: string; endpointStatusWarning: string;
+  request: string; finalText: string; toolCalls: string; usage: string; latency: string; providerStatus: string; sandboxFailed: string; noSandboxEvidence: string;
+};
+
+export const endpointWorkspaceCopy: Record<Locale, EndpointWorkspaceCopy> = {
+  en: {
+    reasoningEffort: "Reasoning effort", providerDefault: "Provider default", low: "Low", medium: "Medium", high: "High", contextLength: "Context length", maxOutputTokens: "Maximum output tokens", notSet: "Not set",
+    operation: "Operation", runOperation: "Run operation", editConfiguration: "Edit configuration", testConnection: "Test connection", probeCapabilities: "Probe capabilities", openSandbox: "Open sandbox",
+    sandboxIntro: "Send one bounded diagnostic request. Results are not saved and never change endpoint availability.", sandboxEndpoint: "Endpoint", sandboxMode: "Test mode", textMode: "Text", toolMode: "Tool-calling test", toolHelp: "The platform requests one deterministic function call and never executes it.",
+    userPrompt: "User prompt", systemPrompt: "System prompt (optional)", runSandbox: "Run sandbox", runningSandbox: "Running sandbox…", costConfirmation: "This sends one request to the provider and may incur API charges. Continue?", endpointStatusWarning: "This endpoint is not available. Sandbox results will not change its connection status.",
+    request: "Sanitized request", finalText: "Final text", toolCalls: "Tool calls", usage: "Usage", latency: "Latency", providerStatus: "Provider status", sandboxFailed: "Sandbox request failed", noSandboxEvidence: "Run a text or tool-calling test to inspect safe evidence.",
+  },
+  "zh-CN": {
+    reasoningEffort: "推理强度", providerDefault: "提供商默认值", low: "低", medium: "中", high: "高", contextLength: "上下文长度", maxOutputTokens: "最大输出令牌数", notSet: "未设置",
+    operation: "操作", runOperation: "运行操作", editConfiguration: "编辑配置", testConnection: "测试连接", probeCapabilities: "探测能力", openSandbox: "打开沙盒",
+    sandboxIntro: "发送一次受限诊断请求。结果不会保存，也不会改变端点可用性。", sandboxEndpoint: "端点", sandboxMode: "测试模式", textMode: "文本", toolMode: "工具调用测试", toolHelp: "平台请求一次确定性的函数调用，绝不执行它。",
+    userPrompt: "用户提示词", systemPrompt: "系统提示词（可选）", runSandbox: "运行沙盒", runningSandbox: "正在运行沙盒…", costConfirmation: "这会向提供商发送一次请求，可能产生 API 费用。是否继续？", endpointStatusWarning: "此端点不可用。沙盒结果不会改变其连接状态。",
+    request: "已清理的请求", finalText: "最终文本", toolCalls: "工具调用", usage: "用量", latency: "延迟", providerStatus: "提供商状态", sandboxFailed: "沙盒请求失败", noSandboxEvidence: "运行文本或工具调用测试以检查安全证据。",
+  },
+  fr: {
+    reasoningEffort: "Effort de raisonnement", providerDefault: "Valeur par défaut du fournisseur", low: "Faible", medium: "Moyen", high: "Élevé", contextLength: "Longueur de contexte", maxOutputTokens: "Jetons de sortie maximum", notSet: "Non défini",
+    operation: "Opération", runOperation: "Exécuter l’opération", editConfiguration: "Modifier la configuration", testConnection: "Tester la connexion", probeCapabilities: "Sonder les capacités", openSandbox: "Ouvrir le bac à sable",
+    sandboxIntro: "Envoyez une requête de diagnostic limitée. Les résultats ne sont pas enregistrés et ne changent jamais la disponibilité.", sandboxEndpoint: "Point de terminaison", sandboxMode: "Mode de test", textMode: "Texte", toolMode: "Test d’appel d’outil", toolHelp: "La plateforme demande un appel de fonction déterministe et ne l’exécute jamais.",
+    userPrompt: "Invite utilisateur", systemPrompt: "Invite système (facultative)", runSandbox: "Exécuter le bac à sable", runningSandbox: "Exécution du bac à sable…", costConfirmation: "Cette action envoie une requête au fournisseur et peut entraîner des frais API. Continuer ?", endpointStatusWarning: "Ce point de terminaison n’est pas disponible. Les résultats ne changent pas son état de connexion.",
+    request: "Requête nettoyée", finalText: "Texte final", toolCalls: "Appels d’outil", usage: "Utilisation", latency: "Latence", providerStatus: "État du fournisseur", sandboxFailed: "La requête du bac à sable a échoué", noSandboxEvidence: "Exécutez un test texte ou d’appel d’outil pour examiner les preuves sûres.",
+  },
+  de: {
+    reasoningEffort: "Reasoning-Aufwand", providerDefault: "Anbieterstandard", low: "Niedrig", medium: "Mittel", high: "Hoch", contextLength: "Kontextlänge", maxOutputTokens: "Maximale Ausgabetoken", notSet: "Nicht festgelegt",
+    operation: "Aktion", runOperation: "Aktion ausführen", editConfiguration: "Konfiguration bearbeiten", testConnection: "Verbindung testen", probeCapabilities: "Fähigkeiten prüfen", openSandbox: "Sandbox öffnen",
+    sandboxIntro: "Senden Sie eine begrenzte Diagnoseanfrage. Ergebnisse werden nicht gespeichert und ändern nie die Endpunktverfügbarkeit.", sandboxEndpoint: "Endpunkt", sandboxMode: "Testmodus", textMode: "Text", toolMode: "Tool-Aufruftest", toolHelp: "Die Plattform fordert einen deterministischen Funktionsaufruf an und führt ihn nie aus.",
+    userPrompt: "Benutzereingabe", systemPrompt: "Systemeingabe (optional)", runSandbox: "Sandbox ausführen", runningSandbox: "Sandbox wird ausgeführt…", costConfirmation: "Dies sendet eine Anfrage an den Anbieter und kann API-Kosten verursachen. Fortfahren?", endpointStatusWarning: "Dieser Endpunkt ist nicht verfügbar. Sandbox-Ergebnisse ändern seinen Verbindungsstatus nicht.",
+    request: "Bereinigte Anfrage", finalText: "Finaler Text", toolCalls: "Tool-Aufrufe", usage: "Nutzung", latency: "Latenz", providerStatus: "Anbieterstatus", sandboxFailed: "Sandbox-Anfrage fehlgeschlagen", noSandboxEvidence: "Führen Sie einen Text- oder Tool-Aufruftest aus, um sichere Nachweise zu prüfen.",
+  },
+  ru: {
+    reasoningEffort: "Уровень рассуждений", providerDefault: "Значение поставщика по умолчанию", low: "Низкий", medium: "Средний", high: "Высокий", contextLength: "Длина контекста", maxOutputTokens: "Максимум выходных токенов", notSet: "Не задано",
+    operation: "Операция", runOperation: "Выполнить операцию", editConfiguration: "Изменить конфигурацию", testConnection: "Проверить подключение", probeCapabilities: "Проверить возможности", openSandbox: "Открыть песочницу",
+    sandboxIntro: "Отправьте один ограниченный диагностический запрос. Результаты не сохраняются и не меняют доступность конечной точки.", sandboxEndpoint: "Конечная точка", sandboxMode: "Режим теста", textMode: "Текст", toolMode: "Тест вызова инструмента", toolHelp: "Платформа запрашивает один детерминированный вызов функции и никогда его не выполняет.",
+    userPrompt: "Пользовательский запрос", systemPrompt: "Системный запрос (необязательно)", runSandbox: "Запустить песочницу", runningSandbox: "Песочница выполняется…", costConfirmation: "Это отправит один запрос поставщику и может повлечь расходы API. Продолжить?", endpointStatusWarning: "Эта конечная точка недоступна. Результаты песочницы не изменят её статус подключения.",
+    request: "Очищенный запрос", finalText: "Итоговый текст", toolCalls: "Вызовы инструментов", usage: "Использование", latency: "Задержка", providerStatus: "Статус поставщика", sandboxFailed: "Запрос песочницы завершился ошибкой", noSandboxEvidence: "Запустите текстовый тест или тест вызова инструмента, чтобы проверить безопасные данные.",
+  },
+  ja: {
+    reasoningEffort: "推論の強さ", providerDefault: "プロバイダーのデフォルト", low: "低", medium: "中", high: "高", contextLength: "コンテキスト長", maxOutputTokens: "最大出力トークン", notSet: "未設定",
+    operation: "操作", runOperation: "操作を実行", editConfiguration: "設定を編集", testConnection: "接続をテスト", probeCapabilities: "機能を確認", openSandbox: "サンドボックスを開く",
+    sandboxIntro: "制限付きの診断リクエストを 1 回送信します。結果は保存されず、エンドポイントの可用性も変更しません。", sandboxEndpoint: "エンドポイント", sandboxMode: "テストモード", textMode: "テキスト", toolMode: "ツール呼び出しテスト", toolHelp: "プラットフォームは決定論的な関数呼び出しを 1 回要求し、決して実行しません。",
+    userPrompt: "ユーザープロンプト", systemPrompt: "システムプロンプト（任意）", runSandbox: "サンドボックスを実行", runningSandbox: "サンドボックスを実行中…", costConfirmation: "プロバイダーへ 1 回リクエストを送信し、API 料金が発生する場合があります。続行しますか？", endpointStatusWarning: "このエンドポイントは利用できません。サンドボックスの結果で接続状態は変更されません。",
+    request: "サニタイズ済みリクエスト", finalText: "最終テキスト", toolCalls: "ツール呼び出し", usage: "使用量", latency: "レイテンシ", providerStatus: "プロバイダーの状態", sandboxFailed: "サンドボックスリクエストに失敗しました", noSandboxEvidence: "安全な証拠を確認するには、テキストまたはツール呼び出しテストを実行してください。",
+  },
+  ko: {
+    reasoningEffort: "추론 수준", providerDefault: "공급자 기본값", low: "낮음", medium: "중간", high: "높음", contextLength: "컨텍스트 길이", maxOutputTokens: "최대 출력 토큰", notSet: "설정 안 됨",
+    operation: "작업", runOperation: "작업 실행", editConfiguration: "구성 편집", testConnection: "연결 테스트", probeCapabilities: "기능 검사", openSandbox: "샌드박스 열기",
+    sandboxIntro: "제한된 진단 요청 하나를 보냅니다. 결과는 저장되지 않으며 엔드포인트 가용성을 바꾸지 않습니다.", sandboxEndpoint: "엔드포인트", sandboxMode: "테스트 모드", textMode: "텍스트", toolMode: "도구 호출 테스트", toolHelp: "플랫폼은 결정론적 함수 호출 하나를 요청하며 절대 실행하지 않습니다.",
+    userPrompt: "사용자 프롬프트", systemPrompt: "시스템 프롬프트(선택 사항)", runSandbox: "샌드박스 실행", runningSandbox: "샌드박스 실행 중…", costConfirmation: "공급자에게 요청 하나를 보내며 API 요금이 발생할 수 있습니다. 계속할까요?", endpointStatusWarning: "이 엔드포인트는 사용할 수 없습니다. 샌드박스 결과는 연결 상태를 변경하지 않습니다.",
+    request: "정리된 요청", finalText: "최종 텍스트", toolCalls: "도구 호출", usage: "사용량", latency: "지연 시간", providerStatus: "공급자 상태", sandboxFailed: "샌드박스 요청 실패", noSandboxEvidence: "안전한 증거를 검사하려면 텍스트 또는 도구 호출 테스트를 실행하세요.",
+  },
+  ms: {
+    reasoningEffort: "Usaha penaakulan", providerDefault: "Lalai penyedia", low: "Rendah", medium: "Sederhana", high: "Tinggi", contextLength: "Panjang konteks", maxOutputTokens: "Token output maksimum", notSet: "Tidak ditetapkan",
+    operation: "Operasi", runOperation: "Jalankan operasi", editConfiguration: "Edit konfigurasi", testConnection: "Uji sambungan", probeCapabilities: "Uji keupayaan", openSandbox: "Buka kotak pasir",
+    sandboxIntro: "Hantar satu permintaan diagnostik terhad. Hasil tidak disimpan dan tidak mengubah ketersediaan titik akhir.", sandboxEndpoint: "Titik akhir", sandboxMode: "Mod ujian", textMode: "Teks", toolMode: "Ujian panggilan alat", toolHelp: "Platform meminta satu panggilan fungsi deterministik dan tidak akan melaksanakannya.",
+    userPrompt: "Gesaan pengguna", systemPrompt: "Gesaan sistem (pilihan)", runSandbox: "Jalankan kotak pasir", runningSandbox: "Menjalankan kotak pasir…", costConfirmation: "Ini menghantar satu permintaan kepada penyedia dan mungkin dikenakan caj API. Teruskan?", endpointStatusWarning: "Titik akhir ini tidak tersedia. Hasil kotak pasir tidak mengubah status sambungannya.",
+    request: "Permintaan yang disanitasi", finalText: "Teks akhir", toolCalls: "Panggilan alat", usage: "Penggunaan", latency: "Kependaman", providerStatus: "Status penyedia", sandboxFailed: "Permintaan kotak pasir gagal", noSandboxEvidence: "Jalankan ujian teks atau panggilan alat untuk memeriksa bukti yang selamat.",
+  },
 };
 
 export type GuideCopy = {

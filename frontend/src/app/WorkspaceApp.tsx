@@ -27,7 +27,11 @@ export function WorkspaceApp() {
   const [completedRunCount, setCompletedRunCount] = useState(0);
 
   const navigate = useCallback<WorkspaceNavigate>((nextView, options = {}) => {
-    const href = workspacePath(nextView, options.tab, { datasetId: options.datasetId, runId: options.runId });
+    const href = workspacePath(nextView, options.tab, {
+      datasetId: options.datasetId,
+      endpointId: options.endpointId,
+      runId: options.runId,
+    });
     if (`${window.location.pathname}${window.location.search}` !== href) {
       window.history[options.replace ? "replaceState" : "pushState"](null, "", href);
     }
@@ -68,7 +72,7 @@ export function WorkspaceApp() {
     <StaticCopy>
       {route.view === "dashboard" && <DashboardRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"dashboard">} />}
       {route.view === "guide" && <Guide onOpenView={navigate} />}
-      {route.view === "models" && <EndpointsRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"models">} />}
+      {route.view === "models" && <EndpointsRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"models">} routeSearch={route.search} />}
       {route.view === "datasets" && <DatasetsRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"datasets">} />}
       {route.view === "prompts" && <PromptsRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"prompts">} />}
       {route.view === "runs" && <RunsRoute {...featureProps} activeTab={route.tab as WorkspaceTabFor<"runs">} routeSearch={route.search} />}

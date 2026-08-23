@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import type { Capability, Endpoint } from "../../features/endpoints/api";
 import type { WorkspaceTabFor } from "../../dashboard/routing";
-import { firstEvaluationCopy, formCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
+import { endpointWorkspaceCopy, firstEvaluationCopy, formCopy, workspacePageTabCopy, type Locale } from "../../i18n/catalog";
 import { PageHeader } from "../workspace/PageHeader";
 import { WorkspacePanel } from "../workspace/WorkspacePanel";
 import { WorkspaceTabs, workspaceTabId, workspaceTabPanelId } from "../workspace/WorkspaceTabs";
@@ -17,7 +17,9 @@ export type EndpointForm = {
   display_name: string;
   input_cost_per_million: string;
   input_tokens_per_minute: string;
+  context_length: string;
   max_concurrency: string;
+  max_output_tokens: string;
   model_name: string;
   notes: string;
   output_cost_per_million: string;
@@ -25,6 +27,7 @@ export type EndpointForm = {
   protocol_profile: Endpoint["protocol_profile"];
   requests_per_minute: string;
   requests_per_second: string;
+  reasoning_effort: "" | "low" | "medium" | "high";
   tags: string;
   timeout_seconds: string;
   tokens_per_minute: string;
@@ -47,6 +50,7 @@ type ModelsPageProps = {
   onCancelEdit: () => void;
   onDeclare: (endpointId: string, capability: Capability, status: CapabilityStatus) => void;
   onEdit: (endpoint: Endpoint) => void;
+  onOpenSandbox?: (endpointId: string) => void;
   onFormChange: (form: EndpointForm) => void;
   onProbe: (endpointId: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -55,12 +59,14 @@ type ModelsPageProps = {
   onPreferredEndpointConsumed?: () => void;
   preferredEndpointId?: string | null;
   testRequests: Record<string, { method: "POST"; url: string; body: Record<string, unknown> }>;
+  sandbox?: ReactNode;
 };
 
 type EndpointFormPanelProps = Pick<ModelsPageProps, "busy" | "editingEndpointId" | "form" | "locale" | "onCancelEdit" | "onFormChange" | "onSubmit">;
 
 export function EndpointFormPanel({ busy, editingEndpointId, form, locale = "en", onCancelEdit, onFormChange, onSubmit }: EndpointFormPanelProps) {
   const copy = formCopy[locale];
+  const endpointCopy = endpointWorkspaceCopy[locale];
   const apiKeyRequired = !editingEndpointId && form.protocol_profile !== "ollama_chat";
   return (
     <WorkspacePanel description="Connection, rate-limit, and cost settings remain editable without exposing stored credentials." title={editingEndpointId ? "Edit model endpoint" : "Add model endpoint"}>
@@ -71,9 +77,10 @@ export function EndpointFormPanel({ busy, editingEndpointId, form, locale = "en"
             <label><span>Model name <small>{copy.required}</small></span><input aria-label="Model name" onChange={(event) => onFormChange(updateEndpointForm(form, "model_name", event.target.value))} placeholder="model-id" required value={form.model_name} /></label>
             <label><span>Protocol profile <small>{copy.required}</small></span><select aria-label="Protocol profile" onChange={(event) => onFormChange(updateEndpointForm(form, "protocol_profile", event.target.value as Endpoint["protocol_profile"]))} value={form.protocol_profile}><option value="openai_chat_completions">OpenAI-compatible Chat Completions</option><option value="openai_responses">OpenAI-compatible Responses API</option><option value="anthropic_messages">Anthropic Messages</option><option value="gemini_generate_content">Gemini GenerateContent</option><option value="azure_openai_chat_completions">Azure OpenAI Chat Completions</option><option value="ollama_chat">Ollama Chat</option><option value="custom_http_json">Custom HTTP JSON</option></select></label>
             <label><span>API key <small>{apiKeyRequired ? copy.required : copy.optional}</small></span><input aria-label="API key" onChange={(event) => onFormChange(updateEndpointForm(form, "api_key", event.target.value))} placeholder={editingEndpointId ? "Leave blank to keep the encrypted key" : form.protocol_profile === "ollama_chat" ? "Optional for a local Ollama service" : "Stored encrypted"} required={apiKeyRequired} type="password" value={form.api_key} /></label>
-            <details className="workspace-form-disclosure" open={editingEndpointId ? true : undefined}>
+            <details className="workspace-form-disclosure">
               <summary>{copy.advanced}</summary>
               <div className="workspace-form-disclosure__content">
+            <div className="workspace-field-grid workspace-field-grid--three"><label>{endpointCopy.reasoningEffort}<select aria-label={endpointCopy.reasoningEffort} onChange={(event) => onFormChange(updateEndpointForm(form, "reasoning_effort", event.target.value as EndpointForm["reasoning_effort"]))} value={form.reasoning_effort}><option value="">{endpointCopy.providerDefault}</option><option value="low">{endpointCopy.low}</option><option value="medium">{endpointCopy.medium}</option><option value="high">{endpointCopy.high}</option></select></label><label>{endpointCopy.contextLength}<input aria-label={endpointCopy.contextLength} min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "context_length", event.target.value))} placeholder={endpointCopy.notSet} type="number" value={form.context_length} /></label><label>{endpointCopy.maxOutputTokens}<input aria-label={endpointCopy.maxOutputTokens} min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "max_output_tokens", event.target.value))} placeholder={endpointCopy.notSet} type="number" value={form.max_output_tokens} /></label></div>
             <label>Custom headers (JSON)<textarea onChange={(event) => onFormChange(updateEndpointForm(form, "custom_headers", event.target.value))} placeholder='{"X-Provider-Project":"project-id"}' spellCheck={false} value={form.custom_headers} /></label>
             <label>Default request body (JSON)<textarea onChange={(event) => onFormChange(updateEndpointForm(form, "default_request_body", event.target.value))} spellCheck={false} value={form.default_request_body} /></label>
             <div className="workspace-field-grid workspace-field-grid--five"><label>Timeout (seconds)<input max="600" min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "timeout_seconds", event.target.value))} required type="number" value={form.timeout_seconds} /></label><label>Endpoint concurrency<input max="1000" min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "max_concurrency", event.target.value))} required type="number" value={form.max_concurrency} /></label><label>Shared API-key concurrency<input max="1000" min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "api_key_max_concurrency", event.target.value))} placeholder="Unlimited" type="number" value={form.api_key_max_concurrency} /></label><label>Requests / minute<input min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "requests_per_minute", event.target.value))} placeholder="Unlimited" type="number" value={form.requests_per_minute} /></label><label>Tokens / minute<input min="1" onChange={(event) => onFormChange(updateEndpointForm(form, "tokens_per_minute", event.target.value))} placeholder="Unlimited" type="number" value={form.tokens_per_minute} /></label></div>
@@ -89,11 +96,13 @@ export function EndpointFormPanel({ busy, editingEndpointId, form, locale = "en"
   );
 }
 
-type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "locale" | "onDeclare" | "onEdit" | "onPreferredEndpointConsumed" | "onProbe" | "onTabChange" | "onTest" | "preferredEndpointId" | "testRequests">;
+type ModelInventoryProps = Pick<ModelsPageProps, "busy" | "capabilities" | "endpoints" | "locale" | "onDeclare" | "onEdit" | "onOpenSandbox" | "onPreferredEndpointConsumed" | "onProbe" | "onTabChange" | "onTest" | "preferredEndpointId" | "testRequests">;
 
-export function ModelInventory({ busy, capabilities, endpoints, locale = "en", onDeclare, onEdit, onPreferredEndpointConsumed, onProbe, onTabChange, onTest, preferredEndpointId, testRequests }: ModelInventoryProps) {
+export function ModelInventory({ busy, capabilities, endpoints, locale = "en", onDeclare, onEdit, onOpenSandbox, onPreferredEndpointConsumed, onProbe, onTabChange, onTest, preferredEndpointId, testRequests }: ModelInventoryProps) {
   const onboarding = firstEvaluationCopy[locale];
+  const copy = endpointWorkspaceCopy[locale];
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(() => preferredEndpointId ?? endpoints[0]?.id ?? null);
+  const [operation, setOperation] = useState<"edit" | "test" | "probe" | "sandbox">("edit");
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? endpoints[0] ?? null;
 
   useEffect(() => {
@@ -106,6 +115,14 @@ export function ModelInventory({ busy, capabilities, endpoints, locale = "en", o
       onPreferredEndpointConsumed?.();
     }
   }, [endpoints, onPreferredEndpointConsumed, preferredEndpointId]);
+
+  function runOperation() {
+    if (!selectedEndpoint) return;
+    if (operation === "edit") onEdit(selectedEndpoint);
+    if (operation === "test") onTest(selectedEndpoint.id);
+    if (operation === "probe") onProbe(selectedEndpoint.id);
+    if (operation === "sandbox") onOpenSandbox?.(selectedEndpoint.id);
+  }
 
   return (
     <div className="workspace-model-inventory-layout">
@@ -146,9 +163,12 @@ export function ModelInventory({ busy, capabilities, endpoints, locale = "en", o
               <div><dt>Input cost / 1M</dt><dd>{selectedEndpoint.input_cost_per_million ?? "--"} {selectedEndpoint.currency}</dd></div>
               <div><dt>Output cost / 1M</dt><dd>{selectedEndpoint.output_cost_per_million ?? "--"} {selectedEndpoint.currency}</dd></div>
               <div><dt>Timeout</dt><dd>{selectedEndpoint.timeout_seconds}s</dd></div>
+              <div><dt>{copy.reasoningEffort}</dt><dd>{selectedEndpoint.reasoning_effort ?? copy.providerDefault}</dd></div>
+              <div><dt>{copy.contextLength}</dt><dd>{selectedEndpoint.context_length ?? copy.notSet}</dd></div>
+              <div><dt>{copy.maxOutputTokens}</dt><dd>{selectedEndpoint.max_output_tokens ?? copy.providerDefault}</dd></div>
             </dl>
             {selectedEndpoint.last_connection_error && <p className="error" role="alert" data-i18n-preserve>{selectedEndpoint.last_connection_error}</p>}
-            <div className="actions"><button className="secondary" onClick={() => onEdit(selectedEndpoint)} type="button">Edit configuration</button><button className="secondary" disabled={busy === `test-${selectedEndpoint.id}`} onClick={() => onTest(selectedEndpoint.id)} type="button">Test connection</button><button className="secondary" disabled={busy === `capabilities-${selectedEndpoint.id}`} onClick={() => onProbe(selectedEndpoint.id)} type="button">Probe capabilities</button></div>
+            <div className="workspace-inventory-operation"><label>{copy.operation}<select aria-label={copy.operation} onChange={(event) => setOperation(event.target.value as typeof operation)} value={operation}><option value="edit">{copy.editConfiguration}</option><option value="test">{copy.testConnection}</option><option value="probe">{copy.probeCapabilities}</option><option value="sandbox">{copy.openSandbox}</option></select></label><button className="secondary" disabled={busy === `test-${selectedEndpoint.id}` || busy === `capabilities-${selectedEndpoint.id}`} onClick={runOperation} type="button">{copy.runOperation}</button></div>
             {testRequests[selectedEndpoint.id] && <details><summary>Most recent model test request</summary><p className="muted">{testRequests[selectedEndpoint.id].method} {testRequests[selectedEndpoint.id].url}</p><pre>{JSON.stringify(testRequests[selectedEndpoint.id].body, null, 2)}</pre><p className="muted">Credentials and request headers are intentionally not shown.</p></details>}
             {capabilities[selectedEndpoint.id] && <CapabilityDeclarations capabilities={capabilities[selectedEndpoint.id]} busy={busy} endpointId={selectedEndpoint.id} onDeclare={onDeclare} />}
           </article>
@@ -158,11 +178,12 @@ export function ModelInventory({ busy, capabilities, endpoints, locale = "en", o
   );
 }
 
-export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onPreferredEndpointConsumed, onProbe, onSubmit, onTabChange, onTest, preferredEndpointId, testRequests }: ModelsPageProps) {
+export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, endpoints, form, locale = "en", onCancelEdit, onDeclare, onEdit, onFormChange, onOpenSandbox, onPreferredEndpointConsumed, onProbe, onSubmit, onTabChange, onTest, preferredEndpointId, sandbox = null, testRequests }: ModelsPageProps) {
   const copy = workspacePageTabCopy[locale].models;
   const tabs = [
     { id: "model-inventory", label: copy.modelInventory, description: copy.inventoryDescription },
     { id: "add-endpoint", label: copy.addEndpoint, description: copy.endpointDescription },
+    { id: "sandbox", label: copy.sandbox, description: copy.sandboxDescription },
   ] as const;
 
   return (
@@ -175,11 +196,7 @@ export function ModelsPage({ activeTab, busy, capabilities, editingEndpointId, e
       />
       <WorkspaceTabs ariaLabel="Models sections" idPrefix="models" onChange={onTabChange} tabs={tabs} value={activeTab} />
       <div aria-labelledby={workspaceTabId("models", activeTab)} id={workspaceTabPanelId("models", activeTab)} role="tabpanel" tabIndex={0}>
-        {activeTab === "model-inventory" ? (
-          <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} locale={locale} onDeclare={onDeclare} onEdit={onEdit} onPreferredEndpointConsumed={onPreferredEndpointConsumed} onProbe={onProbe} onTabChange={onTabChange} onTest={onTest} preferredEndpointId={preferredEndpointId} testRequests={testRequests} />
-        ) : (
-          <EndpointFormPanel busy={busy} editingEndpointId={editingEndpointId} form={form} locale={locale} onCancelEdit={onCancelEdit} onFormChange={onFormChange} onSubmit={onSubmit} />
-        )}
+        {activeTab === "model-inventory" ? <ModelInventory busy={busy} capabilities={capabilities} endpoints={endpoints} locale={locale} onDeclare={onDeclare} onEdit={onEdit} onOpenSandbox={onOpenSandbox} onPreferredEndpointConsumed={onPreferredEndpointConsumed} onProbe={onProbe} onTabChange={onTabChange} onTest={onTest} preferredEndpointId={preferredEndpointId} testRequests={testRequests} /> : activeTab === "add-endpoint" ? <EndpointFormPanel busy={busy} editingEndpointId={editingEndpointId} form={form} locale={locale} onCancelEdit={onCancelEdit} onFormChange={onFormChange} onSubmit={onSubmit} /> : sandbox}
       </div>
     </div>
   );
