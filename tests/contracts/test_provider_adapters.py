@@ -17,17 +17,21 @@ PROFILES = (
 )
 
 
-def _endpoint(profile: str) -> ModelEndpoint:
-    return ModelEndpoint(
-        display_name=profile,
-        base_url="https://models.example.test/v1?api-version=2025-01-01"
-        if profile == "azure_openai_chat_completions"
-        else "https://models.example.test/v1",
-        model_name="test-model",
-        protocol_profile=profile,
-        encrypted_api_key="unused",
-        api_key_mask="****test",
-    )
+def _endpoint(profile: str, **overrides: object) -> ModelEndpoint:
+    values: dict[str, object] = {
+        "display_name": profile,
+        "base_url": (
+            "https://models.example.test/v1?api-version=2025-01-01"
+            if profile == "azure_openai_chat_completions"
+            else "https://models.example.test/v1"
+        ),
+        "model_name": "test-model",
+        "protocol_profile": profile,
+        "encrypted_api_key": "unused",
+        "api_key_mask": "****test",
+    }
+    values.update(overrides)
+    return ModelEndpoint(**values)
 
 
 @pytest.mark.parametrize("profile", PROFILES)
@@ -152,6 +156,125 @@ def test_gemini_adapter_rejects_tool_result_messages_explicitly() -> None:
             ],
             {},
         )
+
+
+@pytest.mark.parametrize(
+    ("profile", "legacy_defaults", "output_path", "reasoning_path"),
+    (
+        (
+            "openai_chat_completions",
+            {"max_tokens": 22, "reasoning_effort": "low"},
+            ("max_completion_tokens",),
+            ("reasoning_effort",),
+        ),
+        (
+            "azure_openai_chat_completions",
+            {"max_tokens": 22, "reasoning_effort": "low"},
+            ("max_completion_tokens",),
+            ("reasoning_effort",),
+        ),
+        (
+            "openai_responses",
+            {"max_tokens": 22, "reasoning_effort": "low"},
+            ("max_output_tokens",),
+            ("reasoning", "effort"),
+        ),
+        (
+            "anthropic_messages",
+            {"max_output_tokens": 22, "reasoning_effort": "low"},
+            ("max_tokens",),
+            ("output_config", "effort"),
+        ),
+        (
+            "gemini_generate_content",
+            {"max_tokens": 22, "reasoning_effort": "low"},
+            ("generationConfig", "maxOutputTokens"),
+            ("generationConfig", "thinkingConfig", "thinkingLevel"),
+        ),
+        (
+            "ollama_chat",
+            {"max_tokens": 22, "think": "low"},
+            ("options", "num_predict"),
+            ("think",),
+        ),
+    ),
+)
+def test_adapters_translate_typed_reasoning_defaults_and_replace_legacy_model_defaults(
+    profile: str,
+    legacy_defaults: dict[str, object],
+    output_path: tuple[str, ...],
+    reasoning_path: tuple[str, ...],
+) -> None:
+    endpoint = _endpoint(
+        profile,
+        default_request_body=legacy_defaults,
+        reasoning_effort="high",
+        max_output_tokens=77,
+    )
+    adapter = ProviderRegistry().for_endpoint(endpoint)
+    from app.infrastructure.providers.common import resolve_request_body
+
+    evidence = resolve_request_body(
+        protocol_profile=profile,
+        model_defaults=adapter.endpoint_request_defaults(endpoint),
+        equivalent_field_groups=adapter.equivalent_request_field_groups(),
+    )
+    request = adapter.build_request_with_options(
+        endpoint, [{"role": "user", "content": "hello"}], evidence["effective_request_body"]
+    )
+
+    assert _path(request.body, output_path) == 77
+    assert _path(request.body, reasoning_path) == "high"
+    for alias in adapter.max_output_token_aliases:
+        if alias != output_path:
+            assert _path(request.body, alias) is _MISSING
+    for alias in adapter.reasoning_effort_aliases:
+        if alias != reasoning_path:
+            assert _path(request.body, alias) is _MISSING
+
+
+def test_custom_http_keeps_typed_defaults_as_metadata_and_preserves_raw_defaults() -> None:
+    endpoint = _endpoint(
+        "custom_http_json",
+        default_request_body={"max_tokens": 22, "reasoning_effort": "low"},
+        reasoning_effort="high",
+        max_output_tokens=77,
+    )
+    adapter = ProviderRegistry().for_endpoint(endpoint)
+
+    assert adapter.endpoint_request_defaults(endpoint) == {"max_tokens": 22, "reasoning_effort": "low"}
+
+
+def test_later_request_layers_override_typed_endpoint_defaults() -> None:
+    from app.infrastructure.providers.common import resolve_request_body
+
+    endpoint = _endpoint(
+        "openai_chat_completions",
+        default_request_body={"max_tokens": 22},
+        max_output_tokens=77,
+    )
+    adapter = ProviderRegistry().for_endpoint(endpoint)
+    evidence = resolve_request_body(
+        protocol_profile=adapter.profile,
+        model_defaults=adapter.endpoint_request_defaults(endpoint),
+        run_override={"max_tokens": 5},
+        equivalent_field_groups=adapter.equivalent_request_field_groups(),
+    )
+
+    assert evidence["effective_request_body"]["max_tokens"] == 5
+    assert "max_completion_tokens" not in evidence["effective_request_body"]
+
+
+_MISSING = object()
+
+
+def _path(value: object, path: tuple[str, ...]) -> object:
+    current = value
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return _MISSING
+        current = current[key]
+    return current
 
 
 def _response_for(profile: str) -> dict[str, object]:

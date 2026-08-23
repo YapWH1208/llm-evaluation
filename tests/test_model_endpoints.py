@@ -327,6 +327,35 @@ def test_model_endpoint_request_preview_excludes_secrets(tmp_path: Path) -> None
         assert "never-return" not in preview.text
 
 
+def test_model_endpoint_request_preview_translates_typed_reasoning_defaults(tmp_path: Path) -> None:
+    app = create_app(
+        Settings.local_development(
+            database_url=f"sqlite:///{tmp_path / 'platform.db'}", secret_encryption_key=Fernet.generate_key().decode()
+        )
+    )
+    with TestClient(app) as client:
+        endpoint = client.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "reasoning-model",
+                "default_request_body": {"max_tokens": 22, "reasoning_effort": "low"},
+                "reasoning_effort": "high",
+                "max_output_tokens": 77,
+            },
+        ).json()
+        preview = client.post(
+            f"/api/v1/model-endpoints/{endpoint['id']}/request-preview",
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert preview.status_code == 200
+    assert preview.json()["request_body"]["max_completion_tokens"] == 77
+    assert preview.json()["request_body"]["reasoning_effort"] == "high"
+    assert "max_tokens" not in preview.json()["request_body"]
+
+
 def test_model_endpoint_rejects_protected_request_body_fields(tmp_path: Path) -> None:
     app = create_app(
         Settings.local_development(

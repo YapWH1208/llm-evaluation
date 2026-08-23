@@ -83,6 +83,25 @@ def test_responses_connection_probe_uses_responses_shape() -> None:
     assert result == ConnectionTestResult(True, "Connection succeeded.", 200)
 
 
+def test_connection_probe_does_not_inherit_saved_typed_or_raw_output_limit() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Reasoning model",
+        base_url="https://models.example.test/v1",
+        model_name="reasoning-model",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+        reasoning_effort="high",
+        max_output_tokens=4096,
+        default_request_body={"max_completion_tokens": 2048, "temperature": 0.3},
+    )
+
+    request = ProviderConnectionTester().build_request(endpoint)
+
+    assert request.body["max_tokens"] == 8
+    assert "max_completion_tokens" not in request.body
+    assert request.body["temperature"] == 0
+
+
 def test_connection_probe_accepts_a_successful_provider_response_without_evaluation_payload() -> None:
     endpoint = ModelEndpoint(
         display_name="Provider-specific response",

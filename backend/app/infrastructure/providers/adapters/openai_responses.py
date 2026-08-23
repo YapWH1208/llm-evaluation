@@ -15,6 +15,10 @@ from app.infrastructure.providers.common import (
 class OpenAIResponsesAdapter(ProviderAdapter):
     profile = "openai_responses"
     output_token_option = "max_output_tokens"
+    max_output_token_path = ("max_output_tokens",)
+    max_output_token_aliases = (("max_output_tokens",), ("max_tokens",), ("max_completion_tokens",))
+    reasoning_effort_path = ("reasoning", "effort")
+    reasoning_effort_aliases = (("reasoning", "effort"), ("reasoning_effort",))
     capabilities = frozenset(
         {
             "text_input",
@@ -48,7 +52,7 @@ class OpenAIResponsesAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "model": endpoint.model_name,
             "input": [
                 {"role": "user", "content": [{"type": "input_text", "text": "Respond with the single word OK."}]}

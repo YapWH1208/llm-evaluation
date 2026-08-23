@@ -10,6 +10,10 @@ from app.infrastructure.providers.adapters.chat_content import translate_chat_me
 
 class OpenAIChatCompletionsAdapter(ProviderAdapter):
     profile = "openai_chat_completions"
+    max_output_token_path = ("max_completion_tokens",)
+    max_output_token_aliases = (("max_completion_tokens",), ("max_tokens",), ("max_output_tokens",))
+    reasoning_effort_path = ("reasoning_effort",)
+    reasoning_effort_aliases = (("reasoning_effort",), ("reasoning", "effort"))
     capabilities = frozenset(
         {
             "text_input",
@@ -48,7 +52,7 @@ class OpenAIChatCompletionsAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "model": endpoint.model_name,
             "messages": [{"role": "user", "content": "Respond with the single word OK."}],
             "temperature": 0,

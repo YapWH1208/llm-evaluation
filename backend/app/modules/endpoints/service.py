@@ -145,7 +145,10 @@ class EndpointService:
                 _endpoint_proxy(endpoint),
                 messages,
                 effective_request_options(
-                    {}, protocol_profile=adapter.profile, model_defaults=_value(endpoint, "default_request_body", {})
+                    {},
+                    protocol_profile=adapter.profile,
+                    model_defaults=adapter.endpoint_request_defaults(_endpoint_proxy(endpoint)),
+                    equivalent_field_groups=adapter.equivalent_request_field_groups(),
                 ),
             )
         except ValueError as error:

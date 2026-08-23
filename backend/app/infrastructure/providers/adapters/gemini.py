@@ -10,6 +10,18 @@ from app.infrastructure.providers.common import nonnegative_int, validate_base64
 
 class GeminiGenerateContentAdapter(ProviderAdapter):
     profile = "gemini_generate_content"
+    max_output_token_path = ("generationConfig", "maxOutputTokens")
+    max_output_token_aliases = (
+        ("generationConfig", "maxOutputTokens"),
+        ("max_tokens",),
+        ("max_output_tokens",),
+        ("max_completion_tokens",),
+    )
+    reasoning_effort_path = ("generationConfig", "thinkingConfig", "thinkingLevel")
+    reasoning_effort_aliases = (
+        ("generationConfig", "thinkingConfig", "thinkingLevel"),
+        ("reasoning_effort",),
+    )
     credential_header = "x-goog-api-key"
     credential_prefix = ""
     capabilities = frozenset(
@@ -55,7 +67,7 @@ class GeminiGenerateContentAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "contents": [{"role": "user", "parts": [{"text": "Respond with the single word OK."}]}],
             "generationConfig": {"temperature": 0, "maxOutputTokens": 8},
         }

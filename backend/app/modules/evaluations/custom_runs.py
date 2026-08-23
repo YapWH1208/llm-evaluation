@@ -8,10 +8,15 @@ from app.core.content import ContentValidationError, normalize_content_parts
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.endpoints.models import EndpointStatus
 from app.modules.evaluations.models import RunStatus, TaskStatus, TaskType
-from app.infrastructure.providers.common import resolve_request_body
 from app.modules.evaluations.names import format_run_display_name
 from app.modules.evaluations.ports import EvaluationRepository
-from app.modules.evaluations.planning import attempt_values, endpoint_snapshot, task_values
+from app.modules.evaluations.planning import (
+    attempt_values,
+    endpoint_snapshot,
+    record_proxy,
+    request_body_evidence,
+    task_values,
+)
 from app.modules.reports.assets import MediaAssetError, safe_asset_path
 
 
@@ -38,11 +43,11 @@ def create_custom_multimodal_run(
         raise ValidationError("Custom samples require a sample ID and reference answer.")
 
     normalized_messages = _normalize_messages(repository, data_root, messages)
-    request_body_evidence = resolve_request_body(
-        protocol_profile=str(endpoint.get("protocol_profile", "openai_chat_completions")),
-        model_defaults=(
-            endpoint.get("default_request_body") if isinstance(endpoint.get("default_request_body"), dict) else None
-        ),
+    body_evidence = request_body_evidence(
+        endpoint=record_proxy(endpoint),
+        benchmark_manifest={},
+        suite_snapshot=None,
+        request_body_override=None,
     )
     now = datetime.now(timezone.utc)
     run_values = {
@@ -58,7 +63,7 @@ def create_custom_multimodal_run(
             "benchmark": {"id": "custom-multimodal", "version": "1.0.0", "source": "user"},
             "endpoint": endpoint_snapshot(endpoint),
             "sample_ids": [normalized_sample_id],
-            "request_body_evidence": request_body_evidence,
+            "request_body_evidence": body_evidence,
         },
         "status": RunStatus.QUEUED.value,
         "total_samples": 1,
@@ -112,7 +117,7 @@ def create_custom_multimodal_run(
                 "messages": normalized_messages,
                 "modality": sample_modality(normalized_messages),
                 "metadata": {"capability": "custom", "language": "unknown", "difficulty": "custom"},
-                "request_body_evidence": request_body_evidence,
+                "request_body_evidence": body_evidence,
             },
             reference_snapshot={"type": "exact_match", "answer": normalized_reference},
             now=now,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -25,6 +27,10 @@ class ProviderAdapter(ABC):
     omit_empty_credential = False
     static_headers: dict[str, str] = {}
     output_token_option = "max_tokens"
+    max_output_token_path: tuple[str, ...] | None = None
+    max_output_token_aliases: tuple[tuple[str, ...], ...] = ()
+    reasoning_effort_path: tuple[str, ...] | None = None
+    reasoning_effort_aliases: tuple[tuple[str, ...], ...] = ()
 
     def endpoint_url(self, endpoint: ModelEndpoint) -> str:
         suffix = self.path_suffix(endpoint)
@@ -66,6 +72,37 @@ class ProviderAdapter(ABC):
     def request_defaults(self) -> dict[str, object]:
         return {"max_tokens": 32, "temperature": 0}
 
+    def endpoint_request_defaults(self, endpoint: ModelEndpoint) -> dict[str, object]:
+        """Return endpoint defaults with typed settings translated for this provider."""
+
+        raw_defaults = getattr(endpoint, "default_request_body", {})
+        defaults = deepcopy(dict(raw_defaults)) if isinstance(raw_defaults, Mapping) else {}
+        max_output_tokens = _endpoint_value(endpoint, "max_output_tokens")
+        if isinstance(max_output_tokens, int) and not isinstance(max_output_tokens, bool):
+            self._set_typed_default(
+                defaults, self.max_output_token_path, self.max_output_token_aliases, max_output_tokens
+            )
+        reasoning_effort = _endpoint_value(endpoint, "reasoning_effort")
+        if isinstance(reasoning_effort, str) and reasoning_effort:
+            self._set_typed_default(
+                defaults, self.reasoning_effort_path, self.reasoning_effort_aliases, reasoning_effort
+            )
+        return defaults
+
+    def equivalent_request_field_groups(self) -> tuple[tuple[tuple[str, ...], ...], ...]:
+        """Groups whose members mean the same option at different request layers."""
+
+        return tuple(group for group in (self.max_output_token_aliases, self.reasoning_effort_aliases) if group)
+
+    def connection_defaults(self, endpoint: ModelEndpoint) -> dict[str, Any]:
+        """Return safe raw defaults without saved output limits for a bounded probe."""
+
+        raw_defaults = getattr(endpoint, "default_request_body", {})
+        defaults = self.safe_defaults(dict(raw_defaults) if isinstance(raw_defaults, Mapping) else {})
+        for path in self.max_output_token_aliases:
+            _remove_path(defaults, path)
+        return defaults
+
     def capability_probe_options(self) -> dict[str, object]:
         return {"temperature": 0, self.output_token_option: 8}
 
@@ -82,3 +119,47 @@ class ProviderAdapter(ABC):
 
     def safe_defaults(self, options: dict[str, object]) -> dict[str, Any]:
         return allowed_defaults(options)
+
+    @staticmethod
+    def _set_typed_default(
+        defaults: dict[str, object],
+        path: tuple[str, ...] | None,
+        aliases: tuple[tuple[str, ...], ...],
+        value: object,
+    ) -> None:
+        if path is None:
+            return
+        for alias in aliases:
+            _remove_path(defaults, alias)
+        _set_path(defaults, path, value)
+
+
+def _endpoint_value(endpoint: object, key: str) -> object | None:
+    return getattr(endpoint, key, None)
+
+
+def _set_path(target: dict[str, object], path: tuple[str, ...], value: object) -> None:
+    current = target
+    for key in path[:-1]:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            current[key] = child
+        current = child
+    current[path[-1]] = value
+
+
+def _remove_path(target: dict[str, object], path: tuple[str, ...]) -> None:
+    current = target
+    ancestors: list[tuple[dict[str, object], str]] = []
+    for key in path[:-1]:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            return
+        ancestors.append((current, key))
+        current = child
+    current.pop(path[-1], None)
+    for parent, key in reversed(ancestors):
+        child = parent.get(key)
+        if isinstance(child, dict) and not child:
+            parent.pop(key, None)

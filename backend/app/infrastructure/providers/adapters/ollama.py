@@ -13,6 +13,15 @@ class OllamaChatAdapter(ProviderAdapter):
     profile = "ollama_chat"
     allow_loopback = True
     omit_empty_credential = True
+    max_output_token_path = ("options", "num_predict")
+    max_output_token_aliases = (
+        ("options", "num_predict"),
+        ("max_tokens",),
+        ("max_output_tokens",),
+        ("max_completion_tokens",),
+    )
+    reasoning_effort_path = ("think",)
+    reasoning_effort_aliases = (("think",), ("reasoning_effort",))
     capabilities = frozenset(
         {
             "text_input",
@@ -56,7 +65,7 @@ class OllamaChatAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "model": endpoint.model_name,
             "messages": [{"role": "user", "content": "Respond with the single word OK."}],
             "options": {"temperature": 0, "num_predict": 8},

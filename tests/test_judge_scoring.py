@@ -17,6 +17,9 @@ class Endpoint:
     model_name = "judge-model"
     protocol_profile = "openai_chat_completions"
     default_request_body = {"temperature": 0}
+    reasoning_effort = "medium"
+    context_length = 128000
+    max_output_tokens = 4096
     timeout_seconds = 45
     input_cost_per_million = 1.5
     output_cost_per_million = 2.5
@@ -66,6 +69,9 @@ def test_builds_secret_safe_endpoint_snapshot_and_judge_inputs() -> None:
         "base_url": "https://models.example.test/v1",
         "model_name": "judge-model",
         "protocol_profile": "openai_chat_completions",
+        "reasoning_effort": "medium",
+        "context_length": 128000,
+        "max_output_tokens": 4096,
         "timeout_seconds": 45,
         "input_cost_per_million": 1.5,
         "output_cost_per_million": 2.5,

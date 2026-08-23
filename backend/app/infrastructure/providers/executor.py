@@ -48,7 +48,10 @@ class ProviderExecutor:
             if not isinstance(messages, list):
                 raise ValueError("Text sample input must contain a messages list.")
             options = effective_request_options(
-                input_snapshot, protocol_profile=adapter.profile, model_defaults=endpoint.default_request_body
+                input_snapshot,
+                protocol_profile=adapter.profile,
+                model_defaults=adapter.endpoint_request_defaults(endpoint),
+                equivalent_field_groups=adapter.equivalent_request_field_groups(),
             )
             outbound_request = adapter.build_request_with_options(endpoint, messages, options)
             request_snapshot = dict(outbound_request.body)
