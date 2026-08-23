@@ -124,7 +124,8 @@ describe("workspace tab routing", () => {
     const user = userEvent.setup();
     render(<LocaleProvider><App /></LocaleProvider>);
 
-    await user.click(await screen.findByRole("button", { name: "Edit configuration" }));
+    await user.selectOptions(await screen.findByLabelText("Operation"), "edit");
+    await user.click(screen.getByRole("button", { name: "Run operation" }));
 
     await waitFor(() => expect(window.location.pathname).toBe("/models"));
     expect(window.location.search).toBe("?tab=add-endpoint");
