@@ -167,9 +167,9 @@ class ModelEndpointResponse(BaseModel):
     api_key_mask: str
     custom_headers: dict[str, str]
     default_request_body: dict[str, Any]
-    reasoning_effort: ReasoningEffort | None
-    context_length: int | None
-    max_output_tokens: int | None
+    reasoning_effort: ReasoningEffort | None = None
+    context_length: int | None = None
+    max_output_tokens: int | None = None
     timeout_seconds: int
     max_concurrency: int
     api_key_max_concurrency: int | None
