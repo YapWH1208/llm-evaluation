@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 
@@ -100,6 +101,23 @@ def test_connection_probe_does_not_inherit_saved_typed_or_raw_output_limit() -> 
     assert request.body["max_tokens"] == 8
     assert "max_completion_tokens" not in request.body
     assert request.body["temperature"] == 0
+
+
+def test_connection_probe_does_not_mutate_saved_default_request_body() -> None:
+    endpoint = ModelEndpoint(
+        display_name="Gemini",
+        base_url="https://generativelanguage.example.test/v1",
+        model_name="gemini-model",
+        protocol_profile="gemini_generate_content",
+        encrypted_api_key="not-used",
+        api_key_mask="****test",
+        default_request_body={"generationConfig": {"maxOutputTokens": 2048, "temperature": 0.5}},
+    )
+    before = copy.deepcopy(endpoint.default_request_body)
+
+    ProviderConnectionTester().build_request(endpoint)
+
+    assert endpoint.default_request_body == before
 
 
 def test_connection_probe_accepts_a_successful_provider_response_without_evaluation_payload() -> None:

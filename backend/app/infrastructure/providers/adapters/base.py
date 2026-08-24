@@ -125,7 +125,7 @@ class ProviderAdapter(ABC):
         """Return safe raw defaults without saved output limits for a bounded probe."""
 
         raw_defaults = getattr(endpoint, "default_request_body", {})
-        defaults = self.safe_defaults(dict(raw_defaults) if isinstance(raw_defaults, Mapping) else {})
+        defaults = self.safe_defaults(deepcopy(dict(raw_defaults)) if isinstance(raw_defaults, Mapping) else {})
         for path in self.max_output_token_aliases:
             _remove_path(defaults, path)
         return defaults
