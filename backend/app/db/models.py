@@ -73,6 +73,9 @@ class ModelEndpoint(Base):
         nullable=False,
         default=dict,
     )
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    context_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     max_concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     api_key_max_concurrency: Mapped[int | None] = mapped_column(Integer, nullable=True)

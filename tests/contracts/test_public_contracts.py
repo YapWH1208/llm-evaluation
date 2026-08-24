@@ -68,6 +68,7 @@ EXPECTED_ROUTES: dict[str, frozenset[str]] = {
     "/api/v1/model-endpoints/{endpoint_id}/capabilities/detect": frozenset({"POST"}),
     "/api/v1/model-endpoints/{endpoint_id}/connection-test": frozenset({"POST"}),
     "/api/v1/model-endpoints/{endpoint_id}/request-preview": frozenset({"POST"}),
+    "/api/v1/model-endpoints/{endpoint_id}/sandbox": frozenset({"POST"}),
     "/api/v1/prompt-packages": frozenset({"GET", "POST"}),
     "/api/v1/prompt-packages/{prompt_package_id}": frozenset({"DELETE", "PUT"}),
     "/api/v1/reports": frozenset({"POST"}),

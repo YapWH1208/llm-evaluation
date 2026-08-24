@@ -244,6 +244,14 @@ def _upgrade_v27_remove_user_authentication_tables(connection: Connection) -> No
             connection.execute(text(f"DROP TABLE {table_name}"))
 
 
+def _upgrade_v28_reasoning_endpoint_defaults(connection: Connection) -> None:
+    """Add optional model reasoning and output-window defaults to endpoints."""
+
+    _add_column_if_missing(connection, "model_endpoints", "reasoning_effort", "reasoning_effort VARCHAR(16)")
+    _add_column_if_missing(connection, "model_endpoints", "context_length", "context_length INTEGER")
+    _add_column_if_missing(connection, "model_endpoints", "max_output_tokens", "max_output_tokens INTEGER")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=2,
@@ -400,6 +408,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         migration_id="20260816_remove_user_authentication_tables",
         description="Drop the users and audit_events tables removed with the user system.",
         upgrade=_upgrade_v27_remove_user_authentication_tables,
+    ),
+    Migration(
+        version=28,
+        migration_id="20260823_add_reasoning_endpoint_defaults",
+        description="Add optional reasoning effort, context length, and output token defaults to model endpoints.",
+        upgrade=_upgrade_v28_reasoning_endpoint_defaults,
     ),
 )
 

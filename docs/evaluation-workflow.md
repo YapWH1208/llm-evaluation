@@ -11,7 +11,7 @@ The retained browser workspace is available through these direct paths:
 | --- | --- |
 | `/dashboard` | Summary (default), `?tab=evaluations`, and `?tab=readiness`. |
 | `/guide` | Getting started (default), `?tab=prepare-data`, and `?tab=run-and-analyze`. |
-| `/models` | Model inventory (default) and `?tab=add-endpoint`. |
+| `/models` | Model inventory (default), `?tab=add-endpoint`, and `?tab=sandbox&endpoint=<endpoint-id>`. |
 | `/datasets` | Dataset inventory (default) and `?tab=register-dataset`. |
 | `/prompts` | Prompt inventory (default) and `?tab=new-prompt-package`. |
 | `/runs` | Run inventory (default), `?tab=quick-start`, `?tab=dataset-evaluation`, and `?tab=run-details&run=<run-id>`. |
@@ -42,6 +42,38 @@ successful connection test moves the endpoint to `available`; only endpoints
 with `available` status can be selected for evaluation runs. The **Probe
 capabilities** action additionally records the exact capability evidence the
 provider declared.
+
+The form's **Advanced settings** disclosure is initially closed for both new
+and existing endpoints. Alongside connection, capacity, cost, and metadata
+settings, it holds optional **Reasoning effort** (`low`, `medium`, or `high`),
+**Context length**, and **Maximum output tokens**. Leaving a value unset keeps
+the provider/model default. Context length is operator-supplied metadata; the
+platform validates only that a configured maximum output does not exceed it.
+The provider adapter translates the portable reasoning and output settings to
+its native request shape while preserving legacy raw request defaults when a
+typed setting is unset.
+
+Model inventory retains one selected endpoint. Choose **Edit configuration**,
+**Test connection**, **Probe capabilities**, or **Open sandbox** from the
+operation control, then run the selected operation.
+
+### Sandbox diagnostics
+
+Open **Models → Sandbox** at `/models?tab=sandbox&endpoint=<endpoint-id>` to
+send one bounded diagnostic request. Text mode accepts a user prompt and an
+optional system prompt. Tool-calling mode uses a platform-owned deterministic
+function schema and prompt; it displays the returned function name and JSON
+arguments but never executes a tool or makes a follow-up request.
+
+Sandbox results are ephemeral: they do not save prompts or results, change
+endpoint availability, alter capability declarations, or create runs or queue
+tasks. Each request may incur provider cost and follows the endpoint timeout,
+encrypted credential handling, address/redirect protections, and response-size
+limit. The page shows only a sanitized request, final text, parsed tool calls,
+usage, latency, provider status, and safe errors—never API keys, authorization
+headers, or an unfiltered provider response. Deterministic tool-call tests are
+currently available for OpenAI-compatible Chat Completions (including Azure)
+and OpenAI Responses; other profiles return a clear unsupported result.
 
 ## 2. Register a dataset version
 

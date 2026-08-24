@@ -415,23 +415,94 @@ def test_mongodb_app_model_endpoint_crud_uses_document_store() -> None:
     with TestClient(app) as api:
         created = api.post(
             "/api/v1/model-endpoints",
-            json={"base_url": "https://models.example.test/v1", "api_key": "secret", "model_name": "model"},
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+                "reasoning_effort": "medium",
+                "context_length": 128000,
+                "max_output_tokens": 4096,
+            },
         )
         assert created.status_code == 201
         endpoint = created.json()
         assert endpoint["status"] == "unverified"
         assert "secret" not in str(endpoint)
+        assert endpoint["reasoning_effort"] == "medium"
+        assert endpoint["context_length"] == 128000
+        assert endpoint["max_output_tokens"] == 4096
 
         tested = api.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test")
         assert tested.status_code == 200
         assert tested.json()["status"] == "available"
 
-        updated = api.patch(f"/api/v1/model-endpoints/{endpoint['id']}", json={"max_concurrency": 3})
+        updated = api.patch(
+            f"/api/v1/model-endpoints/{endpoint['id']}",
+            json={"max_concurrency": 3, "reasoning_effort": "low", "max_output_tokens": 2048},
+        )
         assert updated.status_code == 200
         assert updated.json()["max_concurrency"] == 3
+        assert updated.json()["reasoning_effort"] == "low"
+        assert updated.json()["context_length"] == 128000
+        assert updated.json()["max_output_tokens"] == 2048
         assert api.get("/api/v1/model-endpoints").json()[0]["id"] == endpoint["id"]
         assert api.delete(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 204
         assert api.get(f"/api/v1/model-endpoints/{endpoint['id']}").status_code == 404
+
+
+def test_mongodb_app_reads_legacy_endpoint_documents_without_typed_defaults() -> None:
+    client = FakeClient()
+    settings = Settings.local_development(
+        database_url="mongodb://mongo.test/platform",
+        secret_encryption_key=Fernet.generate_key().decode(),
+    )
+    store = MongoDocumentStore(settings, client=client)
+    app = create_app(settings, connection_tester=SuccessfulTester(), document_store=store)
+
+    with TestClient(app) as api:
+        created = api.post(
+            "/api/v1/model-endpoints",
+            json={
+                "base_url": "https://models.example.test/v1",
+                "api_key": "secret",
+                "model_name": "model",
+            },
+        )
+        assert created.status_code == 201
+        created_payload = created.json()
+
+        # Simulate a master-era document written before the typed-default fields existed.
+        endpoint_collections = [
+            collection
+            for database in client.databases.values()
+            for name, collection in database.collections.items()
+            if name == "model_endpoints"
+        ]
+        assert len(endpoint_collections) == 1
+        stripped = 0
+        for document in endpoint_collections[0].documents:
+            if "encrypted_api_key" in document:
+                for key in ("reasoning_effort", "context_length", "max_output_tokens"):
+                    document.pop(key, None)
+                stripped += 1
+        assert stripped == 1
+
+        listed = api.get("/api/v1/model-endpoints")
+        assert listed.status_code == 200
+        assert len(listed.json()) == 1
+        row = listed.json()[0]
+        assert row["id"] == created_payload["id"]
+        assert row["reasoning_effort"] is None
+        assert row["context_length"] is None
+        assert row["max_output_tokens"] is None
+
+        fetched = api.get(f"/api/v1/model-endpoints/{created_payload['id']}")
+        assert fetched.status_code == 200
+        assert fetched.json()["max_output_tokens"] is None
+
+        patched = api.patch(f"/api/v1/model-endpoints/{created_payload['id']}", json={"max_concurrency": 2})
+        assert patched.status_code == 200
+        assert patched.json()["reasoning_effort"] is None
 
 
 def test_mongodb_app_preserves_capability_declarations_and_detection_evidence() -> None:

@@ -17,6 +17,9 @@ const createdEndpoint: Endpoint = {
   currency: "USD",
   custom_headers: {},
   default_request_body: {},
+  reasoning_effort: "high",
+  context_length: 128000,
+  max_output_tokens: 8192,
   display_name: "First model",
   id: "endpoint-created",
   input_cost_per_million: null,
@@ -62,11 +65,16 @@ describe("endpoint onboarding handoff", () => {
     await user.type(screen.getByLabelText("Base URL"), createdEndpoint.base_url);
     await user.type(screen.getByLabelText("Model name"), createdEndpoint.model_name);
     await user.type(screen.getByLabelText("API key"), "secret-test-key");
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    await user.selectOptions(screen.getByLabelText("Reasoning effort"), "high");
+    await user.type(screen.getByLabelText("Context length"), "128000");
+    await user.type(screen.getByLabelText("Maximum output tokens"), "8192");
     await user.click(screen.getByRole("button", { name: "Save encrypted endpoint" }));
 
+    expect(endpointsApi.create).toHaveBeenCalledWith(expect.objectContaining({ reasoning_effort: "high", context_length: 128000, max_output_tokens: 8192 }));
     expect(await screen.findByRole("tab", { name: "Model inventory" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: "Select First model" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Test connection" })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Operation" })).toHaveValue("edit");
     expect(window.location.pathname).toBe("/models");
     expect(window.location.search).toBe("");
   });
@@ -105,8 +113,9 @@ describe("endpoint onboarding handoff", () => {
     await user.click(screen.getByRole("button", { name: "Select Second model" }));
     expect(screen.getByRole("button", { name: "Select Second model" })).toHaveAttribute("aria-pressed", "true");
 
-    await user.click(screen.getByRole("button", { name: "Test connection" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled());
+    await user.selectOptions(screen.getByRole("combobox", { name: "Operation" }), "test");
+    await user.click(screen.getByRole("button", { name: "Run operation" }));
+    await waitFor(() => expect(endpointsApi.test).toHaveBeenCalledWith(secondEndpoint.id));
 
     expect(screen.getByRole("button", { name: "Select Second model" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Select First model" })).toHaveAttribute("aria-pressed", "false");
@@ -129,10 +138,15 @@ describe("endpoint onboarding handoff", () => {
 
     render(<LocaleProvider><App /></LocaleProvider>);
     await user.click(await screen.findByRole("button", { name: "Select First model" }));
-    await user.click(screen.getByRole("button", { name: "Edit configuration" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Operation" }), "edit");
+    await user.click(screen.getByRole("button", { name: "Run operation" }));
 
     const displayName = screen.getByLabelText("Display name");
     expect(displayName).toHaveValue("First model");
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    expect(screen.getByLabelText("Reasoning effort")).toHaveValue("high");
+    expect(screen.getByLabelText("Context length")).toHaveValue(128000);
+    expect(screen.getByLabelText("Maximum output tokens")).toHaveValue(8192);
     await user.clear(displayName);
     await user.type(displayName, "Renamed model");
     await user.click(screen.getByRole("button", { name: "Save model configuration" }));

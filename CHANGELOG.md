@@ -31,6 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Model endpoints now support portable reasoning effort, context length, and maximum output-token defaults. Models adds a URL-addressable sandbox for one-shot text and non-executing tool-call diagnostics, while the inventory provides an explicit selected-endpoint operation control.
 - Added a top-level `DEVELOPER.md` developer guide with local setup, common
   commands, environment variables, architecture notes, and repository
   conventions.

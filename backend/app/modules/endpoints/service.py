@@ -10,7 +10,7 @@ from app.core.errors import NotFoundError, ValidationError
 from app.core.secrets import SecretCipher, mask_secret
 from app.modules.endpoints.models import CapabilityDeclaration, CapabilityDetection, EndpointStatus
 from app.infrastructure.providers.capabilities import CapabilityDetector
-from app.infrastructure.providers.contracts import CapabilityDetectionResult
+from app.infrastructure.providers.contracts import CapabilityDetectionResult, ModelSandboxRunner, SandboxExecutionResult
 from app.infrastructure.providers.connection import build_connection_test_request
 from app.infrastructure.providers.common import effective_request_options
 from app.infrastructure.providers.registry import ProviderRegistry
@@ -38,6 +38,9 @@ class EndpointService:
                 "api_key_mask": mask_secret(api_key),
                 "custom_headers": payload.custom_headers,
                 "default_request_body": payload.default_request_body,
+                "reasoning_effort": payload.reasoning_effort,
+                "context_length": payload.context_length,
+                "max_output_tokens": payload.max_output_tokens,
                 "timeout_seconds": payload.timeout_seconds,
                 "max_concurrency": payload.max_concurrency,
                 "api_key_max_concurrency": payload.api_key_max_concurrency,
@@ -79,6 +82,9 @@ class EndpointService:
             "output_tokens_per_minute",
             "input_cost_per_million",
             "output_cost_per_million",
+            "reasoning_effort",
+            "context_length",
+            "max_output_tokens",
             "notes",
         }
         values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
@@ -86,6 +92,10 @@ class EndpointService:
         base_url = str(values.get("base_url", _value(endpoint, "base_url")))
         profile = str(values.get("protocol_profile", _value(endpoint, "protocol_profile", "openai_chat_completions")))
         _validate_loopback_profile(base_url, profile)
+        _validate_output_token_limit(
+            values.get("context_length", _value(endpoint, "context_length")),
+            values.get("max_output_tokens", _value(endpoint, "max_output_tokens")),
+        )
         if "currency" in values:
             values["currency"] = str(values["currency"]).upper()
         if "api_key" in payload.model_fields_set and payload.api_key is not None:
@@ -135,12 +145,37 @@ class EndpointService:
                 _endpoint_proxy(endpoint),
                 messages,
                 effective_request_options(
-                    {}, protocol_profile=adapter.profile, model_defaults=_value(endpoint, "default_request_body", {})
+                    {},
+                    protocol_profile=adapter.profile,
+                    model_defaults=adapter.endpoint_request_defaults(_endpoint_proxy(endpoint)),
+                    equivalent_field_groups=adapter.equivalent_request_field_groups(),
                 ),
             )
         except ValueError as error:
             raise ValidationError(str(error)) from error
         return adapter.profile, request.body
+
+    def sandbox(
+        self,
+        endpoint_id: str,
+        cipher: SecretCipher,
+        runner: ModelSandboxRunner,
+        *,
+        mode: str,
+        user_prompt: str,
+        system_prompt: str | None,
+    ) -> SandboxExecutionResult:
+        """Run one provider request without storing its result or changing endpoint state."""
+
+        endpoint = self.get(endpoint_id)
+        api_key = cipher.decrypt(str(_value(endpoint, "encrypted_api_key")))
+        return runner.execute(
+            _endpoint_proxy(endpoint),
+            api_key,
+            mode=mode,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+        )
 
     def list_capabilities(self, endpoint_id: str) -> list[Any]:
         self.get(endpoint_id)
@@ -263,6 +298,11 @@ def _connection_fields_changed(payload: Any, values: dict[str, Any], current: An
         if new_value is not None and new_value != _value(current, field):
             return True
     return False
+
+
+def _validate_output_token_limit(context_length: Any, max_output_tokens: Any) -> None:
+    if context_length is not None and max_output_tokens is not None and max_output_tokens > context_length:
+        raise ValidationError("Maximum output tokens must not exceed context length.")
 
 
 def _validate_loopback_profile(base_url: str, protocol_profile: str) -> None:

@@ -26,7 +26,7 @@ class CustomHttpJsonAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "model": endpoint.model_name,
             "messages": [{"role": "user", "content": "Respond with the single word OK."}],
             "temperature": 0,

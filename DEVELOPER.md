@@ -118,6 +118,16 @@ provider limits.
   downloads validate addresses, redirects, host allowlists, credential bindings,
   and response/dataset size limits.
 - Endpoint API keys are encrypted at rest and never returned in full.
+- Endpoint configuration persists optional `reasoning_effort`, `context_length`,
+  and `max_output_tokens` values. Provider adapters translate the portable
+  reasoning/output defaults at request construction; a null typed setting leaves
+  legacy `default_request_body` behavior intact. SQLite schema v28 adds these
+  nullable fields, while Mongo endpoint documents carry the same optional keys.
+- `POST /api/v1/model-endpoints/{endpoint_id}/sandbox` is a one-request,
+  non-persistent diagnostic boundary. It reuses encrypted credential handling,
+  provider adapters, outbound-address checks, redirect refusal, timeouts, and
+  bounded response reads. Tool mode uses a fixed no-execution function contract;
+  do not turn it into an arbitrary provider proxy or an agent/tool loop.
 
 ## Frontend conventions
 

@@ -139,6 +139,7 @@ def resolve_request_body(
     benchmark_defaults: Mapping[str, object] | None = None,
     run_override: Mapping[str, object] | None = None,
     benchmark_forced: Mapping[str, object] | None = None,
+    equivalent_field_groups: tuple[tuple[tuple[str, ...], ...], ...] = (),
 ) -> dict[str, object]:
     from app.infrastructure.providers.registry import ProviderRegistry
 
@@ -158,6 +159,7 @@ def resolve_request_body(
     for layer_name, raw_layer in layers:
         safe_layer = _normalise_layer(raw_layer, layer_name, ignored_fields)
         snapshots[layer_name] = deepcopy(safe_layer)
+        _remove_overridden_aliases(effective, safe_layer, equivalent_field_groups)
         _deep_merge(effective, safe_layer, layer_name, provenance, overridden_fields)
     return {
         "protocol_profile": protocol_profile,
@@ -169,13 +171,21 @@ def resolve_request_body(
 
 
 def effective_request_options(
-    input_snapshot: Mapping[str, object], *, protocol_profile: str, model_defaults: Mapping[str, object] | None
+    input_snapshot: Mapping[str, object],
+    *,
+    protocol_profile: str,
+    model_defaults: Mapping[str, object] | None,
+    equivalent_field_groups: tuple[tuple[tuple[str, ...], ...], ...] = (),
 ) -> dict[str, object]:
     evidence = input_snapshot.get("request_body_evidence")
     if isinstance(evidence, Mapping) and isinstance(evidence.get("effective_request_body"), Mapping):
         return deepcopy(dict(evidence["effective_request_body"]))
     return dict(
-        resolve_request_body(protocol_profile=protocol_profile, model_defaults=model_defaults)["effective_request_body"]
+        resolve_request_body(
+            protocol_profile=protocol_profile,
+            model_defaults=model_defaults,
+            equivalent_field_groups=equivalent_field_groups,
+        )["effective_request_body"]
     )
 
 
@@ -221,3 +231,39 @@ def _deep_merge(
             )
         target[key] = deepcopy(value)
         provenance[field_path] = layer_name
+
+
+def _remove_overridden_aliases(
+    effective: dict[str, object],
+    incoming: Mapping[str, object],
+    equivalent_field_groups: tuple[tuple[tuple[str, ...], ...], ...],
+) -> None:
+    for aliases in equivalent_field_groups:
+        if any(_path_exists(incoming, path) for path in aliases):
+            for path in aliases:
+                _remove_path(effective, path)
+
+
+def _path_exists(value: Mapping[str, object], path: tuple[str, ...]) -> bool:
+    current: object = value
+    for key in path:
+        if not isinstance(current, Mapping) or key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def _remove_path(value: dict[str, object], path: tuple[str, ...]) -> None:
+    current = value
+    ancestors: list[tuple[dict[str, object], str]] = []
+    for key in path[:-1]:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            return
+        ancestors.append((current, key))
+        current = child
+    current.pop(path[-1], None)
+    for parent, key in reversed(ancestors):
+        child = parent.get(key)
+        if isinstance(child, dict) and not child:
+            parent.pop(key, None)

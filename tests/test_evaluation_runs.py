@@ -1367,12 +1367,21 @@ def test_pause_invalidates_a_running_lease_before_a_late_result_can_commit(tmp_p
 
 
 def test_queued_run_uses_frozen_endpoint_configuration_and_rotated_secret(tmp_path: Path) -> None:
-    captured: list[tuple[str, str, int, dict[str, object], str]] = []
+    captured: list[tuple[str, str, int, dict[str, object], str | None, int | None, int | None, str]] = []
 
     class SnapshotExecutor:
         def execute(self, endpoint, api_key: str, input_snapshot: dict[str, object]) -> SampleExecutionResult:
             captured.append(
-                (endpoint.base_url, endpoint.model_name, endpoint.timeout_seconds, endpoint.custom_headers, api_key)
+                (
+                    endpoint.base_url,
+                    endpoint.model_name,
+                    endpoint.timeout_seconds,
+                    endpoint.custom_headers,
+                    endpoint.reasoning_effort,
+                    endpoint.context_length,
+                    endpoint.max_output_tokens,
+                    api_key,
+                )
             )
             return SampleExecutionResult(
                 True, {"model": endpoint.model_name}, '{"choices":[{"message":{"content":"4"}}]}', "4"
@@ -1395,6 +1404,9 @@ def test_queued_run_uses_frozen_endpoint_configuration_and_rotated_secret(tmp_pa
                 "timeout_seconds": 42,
                 "custom_headers": {"X-Run-Mode": "frozen"},
                 "default_request_body": {"temperature": 0.1},
+                "reasoning_effort": "medium",
+                "context_length": 128000,
+                "max_output_tokens": 4096,
             },
         ).json()
         assert client.post(f"/api/v1/model-endpoints/{endpoint['id']}/connection-test").status_code == 200
@@ -1410,13 +1422,25 @@ def test_queued_run_uses_frozen_endpoint_configuration_and_rotated_secret(tmp_pa
                 "timeout_seconds": 5,
                 "custom_headers": {"X-Run-Mode": "changed"},
                 "default_request_body": {"temperature": 0.9},
+                "reasoning_effort": "high",
+                "context_length": 32000,
+                "max_output_tokens": 1024,
             },
         )
         assert changed.status_code == 200
         assert client.post(f"/api/v1/evaluation-runs/{run['id']}/execute").json()["status"] == "completed"
 
     assert captured == [
-        ("https://models.example.test/v1", "frozen-model", 42, {"X-Run-Mode": "frozen"}, "rotated-secret")
+        (
+            "https://models.example.test/v1",
+            "frozen-model",
+            42,
+            {"X-Run-Mode": "frozen"},
+            "medium",
+            128000,
+            4096,
+            "rotated-secret",
+        )
     ]
 
 

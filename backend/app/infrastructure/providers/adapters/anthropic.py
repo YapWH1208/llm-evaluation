@@ -10,6 +10,10 @@ from app.infrastructure.providers.common import validate_base64, validate_remote
 
 class AnthropicMessagesAdapter(ProviderAdapter):
     profile = "anthropic_messages"
+    max_output_token_path = ("max_tokens",)
+    max_output_token_aliases = (("max_tokens",), ("max_output_tokens",), ("max_completion_tokens",))
+    reasoning_effort_path = ("output_config", "effort")
+    reasoning_effort_aliases = (("output_config", "effort"), ("reasoning_effort",))
     credential_header = "x-api-key"
     credential_prefix = ""
     static_headers = {"anthropic-version": "2023-06-01"}
@@ -47,7 +51,7 @@ class AnthropicMessagesAdapter(ProviderAdapter):
 
     def build_connection_body(self, endpoint: ModelEndpoint) -> dict[str, object]:
         return {
-            **self.safe_defaults(endpoint.default_request_body or {}),
+            **self.connection_defaults(endpoint),
             "model": endpoint.model_name,
             "messages": [{"role": "user", "content": [{"type": "text", "text": "Respond with the single word OK."}]}],
             "max_tokens": 8,

@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.errors import ValidationError
 from app.infrastructure.providers.common import resolve_request_body
+from app.infrastructure.providers.registry import ProviderRegistry
 from app.modules.benchmarks.prompts import PromptTemplateError, render_template
 from app.modules.evaluations.models import SampleAttemptStatus
 
@@ -40,6 +41,9 @@ def endpoint_snapshot(endpoint: dict[str, Any]) -> dict[str, Any]:
         "model_name": endpoint["model_name"],
         "protocol_profile": endpoint.get("protocol_profile", "openai_chat_completions"),
         "default_request_body": endpoint.get("default_request_body", {}),
+        "reasoning_effort": endpoint.get("reasoning_effort"),
+        "context_length": endpoint.get("context_length"),
+        "max_output_tokens": endpoint.get("max_output_tokens"),
         "timeout_seconds": endpoint.get("timeout_seconds", 60),
         "custom_headers": endpoint.get("custom_headers", {}),
         "input_cost_per_million": endpoint.get("input_cost_per_million"),
@@ -161,13 +165,15 @@ def request_body_evidence(
     benchmark_forced = benchmark_manifest.get("forced_request_body")
     if not isinstance(benchmark_forced, dict):
         benchmark_forced = benchmark_manifest.get("required_request_body")
+    adapter = ProviderRegistry().for_endpoint(endpoint)
     return resolve_request_body(
-        protocol_profile=str(endpoint.protocol_profile),
-        model_defaults=endpoint.default_request_body,
+        protocol_profile=adapter.profile,
+        model_defaults=adapter.endpoint_request_defaults(endpoint),
         suite_defaults=suite_defaults if isinstance(suite_defaults, dict) else None,
         benchmark_defaults=benchmark_defaults if isinstance(benchmark_defaults, dict) else None,
         run_override=request_body_override,
         benchmark_forced=benchmark_forced if isinstance(benchmark_forced, dict) else None,
+        equivalent_field_groups=adapter.equivalent_request_field_groups(),
     )
 
 

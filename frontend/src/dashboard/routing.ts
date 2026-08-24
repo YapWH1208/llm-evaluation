@@ -15,7 +15,7 @@ export const workspacePaths = {
 export const workspaceTabIds = {
   dashboard: ["summary", "evaluations", "readiness"],
   guide: ["getting-started", "prepare-data", "run-and-analyze"],
-  models: ["model-inventory", "add-endpoint"],
+  models: ["model-inventory", "add-endpoint", "sandbox"],
   datasets: ["dataset-inventory", "register-dataset"],
   prompts: ["prompt-inventory", "new-prompt-package"],
   runs: ["run-inventory", "quick-start", "dataset-evaluation", "run-details"],
@@ -28,7 +28,7 @@ export type WorkspaceTabFor<V extends WorkspaceView> = (typeof workspaceTabIds)[
 export type WorkspaceTab = { [V in WorkspaceView]: WorkspaceTabFor<V> }[WorkspaceView];
 export type WorkspaceNavigate = <V extends WorkspaceView>(
   view: V,
-  options?: { datasetId?: string; replace?: boolean; runId?: string; tab?: WorkspaceTabFor<V> },
+  options?: { datasetId?: string; endpointId?: string; replace?: boolean; runId?: string; tab?: WorkspaceTabFor<V> },
 ) => void;
 
 export type WorkspaceRoute = {
@@ -50,13 +50,14 @@ function isWorkspaceTab<V extends WorkspaceView>(view: V, value: string | null):
 export function workspacePath<V extends WorkspaceView>(
   view: V,
   tab: WorkspaceTabFor<V> = defaultWorkspaceTab(view),
-  options: { datasetId?: string; runId?: string } = {},
+  options: { datasetId?: string; endpointId?: string; runId?: string } = {},
 ): string {
   const pathname = workspacePaths[view];
   const params = new URLSearchParams();
   if (tab !== defaultWorkspaceTab(view)) params.set("tab", tab);
   if (view === "runs" && tab === "dataset-evaluation" && validResourceId(options.datasetId)) params.set("dataset", options.datasetId);
   if (view === "runs" && tab === "run-details" && validRunId(options.runId)) params.set("run", options.runId);
+  if (view === "models" && tab === "sandbox" && validResourceId(options.endpointId)) params.set("endpoint", options.endpointId);
   return params.size ? `${pathname}?${params.toString()}` : pathname;
 }
 
@@ -81,9 +82,11 @@ export function workspaceRoute(pathname: string, search = ""): WorkspaceRoute {
       const tab = isWorkspaceTab(view, requestedTab) ? requestedTab : defaultWorkspaceTab(view);
       const requestedRunId = new URLSearchParams(normalizedSearch).get("run");
       const requestedDatasetId = new URLSearchParams(normalizedSearch).get("dataset");
+      const requestedEndpointId = new URLSearchParams(normalizedSearch).get("endpoint");
       const canonicalSearch = workspacePath(view, tab, {
         datasetId: view === "runs" && tab === "dataset-evaluation" && validResourceId(requestedDatasetId) ? requestedDatasetId : undefined,
         runId: view === "runs" && tab === "run-details" && validRunId(requestedRunId) ? requestedRunId : undefined,
+        endpointId: view === "models" && tab === "sandbox" && validResourceId(requestedEndpointId) ? requestedEndpointId : undefined,
       }).slice(path.length);
       return {
         view,

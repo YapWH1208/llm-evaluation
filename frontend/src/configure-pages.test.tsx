@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Capability, Endpoint } from "./features/endpoints/api";
 import { Guide } from "./components/Guide";
-import { CapabilityDeclarations, EndpointForm, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
+import { ModelSandbox } from "./features/endpoints/ModelSandbox";
+import { CapabilityDeclarations, EndpointForm, EndpointFormPanel, ModelsPage, updateEndpointForm } from "./components/pages/EndpointPages";
 import { LocaleProvider } from "./i18n/LocaleProvider";
 
 afterEach(cleanup);
@@ -17,6 +18,9 @@ const endpoint: Endpoint = {
   currency: "USD",
   custom_headers: {},
   default_request_body: {},
+  reasoning_effort: "high",
+  context_length: 128000,
+  max_output_tokens: 8192,
   display_name: "Production model",
   id: "endpoint-1",
   input_cost_per_million: 1.5,
@@ -46,7 +50,9 @@ const form: EndpointForm = {
   display_name: "",
   input_cost_per_million: "",
   input_tokens_per_minute: "",
+  context_length: "",
   max_concurrency: "1",
+  max_output_tokens: "",
   model_name: "",
   notes: "",
   output_cost_per_million: "",
@@ -54,6 +60,7 @@ const form: EndpointForm = {
   protocol_profile: "openai_chat_completions",
   requests_per_minute: "",
   requests_per_second: "",
+  reasoning_effort: "",
   tags: "",
   timeout_seconds: "60",
   tokens_per_minute: "",
@@ -81,6 +88,7 @@ function modelProps(overrides: Partial<React.ComponentProps<typeof ModelsPage>> 
     onCancelEdit: vi.fn(),
     onDeclare: vi.fn(),
     onEdit: vi.fn(),
+    onOpenSandbox: vi.fn(),
     onFormChange: vi.fn(),
     onProbe: vi.fn(),
     onSubmit: vi.fn((event) => event.preventDefault()),
@@ -121,11 +129,20 @@ describe("configure workspace pages", () => {
     expect(within(inspector).getByRole("heading", { name: "Staging model" })).toBeVisible();
     expect(within(inspector).getByText(stagingEndpoint.base_url)).toBeVisible();
 
-    await user.click(within(inspector).getByRole("button", { name: "Test connection" }));
-    await user.click(within(inspector).getByRole("button", { name: "Probe capabilities" }));
+    const operation = within(inspector).getByLabelText("Operation");
+    await user.selectOptions(operation, "test");
+    await user.click(within(inspector).getByRole("button", { name: "Run operation" }));
+    await user.selectOptions(operation, "probe");
+    await user.click(within(inspector).getByRole("button", { name: "Run operation" }));
+    await user.selectOptions(operation, "sandbox");
+    await user.click(within(inspector).getByRole("button", { name: "Run operation" }));
 
     expect(props.onTest).toHaveBeenCalledWith(stagingEndpoint.id);
     expect(props.onProbe).toHaveBeenCalledWith(stagingEndpoint.id);
+    expect(props.onOpenSandbox).toHaveBeenCalledWith(stagingEndpoint.id);
+    expect(within(inspector).getByText("high")).toBeVisible();
+    expect(within(inspector).getByText("128000")).toBeVisible();
+    expect(within(inspector).getByText("8192")).toBeVisible();
 
     rerender(<ModelsPage {...props} endpoints={[endpoint]} />);
     expect(screen.getByRole("button", { name: "Select Production model" })).toHaveAttribute("aria-pressed", "true");
@@ -182,6 +199,34 @@ describe("configure workspace pages", () => {
     await user.click(screen.getByText("Advanced settings (optional)"));
 
     expect(screen.getByLabelText("Notes")).toHaveValue("Keep this value");
+  });
+
+  it("keeps advanced settings collapsed when editing and exposes typed reasoning defaults when opened", async () => {
+    const user = userEvent.setup();
+    render(<EndpointFormPanel busy={null} editingEndpointId={endpoint.id} form={form} onCancelEdit={vi.fn()} onFormChange={vi.fn()} onSubmit={vi.fn()} />);
+
+    expect(screen.getByText("Advanced settings (optional)").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByText("Advanced settings (optional)"));
+    expect(screen.getByLabelText("Reasoning effort")).toHaveValue("");
+    expect(screen.getByLabelText("Context length")).toHaveValue(null);
+    expect(screen.getByLabelText("Maximum output tokens")).toHaveValue(null);
+  });
+
+  it("collects text evidence and presents the non-executing tool mode", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const onEndpointChange = vi.fn();
+    render(<ModelSandbox busy={false} endpoints={[endpoint]} locale="en" onEndpointChange={onEndpointChange} onSubmit={onSubmit} result={{ success: true, mode: "text", protocol_profile: endpoint.protocol_profile, request: { model: endpoint.model_name }, final_text: "Hello.", tool_calls: [], latency_ms: 12.5, usage: { input_tokens: 3, output_tokens: 2 }, provider_status_code: 200, error_type: null, error_message: null }} selectedEndpointId={endpoint.id} />);
+
+    await user.type(screen.getByLabelText("User prompt"), "Say hello.");
+    await user.click(screen.getByRole("button", { name: "Run sandbox" }));
+    expect(onSubmit).toHaveBeenCalledWith({ endpointId: endpoint.id, mode: "text", userPrompt: "Say hello.", systemPrompt: "" });
+    expect(screen.getByText("Hello.")).toBeVisible();
+    expect(screen.getByText(/"model": "example-model"/)).toBeVisible();
+
+    await user.click(screen.getByRole("radio", { name: "Tool-calling test" }));
+    expect(screen.queryByLabelText("User prompt")).not.toBeInTheDocument();
+    expect(screen.getByText("The platform requests one deterministic function call and never executes it.")).toBeVisible();
   });
 
 
